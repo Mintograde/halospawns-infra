@@ -53,3 +53,20 @@ resource "aws_s3_bucket_cors_configuration" "this" {
     max_age_seconds = 3000
   }
 }
+
+resource "aws_s3_bucket_metadata_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  metadata_configuration {
+    inventory_table_configuration {
+      configuration_state = "ENABLED"
+    }
+
+    journal_table_configuration {
+      record_expiration {
+        days       = 7
+        expiration = "ENABLED"
+      }
+    }
+  }
+}

@@ -7,4 +7,4 @@ if (-not $env) {
     exit 1
 }
 
-terraform init -backend-config="./configuration/$env/backend.hcl"
+terraform init -upgrade -backend-config="./configuration/$env/backend.hcl"
