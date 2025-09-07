@@ -13,8 +13,6 @@ resource "aws_iam_role" "lambda_exec_role" {
       }
     ]
   })
-
-  tags = var.tags
 }
 
 data "aws_iam_policy_document" "s3_policy" {
@@ -65,8 +63,6 @@ resource "aws_lambda_function" "container_lambda" {
   environment {
     variables = var.environment_variables
   }
-
-  tags = var.tags
 }
 
 resource "aws_lambda_event_source_mapping" "sqs_trigger" {
