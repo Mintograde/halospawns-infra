@@ -1,13 +1,15 @@
 import json
 import os
 import time
+from decimal import Decimal
+
 import boto3
 
 ddb = boto3.resource('dynamodb')
 
 def handler(event, context):
     try:
-        body = json.loads(event.get('body') or '{}')
+        body = json.loads(event.get('body') or '{}', parse_float=Decimal)
         game_id = body.get('game_id')
         status = body.get('status')
 

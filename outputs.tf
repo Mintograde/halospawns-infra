@@ -17,9 +17,3 @@ output "current_games_api_invoke_url" {
   description = "Invoke URL for the current-games API"
   value       = module.current_games_api.stage_invoke_url
 }
-
-output "current_games_api_key_value" {
-  description = "API key value for the protected POST route (if created)"
-  value       = module.current_games_api.api_key_value
-  sensitive   = true
-}
