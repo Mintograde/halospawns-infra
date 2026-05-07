@@ -1,0 +1,9 @@
+workflows:
+  apply-dev:
+    description: Apply all dev Terraform components in dependency order.
+    steps:
+      - command: terraform apply tfstate-backend -s dev
+      - command: terraform apply uploads-ingest -s dev
+      - command: terraform apply ecr -s dev
+      - command: terraform apply map-processing -s dev
+      - command: terraform apply current-games -s dev

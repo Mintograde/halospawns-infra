@@ -1,0 +1,78 @@
+vars:
+  project: halospawns
+  environment: dev
+  region: us-east-1
+  profile: halospawns-dev
+
+components:
+  terraform:
+    halospawns-monolith:
+      metadata:
+        component: halospawns-monolith
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
+    tfstate-backend:
+      metadata:
+        component: tfstate-backend
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/tfstate-backend/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
+    ecr:
+      metadata:
+        component: ecr
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/ecr/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
+    uploads-ingest:
+      metadata:
+        component: uploads-ingest
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/uploads-ingest/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
+    map-processing:
+      metadata:
+        component: map-processing
+      vars:
+        tfstate_bucket: halospawns-tfstate-283279960672
+        ecr_state_key: dev/ecr/terraform.tfstate
+        uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/map-processing/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
+    current-games:
+      metadata:
+        component: current-games
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/current-games/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true

@@ -1,12 +1,5 @@
-module "backend" {
-  source        = "./modules/backend"
-  bucket_prefix = "${var.project}-tfstate"
-  tags          = { "Description" = "Stores Terraform remote state" }
-  environment   = var.environment
-}
-
 module "uploads_bucket" {
-  source                  = "./modules/s3-bucket"
+  source                  = "../../../modules/s3-bucket"
   bucket_prefix           = "uploads"
   environment             = var.environment
   allowed_cors_origins    = ["halospawns.com", "halospawns.benzeis.com", "localhost:8080"]
@@ -147,10 +140,37 @@ data "aws_iam_policy_document" "cloudfront_to_s3_policy" {
   }
 }
 
+resource "aws_secretsmanager_secret" "upload_signing_private_key" {
+  name                    = local.upload_signing_private_key_secret_name
+  description             = "Private key for signing CloudFront upload URLs for ${local.full_domain_name}"
+  recovery_window_in_days = 30
+}
+
+resource "aws_ssm_parameter" "upload_signing_public_key" {
+  name        = local.upload_signing_public_key_parameter_name
+  description = "Public key for signing CloudFront upload URLs for ${local.full_domain_name}"
+  type        = "String"
+  value       = "PENDING_PUBLIC_KEY_SEED"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 resource "aws_cloudfront_public_key" "main" {
   comment     = "Public key for signing upload URLs"
-  encoded_key = file("./configuration/${var.environment}/public_key.pem") # FIXME: seed this in param store
+  encoded_key = nonsensitive(aws_ssm_parameter.upload_signing_public_key.value)
   name        = "s3-upload-key"
+
+  lifecycle {
+    precondition {
+      condition = (
+        startswith(trimspace(nonsensitive(aws_ssm_parameter.upload_signing_public_key.value)), "-----BEGIN PUBLIC KEY-----") &&
+        endswith(trimspace(nonsensitive(aws_ssm_parameter.upload_signing_public_key.value)), "-----END PUBLIC KEY-----")
+      )
+      error_message = "Seed ${local.upload_signing_public_key_parameter_name} with a PEM public key before applying CloudFront resources."
+    }
+  }
 }
 
 resource "aws_cloudfront_key_group" "main" {
@@ -213,140 +233,5 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     geo_restriction {
       restriction_type = "none"
     }
-  }
-}
-
-resource "aws_ecr_repository" "lambda_container" {
-  for_each             = toset(local.lambda_containers)
-  name                 = each.key
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-}
-
-resource "aws_ecr_lifecycle_policy" "lambda_container" {
-  for_each   = toset(local.lambda_containers)
-  repository = aws_ecr_repository.lambda_container[each.key].name
-
-  policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Expire images older than 7 days"
-        selection = {
-          tagStatus   = "untagged"
-          countType   = "sinceImagePushed"
-          countUnit   = "days"
-          countNumber = 7
-        }
-        action = {
-          type = "expire"
-        }
-      }
-    ]
-  })
-}
-
-module "sqs_lambda_consumers" {
-  for_each = local.lambda_configurations
-  source   = "./modules/lambda-container"
-
-  function_name  = "${each.key}-${var.environment}"
-  image_uri      = "${aws_ecr_repository.lambda_container[each.key].repository_url}:latest"
-  sqs_queue_arn  = each.value.sqs_queue_arn
-  s3_bucket_arn  = each.value.s3_bucket_arn
-  s3_bucket_path = each.value.s3_bucket_path
-
-  environment_variables = {
-    UPLOADS_BUCKET_NAME = module.uploads_bucket.s3_bucket_id
-    ENVIRONMENT         = var.environment
-  }
-}
-
-module "current_games_ddb" {
-  source       = "./modules/ddb"
-  table_name   = "current-games-${var.environment}"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "game_id"
-  attributes = [
-    { name = "game_id", type = "S" }
-  ]
-  ttl_enabled        = true
-  ttl_attribute_name = "ttl"
-}
-
-data "aws_iam_policy_document" "current_games_update_access" {
-  statement {
-    actions   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
-    resources = [module.current_games_ddb.table_arn]
-  }
-}
-
-data "aws_iam_policy_document" "current_games_list_access" {
-  statement {
-    actions   = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:Scan"]
-    resources = [module.current_games_ddb.table_arn]
-  }
-}
-
-module "update_status_lambda" {
-  source        = "./modules/lambda-zip"
-  function_name = "update-status-${var.environment}"
-  runtime       = "python3.12"
-  handler       = "handler.handler"
-  source_dir    = "./lambda/update_status"
-  timeout       = 10
-  memory_size   = 128
-  environment_variables = {
-    TABLE_NAME            = module.current_games_ddb.table_name
-    RECENT_WINDOW_SECONDS = "600"
-  }
-  policies_json = [
-    data.aws_iam_policy_document.current_games_update_access.json
-  ]
-}
-
-module "list_games_lambda" {
-  source        = "./modules/lambda-zip"
-  function_name = "list-games-${var.environment}"
-  runtime       = "python3.12"
-  handler       = "handler.handler"
-  source_dir    = "./lambda/list_games"
-  timeout       = 10
-  memory_size   = 128
-  environment_variables = {
-    TABLE_NAME            = module.current_games_ddb.table_name
-    RECENT_WINDOW_SECONDS = "600"
-  }
-  policies_json = [
-    data.aws_iam_policy_document.current_games_list_access.json
-  ]
-}
-
-module "current_games_api" {
-  source     = "./modules/api-gateway-rest"
-  api_name   = "current-games"
-  stage_name = var.environment
-
-  routes = [
-    {
-      path             = "/game-status"
-      method           = "POST"
-      lambda_arn       = module.update_status_lambda.function_arn
-      api_key_required = true
-    },
-    {
-      path       = "/games"
-      method     = "GET"
-      lambda_arn = module.list_games_lambda.function_arn
-    }
-  ]
-
-  usage_plan = {
-    enabled        = true
-    name           = "current-games-${var.environment}"
-    throttle_burst = 50
-    throttle_rate  = 100
-    quota_limit    = 50000
-    quota_period   = "MONTH"
   }
 }

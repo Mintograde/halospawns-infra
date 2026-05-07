@@ -3,3 +3,9 @@
 .venv
 .idea
 *.zip
+*.pem
+*.tfstate
+*.tfstate.backup
+*.planfile
+backend.tf.json
+*.terraform.tfvars.json

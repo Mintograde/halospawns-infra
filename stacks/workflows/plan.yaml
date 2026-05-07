@@ -1,0 +1,9 @@
+workflows:
+  plan-dev:
+    description: Plan all dev Terraform components in dependency order.
+    steps:
+      - command: terraform plan tfstate-backend -s dev
+      - command: terraform plan uploads-ingest -s dev
+      - command: terraform plan ecr -s dev
+      - command: terraform plan map-processing -s dev
+      - command: terraform plan current-games -s dev

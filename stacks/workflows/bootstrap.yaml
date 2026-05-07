@@ -1,0 +1,5 @@
+workflows:
+  bootstrap-dev:
+    description: Check the dev Terraform state backend component.
+    steps:
+      - command: terraform plan tfstate-backend -s dev
