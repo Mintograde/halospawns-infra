@@ -28,6 +28,37 @@ components:
           region: us-east-1
           profile: halospawns-dev
           use_lockfile: true
+    frontend-site:
+      metadata:
+        component: frontend-site
+      vars:
+        github_repository: Mintograde/halospawns-svelte
+        github_environment: dev
+        github_branch: main
+        create_delegated_hosted_zone: true
+        delegated_zone_name: dev.halospawns.com
+        domain_name: dev.halospawns.com
+        hosted_zone_id: null
+        acm_certificate_arn: null
+        create_certificate: true
+        access_control_mode: basic_auth
+        basic_auth_realm: Halospawns dev
+        basic_auth_ssm_parameter_name: /halospawns/dev/frontend-site/basic-auth/credentials-base64
+        create_basic_auth_ssm_parameter: true
+        basic_auth_ssm_placeholder_value: REPLACE_ME_DO_NOT_USE
+        basic_auth_ssm_kms_key_id: null
+        create_basic_auth_edge_lambda: true
+        basic_auth_cache_ttl_seconds: 300
+        create_github_oidc_provider: true
+        github_oidc_provider_arn: null
+      backend_type: s3
+      backend:
+        s3:
+          bucket: halospawns-tfstate-283279960672
+          key: dev/frontend-site/terraform.tfstate
+          region: us-east-1
+          profile: halospawns-dev
+          use_lockfile: true
     ecr:
       metadata:
         component: ecr

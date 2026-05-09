@@ -1,0 +1,79 @@
+const crypto = require("crypto");
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
+
+const parameterName = ${ssm_parameter_name_json};
+const ssmRegion = ${ssm_region_json};
+const realm = ${basic_auth_realm_json};
+const cacheTtlMs = ${credential_cache_ttl_seconds} * 1000;
+const placeholderValue = ${ssm_placeholder_value_json};
+
+const ssm = new SSMClient({ region: ssmRegion });
+let cachedCredential = null;
+let cachedUntil = 0;
+
+function unauthorized() {
+  return {
+    status: "401",
+    statusDescription: "Unauthorized",
+    headers: {
+      "www-authenticate": [{ key: "WWW-Authenticate", value: 'Basic realm="' + realm.replace(/"/g, '\\"') + '"' }],
+      "cache-control": [{ key: "Cache-Control", value: "no-store" }]
+    }
+  };
+}
+
+function unavailable() {
+  return {
+    status: "503",
+    statusDescription: "Service Unavailable",
+    headers: {
+      "cache-control": [{ key: "Cache-Control", value: "no-store" }]
+    }
+  };
+}
+
+function timingSafeEqual(a, b) {
+  const left = Buffer.from(a || "");
+  const right = Buffer.from(b || "");
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+async function getExpectedHeader() {
+  const now = Date.now();
+  if (cachedCredential && now < cachedUntil) {
+    return "Basic " + cachedCredential;
+  }
+
+  const response = await ssm.send(new GetParameterCommand({
+    Name: parameterName,
+    WithDecryption: true
+  }));
+
+  const value = response.Parameter && response.Parameter.Value && response.Parameter.Value.trim();
+  if (!value || value === placeholderValue) {
+    throw new Error("Basic Auth credential is not configured");
+  }
+
+  cachedCredential = value;
+  cachedUntil = now + cacheTtlMs;
+  return "Basic " + cachedCredential;
+}
+
+exports.handler = async (event) => {
+  const request = event.Records[0].cf.request;
+  const authHeader = request.headers.authorization && request.headers.authorization[0].value;
+
+  let expectedHeader;
+  try {
+    expectedHeader = await getExpectedHeader();
+  } catch (error) {
+    console.error("Unable to load Basic Auth credential from SSM");
+    return unavailable();
+  }
+
+  if (timingSafeEqual(authHeader, expectedHeader)) {
+    return request;
+  }
+
+  return unauthorized();
+};
