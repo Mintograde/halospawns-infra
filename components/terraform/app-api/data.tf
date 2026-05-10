@@ -70,6 +70,7 @@ data "archive_file" "code_updater" {
   type        = "zip"
   source_dir  = "../../../lambda/app_api_code_updater"
   output_path = "${path.module}/app-api-code-updater.zip"
+  excludes    = ["**/__pycache__/**", "**/*.pyc"]
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -114,7 +115,10 @@ data "aws_iam_policy_document" "code_updater" {
       "lambda:GetAlias",
       "lambda:UpdateAlias",
     ]
-    resources = [module.app_lambda[0].alias_arn]
+    resources = [
+      module.app_lambda[0].function_arn,
+      module.app_lambda[0].alias_arn,
+    ]
   }
 }
 

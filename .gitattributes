@@ -1,0 +1,5 @@
+# Terraform hashes these package inputs, so CRLF checkouts create false package
+# drift on Windows.
+lambda/app_api_code_updater/handler.py text eol=lf
+modules/lambda-edge-basic-auth/auth.js.tftpl text eol=lf
+modules/lambda-edge-basic-auth/build-package.mjs text eol=lf

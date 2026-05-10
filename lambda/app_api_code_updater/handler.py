@@ -41,11 +41,11 @@ def _wait_for_function_update(function_name):
 
 
 def _deploy_artifact(bucket, key, version_id):
+    deployment_description = f"Deployed from s3://{bucket}/{key}"
     update_args = {
         "FunctionName": TARGET_FUNCTION_NAME,
         "S3Bucket": bucket,
         "S3Key": key,
-        "Publish": True,
     }
 
     if version_id and version_id != "null":
@@ -54,12 +54,21 @@ def _deploy_artifact(bucket, key, version_id):
     response = LAMBDA.update_function_code(**update_args)
     _wait_for_function_update(TARGET_FUNCTION_NAME)
 
-    lambda_version = response["Version"]
+    publish_args = {
+        "FunctionName": TARGET_FUNCTION_NAME,
+        "Description": deployment_description,
+    }
+    if response.get("CodeSha256"):
+        publish_args["CodeSha256"] = response["CodeSha256"]
+
+    version_response = LAMBDA.publish_version(**publish_args)
+    lambda_version = version_response["Version"]
+
     LAMBDA.update_alias(
         FunctionName=TARGET_FUNCTION_NAME,
         Name=TARGET_ALIAS_NAME,
         FunctionVersion=lambda_version,
-        Description=f"Deployed from s3://{bucket}/{key}",
+        Description=deployment_description,
     )
 
     deployment = {

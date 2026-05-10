@@ -2,6 +2,8 @@
 .terraform.lock.hcl
 .venv
 .idea
+__pycache__/
+*.pyc
 *.zip
 *.pem
 *.tfstate
