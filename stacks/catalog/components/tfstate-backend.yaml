@@ -1,0 +1,5 @@
+components:
+  terraform:
+    tfstate-backend:
+      metadata:
+        component: tfstate-backend

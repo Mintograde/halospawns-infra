@@ -9,11 +9,16 @@ components:
     auto_generate_backend_file: true
     workspaces_enabled: false
 
+templates:
+  settings:
+    enabled: true
+
 stacks:
   base_path: "stacks"
   included_paths:
     - "*.yaml"
   excluded_paths:
+    - "**/_defaults.yaml"
     - "catalog/**/*"
     - "workflows/**/*"
   name_pattern: "{environment}"

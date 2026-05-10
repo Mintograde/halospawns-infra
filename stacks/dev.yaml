@@ -1,40 +1,27 @@
+import:
+  - _defaults
+  - catalog/components/tfstate-backend
+  - catalog/components/frontend-site
+  - catalog/components/app-api
+  - catalog/components/uploads-ingest
+  - catalog/components/ecr
+  - catalog/components/map-processing
+  - catalog/components/current-games
+
 vars:
-  project: halospawns
   environment: dev
-  region: us-east-1
   profile: halospawns-dev
+
+terraform:
+  backend:
+    s3:
+      bucket: halospawns-tfstate-283279960672
 
 components:
   terraform:
-    halospawns-monolith:
-      metadata:
-        component: halospawns-monolith
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
-    tfstate-backend:
-      metadata:
-        component: tfstate-backend
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/tfstate-backend/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
     frontend-site:
-      metadata:
-        component: frontend-site
       vars:
-        github_repository: Mintograde/halospawns-svelte
         github_environment: dev
-        github_branch: main
         create_delegated_hosted_zone: true
         delegated_zone_name: dev.halospawns.com
         domain_name: dev.halospawns.com
@@ -51,17 +38,7 @@ components:
         basic_auth_cache_ttl_seconds: 300
         create_github_oidc_provider: true
         github_oidc_provider_arn: null
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/frontend-site/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
     app-api:
-      metadata:
-        component: app-api
       vars:
         enabled: true
         tfstate_bucket: halospawns-tfstate-283279960672
@@ -69,74 +46,17 @@ components:
         api_domain_name: api.dev.halospawns.com
         frontend_allowed_origins:
           - https://dev.halospawns.com
-        artifact_release_prefix: releases/
-        github_repository: Mintograde/halospawns-api
         github_environment: dev
-        github_branch: main
         create_github_oidc_provider: false
         github_oidc_provider_arn: null
-        app_lambda_runtime: python3.12
-        app_lambda_handler: halospawns_api.lambda_handler.handler
         supabase_project_ref: sozzcczmuwlacqczdmnm
         supabase_url: https://sozzcczmuwlacqczdmnm.supabase.co
         supabase_jwt_issuer: https://sozzcczmuwlacqczdmnm.supabase.co/auth/v1
-        supabase_jwt_audience: authenticated
         supabase_database_url_secret_name: /halospawns/dev/app-api/supabase/database-url
         supabase_service_role_secret_name: /halospawns/dev/app-api/supabase/service-role-key
         create_supabase_service_role_secret: false
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/app-api/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
-    ecr:
-      metadata:
-        component: ecr
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/ecr/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
-    uploads-ingest:
-      metadata:
-        component: uploads-ingest
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/uploads-ingest/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
     map-processing:
-      metadata:
-        component: map-processing
       vars:
         tfstate_bucket: halospawns-tfstate-283279960672
         ecr_state_key: dev/ecr/terraform.tfstate
         uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/map-processing/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true
-    current-games:
-      metadata:
-        component: current-games
-      backend_type: s3
-      backend:
-        s3:
-          bucket: halospawns-tfstate-283279960672
-          key: dev/current-games/terraform.tfstate
-          region: us-east-1
-          profile: halospawns-dev
-          use_lockfile: true

@@ -1,7 +1,8 @@
+import:
+  - _defaults
+
 vars:
-  project: halospawns
   environment: prod
-  region: us-east-1
   profile: halospawns-prod
 
 components:

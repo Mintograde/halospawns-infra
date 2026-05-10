@@ -1,0 +1,5 @@
+components:
+  terraform:
+    ecr:
+      metadata:
+        component: ecr

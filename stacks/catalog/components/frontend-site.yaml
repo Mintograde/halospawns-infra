@@ -1,0 +1,8 @@
+components:
+  terraform:
+    frontend-site:
+      metadata:
+        component: frontend-site
+      vars:
+        github_repository: Mintograde/halospawns-svelte
+        github_branch: main
