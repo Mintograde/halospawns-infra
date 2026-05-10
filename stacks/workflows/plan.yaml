@@ -4,6 +4,7 @@ workflows:
     steps:
       - command: terraform plan tfstate-backend -s dev
       - command: terraform plan frontend-site -s dev
+      - command: terraform plan app-api -s dev
       - command: terraform plan uploads-ingest -s dev
       - command: terraform plan ecr -s dev
       - command: terraform plan map-processing -s dev

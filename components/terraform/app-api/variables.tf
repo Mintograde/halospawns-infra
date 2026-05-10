@@ -1,0 +1,223 @@
+variable "enabled" {
+  description = "Whether to create app API resources. Keep false until dev Supabase values are ready."
+  type        = bool
+  default     = true
+}
+
+variable "region" {
+  description = "Region to deploy resources."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "environment" {
+  description = "Environment name."
+  type        = string
+}
+
+variable "project" {
+  description = "Project name."
+  type        = string
+  default     = "halospawns"
+}
+
+variable "profile" {
+  description = "AWS profile name."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "tags" {
+  description = "Additional tags to apply to resources."
+  type        = map(string)
+  default     = {}
+}
+
+variable "tfstate_bucket" {
+  description = "Terraform state bucket used for remote-state reads."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "frontend_site_state_key" {
+  description = "Remote-state key for the frontend-site component."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "hosted_zone_id" {
+  description = "Route 53 hosted zone ID for the API domain. Defaults to frontend-site delegated zone remote state."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "api_domain_name" {
+  description = "Custom domain name for the app API."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "create_api_domain_certificate" {
+  description = "Whether to create and validate an ACM certificate for api_domain_name."
+  type        = bool
+  default     = true
+}
+
+variable "create_api_dns_records" {
+  description = "Whether to create API custom-domain DNS records."
+  type        = bool
+  default     = true
+}
+
+variable "api_certificate_arn" {
+  description = "Existing ACM certificate ARN for api_domain_name."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "frontend_allowed_origins" {
+  description = "Allowed frontend origins for API CORS."
+  type        = list(string)
+  default     = []
+}
+
+variable "supabase_project_ref" {
+  description = "Supabase project ref. Public identifier; do not put secret keys here."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "supabase_url" {
+  description = "Supabase project URL. Public identifier; do not put secret keys here."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "supabase_jwt_issuer" {
+  description = "Supabase JWT issuer URL for API Gateway native JWT auth."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "supabase_jwt_audience" {
+  description = "Supabase JWT audience for API Gateway native JWT auth."
+  type        = string
+  default     = "authenticated"
+}
+
+variable "create_jwt_authorizer" {
+  description = "Whether protected routes should use API Gateway's native JWT authorizer."
+  type        = bool
+  default     = true
+}
+
+variable "artifact_release_prefix" {
+  description = "S3 prefix that receives API release zip artifacts."
+  type        = string
+  default     = "releases/"
+}
+
+variable "github_repository" {
+  description = "GitHub API repository allowed to upload release artifacts, in owner/name form."
+  type        = string
+}
+
+variable "github_environment" {
+  description = "GitHub Environment used by the deploy workflow."
+  type        = string
+  default     = "dev"
+}
+
+variable "github_branch" {
+  description = "GitHub branch used when github_environment is empty."
+  type        = string
+  default     = "main"
+}
+
+variable "github_subject" {
+  description = "Optional explicit GitHub OIDC subject. Overrides github_environment/github_branch."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "github_oidc_provider_arn" {
+  description = "Existing GitHub Actions OIDC provider ARN. When null and create_github_oidc_provider is false, the provider is looked up by URL."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "create_github_oidc_provider" {
+  description = "Whether this component should create the account-level GitHub Actions OIDC provider."
+  type        = bool
+  default     = false
+}
+
+variable "github_oidc_thumbprint_list" {
+  description = "Thumbprint list for the GitHub Actions OIDC provider."
+  type        = list(string)
+  default     = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+variable "app_lambda_runtime" {
+  description = "Runtime for the app Lambda."
+  type        = string
+  default     = "python3.12"
+}
+
+variable "app_lambda_handler" {
+  description = "Handler for the real app Lambda package."
+  type        = string
+  default     = "halospawns_api.lambda_handler.handler"
+}
+
+variable "app_lambda_memory_size" {
+  description = "Memory size for the app Lambda in MB."
+  type        = number
+  default     = 512
+}
+
+variable "app_lambda_timeout" {
+  description = "Timeout for the app Lambda in seconds."
+  type        = number
+  default     = 30
+}
+
+variable "app_lambda_alias_name" {
+  description = "Alias used by API Gateway and the release updater."
+  type        = string
+  default     = "live"
+}
+
+variable "code_updater_reserved_concurrent_executions" {
+  description = "Reserved concurrency for the code updater Lambda. Leave null to use account-level unreserved concurrency."
+  type        = number
+  default     = null
+  nullable    = true
+}
+
+variable "supabase_database_url_secret_name" {
+  description = "Secrets Manager secret name for the Supabase transaction pooler database URL."
+  type        = string
+}
+
+variable "supabase_service_role_secret_name" {
+  description = "Secrets Manager secret name for the optional Supabase service role key."
+  type        = string
+}
+
+variable "create_supabase_service_role_secret" {
+  description = "Whether to create the optional Supabase service role key secret metadata and grant the app Lambda read access."
+  type        = bool
+  default     = false
+}

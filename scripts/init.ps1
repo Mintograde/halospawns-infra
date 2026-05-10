@@ -16,6 +16,7 @@ if (-not $Component) {
     $components = @(
         "tfstate-backend",
         "frontend-site",
+        "app-api",
         "uploads-ingest",
         "ecr",
         "map-processing",
