@@ -348,6 +348,14 @@ module "api" {
       authorization_type = "NONE"
     },
     {
+      route_key          = "POST /v1/ingest/live-games/status"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/live-games/{live_game_id}/finish"
+      authorization_type = "NONE"
+    },
+    {
       route_key          = "$default"
       authorization_type = var.create_jwt_authorizer ? "JWT" : "NONE"
     },

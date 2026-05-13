@@ -57,6 +57,7 @@ components:
         supabase_service_role_secret_name: /halospawns/dev/app-api/supabase/service-role-key
         create_supabase_service_role_secret: false
         trusted_service_hmac_secret_names:
+          live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
           map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
         trusted_service_hmac_timestamp_tolerance_seconds: 300
     uploads-ingest:
