@@ -10,3 +10,6 @@ components:
         app_lambda_runtime: python3.12
         app_lambda_handler: halospawns_api.lambda_handler.handler
         supabase_jwt_audience: authenticated
+        map_upload_prefix: maps/unprocessed
+        replay_upload_prefix: replays/unprocessed
+        upload_url_ttl_seconds: 900

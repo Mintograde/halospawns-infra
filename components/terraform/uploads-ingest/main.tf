@@ -2,7 +2,7 @@ module "uploads_bucket" {
   source                  = "../../../modules/s3-bucket"
   bucket_prefix           = "uploads"
   environment             = var.environment
-  allowed_cors_origins    = ["halospawns.com", "halospawns.benzeis.com", "localhost:8080"]
+  allowed_cors_origins    = var.allowed_cors_origins
   source_policy_documents = [data.aws_iam_policy_document.cloudfront_to_s3_policy.json]
 }
 

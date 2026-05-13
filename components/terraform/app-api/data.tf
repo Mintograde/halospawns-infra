@@ -14,6 +14,18 @@ data "terraform_remote_state" "frontend_site" {
   }
 }
 
+data "terraform_remote_state" "uploads_ingest" {
+  count = var.enabled && var.uploads_ingest_state_key != null ? 1 : 0
+
+  backend = "s3"
+  config = {
+    bucket  = var.tfstate_bucket
+    key     = var.uploads_ingest_state_key
+    region  = var.region
+    profile = var.profile
+  }
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   count = var.enabled && var.create_github_oidc_provider ? 1 : 0
 
@@ -61,6 +73,16 @@ data "aws_iam_policy_document" "app_runtime" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = local.app_secret_arns
+  }
+
+  dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+
+    content {
+      sid       = "PresignUploadPutObjects"
+      actions   = ["s3:PutObject"]
+      resources = local.upload_put_object_resource_arns
+    }
   }
 }
 

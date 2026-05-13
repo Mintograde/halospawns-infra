@@ -43,6 +43,7 @@ components:
         enabled: true
         tfstate_bucket: halospawns-tfstate-283279960672
         frontend_site_state_key: dev/frontend-site/terraform.tfstate
+        uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
         api_domain_name: api.dev.halospawns.com
         frontend_allowed_origins:
           - https://dev.halospawns.com
@@ -55,8 +56,16 @@ components:
         supabase_database_url_secret_name: /halospawns/dev/app-api/supabase/database-url
         supabase_service_role_secret_name: /halospawns/dev/app-api/supabase/service-role-key
         create_supabase_service_role_secret: false
+        trusted_service_hmac_secret_names:
+          map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
+        trusted_service_hmac_timestamp_tolerance_seconds: 300
+    uploads-ingest:
+      vars:
+        allowed_cors_origins:
+          - https://dev.halospawns.com
     map-processing:
       vars:
         tfstate_bucket: halospawns-tfstate-283279960672
         ecr_state_key: dev/ecr/terraform.tfstate
         uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
+        app_api_state_key: dev/app-api/terraform.tfstate

@@ -68,6 +68,19 @@ output "supabase_service_role_secret_arn" {
   value       = var.enabled && var.create_supabase_service_role_secret ? aws_secretsmanager_secret.supabase_service_role[0].arn : null
 }
 
+output "trusted_service_hmac_secret_names" {
+  description = "Secrets Manager secret names used by trusted HMAC clients, keyed by trusted client name."
+  value       = local.trusted_service_hmac_secret_ids
+}
+
+output "trusted_service_hmac_secret_arns" {
+  description = "Secrets Manager secret ARNs used by trusted HMAC clients, keyed by trusted client name."
+  value = {
+    for client, secret in aws_secretsmanager_secret.trusted_service_hmac :
+    client => secret.arn
+  }
+}
+
 output "code_updater_lambda_function_name" {
   description = "Code updater Lambda function name."
   value       = var.enabled ? aws_lambda_function.code_updater[0].function_name : null

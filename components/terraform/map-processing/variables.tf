@@ -35,3 +35,39 @@ variable "uploads_ingest_state_key" {
   description = "S3 state key for the uploads-ingest component."
   type        = string
 }
+
+variable "app_api_state_key" {
+  description = "Optional S3 state key for the app-api component. When set, processor callbacks can read app-api outputs."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "app_api_base_url" {
+  description = "Optional explicit app API base URL for processor callbacks. Defaults to the app-api remote-state custom domain or endpoint."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "trusted_service_hmac_client_name" {
+  description = "Trusted HMAC client name used by the processor when calling app-api callbacks."
+  type        = string
+  default     = "map-processing"
+
+  validation {
+    condition     = trimspace(var.trusted_service_hmac_client_name) != ""
+    error_message = "trusted_service_hmac_client_name must not be empty."
+  }
+}
+
+variable "app_api_processing_status_path_template" {
+  description = "Path template for app-api upload processing status callbacks."
+  type        = string
+  default     = "/v1/uploads/{upload_id}/processing-status"
+
+  validation {
+    condition     = startswith(var.app_api_processing_status_path_template, "/")
+    error_message = "app_api_processing_status_path_template must start with '/'."
+  }
+}

@@ -1,28 +1,61 @@
 locals {
   normalized_artifact_release_prefix = trimsuffix(var.artifact_release_prefix, "/") == "" ? "" : "${trimsuffix(var.artifact_release_prefix, "/")}/"
+  map_upload_prefix                  = trim(var.map_upload_prefix, "/")
+  replay_upload_prefix               = trim(var.replay_upload_prefix, "/")
 
   frontend_hosted_zone_id = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
   api_hosted_zone_id      = var.hosted_zone_id != null ? var.hosted_zone_id : local.frontend_hosted_zone_id
   api_domain_name         = var.api_domain_name == null ? null : trimspace(var.api_domain_name)
+  uploads_bucket_name     = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
+  uploads_bucket_arn      = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
 
   github_environment_subject = var.github_environment == null || trimspace(var.github_environment) == "" ? null : "repo:${var.github_repository}:environment:${var.github_environment}"
   github_branch_subject      = "repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"
   github_subject             = var.github_subject == null || trimspace(var.github_subject) == "" ? (local.github_environment_subject != null ? local.github_environment_subject : local.github_branch_subject) : var.github_subject
   github_oidc_provider_arn   = var.create_github_oidc_provider ? try(aws_iam_openid_connect_provider.github[0].arn, null) : (var.github_oidc_provider_arn != null && trimspace(var.github_oidc_provider_arn) != "" ? var.github_oidc_provider_arn : try(data.aws_iam_openid_connect_provider.github[0].arn, null))
 
-  app_secret_arns = compact([
-    try(aws_secretsmanager_secret.supabase_database_url[0].arn, null),
-    try(aws_secretsmanager_secret.supabase_service_role[0].arn, null),
-  ])
+  trusted_service_hmac_secret_ids = {
+    for client, secret in aws_secretsmanager_secret.trusted_service_hmac :
+    client => secret.name
+  }
+
+  trusted_service_hmac_secret_arns = [
+    for secret in aws_secretsmanager_secret.trusted_service_hmac :
+    secret.arn
+  ]
+
+  app_secret_arns = concat(
+    compact([
+      try(aws_secretsmanager_secret.supabase_database_url[0].arn, null),
+      try(aws_secretsmanager_secret.supabase_service_role[0].arn, null),
+    ]),
+    local.trusted_service_hmac_secret_arns,
+  )
+
+  upload_put_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+    "${local.uploads_bucket_arn}/${local.map_upload_prefix}/*",
+    "${local.uploads_bucket_arn}/${local.replay_upload_prefix}/*",
+  ]
 
   app_lambda_environment = var.enabled ? merge(
     {
+      ENVIRONMENT                      = var.environment
       SUPABASE_DATABASE_URL_SECRET_ARN = aws_secretsmanager_secret.supabase_database_url[0].arn
       SUPABASE_PROJECT_REF             = var.supabase_project_ref == null ? "" : var.supabase_project_ref
       SUPABASE_URL                     = var.supabase_url == null ? "" : var.supabase_url
+      UPLOADS_BUCKET                   = coalesce(local.uploads_bucket_name, "")
+      MAP_UPLOAD_PREFIX                = local.map_upload_prefix
+      REPLAY_UPLOAD_PREFIX             = local.replay_upload_prefix
+      UPLOAD_URL_TTL_SECONDS           = tostring(var.upload_url_ttl_seconds)
     },
     var.create_supabase_service_role_secret ? {
       SUPABASE_SERVICE_ROLE_SECRET_ARN = aws_secretsmanager_secret.supabase_service_role[0].arn
+    } : {},
+    length(local.trusted_service_hmac_secret_ids) > 0 ? {
+      TRUSTED_SERVICE_HMAC_SECRET_IDS = jsonencode(local.trusted_service_hmac_secret_ids)
+    } : {},
+    length(local.trusted_service_hmac_secret_ids) > 0 && var.trusted_service_hmac_timestamp_tolerance_seconds != null ? {
+      TRUSTED_SERVICE_HMAC_TIMESTAMP_TOLERANCE_SECONDS = tostring(var.trusted_service_hmac_timestamp_tolerance_seconds)
     } : {}
   ) : {}
 
@@ -44,9 +77,14 @@ resource "terraform_data" "required_inputs" {
     github_oidc_provider_arn = local.github_oidc_provider_arn
     api_domain_name          = local.api_domain_name
     api_hosted_zone_id       = local.api_hosted_zone_id
+    uploads_ingest_state_key = var.uploads_ingest_state_key
+    uploads_bucket_name      = local.uploads_bucket_name
     create_api_dns_records   = var.create_api_dns_records
     create_api_certificate   = var.create_api_domain_certificate
     create_jwt_authorizer    = var.create_jwt_authorizer
+    map_upload_prefix        = local.map_upload_prefix
+    replay_upload_prefix     = local.replay_upload_prefix
+    upload_url_ttl_seconds   = var.upload_url_ttl_seconds
   }
 
   lifecycle {
@@ -77,6 +115,21 @@ resource "terraform_data" "required_inputs" {
     precondition {
       condition     = local.github_oidc_provider_arn != null
       error_message = "GitHub OIDC provider ARN is required. Pass github_oidc_provider_arn, set create_github_oidc_provider = true, or ensure the provider exists in the account."
+    }
+
+    precondition {
+      condition = (
+        var.tfstate_bucket != null &&
+        var.uploads_ingest_state_key != null &&
+        local.uploads_bucket_name != null &&
+        local.uploads_bucket_arn != null
+      )
+      error_message = "app-api upload presigning requires tfstate_bucket and uploads_ingest_state_key so it can read the uploads-ingest bucket outputs."
+    }
+
+    precondition {
+      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != ""
+      error_message = "map_upload_prefix and replay_upload_prefix must be non-empty stable root prefixes."
     }
   }
 }
@@ -150,6 +203,15 @@ resource "aws_secretsmanager_secret" "supabase_service_role" {
   description             = "Optional Supabase service role key for ${var.project}-${var.environment} app API."
   recovery_window_in_days = 30
   tags                    = var.tags
+}
+
+resource "aws_secretsmanager_secret" "trusted_service_hmac" {
+  for_each = var.enabled ? var.trusted_service_hmac_secret_names : {}
+
+  name                    = each.value
+  description             = "HMAC signing secret for the ${each.key} trusted client calling the ${var.project}-${var.environment} app API."
+  recovery_window_in_days = 30
+  tags                    = merge(var.tags, { TrustedClient = each.key })
 }
 
 module "app_lambda" {
@@ -275,6 +337,14 @@ module "api" {
   routes = [
     {
       route_key          = "GET /health"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "OPTIONS /{proxy+}"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "PATCH /v1/uploads/{upload_id}/processing-status"
       authorization_type = "NONE"
     },
     {

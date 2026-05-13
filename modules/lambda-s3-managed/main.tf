@@ -88,6 +88,9 @@ resource "aws_lambda_alias" "live" {
   function_version = aws_lambda_function.this.version
 
   lifecycle {
-    ignore_changes = [function_version]
+    ignore_changes = [
+      description,
+      function_version,
+    ]
   }
 }

@@ -4,8 +4,8 @@ workflows:
     steps:
       - command: terraform apply tfstate-backend -s dev
       - command: terraform apply frontend-site -s dev
-      - command: terraform apply app-api -s dev
       - command: terraform apply uploads-ingest -s dev
+      - command: terraform apply app-api -s dev
       - command: terraform apply ecr -s dev
       - command: terraform apply map-processing -s dev
       - command: terraform apply current-games -s dev
