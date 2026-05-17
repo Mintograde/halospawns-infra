@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-import simdjson
+import ijson
 import zstandard
 
 LOGGER = logging.getLogger()
@@ -35,6 +35,45 @@ UUID_PATTERN = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})"
 )
 SECRET_CACHE: dict[str, str] = {}
+COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
+TICK_FIELDS = {
+    "multiplayer_map_name",
+    "game_type",
+    "variant",
+    "current_time",
+    "start_time",
+    "game_id",
+}
+PLAYER_FIELDS = {
+    "player_index",
+    "local_player",
+    "name",
+    "player_name",
+    "team",
+    "score",
+    "ctf_score",
+    "kills",
+    "deaths",
+    "assists",
+    "suicides",
+    "team_kills",
+    "player_quit",
+}
+META_PLAYER_SCALAR_FIELDS = {
+    "damage_dealt",
+    "damage_received",
+    "camo_count",
+    "overshield_count",
+}
+META_PLAYER_MAPPING_FIELDS = {
+    "shots_by_weapon",
+    "damage_to_player",
+    "damage_from_player",
+    "shots_by_tick",
+    "kills_by_tick",
+    "deaths_by_tick",
+    "assists_by_tick",
+}
 
 
 class ReplayProcessingError(Exception):
@@ -293,29 +332,25 @@ def _extract_json_from_zip(source: Path, destination: Path) -> None:
 
 
 def _parse_replay(json_path: Path) -> ParsedReplay:
-    parser = simdjson.Parser()
     try:
-        document = parser.load(json_path)
+        replay_document = _extract_replay_document(json_path)
     except Exception as error:
         raise NonRetryableReplayError(f"Replay JSON parse failed: {error}") from error
 
-    ticks = document.get("ticks", [])
-    tick_count = len(ticks)
+    tick_count = replay_document["tick_count"]
     if tick_count < 1:
         raise NonRetryableReplayError("Replay JSON did not contain ticks")
 
-    summary = _proxy_dict(document.get("summary", {}))
-    game_meta = document.get("game_meta", {})
-    game_meta_players = game_meta.get("players", {}) if hasattr(game_meta, "get") else {}
-    first_tick = ticks[0]
-    last_tick = ticks[tick_count - 1]
+    summary = _proxy_dict(replay_document["summary"])
+    game_meta_players = _proxy_dict(replay_document["game_meta_players"])
+    first_tick = replay_document["first_tick"]
+    last_tick = replay_document["last_tick"]
     first_players = [_proxy_dict(player) for player in first_tick.get("players", [])]
     last_players = [_proxy_dict(player) for player in last_tick.get("players", [])]
     meta_players = {
         str(player_id): _proxy_dict(player)
         for player_id, player in game_meta_players.items()
     }
-    events = document.get("events", [])
 
     participants = _participants_from_replay(first_players, last_players, meta_players)
     team_stats = _team_stats_from_participants(participants)
@@ -328,12 +363,12 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
     metadata = {
         "summary": summary,
         "tick_count": tick_count,
-        "event_count": len(events),
-        "event_sample": [_jsonable(events[index]) for index in range(min(len(events), 10))],
+        "event_count": replay_document["event_count"],
+        "event_sample": replay_document["event_sample"],
         "parser": {
             "name": "halospawns-replay-parser",
-            "json_library": "pysimdjson",
-            "simdjson_version": getattr(simdjson, "VERSION", None),
+            "json_library": "ijson",
+            "ijson_backend": getattr(ijson.backend, "__name__", str(ijson.backend)),
         },
     }
 
@@ -343,6 +378,154 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         team_stats=team_stats,
         metadata=metadata,
     )
+
+
+def _extract_replay_document(json_path: Path) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    game_meta_players: dict[str, Any] = {}
+    first_tick: dict[str, Any] | None = None
+    last_tick: dict[str, Any] | None = None
+    current_tick: dict[str, Any] | None = None
+    current_player: dict[str, Any] | None = None
+    tick_count = 0
+    event_count = 0
+    event_sample: list[Any] = []
+
+    active_builder: ijson.ObjectBuilder | None = None
+    active_target: str | None = None
+    active_end_event: str | None = None
+    active_context: tuple[str, str, str] | None = None
+
+    with json_path.open("rb") as replay_file:
+        for prefix, event, value in ijson.parse(replay_file, use_float=True):
+            if active_builder is not None:
+                active_builder.event(event, value)
+                if prefix == active_target and event == active_end_event:
+                    built_value = active_builder.value
+                    if active_target == "summary":
+                        summary = _proxy_dict(built_value)
+                    elif active_context and active_context[0] == "meta_player_field":
+                        _, player_id, field = active_context
+                        game_meta_players.setdefault(player_id, {})[field] = built_value
+                    elif active_target == "events.item":
+                        event_count += 1
+                        if len(event_sample) < 10:
+                            event_sample.append(built_value)
+
+                    active_builder = None
+                    active_target = None
+                    active_end_event = None
+                    active_context = None
+                continue
+
+            if prefix == "summary" and event in ("start_map", "start_array"):
+                active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                )
+                continue
+
+            meta_player_field = _meta_player_field(prefix)
+            if meta_player_field is not None:
+                player_id, field = meta_player_field
+                if field in META_PLAYER_SCALAR_FIELDS and _is_scalar_json_event(event):
+                    game_meta_players.setdefault(player_id, {})[field] = value
+                elif field in META_PLAYER_MAPPING_FIELDS and event in ("start_map", "start_array"):
+                    active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                        context=("meta_player_field", player_id, field),
+                    )
+                continue
+
+            if prefix == "ticks.item" and event == "start_map":
+                current_tick = {"players": []}
+                continue
+
+            if current_tick is not None:
+                if prefix == "ticks.item" and event == "end_map":
+                    tick_count += 1
+                    if first_tick is None:
+                        first_tick = current_tick
+                    last_tick = current_tick
+                    current_tick = None
+                    continue
+
+                if prefix == "ticks.item.players.item" and event == "start_map":
+                    current_player = {}
+                    continue
+
+                if current_player is not None:
+                    if prefix == "ticks.item.players.item" and event == "end_map":
+                        current_tick["players"].append(current_player)
+                        current_player = None
+                        continue
+
+                    player_field = _direct_child_field(prefix, "ticks.item.players.item")
+                    if player_field in PLAYER_FIELDS and _is_scalar_json_event(event):
+                        current_player[player_field] = value
+                    continue
+
+                tick_field = _direct_child_field(prefix, "ticks.item")
+                if tick_field in TICK_FIELDS and _is_scalar_json_event(event):
+                    current_tick[tick_field] = value
+                continue
+
+            if prefix == "events.item":
+                if event in ("start_map", "start_array"):
+                    active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                    )
+                elif _is_scalar_json_event(event):
+                    event_count += 1
+                    if len(event_sample) < 10:
+                        event_sample.append(value)
+
+    return {
+        "summary": summary,
+        "game_meta_players": game_meta_players,
+        "first_tick": first_tick or {},
+        "last_tick": last_tick or {},
+        "tick_count": tick_count,
+        "event_count": event_count,
+        "event_sample": event_sample,
+    }
+
+
+def _start_json_builder(
+    prefix: str,
+    event: str,
+    value: Any,
+    *,
+    context: tuple[str, str, str] | None = None,
+) -> tuple[ijson.ObjectBuilder, str, str, tuple[str, str, str] | None]:
+    builder = ijson.ObjectBuilder()
+    builder.event(event, value)
+    end_event = "end_map" if event == "start_map" else "end_array"
+    return builder, prefix, end_event, context
+
+
+def _meta_player_field(prefix: str) -> tuple[str, str] | None:
+    parts = prefix.split(".")
+    if len(parts) != 4 or parts[0] != "game_meta" or parts[1] != "players":
+        return None
+    return parts[2], parts[3]
+
+
+def _direct_child_field(prefix: str, parent_prefix: str) -> str | None:
+    prefix_start = f"{parent_prefix}."
+    if not prefix.startswith(prefix_start):
+        return None
+    field = prefix[len(prefix_start) :]
+    return field if "." not in field else None
+
+
+def _is_scalar_json_event(event: str) -> bool:
+    return event not in COMPOSITE_JSON_EVENTS
 
 
 def _game_from_replay(
