@@ -71,3 +71,14 @@ variable "app_api_processing_status_path_template" {
     error_message = "app_api_processing_status_path_template must start with '/'."
   }
 }
+
+variable "app_api_replay_finalization_path" {
+  description = "Path for app-api replay finalization callbacks."
+  type        = string
+  default     = "/v1/ingest/replay-uploads"
+
+  validation {
+    condition     = startswith(var.app_api_replay_finalization_path, "/")
+    error_message = "app_api_replay_finalization_path must start with '/'."
+  }
+}

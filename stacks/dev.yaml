@@ -47,6 +47,9 @@ components:
         api_domain_name: api.dev.halospawns.com
         frontend_allowed_origins:
           - https://dev.halospawns.com
+          - http://127.0.0.1:5173
+          - http://127.0.0.1:5174
+          - http://127.0.0.1:5175
         github_environment: dev
         create_github_oidc_provider: false
         github_oidc_provider_arn: null
@@ -59,11 +62,15 @@ components:
         trusted_service_hmac_secret_names:
           live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
           map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
+          replay-processing: /halospawns/dev/app-api/trusted-clients/replay-processing/hmac-secret
         trusted_service_hmac_timestamp_tolerance_seconds: 300
     uploads-ingest:
       vars:
         allowed_cors_origins:
           - https://dev.halospawns.com
+          - http://127.0.0.1:5173
+          - http://127.0.0.1:5174
+          - http://127.0.0.1:5175
     map-processing:
       vars:
         tfstate_bucket: halospawns-tfstate-283279960672

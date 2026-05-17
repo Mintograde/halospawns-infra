@@ -60,14 +60,23 @@ resource "aws_lambda_function" "container_lambda" {
   timeout       = var.timeout
   memory_size   = var.memory_size
 
+  dynamic "ephemeral_storage" {
+    for_each = var.ephemeral_storage_size == null ? [] : [var.ephemeral_storage_size]
+
+    content {
+      size = ephemeral_storage.value
+    }
+  }
+
   environment {
     variables = var.environment_variables
   }
 }
 
 resource "aws_lambda_event_source_mapping" "sqs_trigger" {
-  event_source_arn = var.sqs_queue_arn
-  function_name    = aws_lambda_function.container_lambda.arn
-  batch_size       = var.batch_size
-  enabled          = true
+  event_source_arn        = var.sqs_queue_arn
+  function_name           = aws_lambda_function.container_lambda.arn
+  batch_size              = var.batch_size
+  enabled                 = true
+  function_response_types = var.report_batch_item_failures ? ["ReportBatchItemFailures"] : []
 }

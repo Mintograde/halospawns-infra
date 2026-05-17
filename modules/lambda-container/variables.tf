@@ -25,10 +25,23 @@ variable "memory_size" {
   default     = 512
 }
 
+variable "ephemeral_storage_size" {
+  description = "Optional Lambda ephemeral storage size in MB."
+  type        = number
+  default     = null
+  nullable    = true
+}
+
 variable "batch_size" {
   description = "The maximum number of items to retrieve in a single batch from the SQS queue."
   type        = number
   default     = 10
+}
+
+variable "report_batch_item_failures" {
+  description = "Whether the SQS event source mapping should enable partial batch failure responses."
+  type        = bool
+  default     = false
 }
 
 variable "environment_variables" {

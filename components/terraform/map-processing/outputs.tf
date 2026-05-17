@@ -20,3 +20,8 @@ output "app_api_trusted_service_hmac_secret_id" {
   description = "Secrets Manager secret identifier configured for processor callback signing."
   value       = local.trusted_service_hmac_secret_id
 }
+
+output "app_api_trusted_service_hmac_secret_ids" {
+  description = "Secrets Manager secret identifiers available to processor callback signers, keyed by trusted client name."
+  value       = local.trusted_service_hmac_secret_ids_by_client
+}

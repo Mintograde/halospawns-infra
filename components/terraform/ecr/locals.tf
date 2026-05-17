@@ -1,5 +1,6 @@
 locals {
   lambda_containers = [
-    "halospawns-tools"
+    "halospawns-tools",
+    "halospawns-replay-parser"
   ]
 }

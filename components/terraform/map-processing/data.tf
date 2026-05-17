@@ -31,11 +31,11 @@ data "terraform_remote_state" "app_api" {
 }
 
 data "aws_iam_policy_document" "trusted_service_hmac_secret" {
-  count = local.trusted_service_hmac_secret_arn == null ? 0 : 1
+  for_each = local.trusted_service_hmac_secret_arns_by_client
 
   statement {
     sid       = "ReadTrustedServiceHmacSecret"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [local.trusted_service_hmac_secret_arn]
+    resources = [each.value]
   }
 }
