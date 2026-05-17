@@ -10,6 +10,7 @@ import posixpath
 import re
 import shutil
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -143,7 +144,13 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
             processed_key,
         )
     except NonRetryableReplayError as error:
-        LOGGER.warning("Replay upload %s is not processable: %s", upload_id, error)
+        error_details = _exception_details(error)
+        LOGGER.warning(
+            "Replay upload %s is not processable: %s",
+            upload_id,
+            error,
+            exc_info=True,
+        )
         _send_upload_status(
             upload_id,
             "failed",
@@ -154,6 +161,7 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
                     "key": replay_object.key,
                     "event_name": replay_object.event_name,
                 },
+                "processor_error": error_details,
             },
         )
         failed_key = _processed_key(
@@ -536,6 +544,16 @@ def _send_upload_status(
         _settings()["processing_status_path_template"].format(upload_id=upload_id),
         payload,
     )
+
+
+def _exception_details(error: BaseException) -> dict[str, str]:
+    return {
+        "type": type(error).__name__,
+        "message": str(error),
+        "traceback": "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        ),
+    }
 
 
 def _call_app_api(method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
