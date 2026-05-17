@@ -82,3 +82,14 @@ variable "app_api_replay_finalization_path" {
     error_message = "app_api_replay_finalization_path must start with '/'."
   }
 }
+
+variable "app_api_map_finalization_path" {
+  description = "Path for app-api map finalization callbacks."
+  type        = string
+  default     = "/v1/ingest/map-uploads"
+
+  validation {
+    condition     = startswith(var.app_api_map_finalization_path, "/")
+    error_message = "app_api_map_finalization_path must start with '/'."
+  }
+}

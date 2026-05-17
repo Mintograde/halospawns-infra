@@ -360,6 +360,10 @@ module "api" {
       authorization_type = "NONE"
     },
     {
+      route_key          = "POST /v1/ingest/map-uploads"
+      authorization_type = "NONE"
+    },
+    {
       route_key          = "$default"
       authorization_type = var.create_jwt_authorizer ? "JWT" : "NONE"
     },

@@ -5,13 +5,19 @@ locals {
       sqs_queue_arn                    = data.terraform_remote_state.uploads_ingest.outputs.file_processing_queue_arns["maps"]
       s3_bucket_arn                    = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn
       s3_bucket_path                   = "/maps"
-      batch_size                       = 10
+      batch_size                       = 1
       timeout                          = 300
       memory_size                      = 512
       ephemeral_storage_size           = null
-      report_batch_item_failures       = false
+      report_batch_item_failures       = true
       trusted_service_hmac_client_name = var.trusted_service_hmac_client_name
-      environment_variables            = {}
+      environment_variables = {
+        APP_API_MAP_FINALIZATION_PATH = var.app_api_map_finalization_path
+        MAP_UNPROCESSED_PREFIX        = "maps/unprocessed/"
+        MAP_PROCESSED_PREFIX          = "maps/processed/"
+        MAP_FAILED_PREFIX             = "maps/failed/"
+        REPORT_BATCH_ITEM_FAILURES    = "true"
+      }
     }
     "halospawns-replay-parser" = {
       description                      = "Parses replay files from SQS"
