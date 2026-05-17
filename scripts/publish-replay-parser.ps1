@@ -16,13 +16,20 @@ param (
     [string]$RepositoryName = "halospawns-replay-parser",
 
     [Parameter()]
-    [string]$Tag = "latest"
+    [string]$Tag = "latest",
+
+    [Parameter()]
+    [string]$FunctionName
 )
 
 Set-StrictMode -Version Latest
 
 if (-not $Profile) {
     $Profile = "halospawns-$Stack"
+}
+
+if (-not $FunctionName) {
+    $FunctionName = "halospawns-replay-parser-$Stack"
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -68,6 +75,17 @@ try {
     $pushCommandText = "docker push $remoteImage"
     Write-Host "+ $pushCommandText"
     & docker push $remoteImage
+    if ($LASTEXITCODE -ne 0) {
+        exit 1
+    }
+
+    $updateFunctionCommandText = "aws lambda update-function-code --profile $Profile --region $Region --function-name $FunctionName --image-uri $remoteImage"
+    Write-Host "+ $updateFunctionCommandText"
+    & aws lambda update-function-code `
+        --profile $Profile `
+        --region $Region `
+        --function-name $FunctionName `
+        --image-uri $remoteImage
     if ($LASTEXITCODE -ne 0) {
         exit 1
     }
