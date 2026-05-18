@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import posixpath
 import re
@@ -35,6 +36,8 @@ UUID_PATTERN = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})"
 )
 SECRET_CACHE: dict[str, str] = {}
+MAX_SPAWN_POINTS = 512
+PROCESSOR_NAME = "halospawns-replay-parser"
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 TICK_FIELDS = {
     "multiplayer_map_name",
@@ -106,6 +109,8 @@ class ParsedReplay:
     game: dict[str, Any]
     participants: list[dict[str, Any]]
     team_stats: list[dict[str, Any]]
+    spawn_points: list[dict[str, float]]
+    spawn_source: dict[str, Any] | None
     metadata: dict[str, Any]
 
 
@@ -366,16 +371,25 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         "event_count": replay_document["event_count"],
         "event_sample": replay_document["event_sample"],
         "parser": {
-            "name": "halospawns-replay-parser",
+            "name": PROCESSOR_NAME,
             "json_library": "ijson",
             "ijson_backend": getattr(ijson.backend, "__name__", str(ijson.backend)),
         },
     }
+    spawn_points = replay_document["spawn_points"]
+    spawn_source = None
+    if spawn_points:
+        spawn_source = {
+            "path": replay_document["spawn_source_path"],
+            "extractor": PROCESSOR_NAME,
+        }
 
     return ParsedReplay(
         game=game,
         participants=participants,
         team_stats=team_stats,
+        spawn_points=spawn_points,
+        spawn_source=spawn_source,
         metadata=metadata,
     )
 
@@ -387,6 +401,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     last_tick: dict[str, Any] | None = None
     current_tick: dict[str, Any] | None = None
     current_player: dict[str, Any] | None = None
+    spawn_points: list[dict[str, float]] = []
+    spawn_source_path: str | None = None
     tick_count = 0
     event_count = 0
     event_sample: list[Any] = []
@@ -394,7 +410,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     active_builder: ijson.ObjectBuilder | None = None
     active_target: str | None = None
     active_end_event: str | None = None
-    active_context: tuple[str, str, str] | None = None
+    active_context: tuple[Any, ...] | None = None
 
     with json_path.open("rb") as replay_file:
         for prefix, event, value in ijson.parse(replay_file, use_float=True):
@@ -407,6 +423,12 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     elif active_context and active_context[0] == "meta_player_field":
                         _, player_id, field = active_context
                         game_meta_players.setdefault(player_id, {})[field] = built_value
+                    elif active_context and active_context[0] == "spawn_records":
+                        _, source_path = active_context
+                        extracted_points = _spawn_points_from_records(built_value)
+                        if extracted_points and not spawn_points:
+                            spawn_points = extracted_points
+                            spawn_source_path = source_path
                     elif active_target == "events.item":
                         event_count += 1
                         if len(event_sample) < 10:
@@ -419,10 +441,29 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                 continue
 
             if prefix == "summary" and event in ("start_map", "start_array"):
-                active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
                     prefix,
                     event,
                     value,
+                )
+                continue
+
+            if not spawn_points and prefix == "spawns" and event == "start_array":
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                    context=("spawn_records", "$.spawns"),
                 )
                 continue
 
@@ -432,7 +473,12 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                 if field in META_PLAYER_SCALAR_FIELDS and _is_scalar_json_event(event):
                     game_meta_players.setdefault(player_id, {})[field] = value
                 elif field in META_PLAYER_MAPPING_FIELDS and event in ("start_map", "start_array"):
-                    active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
                         prefix,
                         event,
                         value,
@@ -451,6 +497,20 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         first_tick = current_tick
                     last_tick = current_tick
                     current_tick = None
+                    continue
+
+                if not spawn_points and prefix == "ticks.item.spawns" and event == "start_array":
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                        context=("spawn_records", f"$.ticks[{tick_count}].spawns"),
+                    )
                     continue
 
                 if prefix == "ticks.item.players.item" and event == "start_map":
@@ -475,7 +535,12 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
 
             if prefix == "events.item":
                 if event in ("start_map", "start_array"):
-                    active_builder, active_target, active_end_event, active_context = _start_json_builder(
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
                         prefix,
                         event,
                         value,
@@ -490,6 +555,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
         "game_meta_players": game_meta_players,
         "first_tick": first_tick or {},
         "last_tick": last_tick or {},
+        "spawn_points": spawn_points,
+        "spawn_source_path": spawn_source_path,
         "tick_count": tick_count,
         "event_count": event_count,
         "event_sample": event_sample,
@@ -501,8 +568,8 @@ def _start_json_builder(
     event: str,
     value: Any,
     *,
-    context: tuple[str, str, str] | None = None,
-) -> tuple[ijson.ObjectBuilder, str, str, tuple[str, str, str] | None]:
+    context: tuple[Any, ...] | None = None,
+) -> tuple[ijson.ObjectBuilder, str, str, tuple[Any, ...] | None]:
     builder = ijson.ObjectBuilder()
     builder.event(event, value)
     end_event = "end_map" if event == "start_map" else "end_array"
@@ -526,6 +593,57 @@ def _direct_child_field(prefix: str, parent_prefix: str) -> str | None:
 
 def _is_scalar_json_event(event: str) -> bool:
     return event not in COMPOSITE_JSON_EVENTS
+
+
+def _spawn_points_from_records(records: Any) -> list[dict[str, float]]:
+    if not isinstance(records, list):
+        return []
+
+    points: list[dict[str, float]] = []
+    skipped = 0
+    for record in records:
+        point = _spawn_point_from_record(record)
+        if point is None:
+            skipped += 1
+            continue
+        points.append(point)
+        if len(points) >= MAX_SPAWN_POINTS:
+            break
+
+    if skipped:
+        LOGGER.info("Skipped %s spawn record(s) without finite x/y/z coordinates", skipped)
+    if len(records) > MAX_SPAWN_POINTS:
+        LOGGER.info("Truncated spawn records from %s to %s", len(records), MAX_SPAWN_POINTS)
+    return points
+
+
+def _spawn_point_from_record(record: Any) -> dict[str, float] | None:
+    try:
+        if isinstance(record, dict):
+            if all(axis in record for axis in ("x", "y", "z")):
+                return _finite_spawn_point(record["x"], record["y"], record["z"])
+            for key in ("position", "translation", "origin", "location"):
+                nested = record.get(key)
+                if isinstance(nested, dict) and all(axis in nested for axis in ("x", "y", "z")):
+                    return _finite_spawn_point(nested["x"], nested["y"], nested["z"])
+                if isinstance(nested, (list, tuple)) and len(nested) >= 3:
+                    return _finite_spawn_point(nested[0], nested[1], nested[2])
+        if isinstance(record, (list, tuple)) and len(record) >= 3:
+            return _finite_spawn_point(record[0], record[1], record[2])
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def _finite_spawn_point(x: Any, y: Any, z: Any) -> dict[str, float] | None:
+    point = {
+        "x": float(x),
+        "y": float(y),
+        "z": float(z),
+    }
+    if not all(math.isfinite(component) for component in point.values()):
+        return None
+    return point
 
 
 def _game_from_replay(
@@ -575,7 +693,10 @@ def _participants_from_replay(
     last_players: list[dict[str, Any]],
     meta_players: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    first_by_index = {_player_index(player, fallback=index): player for index, player in enumerate(first_players)}
+    first_by_index = {
+        _player_index(player, fallback=index): player
+        for index, player in enumerate(first_players)
+    }
     participants: list[dict[str, Any]] = []
 
     for fallback_index, last_player in enumerate(last_players):
@@ -701,6 +822,9 @@ def _finalize_replay_upload(
             "processed_s3_key": processed_key,
         },
     }
+    if parsed.spawn_points:
+        payload["spawn_points"] = parsed.spawn_points
+        payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
     _call_app_api("POST", _settings()["replay_finalization_path"], payload)
 
 
@@ -716,7 +840,7 @@ def _send_upload_status(
         "metadata": {
             **(metadata or {}),
             "processor_runtime": {
-                "name": "halospawns-replay-parser",
+                "name": PROCESSOR_NAME,
             },
         },
     }
@@ -777,7 +901,9 @@ def _call_app_api(method: str, path: str, payload: dict[str, Any]) -> dict[str, 
             f"App API returned HTTP {error.code} for {method} {path}: {error_body[:1000]}"
         ) from error
     except urllib.error.URLError as error:
-        raise ReplayProcessingError(f"App API request failed for {method} {path}: {error}") from error
+        raise ReplayProcessingError(
+            f"App API request failed for {method} {path}: {error}"
+        ) from error
 
 
 def _hmac_signature(
@@ -824,7 +950,11 @@ def _delete_object(bucket: str, key: str) -> None:
 
 
 def _processed_key(source_key: str, *, unprocessed_prefix: str, processed_prefix: str) -> str:
-    suffix = source_key[len(unprocessed_prefix) :] if source_key.startswith(unprocessed_prefix) else posixpath.basename(source_key)
+    suffix = (
+        source_key[len(unprocessed_prefix) :]
+        if source_key.startswith(unprocessed_prefix)
+        else posixpath.basename(source_key)
+    )
     return f"{processed_prefix}{suffix.lstrip('/')}"
 
 
@@ -1010,7 +1140,13 @@ def _duration_seconds(value: Any) -> int | None:
     try:
         if len(parts) == 3:
             hours, minutes, seconds = parts
-            return int(timedelta(hours=int(hours), minutes=int(minutes), seconds=float(seconds)).total_seconds())
+            return int(
+                timedelta(
+                    hours=int(hours),
+                    minutes=int(minutes),
+                    seconds=float(seconds),
+                ).total_seconds()
+            )
         if len(parts) == 2:
             minutes, seconds = parts
             return int(timedelta(minutes=int(minutes), seconds=float(seconds)).total_seconds())
