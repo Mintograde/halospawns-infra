@@ -12,4 +12,6 @@ components:
         supabase_jwt_audience: authenticated
         map_upload_prefix: maps/unprocessed
         replay_upload_prefix: replays/unprocessed
+        map_asset_read_prefix: maps/processed
+        replay_asset_read_prefix: replays/processed
         upload_url_ttl_seconds: 900

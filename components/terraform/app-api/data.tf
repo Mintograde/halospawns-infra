@@ -84,6 +84,26 @@ data "aws_iam_policy_document" "app_runtime" {
       resources = local.upload_put_object_resource_arns
     }
   }
+
+  dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+
+    content {
+      sid       = "PresignProcessedMapGetObjects"
+      actions   = ["s3:GetObject"]
+      resources = local.map_asset_get_object_resource_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+
+    content {
+      sid       = "PresignProcessedReplayGetObjects"
+      actions   = ["s3:GetObject"]
+      resources = local.replay_asset_get_object_resource_arns
+    }
+  }
 }
 
 data "archive_file" "code_updater" {

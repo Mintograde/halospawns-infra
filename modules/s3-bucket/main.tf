@@ -47,7 +47,7 @@ resource "aws_s3_bucket_cors_configuration" "this" {
   bucket = aws_s3_bucket.this.id
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["PUT", "POST"]
+    allowed_methods = ["GET", "HEAD", "PUT", "POST"]
     allowed_origins = var.allowed_cors_origins
     expose_headers  = []
     max_age_seconds = 3000

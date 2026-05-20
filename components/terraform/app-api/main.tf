@@ -2,6 +2,8 @@ locals {
   normalized_artifact_release_prefix = trimsuffix(var.artifact_release_prefix, "/") == "" ? "" : "${trimsuffix(var.artifact_release_prefix, "/")}/"
   map_upload_prefix                  = trim(var.map_upload_prefix, "/")
   replay_upload_prefix               = trim(var.replay_upload_prefix, "/")
+  map_asset_read_prefix              = trim(var.map_asset_read_prefix, "/")
+  replay_asset_read_prefix           = trim(var.replay_asset_read_prefix, "/")
 
   frontend_hosted_zone_id = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
   api_hosted_zone_id      = var.hosted_zone_id != null ? var.hosted_zone_id : local.frontend_hosted_zone_id
@@ -35,6 +37,14 @@ locals {
   upload_put_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
     "${local.uploads_bucket_arn}/${local.map_upload_prefix}/*",
     "${local.uploads_bucket_arn}/${local.replay_upload_prefix}/*",
+  ]
+
+  map_asset_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+    "${local.uploads_bucket_arn}/${local.map_asset_read_prefix}/*",
+  ]
+
+  replay_asset_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+    "${local.uploads_bucket_arn}/${local.replay_asset_read_prefix}/*",
   ]
 
   app_lambda_environment = var.enabled ? merge(
@@ -128,8 +138,8 @@ resource "terraform_data" "required_inputs" {
     }
 
     precondition {
-      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != ""
-      error_message = "map_upload_prefix and replay_upload_prefix must be non-empty stable root prefixes."
+      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != "" && local.map_asset_read_prefix != "" && local.replay_asset_read_prefix != ""
+      error_message = "map_upload_prefix, replay_upload_prefix, map_asset_read_prefix, and replay_asset_read_prefix must be non-empty stable root prefixes."
     }
   }
 }
