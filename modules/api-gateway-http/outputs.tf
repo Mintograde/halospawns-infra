@@ -18,6 +18,11 @@ output "stage_name" {
   value       = aws_apigatewayv2_stage.this.name
 }
 
+output "access_log_group_name" {
+  description = "CloudWatch Logs group receiving HTTP API access logs."
+  value       = var.enable_access_logs ? aws_cloudwatch_log_group.access_logs[0].name : null
+}
+
 output "jwt_authorizer_id" {
   description = "JWT authorizer ID, when configured."
   value       = var.jwt_authorizer == null ? null : aws_apigatewayv2_authorizer.jwt[0].id

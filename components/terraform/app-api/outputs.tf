@@ -23,6 +23,11 @@ output "api_stage_name" {
   value       = var.enabled ? module.api[0].stage_name : null
 }
 
+output "api_access_log_group_name" {
+  description = "CloudWatch Logs group receiving app API Gateway access logs."
+  value       = var.enabled ? module.api[0].access_log_group_name : null
+}
+
 output "app_lambda_function_name" {
   description = "App Lambda function name."
   value       = var.enabled ? module.app_lambda[0].function_name : null

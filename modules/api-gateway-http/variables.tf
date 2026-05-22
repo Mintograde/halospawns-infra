@@ -21,6 +21,18 @@ variable "stage_name" {
   default     = "$default"
 }
 
+variable "enable_access_logs" {
+  description = "Whether to write HTTP API stage access logs to CloudWatch Logs."
+  type        = bool
+  default     = true
+}
+
+variable "access_log_retention_days" {
+  description = "CloudWatch retention period for HTTP API access logs."
+  type        = number
+  default     = 30
+}
+
 variable "lambda_invoke_arn" {
   description = "Lambda function or alias invoke ARN used by the proxy integration."
   type        = string

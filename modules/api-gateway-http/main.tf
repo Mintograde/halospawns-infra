@@ -4,6 +4,32 @@ locals {
   create_managed_certificate = local.create_domain && var.create_certificate
   certificate_arn            = local.create_managed_certificate ? aws_acm_certificate_validation.this[0].certificate_arn : var.certificate_arn
   route_map                  = { for route in var.routes : route.route_key => route }
+  access_log_format = jsonencode({
+    requestId                = "$context.requestId"
+    extendedRequestId        = "$context.extendedRequestId"
+    requestTime              = "$context.requestTime"
+    requestTimeEpoch         = "$context.requestTimeEpoch"
+    apiId                    = "$context.apiId"
+    domainName               = "$context.domainName"
+    stage                    = "$context.stage"
+    httpMethod               = "$context.httpMethod"
+    path                     = "$context.path"
+    routeKey                 = "$context.routeKey"
+    protocol                 = "$context.protocol"
+    status                   = "$context.status"
+    responseLength           = "$context.responseLength"
+    responseLatency          = "$context.responseLatency"
+    integrationStatus        = "$context.integrationStatus"
+    integrationLatency       = "$context.integrationLatency"
+    integrationErrorMessage  = "$context.integrationErrorMessage"
+    integrationRequestId     = "$context.integration.requestId"
+    integrationResponseCode  = "$context.integration.status"
+    integrationExecutionCode = "$context.integration.integrationStatus"
+    errorMessage             = "$context.error.message"
+    errorResponseType        = "$context.error.responseType"
+    sourceIp                 = "$context.identity.sourceIp"
+    userAgent                = "$context.identity.userAgent"
+  })
 }
 
 resource "aws_apigatewayv2_api" "this" {
@@ -64,11 +90,28 @@ resource "aws_apigatewayv2_route" "this" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "access_logs" {
+  count = var.enable_access_logs ? 1 : 0
+
+  name              = "/aws/apigateway/${var.name}"
+  retention_in_days = var.access_log_retention_days
+  tags              = var.tags
+}
+
 resource "aws_apigatewayv2_stage" "this" {
   api_id      = aws_apigatewayv2_api.this.id
   name        = var.stage_name
   auto_deploy = true
   tags        = var.tags
+
+  dynamic "access_log_settings" {
+    for_each = var.enable_access_logs ? [1] : []
+
+    content {
+      destination_arn = aws_cloudwatch_log_group.access_logs[0].arn
+      format          = local.access_log_format
+    }
+  }
 }
 
 resource "aws_lambda_permission" "allow_api_gateway" {
