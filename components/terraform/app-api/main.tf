@@ -358,11 +358,11 @@ module "api" {
       authorization_type = "NONE"
     },
     {
-      route_key          = "POST /v1/ingest/live-games/status"
+      route_key          = "POST /v1/ingest/live-channels/status"
       authorization_type = "NONE"
     },
     {
-      route_key          = "POST /v1/ingest/live-games/{live_game_id}/finish"
+      route_key          = "POST /v1/ingest/live-channels/{channel_key}/offline"
       authorization_type = "NONE"
     },
     {
