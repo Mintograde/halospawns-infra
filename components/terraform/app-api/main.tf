@@ -74,6 +74,55 @@ locals {
     issuer   = var.supabase_jwt_issuer == null ? "" : var.supabase_jwt_issuer
     audience = [var.supabase_jwt_audience]
   } : null
+
+  app_api_public_routes = [
+    {
+      route_key          = "GET /health"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "OPTIONS /{proxy+}"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "PATCH /v1/uploads/{upload_id}/processing-status"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/live-channels/status"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/live-channels/{channel_key}/offline"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/replay-uploads"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/map-uploads"
+      authorization_type = "NONE"
+    },
+  ]
+
+  app_api_dev_public_routes = var.environment == "dev" ? [
+    {
+      route_key          = "GET /swagger"
+      authorization_type = "NONE"
+    },
+  ] : []
+
+  app_api_routes = concat(
+    local.app_api_public_routes,
+    local.app_api_dev_public_routes,
+    [
+      {
+        route_key          = "$default"
+        authorization_type = var.create_jwt_authorizer ? "JWT" : "NONE"
+      },
+    ],
+  )
 }
 
 resource "terraform_data" "required_inputs" {
@@ -344,40 +393,7 @@ module "api" {
   lambda_function_name = module.app_lambda[0].function_name
   lambda_alias_name    = module.app_lambda[0].alias_name
 
-  routes = [
-    {
-      route_key          = "GET /health"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "OPTIONS /{proxy+}"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "PATCH /v1/uploads/{upload_id}/processing-status"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "POST /v1/ingest/live-channels/status"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "POST /v1/ingest/live-channels/{channel_key}/offline"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "POST /v1/ingest/replay-uploads"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "POST /v1/ingest/map-uploads"
-      authorization_type = "NONE"
-    },
-    {
-      route_key          = "$default"
-      authorization_type = var.create_jwt_authorizer ? "JWT" : "NONE"
-    },
-  ]
+  routes = local.app_api_routes
 
   jwt_authorizer       = local.jwt_authorizer
   cors_allowed_origins = var.frontend_allowed_origins
