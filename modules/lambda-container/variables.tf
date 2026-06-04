@@ -44,6 +44,12 @@ variable "report_batch_item_failures" {
   default     = false
 }
 
+variable "event_source_enabled" {
+  description = "Whether the SQS event source mapping is enabled."
+  type        = bool
+  default     = true
+}
+
 variable "environment_variables" {
   description = "A map of environment variables for the Lambda function."
   type        = map(string)

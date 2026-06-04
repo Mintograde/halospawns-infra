@@ -219,6 +219,7 @@ module "sqs_lambda_consumers" {
 
   ephemeral_storage_size     = each.value.ephemeral_storage_size
   report_batch_item_failures = each.value.report_batch_item_failures
+  event_source_enabled       = each.value.event_source_enabled
 
   environment_variables = merge(
     {

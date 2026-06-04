@@ -22,6 +22,7 @@ locals {
       memory_size                      = 512
       ephemeral_storage_size           = null
       report_batch_item_failures       = true
+      event_source_enabled             = var.legacy_maps_processor_event_source_enabled
       trusted_service_hmac_client_name = var.trusted_service_hmac_client_name
       environment_variables = {
         APP_API_MAP_FINALIZATION_PATH = var.app_api_map_finalization_path
@@ -41,6 +42,7 @@ locals {
       memory_size                      = 2048
       ephemeral_storage_size           = 10240
       report_batch_item_failures       = true
+      event_source_enabled             = true
       trusted_service_hmac_client_name = "replay-processing"
       environment_variables = {
         APP_API_REPLAY_FINALIZATION_PATH = var.app_api_replay_finalization_path

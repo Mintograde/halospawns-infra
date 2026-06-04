@@ -61,6 +61,12 @@ variable "trusted_service_hmac_client_name" {
   }
 }
 
+variable "legacy_maps_processor_event_source_enabled" {
+  description = "Whether the legacy container maps processor SQS event source mapping is enabled."
+  type        = bool
+  default     = true
+}
+
 variable "app_api_processing_status_path_template" {
   description = "Path template for app-api upload processing status callbacks."
   type        = string

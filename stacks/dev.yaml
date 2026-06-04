@@ -78,3 +78,5 @@ components:
         ecr_state_key: dev/ecr/terraform.tfstate
         uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
         app_api_state_key: dev/app-api/terraform.tfstate
+        native_maps_processor_event_source_enabled: true
+        legacy_maps_processor_event_source_enabled: false

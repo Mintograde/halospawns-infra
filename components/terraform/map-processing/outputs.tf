@@ -36,6 +36,11 @@ output "native_maps_processor_event_source_enabled" {
   value       = var.native_maps_processor_event_source_enabled
 }
 
+output "legacy_maps_processor_event_source_enabled" {
+  description = "Whether the legacy container maps processor SQS event source mapping is enabled."
+  value       = var.legacy_maps_processor_event_source_enabled
+}
+
 output "maps_processor_artifact_bucket_name" {
   description = "S3 bucket used for native maps processor release artifacts."
   value       = aws_s3_bucket.maps_artifacts.id

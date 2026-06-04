@@ -77,6 +77,6 @@ resource "aws_lambda_event_source_mapping" "sqs_trigger" {
   event_source_arn        = var.sqs_queue_arn
   function_name           = aws_lambda_function.container_lambda.arn
   batch_size              = var.batch_size
-  enabled                 = true
+  enabled                 = var.event_source_enabled
   function_response_types = var.report_batch_item_failures ? ["ReportBatchItemFailures"] : []
 }
