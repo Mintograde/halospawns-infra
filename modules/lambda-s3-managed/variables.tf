@@ -48,6 +48,13 @@ variable "memory_size" {
   default     = 128
 }
 
+variable "ephemeral_storage_size" {
+  description = "Optional Lambda ephemeral storage size in MB. Leave null for the AWS default."
+  type        = number
+  default     = null
+  nullable    = true
+}
+
 variable "reserved_concurrent_executions" {
   description = "Reserved concurrency for the Lambda function. Leave null for unreserved."
   type        = number

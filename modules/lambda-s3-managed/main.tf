@@ -62,6 +62,14 @@ resource "aws_lambda_function" "this" {
   reserved_concurrent_executions = var.reserved_concurrent_executions
   tags                           = var.tags
 
+  dynamic "ephemeral_storage" {
+    for_each = var.ephemeral_storage_size == null ? [] : [var.ephemeral_storage_size]
+
+    content {
+      size = ephemeral_storage.value
+    }
+  }
+
   environment {
     variables = var.environment_variables
   }

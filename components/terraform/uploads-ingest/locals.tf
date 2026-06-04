@@ -4,6 +4,11 @@ locals {
     "replays"
   ]
 
+  file_processing_visibility_timeout_seconds = {
+    maps    = 900
+    replays = 300
+  }
+
   full_domain_name = "api-${var.environment}.halospawns.com"
 
   upload_signing_private_key_secret_name   = "/${var.project}/${var.environment}/cloudfront/upload-signing/private-key"

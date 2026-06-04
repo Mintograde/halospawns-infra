@@ -56,7 +56,7 @@ resource "aws_sns_topic" "file_uploaded" {
 resource "aws_sqs_queue" "file_processing" {
   for_each                   = toset(local.file_upload_types)
   name                       = "${each.key}-processing-queue"
-  visibility_timeout_seconds = 300    # 5 minutes
+  visibility_timeout_seconds = local.file_processing_visibility_timeout_seconds[each.key]
   message_retention_seconds  = 604800 # 7 days
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({

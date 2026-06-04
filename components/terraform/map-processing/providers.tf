@@ -1,3 +1,14 @@
+terraform {
+  required_providers {
+    archive = {
+      source = "hashicorp/archive"
+    }
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
+}
+
 provider "aws" {
   region  = var.region
   profile = var.profile
