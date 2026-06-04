@@ -49,14 +49,15 @@ locals {
 
   app_lambda_environment = var.enabled ? merge(
     {
-      ENVIRONMENT                      = var.environment
-      SUPABASE_DATABASE_URL_SECRET_ARN = aws_secretsmanager_secret.supabase_database_url[0].arn
-      SUPABASE_PROJECT_REF             = var.supabase_project_ref == null ? "" : var.supabase_project_ref
-      SUPABASE_URL                     = var.supabase_url == null ? "" : var.supabase_url
-      UPLOADS_BUCKET                   = coalesce(local.uploads_bucket_name, "")
-      MAP_UPLOAD_PREFIX                = local.map_upload_prefix
-      REPLAY_UPLOAD_PREFIX             = local.replay_upload_prefix
-      UPLOAD_URL_TTL_SECONDS           = tostring(var.upload_url_ttl_seconds)
+      ENVIRONMENT                               = var.environment
+      SUPABASE_DATABASE_URL_SECRET_ARN          = aws_secretsmanager_secret.supabase_database_url[0].arn
+      SUPABASE_PROJECT_REF                      = var.supabase_project_ref == null ? "" : var.supabase_project_ref
+      SUPABASE_URL                              = var.supabase_url == null ? "" : var.supabase_url
+      UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
+      MAP_UPLOAD_PREFIX                         = local.map_upload_prefix
+      REPLAY_UPLOAD_PREFIX                      = local.replay_upload_prefix
+      UPLOAD_URL_TTL_SECONDS                    = tostring(var.upload_url_ttl_seconds)
+      MAP_SUPPORT_RESOURCE_AUTO_APPROVE_UPLOADS = tostring(var.map_support_resource_auto_approve_uploads)
     },
     var.create_supabase_service_role_secret ? {
       SUPABASE_SERVICE_ROLE_SECRET_ARN = aws_secretsmanager_secret.supabase_service_role[0].arn
@@ -102,6 +103,14 @@ locals {
     },
     {
       route_key          = "POST /v1/ingest/map-uploads"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/map-support-resources"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/map-support-resources/resolve"
       authorization_type = "NONE"
     },
   ]

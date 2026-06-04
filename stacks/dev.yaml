@@ -64,6 +64,7 @@ components:
           map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
           replay-processing: /halospawns/dev/app-api/trusted-clients/replay-processing/hmac-secret
         trusted_service_hmac_timestamp_tolerance_seconds: 300
+        map_support_resource_auto_approve_uploads: true
     uploads-ingest:
       vars:
         allowed_cors_origins:

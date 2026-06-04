@@ -163,6 +163,12 @@ variable "upload_url_ttl_seconds" {
   default     = 900
 }
 
+variable "map_support_resource_auto_approve_uploads" {
+  description = "Whether validated map support-resource uploads auto-activate. Dev rollout only."
+  type        = bool
+  default     = false
+}
+
 variable "github_repository" {
   description = "GitHub API repository allowed to upload release artifacts, in owner/name form."
   type        = string
