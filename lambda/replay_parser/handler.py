@@ -429,6 +429,9 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         if extracted_points and not spawn_points:
                             spawn_points = extracted_points
                             spawn_source_path = source_path
+                    elif active_context and active_context[0] == "tick_map_info":
+                        if current_tick is not None:
+                            current_tick["map_info"] = _proxy_dict(built_value)
                     elif active_target == "events.item":
                         event_count += 1
                         if len(event_sample) < 10:
@@ -510,6 +513,20 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         event,
                         value,
                         context=("spawn_records", f"$.ticks[{tick_count}].spawns"),
+                    )
+                    continue
+
+                if prefix == "ticks.item.map_info" and event == "start_map":
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                        context=("tick_map_info",),
                     )
                     continue
 
@@ -664,8 +681,11 @@ def _game_from_replay(
     ended_at = _timestamp_string(summary.get("recording_ended") or last_tick.get("current_time"))
     duration_seconds = _duration_seconds(summary.get("game_duration_ingame"))
     winning_team_index = _winning_team_index(team_stats)
+    map_info = _map_info_from_ticks(first_tick, last_tick)
+    cache_version = _optional_int(map_info.get("cache_version"))
+    build_version = _optional_text(map_info.get("build_version"))
 
-    return {
+    game = {
         "map_engine_name": map_engine_name,
         "game_type": game_type,
         "variant_name": variant if isinstance(variant, str) else None,
@@ -686,6 +706,19 @@ def _game_from_replay(
             "recording_duration": summary.get("recording_duration"),
         },
     }
+    if cache_version is not None:
+        game["cache_version"] = cache_version
+    if build_version is not None:
+        game["build_version"] = build_version
+    return game
+
+
+def _map_info_from_ticks(first_tick: Any, last_tick: Any) -> dict[str, Any]:
+    for tick in (last_tick, first_tick):
+        map_info = _proxy_dict(_proxy_dict(tick).get("map_info"))
+        if map_info:
+            return map_info
+    return {}
 
 
 def _participants_from_replay(

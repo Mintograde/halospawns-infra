@@ -50,6 +50,11 @@ components:
           - http://127.0.0.1:5173
           - http://127.0.0.1:5174
           - http://127.0.0.1:5175
+          - http://127.0.0.1:5176
+          - http://127.0.0.1:5177
+          - http://127.0.0.1:5178
+          - http://127.0.0.1:5179
+          - http://127.0.0.1:5180
         github_environment: dev
         create_github_oidc_provider: false
         github_oidc_provider_arn: null
@@ -72,6 +77,11 @@ components:
           - http://127.0.0.1:5173
           - http://127.0.0.1:5174
           - http://127.0.0.1:5175
+          - http://127.0.0.1:5176
+          - http://127.0.0.1:5177
+          - http://127.0.0.1:5178
+          - http://127.0.0.1:5179
+          - http://127.0.0.1:5180
     map-processing:
       vars:
         tfstate_bucket: halospawns-tfstate-283279960672
