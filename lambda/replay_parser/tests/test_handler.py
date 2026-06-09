@@ -22,6 +22,7 @@ def _write_replay_json(
     directory: Path,
     *,
     map_info: dict[str, object] | None,
+    gametype_settings: dict[str, object] | None = None,
     summary_overrides: dict[str, object] | None = None,
     tick_overrides: dict[str, object] | None = None,
 ) -> Path:
@@ -54,18 +55,58 @@ def _write_replay_json(
         summary.update(summary_overrides)
 
     path = directory / "replay.json"
+    replay: dict[str, object] = {
+        "summary": summary,
+        "game_meta": {"players": {}},
+        "ticks": [tick],
+        "events": [],
+    }
+    if gametype_settings is not None:
+        replay["gametype_settings"] = gametype_settings
+
     path.write_text(
-        json.dumps(
-            {
-                "summary": summary,
-                "game_meta": {"players": {}},
-                "ticks": [tick],
-                "events": [],
-            }
-        ),
+        json.dumps(replay),
         encoding="utf-8",
     )
     return path
+
+
+def _finalization_payload(parsed: handler.ParsedReplay) -> dict[str, object]:
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def capture_call(method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+        calls.append((method, path, payload))
+        return {}
+
+    with (
+        patch.object(
+            handler,
+            "_settings",
+            return_value={"replay_finalization_path": "/v1/ingest/replay-uploads"},
+        ),
+        patch.object(handler, "_call_app_api", side_effect=capture_call),
+    ):
+        handler._finalize_replay_upload(
+            upload_id="22222222-2222-4222-8222-222222222222",
+            source_external_id="22222222-2222-4222-8222-222222222222",
+            original_object=handler.S3ReplayObject(
+                bucket="uploads-bucket",
+                key="replays/unprocessed/22222222-2222-4222-8222-222222222222.json.zst",
+                event_name="ObjectCreated:Put",
+                sqs_message_id="message-1",
+            ),
+            processed_key="replays/processed/22222222-2222-4222-8222-222222222222.json.zst",
+            downloaded=handler.DownloadedReplay(
+                path=Path("replay.json.zst"),
+                content_type="application/zstd",
+                size_bytes=123,
+                sha256="a" * 64,
+                metadata={},
+            ),
+            parsed=parsed,
+        )
+
+    return calls[0][2]
 
 
 class ReplayParserStatusTests(unittest.TestCase):
@@ -96,6 +137,85 @@ class ReplayParserStatusTests(unittest.TestCase):
 
         self.assertEqual(parsed.game["status"], "imported")
         self.assertIs(parsed.game["metadata"]["game_ended_this_tick"], False)
+
+
+class ReplayParserGametypeSettingsTests(unittest.TestCase):
+    def test_finalization_payload_prefers_sanitized_gametype_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                gametype_settings={
+                    "name": "Team Slayer",
+                    "game_type": 2,
+                    "mode": "slayer",
+                    "teamplay": 1,
+                    "teams_enabled": True,
+                    "player_settings": {
+                        "value": 0,
+                        "radar_enabled": False,
+                        "host_address": "192.0.2.1",
+                    },
+                    "raw_byte_dump": "deadbeef" * 16,
+                    "presigned_url": "https://example.test/replay?X-Amz-Signature=abc",
+                },
+                tick_overrides={"game_type": 1, "variant": "Classic Slayer"},
+            )
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+        game = payload["game"]
+        self.assertIsInstance(game, dict)
+        self.assertEqual(game["game_type"], "slayer")
+        self.assertEqual(game["variant_name"], "Team Slayer")
+
+        metadata = game["metadata"]
+        self.assertIsInstance(metadata, dict)
+        settings = metadata["gametype_settings"]
+        self.assertEqual(
+            settings,
+            {
+                "name": "Team Slayer",
+                "game_type": 2,
+                "mode": "slayer",
+                "teamplay": 1,
+                "teams_enabled": True,
+                "player_settings": {
+                    "value": 0,
+                    "radar_enabled": False,
+                },
+            },
+        )
+
+    def test_parse_replay_preserves_tick_fields_when_gametype_settings_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(Path(tmp), map_info=None)
+
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.game["game_type"], "2")
+        self.assertEqual(parsed.game["variant_name"], "CTF")
+        self.assertNotIn("gametype_settings", parsed.game["metadata"])
+
+    def test_parse_replay_does_not_use_blank_or_unknown_gametype_name(self) -> None:
+        for name in ("   ", "unknown <7>"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = _write_replay_json(
+                        Path(tmp),
+                        map_info=None,
+                        gametype_settings={
+                            "name": name,
+                            "mode": "ctf",
+                        },
+                        tick_overrides={"variant": "Classic CTF"},
+                    )
+
+                    parsed = handler._parse_replay(path)
+
+                self.assertEqual(parsed.game["game_type"], "ctf")
+                self.assertEqual(parsed.game["variant_name"], "Classic CTF")
+                self.assertNotEqual(parsed.game["variant_name"], name.strip())
 
 
 class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
@@ -149,41 +269,7 @@ class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
             )
             parsed = handler._parse_replay(path)
 
-        calls: list[tuple[str, str, dict[str, object]]] = []
-
-        def capture_call(method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
-            calls.append((method, path, payload))
-            return {}
-
-        with (
-            patch.object(
-                handler,
-                "_settings",
-                return_value={"replay_finalization_path": "/v1/ingest/replay-uploads"},
-            ),
-            patch.object(handler, "_call_app_api", side_effect=capture_call),
-        ):
-            handler._finalize_replay_upload(
-                upload_id="22222222-2222-4222-8222-222222222222",
-                source_external_id="22222222-2222-4222-8222-222222222222",
-                original_object=handler.S3ReplayObject(
-                    bucket="uploads-bucket",
-                    key="replays/unprocessed/22222222-2222-4222-8222-222222222222.json.zst",
-                    event_name="ObjectCreated:Put",
-                    sqs_message_id="message-1",
-                ),
-                processed_key="replays/processed/22222222-2222-4222-8222-222222222222.json.zst",
-                downloaded=handler.DownloadedReplay(
-                    path=Path("replay.json.zst"),
-                    content_type="application/zstd",
-                    size_bytes=123,
-                    sha256="a" * 64,
-                    metadata={},
-                ),
-                parsed=parsed,
-            )
-
-        payload = calls[0][2]
+        payload = _finalization_payload(parsed)
         game = payload["game"]
         self.assertIsInstance(game, dict)
         self.assertEqual(game["cache_version"], 5)

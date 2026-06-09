@@ -37,8 +37,40 @@ UUID_PATTERN = re.compile(
 )
 SECRET_CACHE: dict[str, str] = {}
 MAX_SPAWN_POINTS = 512
+MAX_GAMETYPE_SETTINGS_ITEMS = 128
+MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS = 32
+MAX_GAMETYPE_SETTINGS_DEPTH = 4
+MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
+KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
+SAFE_GAMETYPE_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+UNKNOWN_PLACEHOLDER_PATTERN = re.compile(
+    r"^(?:unknown|unknown\s*<[^>]+>|unknown\s+[-+]?(?:0x[0-9a-f]+|\d+))$",
+    re.IGNORECASE,
+)
+LOCAL_PATH_PATTERN = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|/(?:tmp|var|home|users|mnt)/)", re.IGNORECASE)
+HOST_ADDRESS_PATTERN = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?$")
+HEX_DUMP_PATTERN = re.compile(r"^(?:0x)?[0-9a-f]{32,}$", re.IGNORECASE)
+UNSAFE_GAMETYPE_KEY_FRAGMENTS = (
+    "address",
+    "addr",
+    "bytes",
+    "credential",
+    "dump",
+    "host",
+    "password",
+    "path",
+    "presigned",
+    "private",
+    "raw",
+    "secret",
+    "signature",
+    "token",
+    "uri",
+    "url",
+)
+OMIT = object()
 TICK_FIELDS = {
     "multiplayer_map_name",
     "game_type",
@@ -351,6 +383,7 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
     game_meta_players = _proxy_dict(replay_document["game_meta_players"])
     first_tick = replay_document["first_tick"]
     last_tick = replay_document["last_tick"]
+    gametype_settings = replay_document["gametype_settings"]
     first_players = [_proxy_dict(player) for player in first_tick.get("players", [])]
     last_players = [_proxy_dict(player) for player in last_tick.get("players", [])]
     meta_players = {
@@ -365,6 +398,7 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         first_tick=first_tick,
         last_tick=last_tick,
         team_stats=team_stats,
+        gametype_settings=gametype_settings,
     )
     metadata = {
         "summary": summary,
@@ -402,6 +436,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     last_tick: dict[str, Any] | None = None
     current_tick: dict[str, Any] | None = None
     current_player: dict[str, Any] | None = None
+    gametype_settings: dict[str, Any] = {}
     spawn_points: list[dict[str, float]] = []
     spawn_source_path: str | None = None
     tick_count = 0
@@ -421,6 +456,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     built_value = active_builder.value
                     if active_target == "summary":
                         summary = _proxy_dict(built_value)
+                    elif active_context and active_context[0] == "gametype_settings":
+                        gametype_settings = _sanitize_gametype_settings(built_value)
                     elif active_context and active_context[0] == "meta_player_field":
                         _, player_id, field = active_context
                         game_meta_players.setdefault(player_id, {})[field] = built_value
@@ -454,6 +491,20 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     prefix,
                     event,
                     value,
+                )
+                continue
+
+            if prefix == "gametype_settings" and event == "start_map":
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                    context=("gametype_settings",),
                 )
                 continue
 
@@ -571,6 +622,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     return {
         "summary": summary,
         "game_meta_players": game_meta_players,
+        "gametype_settings": gametype_settings,
         "first_tick": first_tick or {},
         "last_tick": last_tick or {},
         "spawn_points": spawn_points,
@@ -670,12 +722,18 @@ def _game_from_replay(
     first_tick: Any,
     last_tick: Any,
     team_stats: list[dict[str, Any]],
+    gametype_settings: dict[str, Any],
 ) -> dict[str, Any]:
     map_engine_name = _optional_text(
         last_tick.get("multiplayer_map_name") or first_tick.get("multiplayer_map_name")
     )
-    game_type = _optional_text(last_tick.get("game_type") or first_tick.get("game_type"))
+    game_type = _known_gametype_mode(gametype_settings.get("mode")) or _authoritative_text(
+        last_tick.get("game_type") or first_tick.get("game_type")
+    )
     variant = _jsonable(last_tick.get("variant") or first_tick.get("variant"))
+    variant_name = _authoritative_text(gametype_settings.get("name")) or (
+        _authoritative_text(variant) if isinstance(variant, str) else None
+    )
     started_at = _timestamp_string(
         summary.get("recording_started") or first_tick.get("start_time")
     )
@@ -693,7 +751,7 @@ def _game_from_replay(
     game = {
         "map_engine_name": map_engine_name,
         "game_type": game_type,
-        "variant_name": variant if isinstance(variant, str) else None,
+        "variant_name": variant_name,
         "status": "completed" if is_completed else "imported",
         "started_at": started_at,
         "ended_at": ended_at,
@@ -712,6 +770,8 @@ def _game_from_replay(
             "game_ended_this_tick": last_tick.get("game_ended_this_tick"),
         },
     }
+    if gametype_settings:
+        game["metadata"]["gametype_settings"] = gametype_settings
     if cache_version is not None:
         game["cache_version"] = cache_version
     if build_version is not None:
@@ -1061,6 +1121,127 @@ def _jsonable(value: Any) -> Any:
     if hasattr(value, "as_list"):
         return value.as_list()
     return value
+
+
+def _sanitize_gametype_settings(value: Any) -> dict[str, Any]:
+    sanitized = _sanitize_gametype_mapping(value, depth=0)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _sanitize_gametype_mapping(value: Any, *, depth: int) -> Any:
+    if depth >= MAX_GAMETYPE_SETTINGS_DEPTH:
+        return OMIT
+
+    mapping = _proxy_dict(value)
+    if not mapping:
+        return OMIT
+
+    sanitized: dict[str, Any] = {}
+    for raw_key, raw_value in mapping.items():
+        key = _safe_gametype_key(raw_key)
+        if key is None:
+            continue
+        sanitized_value = _sanitize_gametype_value(raw_value, depth=depth + 1)
+        if sanitized_value is OMIT:
+            continue
+        sanitized[key] = sanitized_value
+        if len(sanitized) >= MAX_GAMETYPE_SETTINGS_ITEMS:
+            LOGGER.info("Truncated gametype_settings metadata to %s items", len(sanitized))
+            break
+    return sanitized or OMIT
+
+
+def _sanitize_gametype_sequence(value: Any, *, depth: int) -> Any:
+    if depth >= MAX_GAMETYPE_SETTINGS_DEPTH or not isinstance(value, list):
+        return OMIT
+
+    sanitized: list[Any] = []
+    for raw_item in value[:MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS]:
+        sanitized_value = _sanitize_gametype_value(raw_item, depth=depth + 1)
+        if sanitized_value is not OMIT:
+            sanitized.append(sanitized_value)
+    if len(value) > MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS:
+        LOGGER.info(
+            "Truncated gametype_settings array from %s to %s items",
+            len(value),
+            MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS,
+        )
+    return sanitized if sanitized else OMIT
+
+
+def _sanitize_gametype_value(value: Any, *, depth: int) -> Any:
+    jsonable = _jsonable(value)
+    if jsonable is None:
+        return OMIT
+    if isinstance(jsonable, bool):
+        return jsonable
+    if isinstance(jsonable, int):
+        return jsonable
+    if isinstance(jsonable, float):
+        return jsonable if math.isfinite(jsonable) else OMIT
+    if isinstance(jsonable, str):
+        text = _safe_gametype_text(jsonable)
+        return text if text is not None else OMIT
+    if isinstance(jsonable, dict) or hasattr(jsonable, "as_dict"):
+        return _sanitize_gametype_mapping(jsonable, depth=depth)
+    if isinstance(jsonable, list):
+        return _sanitize_gametype_sequence(jsonable, depth=depth)
+    return OMIT
+
+
+def _safe_gametype_key(value: Any) -> str | None:
+    key = _optional_text(value)
+    if key is None or SAFE_GAMETYPE_KEY_PATTERN.fullmatch(key) is None:
+        return None
+
+    normalized = key.lower()
+    if any(fragment in normalized for fragment in UNSAFE_GAMETYPE_KEY_FRAGMENTS):
+        return None
+    return key
+
+
+def _safe_gametype_text(value: Any) -> str | None:
+    text = _optional_text(value)
+    if text is None:
+        return None
+    if len(text) > MAX_GAMETYPE_SETTINGS_STRING_LENGTH:
+        text = text[:MAX_GAMETYPE_SETTINGS_STRING_LENGTH]
+    if _looks_like_unsafe_metadata_text(text):
+        return None
+    return text
+
+
+def _known_gametype_mode(value: Any) -> str | None:
+    mode = _optional_text(value)
+    if mode is None:
+        return None
+    normalized = mode.lower()
+    return normalized if normalized in KNOWN_GAMETYPE_MODES else None
+
+
+def _authoritative_text(value: Any) -> str | None:
+    text = _safe_gametype_text(value)
+    if text is None or _is_unknown_placeholder(text):
+        return None
+    return text
+
+
+def _is_unknown_placeholder(value: Any) -> bool:
+    text = _optional_text(value)
+    return bool(text and UNKNOWN_PLACEHOLDER_PATTERN.fullmatch(text))
+
+
+def _looks_like_unsafe_metadata_text(value: str) -> bool:
+    text = value.strip()
+    lower = text.lower()
+    return (
+        "http://" in lower
+        or "https://" in lower
+        or "x-amz-" in lower
+        or LOCAL_PATH_PATTERN.search(text) is not None
+        or HOST_ADDRESS_PATTERN.fullmatch(text) is not None
+        or HEX_DUMP_PATTERN.fullmatch(text) is not None
+    )
 
 
 def _small_mapping(value: Any, *, max_items: int = 64) -> dict[str, Any]:
