@@ -46,6 +46,7 @@ TICK_FIELDS = {
     "current_time",
     "start_time",
     "game_id",
+    "game_ended_this_tick",
 }
 PLAYER_FIELDS = {
     "player_index",
@@ -684,12 +685,16 @@ def _game_from_replay(
     map_info = _map_info_from_ticks(first_tick, last_tick)
     cache_version = _optional_int(map_info.get("cache_version"))
     build_version = _optional_text(map_info.get("build_version"))
+    is_completed = (
+        summary.get("is_full_game") is not False
+        or last_tick.get("game_ended_this_tick") is True
+    )
 
     game = {
         "map_engine_name": map_engine_name,
         "game_type": game_type,
         "variant_name": variant if isinstance(variant, str) else None,
-        "status": "completed" if summary.get("is_full_game") is not False else "imported",
+        "status": "completed" if is_completed else "imported",
         "started_at": started_at,
         "ended_at": ended_at,
         "duration_seconds": duration_seconds,
@@ -704,6 +709,7 @@ def _game_from_replay(
             "ticks_recorded": summary.get("ticks_recorded"),
             "ticks_dropped": summary.get("ticks_dropped"),
             "recording_duration": summary.get("recording_duration"),
+            "game_ended_this_tick": last_tick.get("game_ended_this_tick"),
         },
     }
     if cache_version is not None:

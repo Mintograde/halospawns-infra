@@ -18,7 +18,13 @@ if str(REPLAY_PARSER_DIR) not in sys.path:
 import handler  # noqa: E402
 
 
-def _write_replay_json(directory: Path, *, map_info: dict[str, object] | None) -> Path:
+def _write_replay_json(
+    directory: Path,
+    *,
+    map_info: dict[str, object] | None,
+    summary_overrides: dict[str, object] | None = None,
+    tick_overrides: dict[str, object] | None = None,
+) -> Path:
     tick: dict[str, object] = {
         "current_time": "2026-05-09 15:52:20.278065",
         "start_time": "2026-05-09 15:51:32.887485",
@@ -30,22 +36,28 @@ def _write_replay_json(directory: Path, *, map_info: dict[str, object] | None) -
     }
     if map_info is not None:
         tick["map_info"] = map_info
+    if tick_overrides:
+        tick.update(tick_overrides)
+
+    summary: dict[str, object] = {
+        "game_id": "minimal-game",
+        "is_full_game": True,
+        "recording_started": "2026-05-09 15:51:32.887485",
+        "recording_ended": "2026-05-09 15:52:20.278065",
+        "game_duration_ingame": "0:00:47",
+        "ticks_elapsed": 1,
+        "ticks_recorded": 1,
+        "ticks_dropped": 0,
+        "recording_duration": "0:00:47",
+    }
+    if summary_overrides:
+        summary.update(summary_overrides)
 
     path = directory / "replay.json"
     path.write_text(
         json.dumps(
             {
-                "summary": {
-                    "game_id": "minimal-game",
-                    "is_full_game": True,
-                    "recording_started": "2026-05-09 15:51:32.887485",
-                    "recording_ended": "2026-05-09 15:52:20.278065",
-                    "game_duration_ingame": "0:00:47",
-                    "ticks_elapsed": 1,
-                    "ticks_recorded": 1,
-                    "ticks_dropped": 0,
-                    "recording_duration": "0:00:47",
-                },
+                "summary": summary,
                 "game_meta": {"players": {}},
                 "ticks": [tick],
                 "events": [],
@@ -54,6 +66,36 @@ def _write_replay_json(directory: Path, *, map_info: dict[str, object] | None) -
         encoding="utf-8",
     )
     return path
+
+
+class ReplayParserStatusTests(unittest.TestCase):
+    def test_parse_replay_marks_partial_game_completed_when_last_tick_ended(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                summary_overrides={"is_full_game": False},
+                tick_overrides={"game_ended_this_tick": True},
+            )
+
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.game["status"], "completed")
+        self.assertIs(parsed.game["metadata"]["game_ended_this_tick"], True)
+
+    def test_parse_replay_keeps_partial_game_imported_without_last_tick_end(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                summary_overrides={"is_full_game": False},
+                tick_overrides={"game_ended_this_tick": False},
+            )
+
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.game["status"], "imported")
+        self.assertIs(parsed.game["metadata"]["game_ended_this_tick"], False)
 
 
 class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
