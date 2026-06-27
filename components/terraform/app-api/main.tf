@@ -107,6 +107,10 @@ locals {
       authorization_type = "NONE"
     },
     {
+      route_key          = "POST /v1/ingest/replay-uploads/presign"
+      authorization_type = "NONE"
+    },
+    {
       route_key          = "POST /v1/ingest/map-uploads"
       authorization_type = "NONE"
     },
