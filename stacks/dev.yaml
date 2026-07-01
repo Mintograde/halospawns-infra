@@ -91,4 +91,5 @@ components:
         app_api_state_key: dev/app-api/terraform.tfstate
         native_maps_processor_event_source_enabled: true
         native_maps_processor_map_render_enqueue_enabled: true
+        map_renderer_event_source_enabled: true
         legacy_maps_processor_event_source_enabled: false
