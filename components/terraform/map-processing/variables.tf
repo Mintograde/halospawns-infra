@@ -122,6 +122,17 @@ variable "app_api_map_support_resource_resolve_path" {
   }
 }
 
+variable "app_api_map_screenshot_ingest_path" {
+  description = "Path for app-api map screenshot ingest callbacks."
+  type        = string
+  default     = "/v1/ingest/map-screenshots"
+
+  validation {
+    condition     = startswith(var.app_api_map_screenshot_ingest_path, "/")
+    error_message = "app_api_map_screenshot_ingest_path must start with '/'."
+  }
+}
+
 variable "native_maps_processor_function_name" {
   description = "Optional explicit native maps processor Lambda function name. Defaults to project-maps-processor-environment."
   type        = string
@@ -196,6 +207,12 @@ variable "native_maps_processor_environment_variables" {
   default     = {}
 }
 
+variable "native_maps_processor_map_render_enqueue_enabled" {
+  description = "Whether the native maps processor enqueues screenshot render jobs after successful map finalization."
+  type        = bool
+  default     = false
+}
+
 variable "map_unprocessed_prefix" {
   description = "S3 prefix for unprocessed map uploads."
   type        = string
@@ -224,6 +241,171 @@ variable "maps_artifact_release_prefix" {
   description = "S3 prefix that receives native maps processor release ZIP artifacts."
   type        = string
   default     = "releases/"
+}
+
+variable "map_renderer_function_name" {
+  description = "Optional explicit map renderer Lambda function name. Defaults to project-map-renderer-environment."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "map_renderer_runtime" {
+  description = "Managed Lambda runtime for the map renderer shell."
+  type        = string
+  default     = "nodejs22.x"
+}
+
+variable "map_renderer_handler" {
+  description = "Handler for the map renderer Lambda package."
+  type        = string
+  default     = "index.handler"
+}
+
+variable "map_renderer_alias_name" {
+  description = "Alias used by the SQS trigger and artifact code updater."
+  type        = string
+  default     = "live"
+}
+
+variable "map_renderer_timeout" {
+  description = "Map renderer timeout in seconds."
+  type        = number
+  default     = 300
+}
+
+variable "map_renderer_memory_size" {
+  description = "Map renderer memory size in MB."
+  type        = number
+  default     = 2048
+}
+
+variable "map_renderer_ephemeral_storage_size" {
+  description = "Map renderer ephemeral storage size in MB."
+  type        = number
+  default     = 2048
+}
+
+variable "map_renderer_reserved_concurrent_executions" {
+  description = "Reserved concurrency for the map renderer. Keep low in dev because headless browsers are resource heavy."
+  type        = number
+  default     = 1
+  nullable    = true
+}
+
+variable "map_renderer_batch_size" {
+  description = "SQS batch size for the map renderer."
+  type        = number
+  default     = 1
+}
+
+variable "map_renderer_report_batch_item_failures" {
+  description = "Whether the map renderer SQS mapping enables partial batch failure responses."
+  type        = bool
+  default     = true
+}
+
+variable "map_renderer_event_source_enabled" {
+  description = "Whether the map renderer SQS event source mapping is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "map_renderer_queue_visibility_timeout_seconds" {
+  description = "Visibility timeout for the map rendering queue."
+  type        = number
+  default     = 360
+}
+
+variable "map_renderer_queue_message_retention_seconds" {
+  description = "Message retention for the map rendering queue."
+  type        = number
+  default     = 604800
+}
+
+variable "map_renderer_queue_receive_wait_time_seconds" {
+  description = "Long polling wait time for the map rendering queue."
+  type        = number
+  default     = 20
+}
+
+variable "map_renderer_queue_max_receive_count" {
+  description = "Receive attempts before map rendering jobs are moved to the DLQ."
+  type        = number
+  default     = 4
+}
+
+variable "map_renderer_trusted_service_hmac_client_name" {
+  description = "Trusted HMAC client name used by the renderer when calling app-api callbacks."
+  type        = string
+  default     = "map-rendering"
+
+  validation {
+    condition     = trimspace(var.map_renderer_trusted_service_hmac_client_name) != ""
+    error_message = "map_renderer_trusted_service_hmac_client_name must not be empty."
+  }
+}
+
+variable "map_renderer_artifact_release_prefix" {
+  description = "S3 prefix that receives map renderer Lambda ZIP release artifacts."
+  type        = string
+  default     = "renderer/releases/"
+}
+
+variable "map_renderer_render_set_name" {
+  description = "Default render set name passed to the renderer."
+  type        = string
+  default     = "default-map-screenshots"
+}
+
+variable "map_renderer_render_set_version" {
+  description = "Default render set version passed to the renderer."
+  type        = number
+  default     = 1
+}
+
+variable "map_renderer_environment_variables" {
+  description = "Additional environment variables for the map renderer."
+  type        = map(string)
+  default     = {}
+}
+
+variable "map_renderer_code_updater_reserved_concurrent_executions" {
+  description = "Reserved concurrency for the map renderer code updater Lambda. Leave null to use account-level unreserved concurrency."
+  type        = number
+  default     = null
+  nullable    = true
+}
+
+variable "map_renderer_github_repository" {
+  description = "GitHub Svelte repository allowed to upload map renderer release artifacts, in owner/name form."
+  type        = string
+  default     = "Mintograde/halospawns-svelte"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.map_renderer_github_repository))
+    error_message = "map_renderer_github_repository must be in owner/name form."
+  }
+}
+
+variable "map_renderer_github_environment" {
+  description = "GitHub Environment used by the map renderer deploy workflow."
+  type        = string
+  default     = "dev"
+  nullable    = true
+}
+
+variable "map_renderer_github_branch" {
+  description = "GitHub branch used when map_renderer_github_environment is empty."
+  type        = string
+  default     = "main"
+}
+
+variable "map_renderer_github_subject" {
+  description = "Optional explicit GitHub OIDC subject for map renderer artifact publishing. Overrides map_renderer_github_environment/map_renderer_github_branch."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "maps_code_updater_reserved_concurrent_executions" {

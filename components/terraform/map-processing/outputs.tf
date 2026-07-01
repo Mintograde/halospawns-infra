@@ -7,6 +7,7 @@ output "function_arns" {
     },
     {
       "halospawns-maps-processor" = module.native_maps_processor.function_arn
+      "halospawns-map-renderer"   = module.map_renderer.function_arn
     },
   )
 }
@@ -64,6 +65,71 @@ output "maps_processor_github_oidc_subject" {
 output "maps_code_updater_lambda_function_name" {
   description = "Maps code updater Lambda function name."
   value       = aws_lambda_function.maps_code_updater.function_name
+}
+
+output "map_renderer_function_name" {
+  description = "Map renderer Lambda function name."
+  value       = module.map_renderer.function_name
+}
+
+output "map_renderer_function_arn" {
+  description = "Map renderer Lambda function ARN."
+  value       = module.map_renderer.function_arn
+}
+
+output "map_renderer_alias_name" {
+  description = "Map renderer live alias name."
+  value       = module.map_renderer.alias_name
+}
+
+output "map_renderer_alias_arn" {
+  description = "Map renderer live alias ARN."
+  value       = module.map_renderer.alias_arn
+}
+
+output "map_renderer_event_source_enabled" {
+  description = "Whether the map renderer SQS event source mapping is enabled."
+  value       = var.map_renderer_event_source_enabled
+}
+
+output "map_rendering_queue_arn" {
+  description = "ARN of the map rendering SQS queue."
+  value       = aws_sqs_queue.map_rendering.arn
+}
+
+output "map_rendering_queue_url" {
+  description = "URL of the map rendering SQS queue."
+  value       = aws_sqs_queue.map_rendering.url
+}
+
+output "map_rendering_dlq_arn" {
+  description = "ARN of the map rendering DLQ."
+  value       = aws_sqs_queue.map_rendering_dlq.arn
+}
+
+output "map_renderer_artifact_bucket_name" {
+  description = "S3 bucket used for map renderer release artifacts."
+  value       = aws_s3_bucket.maps_artifacts.id
+}
+
+output "map_renderer_artifact_release_prefix" {
+  description = "S3 prefix used for map renderer Lambda ZIP release artifacts."
+  value       = local.normalized_map_renderer_release_prefix
+}
+
+output "map_renderer_github_deploy_role_arn" {
+  description = "ARN of the GitHub Actions role allowed to upload map renderer release artifacts."
+  value       = aws_iam_role.map_renderer_github_deploy.arn
+}
+
+output "map_renderer_github_oidc_subject" {
+  description = "GitHub OIDC subject allowed to assume the map renderer deploy role."
+  value       = local.map_renderer_github_subject
+}
+
+output "map_renderer_code_updater_lambda_function_name" {
+  description = "Map renderer code updater Lambda function name."
+  value       = aws_lambda_function.map_renderer_code_updater.function_name
 }
 
 output "app_api_callback_base_url" {

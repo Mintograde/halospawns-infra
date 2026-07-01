@@ -62,6 +62,31 @@ resource "aws_s3_bucket_policy" "maps_artifacts" {
   depends_on = [aws_s3_bucket_public_access_block.maps_artifacts]
 }
 
+resource "aws_sqs_queue" "map_rendering_dlq" {
+  name                      = "map-rendering-dlq"
+  message_retention_seconds = var.map_renderer_queue_message_retention_seconds
+}
+
+resource "aws_sqs_queue" "map_rendering" {
+  name                       = "map-rendering-queue"
+  visibility_timeout_seconds = var.map_renderer_queue_visibility_timeout_seconds
+  message_retention_seconds  = var.map_renderer_queue_message_retention_seconds
+  receive_wait_time_seconds  = var.map_renderer_queue_receive_wait_time_seconds
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.map_rendering_dlq.arn
+    maxReceiveCount     = var.map_renderer_queue_max_receive_count
+  })
+}
+
+resource "aws_sqs_queue_redrive_allow_policy" "map_rendering" {
+  queue_url = aws_sqs_queue.map_rendering_dlq.id
+  redrive_allow_policy = jsonencode({
+    redrivePermission = "byQueue"
+    sourceQueueArns   = [aws_sqs_queue.map_rendering.arn]
+  })
+}
+
 module "native_maps_processor" {
   source = "../../../modules/lambda-s3-managed"
 
@@ -89,6 +114,13 @@ module "native_maps_processor" {
       APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = var.app_api_processing_status_path_template
       REPORT_BATCH_ITEM_FAILURES                     = tostring(var.native_maps_processor_report_batch_item_failures)
     },
+    var.native_maps_processor_map_render_enqueue_enabled ? {
+      MAP_RENDERING_QUEUE_URL            = aws_sqs_queue.map_rendering.url
+      MAP_RENDER_OUTPUT_PREFIX_TEMPLATE  = "${local.map_processed_prefix}/{upload_id}/screenshots/v1/"
+      APP_API_MAP_SCREENSHOT_INGEST_PATH = var.app_api_map_screenshot_ingest_path
+      RENDER_SET_NAME                    = var.map_renderer_render_set_name
+      RENDER_SET_VERSION                 = tostring(var.map_renderer_render_set_version)
+    } : {},
     local.app_api_base_url == null || lookup(local.trusted_service_hmac_secret_ids_by_client, local.native_maps_processor_trusted_hmac_client, null) == null ? {} : {
       APP_API_BASE_URL                      = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME           = local.native_maps_processor_trusted_hmac_client
@@ -101,6 +133,9 @@ module "native_maps_processor" {
     [data.aws_iam_policy_document.native_maps_processor_s3.json],
     contains(keys(local.trusted_service_hmac_secret_arns_by_client), local.native_maps_processor_trusted_hmac_client) ? [
       data.aws_iam_policy_document.trusted_service_hmac_secret[local.native_maps_processor_trusted_hmac_client].json
+    ] : [],
+    var.native_maps_processor_map_render_enqueue_enabled ? [
+      data.aws_iam_policy_document.native_maps_processor_map_rendering.json
     ] : [],
   )
 
@@ -117,6 +152,52 @@ resource "aws_lambda_event_source_mapping" "native_maps_processor_sqs_trigger" {
   batch_size              = var.native_maps_processor_batch_size
   enabled                 = var.native_maps_processor_event_source_enabled
   function_response_types = var.native_maps_processor_report_batch_item_failures ? ["ReportBatchItemFailures"] : []
+}
+
+module "map_renderer" {
+  source = "../../../modules/lambda-s3-managed"
+
+  function_name                  = local.map_renderer_function_name
+  runtime                        = var.map_renderer_runtime
+  handler                        = var.map_renderer_handler
+  source_dir                     = "../../../lambda/map_renderer_placeholder"
+  alias_name                     = var.map_renderer_alias_name
+  timeout                        = var.map_renderer_timeout
+  memory_size                    = var.map_renderer_memory_size
+  ephemeral_storage_size         = var.map_renderer_ephemeral_storage_size
+  reserved_concurrent_executions = var.map_renderer_reserved_concurrent_executions
+
+  environment_variables = merge(
+    {
+      ENVIRONMENT                        = var.environment
+      UPLOADS_BUCKET_NAME                = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
+      MAP_RENDER_OUTPUT_PREFIX_TEMPLATE  = "${local.map_processed_prefix}/{upload_id}/screenshots/v1/"
+      APP_API_MAP_SCREENSHOT_INGEST_PATH = var.app_api_map_screenshot_ingest_path
+      APP_API_TRUSTED_CLIENT_NAME        = local.map_renderer_trusted_hmac_client
+      REPORT_BATCH_ITEM_FAILURES         = tostring(var.map_renderer_report_batch_item_failures)
+      RENDER_SET_NAME                    = var.map_renderer_render_set_name
+      RENDER_SET_VERSION                 = tostring(var.map_renderer_render_set_version)
+    },
+    local.app_api_base_url == null || local.map_renderer_trusted_service_hmac_secret_id == null ? {} : {
+      APP_API_BASE_URL                      = local.app_api_base_url
+      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID = local.map_renderer_trusted_service_hmac_secret_id
+    },
+    var.map_renderer_environment_variables,
+  )
+
+  policies_json = [data.aws_iam_policy_document.map_renderer_runtime.json]
+
+  role_policy_arns = [
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole",
+  ]
+}
+
+resource "aws_lambda_event_source_mapping" "map_renderer_sqs_trigger" {
+  event_source_arn        = aws_sqs_queue.map_rendering.arn
+  function_name           = module.map_renderer.alias_arn
+  batch_size              = var.map_renderer_batch_size
+  enabled                 = var.map_renderer_event_source_enabled
+  function_response_types = var.map_renderer_report_batch_item_failures ? ["ReportBatchItemFailures"] : []
 }
 
 resource "aws_cloudwatch_log_group" "maps_code_updater" {
@@ -177,6 +258,64 @@ resource "aws_lambda_permission" "allow_maps_artifact_bucket" {
   source_account = data.aws_caller_identity.current.account_id
 }
 
+resource "aws_cloudwatch_log_group" "map_renderer_code_updater" {
+  name              = "/aws/lambda/${var.project}-${var.environment}-map-renderer-code-updater"
+  retention_in_days = 30
+}
+
+resource "aws_iam_role" "map_renderer_code_updater" {
+  name               = "${var.project}-${var.environment}-map-renderer-code-updater-exec-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "map_renderer_code_updater_basic_execution" {
+  role       = aws_iam_role.map_renderer_code_updater.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "map_renderer_code_updater" {
+  name   = "map-renderer-code-updater"
+  role   = aws_iam_role.map_renderer_code_updater.id
+  policy = data.aws_iam_policy_document.map_renderer_code_updater.json
+}
+
+resource "aws_lambda_function" "map_renderer_code_updater" {
+  function_name                  = "${var.project}-${var.environment}-map-renderer-code-updater"
+  role                           = aws_iam_role.map_renderer_code_updater.arn
+  runtime                        = "python3.12"
+  handler                        = "handler.handler"
+  filename                       = data.archive_file.map_renderer_code_updater.output_path
+  source_code_hash               = data.archive_file.map_renderer_code_updater.output_base64sha256
+  timeout                        = 300
+  memory_size                    = 128
+  reserved_concurrent_executions = var.map_renderer_code_updater_reserved_concurrent_executions
+
+  environment {
+    variables = {
+      TARGET_FUNCTION_NAME    = module.map_renderer.function_name
+      TARGET_ALIAS_NAME       = module.map_renderer.alias_name
+      ARTIFACT_RELEASE_PREFIX = local.normalized_map_renderer_release_prefix
+      ARTIFACT_SUFFIX         = ".zip"
+      WAIT_TIMEOUT_SECONDS    = "300"
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.map_renderer_code_updater,
+    aws_iam_role_policy_attachment.map_renderer_code_updater_basic_execution,
+    aws_iam_role_policy.map_renderer_code_updater,
+  ]
+}
+
+resource "aws_lambda_permission" "allow_map_renderer_artifact_bucket" {
+  statement_id   = "AllowMapRendererArtifactBucket"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.map_renderer_code_updater.function_name
+  principal      = "s3.amazonaws.com"
+  source_arn     = aws_s3_bucket.maps_artifacts.arn
+  source_account = data.aws_caller_identity.current.account_id
+}
+
 resource "aws_s3_bucket_notification" "maps_release_artifacts" {
   bucket = aws_s3_bucket.maps_artifacts.id
 
@@ -187,7 +326,17 @@ resource "aws_s3_bucket_notification" "maps_release_artifacts" {
     filter_suffix       = ".zip"
   }
 
-  depends_on = [aws_lambda_permission.allow_maps_artifact_bucket]
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.map_renderer_code_updater.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = local.normalized_map_renderer_release_prefix
+    filter_suffix       = ".zip"
+  }
+
+  depends_on = [
+    aws_lambda_permission.allow_maps_artifact_bucket,
+    aws_lambda_permission.allow_map_renderer_artifact_bucket,
+  ]
 }
 
 resource "aws_iam_role" "maps_github_deploy" {
@@ -202,6 +351,20 @@ resource "aws_iam_role_policy" "maps_github_deploy" {
   name   = "maps-release-artifacts"
   role   = aws_iam_role.maps_github_deploy.id
   policy = data.aws_iam_policy_document.maps_github_deploy.json
+}
+
+resource "aws_iam_role" "map_renderer_github_deploy" {
+  name                 = "${var.project}-${var.environment}-map-renderer-deploy"
+  assume_role_policy   = data.aws_iam_policy_document.map_renderer_github_assume_role.json
+  max_session_duration = 3600
+
+  depends_on = [terraform_data.native_maps_processor_required_inputs]
+}
+
+resource "aws_iam_role_policy" "map_renderer_github_deploy" {
+  name   = "map-renderer-artifacts"
+  role   = aws_iam_role.map_renderer_github_deploy.id
+  policy = data.aws_iam_policy_document.map_renderer_github_deploy.json
 }
 
 module "sqs_lambda_consumers" {

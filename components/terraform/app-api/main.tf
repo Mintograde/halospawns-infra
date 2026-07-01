@@ -115,6 +115,10 @@ locals {
       authorization_type = "NONE"
     },
     {
+      route_key          = "POST /v1/ingest/map-screenshots"
+      authorization_type = "NONE"
+    },
+    {
       route_key          = "POST /v1/ingest/map-support-resources"
       authorization_type = "NONE"
     },

@@ -1,6 +1,8 @@
 locals {
   native_maps_processor_function_name       = var.native_maps_processor_function_name == null || trimspace(var.native_maps_processor_function_name) == "" ? "${var.project}-maps-processor-${var.environment}" : trimspace(var.native_maps_processor_function_name)
   normalized_maps_artifact_release_prefix   = trimsuffix(var.maps_artifact_release_prefix, "/") == "" ? "" : "${trimsuffix(var.maps_artifact_release_prefix, "/")}/"
+  map_renderer_function_name                = var.map_renderer_function_name == null || trimspace(var.map_renderer_function_name) == "" ? "${var.project}-map-renderer-${var.environment}" : trimspace(var.map_renderer_function_name)
+  normalized_map_renderer_release_prefix    = trimsuffix(var.map_renderer_artifact_release_prefix, "/") == "" ? "" : "${trimsuffix(var.map_renderer_artifact_release_prefix, "/")}/"
   map_unprocessed_prefix                    = trim(var.map_unprocessed_prefix, "/")
   map_processed_prefix                      = trim(var.map_processed_prefix, "/")
   map_failed_prefix                         = trim(var.map_failed_prefix, "/")
@@ -10,6 +12,10 @@ locals {
   maps_github_subject                       = var.maps_github_subject == null || trimspace(var.maps_github_subject) == "" ? (local.maps_github_environment_subject != null ? local.maps_github_environment_subject : local.maps_github_branch_subject) : var.maps_github_subject
   maps_github_oidc_provider_arn             = var.maps_github_create_oidc_provider ? try(aws_iam_openid_connect_provider.maps_github[0].arn, null) : (var.maps_github_oidc_provider_arn != null && trimspace(var.maps_github_oidc_provider_arn) != "" ? var.maps_github_oidc_provider_arn : try(data.aws_iam_openid_connect_provider.github[0].arn, null))
   native_maps_processor_trusted_hmac_client = var.trusted_service_hmac_client_name
+  map_renderer_trusted_hmac_client          = var.map_renderer_trusted_service_hmac_client_name
+  map_renderer_github_environment_subject   = var.map_renderer_github_environment == null || trimspace(var.map_renderer_github_environment) == "" ? null : "repo:${var.map_renderer_github_repository}:environment:${var.map_renderer_github_environment}"
+  map_renderer_github_branch_subject        = "repo:${var.map_renderer_github_repository}:ref:refs/heads/${var.map_renderer_github_branch}"
+  map_renderer_github_subject               = var.map_renderer_github_subject == null || trimspace(var.map_renderer_github_subject) == "" ? (local.map_renderer_github_environment_subject != null ? local.map_renderer_github_environment_subject : local.map_renderer_github_branch_subject) : var.map_renderer_github_subject
 
   lambda_configurations = {
     "halospawns-tools" = {
@@ -65,4 +71,7 @@ locals {
   )
 
   trusted_service_hmac_secret_id = try(local.trusted_service_hmac_secret_ids_by_client[var.trusted_service_hmac_client_name], null)
+
+  map_renderer_trusted_service_hmac_secret_id  = try(local.trusted_service_hmac_secret_ids_by_client[local.map_renderer_trusted_hmac_client], null)
+  map_renderer_trusted_service_hmac_secret_arn = try(local.trusted_service_hmac_secret_arns_by_client[local.map_renderer_trusted_hmac_client], null)
 }

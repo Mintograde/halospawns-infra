@@ -67,6 +67,7 @@ components:
         trusted_service_hmac_secret_names:
           live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
           map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
+          map-rendering: /halospawns/dev/app-api/trusted-clients/map-rendering/hmac-secret
           replay-processing: /halospawns/dev/app-api/trusted-clients/replay-processing/hmac-secret
         trusted_service_hmac_timestamp_tolerance_seconds: 300
         map_support_resource_auto_approve_uploads: true
@@ -89,4 +90,5 @@ components:
         uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
         app_api_state_key: dev/app-api/terraform.tfstate
         native_maps_processor_event_source_enabled: true
+        native_maps_processor_map_render_enqueue_enabled: true
         legacy_maps_processor_event_source_enabled: false

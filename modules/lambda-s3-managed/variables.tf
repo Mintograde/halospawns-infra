@@ -80,6 +80,12 @@ variable "role_policy_arns" {
   default     = []
 }
 
+variable "layers" {
+  description = "Lambda layer version ARNs to attach to the function."
+  type        = list(string)
+  default     = []
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention in days. Leave null for CloudWatch's default retention."
   type        = number
