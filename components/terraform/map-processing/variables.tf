@@ -287,9 +287,9 @@ variable "map_renderer_ephemeral_storage_size" {
 }
 
 variable "map_renderer_reserved_concurrent_executions" {
-  description = "Reserved concurrency for the map renderer. Keep low in dev because headless browsers are resource heavy."
+  description = "Reserved concurrency for the map renderer. Leave null for unreserved."
   type        = number
-  default     = 1
+  default     = null
   nullable    = true
 }
 
