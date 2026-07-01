@@ -253,7 +253,7 @@ variable "map_renderer_function_name" {
 variable "map_renderer_runtime" {
   description = "Managed Lambda runtime for the map renderer shell."
   type        = string
-  default     = "nodejs22.x"
+  default     = "nodejs24.x"
 }
 
 variable "map_renderer_handler" {
