@@ -26,6 +26,12 @@ data "terraform_remote_state" "uploads_ingest" {
   }
 }
 
+data "aws_sqs_queue" "map_rendering" {
+  count = var.enabled && local.map_rendering_queue_name != null ? 1 : 0
+
+  name = local.map_rendering_queue_name
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   count = var.enabled && var.create_github_oidc_provider ? 1 : 0
 
@@ -112,6 +118,16 @@ data "aws_iam_policy_document" "app_runtime" {
       sid       = "DeleteMapSupportResourceObjects"
       actions   = ["s3:DeleteObject"]
       resources = local.map_support_resource_delete_object_resource_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.map_rendering_queue_arn == null ? [] : [local.map_rendering_queue_arn]
+
+    content {
+      sid       = "SendMapRenderingJobs"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value]
     }
   }
 }

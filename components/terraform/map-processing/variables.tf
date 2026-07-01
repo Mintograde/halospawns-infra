@@ -259,7 +259,7 @@ variable "map_renderer_runtime" {
 variable "map_renderer_handler" {
   description = "Handler for the map renderer Lambda package."
   type        = string
-  default     = "index.handler"
+  default     = "packages/viewer-renderer/src/lambda/handler.handler"
 }
 
 variable "map_renderer_alias_name" {

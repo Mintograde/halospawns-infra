@@ -55,6 +55,30 @@ variable "uploads_ingest_state_key" {
   nullable    = true
 }
 
+variable "app_api_base_url" {
+  description = "Optional explicit public base URL for the app API. Defaults to https://api_domain_name when a custom domain is configured."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.app_api_base_url == null || can(regex("^https?://", trimspace(var.app_api_base_url)))
+    error_message = "app_api_base_url must start with http:// or https:// when set."
+  }
+}
+
+variable "map_rendering_queue_name" {
+  description = "Optional existing SQS queue name that app-api may send screenshot render jobs to."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.map_rendering_queue_name == null || trimspace(var.map_rendering_queue_name) != ""
+    error_message = "map_rendering_queue_name must not be empty when set."
+  }
+}
+
 variable "hosted_zone_id" {
   description = "Route 53 hosted zone ID for the API domain. Defaults to frontend-site delegated zone remote state."
   type        = string
@@ -161,6 +185,50 @@ variable "map_support_resource_prefix" {
   description = "Stable root S3 prefix for durable map support-resource objects that the app API may hard-delete."
   type        = string
   default     = "maps/support-resources"
+}
+
+variable "map_render_output_prefix_template" {
+  description = "S3 key prefix template where map screenshot render outputs are written."
+  type        = string
+  default     = "maps/processed/{upload_id}/screenshots/v1/"
+
+  validation {
+    condition     = trimspace(var.map_render_output_prefix_template) != ""
+    error_message = "map_render_output_prefix_template must not be empty."
+  }
+}
+
+variable "app_api_map_screenshot_ingest_path" {
+  description = "Path for app-api map screenshot ingest callbacks."
+  type        = string
+  default     = "/v1/ingest/map-screenshots"
+
+  validation {
+    condition     = startswith(var.app_api_map_screenshot_ingest_path, "/")
+    error_message = "app_api_map_screenshot_ingest_path must start with '/'."
+  }
+}
+
+variable "map_screenshot_render_set_name" {
+  description = "Render set name used for app-api screenshot regeneration jobs."
+  type        = string
+  default     = "default-map-screenshots"
+
+  validation {
+    condition     = trimspace(var.map_screenshot_render_set_name) != ""
+    error_message = "map_screenshot_render_set_name must not be empty."
+  }
+}
+
+variable "map_screenshot_render_set_version" {
+  description = "Render set version used for app-api screenshot regeneration jobs."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.map_screenshot_render_set_version > 0
+    error_message = "map_screenshot_render_set_version must be positive."
+  }
 }
 
 variable "upload_url_ttl_seconds" {

@@ -6,11 +6,15 @@ locals {
   replay_asset_read_prefix           = trim(var.replay_asset_read_prefix, "/")
   map_support_resource_prefix        = trim(var.map_support_resource_prefix, "/")
 
-  frontend_hosted_zone_id = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
-  api_hosted_zone_id      = var.hosted_zone_id != null ? var.hosted_zone_id : local.frontend_hosted_zone_id
-  api_domain_name         = var.api_domain_name == null ? null : trimspace(var.api_domain_name)
-  uploads_bucket_name     = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
-  uploads_bucket_arn      = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
+  frontend_hosted_zone_id  = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
+  api_hosted_zone_id       = var.hosted_zone_id != null ? var.hosted_zone_id : local.frontend_hosted_zone_id
+  api_domain_name          = var.api_domain_name == null ? null : trimspace(var.api_domain_name)
+  app_api_base_url         = var.app_api_base_url != null && trimspace(var.app_api_base_url) != "" ? trimsuffix(trimspace(var.app_api_base_url), "/") : (local.api_domain_name == null || local.api_domain_name == "" ? null : "https://${local.api_domain_name}")
+  uploads_bucket_name      = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
+  uploads_bucket_arn       = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
+  map_rendering_queue_name = var.map_rendering_queue_name == null || trimspace(var.map_rendering_queue_name) == "" ? null : trimspace(var.map_rendering_queue_name)
+  map_rendering_queue_url  = try(data.aws_sqs_queue.map_rendering[0].url, null)
+  map_rendering_queue_arn  = try(data.aws_sqs_queue.map_rendering[0].arn, null)
 
   github_environment_subject = var.github_environment == null || trimspace(var.github_environment) == "" ? null : "repo:${var.github_repository}:environment:${var.github_environment}"
   github_branch_subject      = "repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"
@@ -72,7 +76,17 @@ locals {
     } : {},
     length(local.trusted_service_hmac_secret_ids) > 0 && var.trusted_service_hmac_timestamp_tolerance_seconds != null ? {
       TRUSTED_SERVICE_HMAC_TIMESTAMP_TOLERANCE_SECONDS = tostring(var.trusted_service_hmac_timestamp_tolerance_seconds)
-    } : {}
+    } : {},
+    local.app_api_base_url == null ? {} : {
+      APP_API_BASE_URL = local.app_api_base_url
+    },
+    local.map_rendering_queue_url == null ? {} : {
+      MAP_RENDERING_QUEUE_URL            = local.map_rendering_queue_url
+      MAP_RENDER_OUTPUT_PREFIX_TEMPLATE  = var.map_render_output_prefix_template
+      APP_API_MAP_SCREENSHOT_INGEST_PATH = var.app_api_map_screenshot_ingest_path
+      RENDER_SET_NAME                    = var.map_screenshot_render_set_name
+      RENDER_SET_VERSION                 = tostring(var.map_screenshot_render_set_version)
+    }
   ) : {}
 
   jwt_authorizer = var.create_jwt_authorizer ? {
