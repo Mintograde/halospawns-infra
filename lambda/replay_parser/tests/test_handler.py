@@ -510,6 +510,63 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
         self.assertEqual(finalize_calls[0]["replay_file"], job.current_replay_file)
         self.assertEqual(finalize_calls[0]["reprocess_attempt_id"], job.attempt_id)
 
+    def test_process_reprocess_job_marks_missing_source_failed(self) -> None:
+        job = handler._reprocess_job_from_payload(_reprocess_job_payload(), "message-1")
+        missing_source_error = handler.ClientError(
+            {
+                "Error": {
+                    "Code": "NoSuchKey",
+                    "Message": "The specified key does not exist.",
+                },
+                "ResponseMetadata": {
+                    "HTTPStatusCode": 404,
+                    "RequestId": "request-1",
+                },
+            },
+            "GetObject",
+        )
+        api_calls: list[tuple[str, str, dict[str, object]]] = []
+
+        def capture_call(method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+            api_calls.append((method, path, payload))
+            return {}
+
+        with (
+            patch.object(handler, "_download_replay", side_effect=missing_source_error),
+            patch.object(
+                handler,
+                "_settings",
+                return_value={
+                    "reprocess_status_path_template": (
+                        "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+                    ),
+                },
+            ),
+            patch.object(handler, "_call_app_api", side_effect=capture_call),
+            patch.object(handler, "_decompress_replay", side_effect=AssertionError("no decompress")),
+            patch.object(handler, "_parse_replay", side_effect=AssertionError("no parse")),
+            patch.object(handler, "_finalize_replay_upload", side_effect=AssertionError("no finalize")),
+            patch.object(handler, "_copy_object", side_effect=AssertionError("no copy")),
+            patch.object(handler, "_delete_object", side_effect=AssertionError("no delete")),
+        ):
+            handler._process_reprocess_job(job)
+
+        self.assertEqual(len(api_calls), 1)
+        method, path, payload = api_calls[0]
+        self.assertEqual(method, "PATCH")
+        self.assertEqual(
+            path,
+            f"/v1/ingest/replay-reprocess-attempts/{job.attempt_id}/status",
+        )
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn("NoSuchKey", payload["error_message"])
+        metadata = payload["metadata"]
+        self.assertIsInstance(metadata, dict)
+        self.assertEqual(metadata["source_replay"]["s3_key"], job.source_object.key)
+        self.assertEqual(metadata["s3_error"]["code"], "NoSuchKey")
+        self.assertEqual(metadata["s3_error"]["http_status_code"], 404)
+        self.assertEqual(metadata["processor_error"]["type"], "ClientError")
+
     def test_finalization_payload_includes_reprocess_attempt_and_current_file(self) -> None:
         parsed = _minimal_parsed_replay()
         upload_id = "66666666-6666-4666-8666-666666666666"

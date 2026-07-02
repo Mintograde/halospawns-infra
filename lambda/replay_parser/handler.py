@@ -24,6 +24,7 @@ from typing import Any
 import boto3
 import ijson
 import zstandard
+from botocore.exceptions import ClientError
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
@@ -43,6 +44,7 @@ MAX_GAMETYPE_SETTINGS_DEPTH = 4
 MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
 REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
+NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES = {"NoSuchBucket", "NoSuchKey", "NotFound", "404"}
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
 SAFE_GAMETYPE_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
@@ -294,9 +296,31 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
     json_path = Path("/tmp") / f"{work_stem}.json"
 
     try:
-        downloaded = _download_replay(source_object, compressed_path)
-        _decompress_replay(downloaded.path, json_path)
-        parsed = _parse_replay(json_path)
+        try:
+            downloaded = _download_replay(source_object, compressed_path)
+            _decompress_replay(downloaded.path, json_path)
+            parsed = _parse_replay(json_path)
+        except ClientError as error:
+            if not _is_nonretryable_s3_download_error(error):
+                raise
+            LOGGER.warning(
+                "Replay reprocess attempt %s source object is unavailable: %s",
+                job.attempt_id,
+                error,
+                exc_info=True,
+            )
+            _send_reprocess_attempt_status(job, "failed", error)
+            return
+        except NonRetryableReplayError as error:
+            LOGGER.warning(
+                "Replay reprocess attempt %s is not processable: %s",
+                job.attempt_id,
+                error,
+                exc_info=True,
+            )
+            _send_reprocess_attempt_status(job, "failed", error)
+            return
+
         _finalize_replay_upload(
             upload_id=job.upload_id,
             source_external_id=job.upload_id,
@@ -1163,6 +1187,54 @@ def _send_upload_status(
     )
 
 
+def _send_reprocess_attempt_status(
+    job: ReplayReprocessJob,
+    status: str,
+    error: BaseException,
+) -> None:
+    payload: dict[str, Any] = {
+        "status": status,
+        "error_message": str(error)[:4096],
+        "metadata": {
+            "processor_runtime": {
+                "name": PROCESSOR_NAME,
+            },
+            "job": {
+                "job_id": job.job_id,
+                "operation_id": job.operation_id,
+                "attempt_id": job.attempt_id,
+                "mode": job.mode,
+                "upload_id": job.upload_id,
+                "replay_id": job.replay_id,
+            },
+            "source_replay": {
+                "s3_bucket": job.source_object.bucket,
+                "s3_key": job.source_object.key,
+                "event_name": job.source_object.event_name,
+            },
+            "current_replay_file": {
+                "s3_bucket": job.current_replay_file.bucket,
+                "s3_key": job.current_replay_file.key,
+                "file_role": job.current_replay_file.file_role,
+                "content_type": job.current_replay_file.content_type,
+                "size_bytes": job.current_replay_file.size_bytes,
+                "sha256": job.current_replay_file.sha256,
+            },
+            "processor_error": _exception_details(error),
+        },
+    }
+    if isinstance(error, ClientError):
+        payload["metadata"]["s3_error"] = _s3_client_error_details(error)
+
+    _call_app_api(
+        "PATCH",
+        _settings()["reprocess_status_path_template"].format(
+            attempt_id=job.attempt_id,
+        ),
+        payload,
+    )
+
+
 def _exception_details(error: BaseException) -> dict[str, str]:
     return {
         "type": type(error).__name__,
@@ -1170,6 +1242,26 @@ def _exception_details(error: BaseException) -> dict[str, str]:
         "traceback": "".join(
             traceback.format_exception(type(error), error, error.__traceback__)
         ),
+    }
+
+
+def _is_nonretryable_s3_download_error(error: ClientError) -> bool:
+    details = _s3_client_error_details(error)
+    code = str(details.get("code") or "")
+    status_code = details.get("http_status_code")
+    return code in NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES or status_code == 404
+
+
+def _s3_client_error_details(error: ClientError) -> dict[str, Any]:
+    error_response = error.response if isinstance(error.response, dict) else {}
+    error_details = error_response.get("Error") or {}
+    response_metadata = error_response.get("ResponseMetadata") or {}
+    return {
+        "operation": error.operation_name,
+        "code": str(error_details.get("Code") or ""),
+        "message": str(error_details.get("Message") or ""),
+        "http_status_code": response_metadata.get("HTTPStatusCode"),
+        "request_id": response_metadata.get("RequestId"),
     }
 
 
@@ -1311,6 +1403,10 @@ def _settings() -> dict[str, str]:
         "replay_finalization_path": os.getenv(
             "APP_API_REPLAY_FINALIZATION_PATH",
             "/v1/ingest/replay-uploads",
+        ),
+        "reprocess_status_path_template": os.getenv(
+            "APP_API_REPLAY_REPROCESS_ATTEMPT_STATUS_PATH_TEMPLATE",
+            "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status",
         ),
         "unprocessed_prefix": _prefix_env("REPLAY_UNPROCESSED_PREFIX", "replays/unprocessed/"),
         "processed_prefix": _prefix_env("REPLAY_PROCESSED_PREFIX", "replays/processed/"),

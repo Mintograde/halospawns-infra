@@ -131,6 +131,10 @@ locals {
       authorization_type = "NONE"
     },
     {
+      route_key          = "PATCH /v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+      authorization_type = "NONE"
+    },
+    {
       route_key          = "POST /v1/ingest/map-uploads"
       authorization_type = "NONE"
     },
