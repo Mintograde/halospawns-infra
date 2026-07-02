@@ -47,6 +47,7 @@ components:
         api_domain_name: api.dev.halospawns.com
         app_api_base_url: https://api.dev.halospawns.com
         map_rendering_queue_name: map-rendering-queue
+        replay_processing_queue_name: replays-processing-queue
         frontend_allowed_origins:
           - https://dev.halospawns.com
           - http://127.0.0.1:5173

@@ -79,6 +79,18 @@ variable "map_rendering_queue_name" {
   }
 }
 
+variable "replay_processing_queue_name" {
+  description = "Optional existing SQS queue name that app-api may send replay reprocess jobs to."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.replay_processing_queue_name == null || trimspace(var.replay_processing_queue_name) != ""
+    error_message = "replay_processing_queue_name must not be empty when set."
+  }
+}
+
 variable "hosted_zone_id" {
   description = "Route 53 hosted zone ID for the API domain. Defaults to frontend-site delegated zone remote state."
   type        = string

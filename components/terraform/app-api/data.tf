@@ -32,6 +32,12 @@ data "aws_sqs_queue" "map_rendering" {
   name = local.map_rendering_queue_name
 }
 
+data "aws_sqs_queue" "replay_processing" {
+  count = var.enabled && local.replay_processing_queue_name != null ? 1 : 0
+
+  name = local.replay_processing_queue_name
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   count = var.enabled && var.create_github_oidc_provider ? 1 : 0
 
@@ -126,6 +132,16 @@ data "aws_iam_policy_document" "app_runtime" {
 
     content {
       sid       = "SendMapRenderingJobs"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.replay_processing_queue_arn == null ? [] : [local.replay_processing_queue_arn]
+
+    content {
+      sid       = "SendReplayProcessingJobs"
       actions   = ["sqs:SendMessage"]
       resources = [statement.value]
     }

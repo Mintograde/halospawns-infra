@@ -42,6 +42,7 @@ MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS = 32
 MAX_GAMETYPE_SETTINGS_DEPTH = 4
 MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
+REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
 SAFE_GAMETYPE_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
@@ -130,6 +131,32 @@ class S3ReplayObject:
 
 
 @dataclass(frozen=True)
+class ReplayOutputFile:
+    bucket: str
+    key: str
+    file_role: str
+    content_type: str | None
+    size_bytes: int | None
+    sha256: str | None
+
+
+@dataclass(frozen=True)
+class ReplayReprocessJob:
+    sqs_message_id: str
+    job_id: str
+    operation_id: str
+    attempt_id: str
+    mode: str
+    upload_id: str
+    replay_id: str
+    source_object: S3ReplayObject
+    current_replay_file: ReplayOutputFile
+
+
+ReplayWorkItem = S3ReplayObject | ReplayReprocessJob
+
+
+@dataclass(frozen=True)
 class DownloadedReplay:
     path: Path
     content_type: str | None
@@ -152,16 +179,18 @@ class ParsedReplay:
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     failures: list[dict[str, str]] = []
 
-    for replay_object in _iter_s3_replay_objects(event):
+    for work_item in _iter_replay_work_items(event):
         try:
-            _process_replay_object(replay_object)
+            if isinstance(work_item, ReplayReprocessJob):
+                _process_reprocess_job(work_item)
+            else:
+                _process_replay_object(work_item)
         except Exception:
             LOGGER.exception(
-                "Replay processing failed for s3://%s/%s",
-                replay_object.bucket,
-                replay_object.key,
+                "Replay processing failed for %s",
+                _work_item_description(work_item),
             )
-            failures.append({"itemIdentifier": replay_object.sqs_message_id})
+            failures.append({"itemIdentifier": work_item.sqs_message_id})
 
     return {"batchItemFailures": failures}
 
@@ -255,28 +284,163 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
         _unlink_if_exists(json_path)
 
 
-def _iter_s3_replay_objects(event: dict[str, Any]) -> list[S3ReplayObject]:
-    replay_objects: list[S3ReplayObject] = []
+def _process_reprocess_job(job: ReplayReprocessJob) -> None:
+    if job.mode != "full_reparse":
+        raise NonRetryableReplayError(f"Unsupported replay reprocess mode: {job.mode}")
+
+    work_stem = _safe_tmp_stem(job.attempt_id)
+    source_object = job.source_object
+    compressed_path = Path("/tmp") / f"{work_stem}-{posixpath.basename(source_object.key)}"
+    json_path = Path("/tmp") / f"{work_stem}.json"
+
+    try:
+        downloaded = _download_replay(source_object, compressed_path)
+        _decompress_replay(downloaded.path, json_path)
+        parsed = _parse_replay(json_path)
+        _finalize_replay_upload(
+            upload_id=job.upload_id,
+            source_external_id=job.upload_id,
+            original_object=source_object,
+            processed_key=job.current_replay_file.key,
+            downloaded=downloaded,
+            parsed=parsed,
+            replay_file=job.current_replay_file,
+            reprocess_attempt_id=job.attempt_id,
+        )
+        LOGGER.info(
+            "Reprocessed replay upload %s from s3://%s/%s for attempt %s",
+            job.upload_id,
+            source_object.bucket,
+            source_object.key,
+            job.attempt_id,
+        )
+    finally:
+        _unlink_if_exists(compressed_path)
+        _unlink_if_exists(json_path)
+
+
+def _iter_replay_work_items(event: dict[str, Any]) -> list[ReplayWorkItem]:
+    work_items: list[ReplayWorkItem] = []
 
     for record in event.get("Records", []):
         sqs_message_id = str(record.get("messageId") or record.get("messageID") or "")
         payload = _record_payload(record)
-        for s3_record in payload.get("Records", []):
-            s3_data = s3_record.get("s3") or {}
-            bucket = (s3_data.get("bucket") or {}).get("name")
-            key = (s3_data.get("object") or {}).get("key")
-            if not bucket or not key:
-                continue
-            replay_objects.append(
-                S3ReplayObject(
-                    bucket=str(bucket),
-                    key=urllib.parse.unquote_plus(str(key)),
-                    event_name=s3_record.get("eventName"),
-                    sqs_message_id=sqs_message_id or str(len(replay_objects)),
-                )
+        item_identifier = sqs_message_id or str(len(work_items))
+
+        if payload.get("schema") == REPLAY_REPROCESS_JOB_SCHEMA:
+            work_items.append(_reprocess_job_from_payload(payload, item_identifier))
+            continue
+
+        if "schema" in payload:
+            raise NonRetryableReplayError(f"Unsupported replay job schema: {payload['schema']}")
+
+        work_items.extend(_s3_replay_objects_from_payload(payload, item_identifier))
+
+    return work_items
+
+
+def _iter_s3_replay_objects(event: dict[str, Any]) -> list[S3ReplayObject]:
+    return [
+        work_item
+        for work_item in _iter_replay_work_items(event)
+        if isinstance(work_item, S3ReplayObject)
+    ]
+
+
+def _s3_replay_objects_from_payload(
+    payload: dict[str, Any],
+    sqs_message_id: str,
+) -> list[S3ReplayObject]:
+    replay_objects: list[S3ReplayObject] = []
+
+    for s3_record in payload.get("Records", []):
+        s3_data = s3_record.get("s3") or {}
+        bucket = (s3_data.get("bucket") or {}).get("name")
+        key = (s3_data.get("object") or {}).get("key")
+        if not bucket or not key:
+            continue
+        replay_objects.append(
+            S3ReplayObject(
+                bucket=str(bucket),
+                key=urllib.parse.unquote_plus(str(key)),
+                event_name=s3_record.get("eventName"),
+                sqs_message_id=sqs_message_id,
             )
+        )
 
     return replay_objects
+
+
+def _reprocess_job_from_payload(
+    payload: dict[str, Any],
+    sqs_message_id: str,
+) -> ReplayReprocessJob:
+    mode = _required_payload_text(payload, "mode")
+    if mode != "full_reparse":
+        raise NonRetryableReplayError(f"Unsupported replay reprocess mode: {mode}")
+
+    replay = _required_payload_mapping(payload, "replay")
+    source_replay = _required_payload_mapping(payload, "source_replay")
+    current_replay_file = _required_payload_mapping(payload, "current_replay_file")
+    attempt_id = _required_payload_text(payload, "attempt_id")
+    source_bucket = _required_payload_text(source_replay, "s3_bucket")
+    source_key = _required_payload_text(source_replay, "s3_key")
+
+    return ReplayReprocessJob(
+        sqs_message_id=sqs_message_id,
+        job_id=_required_payload_text(payload, "job_id"),
+        operation_id=_required_payload_text(payload, "operation_id"),
+        attempt_id=attempt_id,
+        mode=mode,
+        upload_id=_required_payload_text(replay, "upload_id"),
+        replay_id=_required_payload_text(replay, "id"),
+        source_object=S3ReplayObject(
+            bucket=source_bucket,
+            key=source_key,
+            event_name=str(payload.get("trigger") or "manual_reprocess"),
+            sqs_message_id=sqs_message_id,
+        ),
+        current_replay_file=ReplayOutputFile(
+            bucket=_required_payload_text(current_replay_file, "s3_bucket"),
+            key=_required_payload_text(current_replay_file, "s3_key"),
+            file_role=_optional_payload_text(current_replay_file, "file_role") or "processed",
+            content_type=_optional_payload_text(current_replay_file, "content_type"),
+            size_bytes=_optional_payload_int(current_replay_file, "size_bytes"),
+            sha256=_optional_payload_text(current_replay_file, "sha256"),
+        ),
+    )
+
+
+def _required_payload_mapping(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise NonRetryableReplayError(f"Replay reprocess job missing object field: {key}")
+    return value
+
+
+def _required_payload_text(payload: dict[str, Any], key: str) -> str:
+    value = _optional_payload_text(payload, key)
+    if value is None:
+        raise NonRetryableReplayError(f"Replay reprocess job missing text field: {key}")
+    return value
+
+
+def _optional_payload_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_payload_int(payload: dict[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise NonRetryableReplayError(f"Replay reprocess job field must be an integer: {key}") from error
 
 
 def _record_payload(record: dict[str, Any]) -> dict[str, Any]:
@@ -919,7 +1083,17 @@ def _finalize_replay_upload(
     processed_key: str,
     downloaded: DownloadedReplay,
     parsed: ParsedReplay,
+    replay_file: ReplayOutputFile | None = None,
+    reprocess_attempt_id: str | None = None,
 ) -> None:
+    output_file = replay_file or ReplayOutputFile(
+        bucket=original_object.bucket,
+        key=processed_key,
+        file_role="processed",
+        content_type=downloaded.content_type,
+        size_bytes=downloaded.size_bytes,
+        sha256=downloaded.sha256,
+    )
     payload = {
         "upload_id": upload_id,
         "source_external_id": source_external_id,
@@ -931,15 +1105,15 @@ def _finalize_replay_upload(
             },
         },
         "replay_file": {
-            "s3_bucket": original_object.bucket,
-            "s3_key": processed_key,
-            "file_role": "processed",
-            "content_type": downloaded.content_type,
-            "size_bytes": downloaded.size_bytes,
-            "sha256": downloaded.sha256,
+            "s3_bucket": output_file.bucket,
+            "s3_key": output_file.key,
+            "file_role": output_file.file_role,
+            "content_type": output_file.content_type,
+            "size_bytes": output_file.size_bytes,
+            "sha256": output_file.sha256,
             "metadata": {
                 "original_s3_key": original_object.key,
-                "processed_s3_key": processed_key,
+                "processed_s3_key": output_file.key,
                 "source_content_type": downloaded.content_type,
                 "parser": parsed.metadata["parser"],
             },
@@ -950,10 +1124,12 @@ def _finalize_replay_upload(
             **parsed.metadata,
             "original_s3_bucket": original_object.bucket,
             "original_s3_key": original_object.key,
-            "processed_s3_bucket": original_object.bucket,
-            "processed_s3_key": processed_key,
+            "processed_s3_bucket": output_file.bucket,
+            "processed_s3_key": output_file.key,
         },
     }
+    if reprocess_attempt_id is not None:
+        payload["reprocess_attempt_id"] = reprocess_attempt_id
     if parsed.spawn_points:
         payload["spawn_points"] = parsed.spawn_points
         payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
@@ -1090,6 +1266,20 @@ def _processed_key(source_key: str, *, unprocessed_prefix: str, processed_prefix
         else posixpath.basename(source_key)
     )
     return f"{processed_prefix}{suffix.lstrip('/')}"
+
+
+def _safe_tmp_stem(value: str) -> str:
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._-")
+    return stem[:120] or "replay"
+
+
+def _work_item_description(work_item: ReplayWorkItem) -> str:
+    if isinstance(work_item, ReplayReprocessJob):
+        return (
+            f"reprocess job {work_item.job_id} from "
+            f"s3://{work_item.source_object.bucket}/{work_item.source_object.key}"
+        )
+    return f"s3://{work_item.bucket}/{work_item.key}"
 
 
 def _upload_id_from_key(key: str) -> str:

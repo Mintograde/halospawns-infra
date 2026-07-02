@@ -74,7 +74,14 @@ def _write_replay_json(
     return path
 
 
-def _finalization_payload(parsed: handler.ParsedReplay) -> dict[str, object]:
+def _finalization_payload(
+    parsed: handler.ParsedReplay,
+    *,
+    original_key: str = "replays/unprocessed/22222222-2222-4222-8222-222222222222.json.zst",
+    processed_key: str = "replays/processed/22222222-2222-4222-8222-222222222222.json.zst",
+    replay_file: handler.ReplayOutputFile | None = None,
+    reprocess_attempt_id: str | None = None,
+) -> dict[str, object]:
     calls: list[tuple[str, str, dict[str, object]]] = []
 
     def capture_call(method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
@@ -94,11 +101,11 @@ def _finalization_payload(parsed: handler.ParsedReplay) -> dict[str, object]:
             source_external_id="22222222-2222-4222-8222-222222222222",
             original_object=handler.S3ReplayObject(
                 bucket="uploads-bucket",
-                key="replays/unprocessed/22222222-2222-4222-8222-222222222222.json.zst",
+                key=original_key,
                 event_name="ObjectCreated:Put",
                 sqs_message_id="message-1",
             ),
-            processed_key="replays/processed/22222222-2222-4222-8222-222222222222.json.zst",
+            processed_key=processed_key,
             downloaded=handler.DownloadedReplay(
                 path=Path("replay.json.zst"),
                 content_type="application/zstd",
@@ -107,9 +114,71 @@ def _finalization_payload(parsed: handler.ParsedReplay) -> dict[str, object]:
                 metadata={},
             ),
             parsed=parsed,
+            replay_file=replay_file,
+            reprocess_attempt_id=reprocess_attempt_id,
         )
 
     return calls[0][2]
+
+
+def _reprocess_job_payload() -> dict[str, object]:
+    upload_id = "66666666-6666-4666-8666-666666666666"
+    replay_id = "44444444-4444-4444-8444-444444444444"
+    attempt_id = "77777777-7777-4777-8777-777777777777"
+    operation_id = "99999999-9999-4999-8999-999999999999"
+    return {
+        "schema": "halospawns.replay_reprocess_job.v1",
+        "job_id": f"replay:{replay_id}:attempt:{attempt_id}",
+        "trigger": "manual_reprocess",
+        "environment": "dev",
+        "operation_id": operation_id,
+        "attempt_id": attempt_id,
+        "mode": "full_reparse",
+        "replay": {
+            "id": replay_id,
+            "game_id": "33333333-3333-4333-8333-333333333333",
+            "upload_id": upload_id,
+        },
+        "source_replay": {
+            "s3_bucket": "uploads-bucket",
+            "s3_key": f"replays/processed/{upload_id}/original+replay.json.zst",
+            "filename": "original+replay.json.zst",
+            "content_type": "application/octet-stream",
+            "size_bytes": 123,
+            "sha256": "a" * 64,
+        },
+        "current_replay_file": {
+            "file_role": "processed",
+            "s3_bucket": "uploads-bucket",
+            "s3_key": f"replays/processed/{upload_id}/game.json.zst",
+            "content_type": "application/zstd",
+            "size_bytes": 456,
+            "sha256": "b" * 64,
+        },
+        "requested_outputs": ["game", "participants", "stats", "spawn_points", "game_meta"],
+        "created_at": "2026-07-02T00:00:00Z",
+    }
+
+
+def _minimal_parsed_replay() -> handler.ParsedReplay:
+    return handler.ParsedReplay(
+        game={
+            "status": "completed",
+            "metadata": {
+                "game_id": "minimal-game",
+                "map_engine_name": "levels\\test\\prisoner\\prisoner",
+            },
+        },
+        participants=[],
+        team_stats=[],
+        spawn_points=[],
+        spawn_source=None,
+        metadata={
+            "summary": {"game_id": "minimal-game"},
+            "parser": {"name": "halospawns-replay-parser"},
+        },
+        game_meta={"players": {}},
+    )
 
 
 class ReplayParserStatusTests(unittest.TestCase):
@@ -368,6 +437,111 @@ class ReplayParserGameMetaCallbackTests(unittest.TestCase):
         payload = _finalization_payload(parsed)
 
         self.assertNotIn("game_meta", payload)
+
+
+class ReplayParserReprocessJobTests(unittest.TestCase):
+    def test_iter_replay_work_items_accepts_reprocess_job(self) -> None:
+        payload = _reprocess_job_payload()
+
+        work_items = handler._iter_replay_work_items(
+            {"Records": [{"messageId": "message-1", "body": json.dumps(payload)}]}
+        )
+
+        self.assertEqual(len(work_items), 1)
+        job = work_items[0]
+        self.assertIsInstance(job, handler.ReplayReprocessJob)
+        assert isinstance(job, handler.ReplayReprocessJob)
+        self.assertEqual(job.sqs_message_id, "message-1")
+        self.assertEqual(job.mode, "full_reparse")
+        self.assertEqual(job.upload_id, "66666666-6666-4666-8666-666666666666")
+        self.assertEqual(
+            job.source_object.key,
+            "replays/processed/66666666-6666-4666-8666-666666666666/original+replay.json.zst",
+        )
+        self.assertEqual(
+            job.current_replay_file.key,
+            "replays/processed/66666666-6666-4666-8666-666666666666/game.json.zst",
+        )
+        self.assertEqual(job.current_replay_file.sha256, "b" * 64)
+
+    def test_process_reprocess_job_downloads_source_without_source_mutation(self) -> None:
+        job = handler._reprocess_job_from_payload(_reprocess_job_payload(), "message-1")
+        parsed = _minimal_parsed_replay()
+        downloaded = handler.DownloadedReplay(
+            path=Path("source-replay.json.zst"),
+            content_type="application/octet-stream",
+            size_bytes=123,
+            sha256="a" * 64,
+            metadata={},
+        )
+        download_calls: list[handler.S3ReplayObject] = []
+        finalize_calls: list[dict[str, object]] = []
+
+        def capture_download(
+            replay_object: handler.S3ReplayObject,
+            destination: Path,
+        ) -> handler.DownloadedReplay:
+            download_calls.append(replay_object)
+            return downloaded
+
+        def capture_finalize(**kwargs: object) -> None:
+            finalize_calls.append(kwargs)
+
+        with (
+            patch.object(handler, "_download_replay", side_effect=capture_download),
+            patch.object(handler, "_decompress_replay"),
+            patch.object(handler, "_parse_replay", return_value=parsed),
+            patch.object(handler, "_finalize_replay_upload", side_effect=capture_finalize),
+            patch.object(handler, "_copy_object", side_effect=AssertionError("no copy")),
+            patch.object(handler, "_delete_object", side_effect=AssertionError("no delete")),
+            patch.object(
+                handler,
+                "_send_upload_status",
+                side_effect=AssertionError("no upload status"),
+            ),
+        ):
+            handler._process_reprocess_job(job)
+
+        self.assertEqual(download_calls, [job.source_object])
+        self.assertEqual(len(finalize_calls), 1)
+        self.assertEqual(finalize_calls[0]["upload_id"], job.upload_id)
+        self.assertEqual(finalize_calls[0]["source_external_id"], job.upload_id)
+        self.assertEqual(finalize_calls[0]["processed_key"], job.current_replay_file.key)
+        self.assertEqual(finalize_calls[0]["replay_file"], job.current_replay_file)
+        self.assertEqual(finalize_calls[0]["reprocess_attempt_id"], job.attempt_id)
+
+    def test_finalization_payload_includes_reprocess_attempt_and_current_file(self) -> None:
+        parsed = _minimal_parsed_replay()
+        upload_id = "66666666-6666-4666-8666-666666666666"
+        source_key = f"replays/processed/{upload_id}/original.json.zst"
+        current_file = handler.ReplayOutputFile(
+            bucket="uploads-bucket",
+            key=f"replays/processed/{upload_id}/game.json.zst",
+            file_role="processed",
+            content_type="application/zstd",
+            size_bytes=456,
+            sha256="b" * 64,
+        )
+
+        payload = _finalization_payload(
+            parsed,
+            original_key=source_key,
+            processed_key=current_file.key,
+            replay_file=current_file,
+            reprocess_attempt_id="77777777-7777-4777-8777-777777777777",
+        )
+
+        self.assertEqual(
+            payload["reprocess_attempt_id"],
+            "77777777-7777-4777-8777-777777777777",
+        )
+        self.assertEqual(payload["replay_file"]["s3_key"], current_file.key)
+        self.assertEqual(payload["replay_file"]["size_bytes"], 456)
+        self.assertEqual(payload["replay_file"]["sha256"], "b" * 64)
+        self.assertEqual(payload["replay_file"]["metadata"]["original_s3_key"], source_key)
+        self.assertEqual(payload["metadata"]["original_s3_key"], source_key)
+        self.assertEqual(payload["metadata"]["processed_s3_key"], current_file.key)
+        self.assertEqual(payload["game_meta"], {"players": {}})
 
 
 if __name__ == "__main__":
