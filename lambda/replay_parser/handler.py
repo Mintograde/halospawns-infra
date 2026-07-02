@@ -45,6 +45,7 @@ PROCESSOR_NAME = "halospawns-replay-parser"
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
 SAFE_GAMETYPE_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+GAME_RELEASE_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 UNKNOWN_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:unknown|unknown\s*<[^>]+>|unknown\s+[-+]?(?:0x[0-9a-f]+|\d+))$",
     re.IGNORECASE,
@@ -145,6 +146,7 @@ class ParsedReplay:
     spawn_points: list[dict[str, float]]
     spawn_source: dict[str, Any] | None
     metadata: dict[str, Any]
+    game_meta: dict[str, Any] | None = None
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -381,6 +383,9 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
 
     summary = _proxy_dict(replay_document["summary"])
     game_meta_players = _proxy_dict(replay_document["game_meta_players"])
+    callback_game_meta = replay_document["callback_game_meta"]
+    if not game_meta_players and callback_game_meta is not None:
+        game_meta_players = _proxy_dict(_proxy_dict(callback_game_meta).get("players"))
     first_tick = replay_document["first_tick"]
     last_tick = replay_document["last_tick"]
     gametype_settings = replay_document["gametype_settings"]
@@ -426,6 +431,7 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         spawn_points=spawn_points,
         spawn_source=spawn_source,
         metadata=metadata,
+        game_meta=callback_game_meta,
     )
 
 
@@ -437,6 +443,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     current_tick: dict[str, Any] | None = None
     current_player: dict[str, Any] | None = None
     gametype_settings: dict[str, Any] = {}
+    callback_game_meta: dict[str, Any] | None = None
     spawn_points: list[dict[str, float]] = []
     spawn_source_path: str | None = None
     tick_count = 0
@@ -458,6 +465,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         summary = _proxy_dict(built_value)
                     elif active_context and active_context[0] == "gametype_settings":
                         gametype_settings = _sanitize_gametype_settings(built_value)
+                    elif active_context and active_context[0] == "callback_game_meta":
+                        callback_game_meta = _callback_game_meta(built_value)
                     elif active_context and active_context[0] == "meta_player_field":
                         _, player_id, field = active_context
                         game_meta_players.setdefault(player_id, {})[field] = built_value
@@ -491,6 +500,20 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     prefix,
                     event,
                     value,
+                )
+                continue
+
+            if prefix == "game_meta" and event == "start_map":
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                    context=("callback_game_meta",),
                 )
                 continue
 
@@ -622,6 +645,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     return {
         "summary": summary,
         "game_meta_players": game_meta_players,
+        "callback_game_meta": callback_game_meta,
         "gametype_settings": gametype_settings,
         "first_tick": first_tick or {},
         "last_tick": last_tick or {},
@@ -741,8 +765,11 @@ def _game_from_replay(
     duration_seconds = _duration_seconds(summary.get("game_duration_ingame"))
     winning_team_index = _winning_team_index(team_stats)
     map_info = _map_info_from_ticks(first_tick, last_tick)
+    game_release_key = _game_release_key(map_info.get("game_release_key"))
+    cache_family = _authoritative_text(map_info.get("cache_family"))
     cache_version = _optional_int(map_info.get("cache_version"))
-    build_version = _optional_text(map_info.get("build_version"))
+    cache_version_name = _authoritative_text(map_info.get("cache_version_name"))
+    build_version = _authoritative_text(map_info.get("build_version"))
     is_completed = (
         summary.get("is_full_game") is not False
         or last_tick.get("game_ended_this_tick") is True
@@ -772,8 +799,14 @@ def _game_from_replay(
     }
     if gametype_settings:
         game["metadata"]["gametype_settings"] = gametype_settings
+    if game_release_key is not None:
+        game["game_release_key"] = game_release_key
+    if cache_family is not None:
+        game["cache_family"] = cache_family
     if cache_version is not None:
         game["cache_version"] = cache_version
+    if cache_version_name is not None:
+        game["cache_version_name"] = cache_version_name
     if build_version is not None:
         game["build_version"] = build_version
     return game
@@ -924,6 +957,8 @@ def _finalize_replay_upload(
     if parsed.spawn_points:
         payload["spawn_points"] = parsed.spawn_points
         payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
+    if parsed.game_meta is not None:
+        payload["game_meta"] = parsed.game_meta
     _call_app_api("POST", _settings()["replay_finalization_path"], payload)
 
 
@@ -1123,6 +1158,39 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _callback_game_meta(value: Any) -> dict[str, Any] | None:
+    jsonable = _json_compatible_value(value)
+    return jsonable if isinstance(jsonable, dict) else None
+
+
+def _json_compatible_value(value: Any) -> Any:
+    jsonable = _jsonable(value)
+    if jsonable is None:
+        return None
+    if isinstance(jsonable, bool):
+        return jsonable
+    if isinstance(jsonable, int):
+        return jsonable
+    if isinstance(jsonable, float):
+        return jsonable if math.isfinite(jsonable) else OMIT
+    if isinstance(jsonable, str):
+        return jsonable
+    if isinstance(jsonable, dict):
+        sanitized: dict[str, Any] = {}
+        for raw_key, raw_value in jsonable.items():
+            sanitized_value = _json_compatible_value(raw_value)
+            if sanitized_value is not OMIT:
+                sanitized[str(raw_key)] = sanitized_value
+        return sanitized
+    if isinstance(jsonable, list):
+        return [
+            sanitized_item
+            for item in jsonable
+            if (sanitized_item := _json_compatible_value(item)) is not OMIT
+        ]
+    return OMIT
+
+
 def _sanitize_gametype_settings(value: Any) -> dict[str, Any]:
     sanitized = _sanitize_gametype_mapping(value, depth=0)
     return sanitized if isinstance(sanitized, dict) else {}
@@ -1209,6 +1277,13 @@ def _safe_gametype_text(value: Any) -> str | None:
     if _looks_like_unsafe_metadata_text(text):
         return None
     return text
+
+
+def _game_release_key(value: Any) -> str | None:
+    text = _optional_text(value)
+    if text is None:
+        return None
+    return text if GAME_RELEASE_KEY_PATTERN.fullmatch(text) else None
 
 
 def _known_gametype_mode(value: Any) -> str | None:

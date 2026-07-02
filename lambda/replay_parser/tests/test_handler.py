@@ -22,6 +22,8 @@ def _write_replay_json(
     directory: Path,
     *,
     map_info: dict[str, object] | None,
+    game_meta: dict[str, object] | None = None,
+    include_game_meta: bool = True,
     gametype_settings: dict[str, object] | None = None,
     summary_overrides: dict[str, object] | None = None,
     tick_overrides: dict[str, object] | None = None,
@@ -57,10 +59,11 @@ def _write_replay_json(
     path = directory / "replay.json"
     replay: dict[str, object] = {
         "summary": summary,
-        "game_meta": {"players": {}},
         "ticks": [tick],
         "events": [],
     }
+    if include_game_meta:
+        replay["game_meta"] = game_meta or {"players": {}}
     if gametype_settings is not None:
         replay["gametype_settings"] = gametype_settings
 
@@ -219,12 +222,50 @@ class ReplayParserGametypeSettingsTests(unittest.TestCase):
 
 
 class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
+    def test_parse_replay_promotes_explicit_release_and_cache_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info={
+                    "game_release_key": "halo1_xbox_nhe",
+                    "cache_family": "halo1_cache",
+                    "cache_version": 5,
+                    "cache_version_name": "xbox",
+                    "build_version": "01.10.12.2300",
+                },
+            )
+
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.game["game_release_key"], "halo1_xbox_nhe")
+        self.assertEqual(parsed.game["cache_family"], "halo1_cache")
+        self.assertEqual(parsed.game["cache_version"], 5)
+        self.assertEqual(parsed.game["cache_version_name"], "xbox")
+        self.assertEqual(parsed.game["build_version"], "01.10.12.2300")
+
+    def test_parse_replay_omits_invalid_explicit_release_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info={
+                    "game_release_key": "Halo 1 Xbox",
+                    "cache_family": "halo1_cache",
+                },
+            )
+
+            parsed = handler._parse_replay(path)
+
+        self.assertNotIn("game_release_key", parsed.game)
+        self.assertEqual(parsed.game["cache_family"], "halo1_cache")
+
     def test_parse_replay_promotes_cache_and_build_evidence_from_map_info(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = _write_replay_json(
                 Path(tmp),
                 map_info={
+                    "cache_family": "halo1_cache",
                     "cache_version": 5,
+                    "cache_version_name": "xbox",
                     "build_version": "01.10.12.2300",
                     "scenario_name": "prisoner",
                 },
@@ -233,6 +274,8 @@ class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
             parsed = handler._parse_replay(path)
 
         self.assertEqual(parsed.game["cache_version"], 5)
+        self.assertEqual(parsed.game["cache_family"], "halo1_cache")
+        self.assertEqual(parsed.game["cache_version_name"], "xbox")
         self.assertEqual(parsed.game["build_version"], "01.10.12.2300")
         self.assertNotIn("game_release_key", parsed.game)
 
@@ -275,6 +318,56 @@ class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
         self.assertEqual(game["cache_version"], 5)
         self.assertEqual(game["build_version"], "01.10.12.2300")
         self.assertNotIn("game_release_key", game)
+
+
+class ReplayParserGameMetaCallbackTests(unittest.TestCase):
+    def test_finalization_payload_includes_top_level_game_meta_when_available(self) -> None:
+        game_meta = {
+            "start_time": None,
+            "players": {
+                "0": {
+                    "shots_by_weapon": {"weapons\\pistol\\pistol": 151},
+                    "damage_to_player": {"1": 246.52589416503906},
+                    "damage_from_player": {"1": 847.7787170410156},
+                    "kills_by_tick": {"164": 1},
+                    "deaths_by_tick": {"320": 1},
+                    "assists_by_tick": {"323": 1},
+                    "damage_dealt_by_tick": {"164": 25},
+                    "damage_dealt": 2401.134578704834,
+                    "damage_received_by_tick": {"320": 456.073760986328},
+                    "damage_received": 4950.623794555664,
+                    "camo_by_tick": {},
+                    "camo_count": 0,
+                    "overshield_by_tick": {"1348": 1},
+                    "overshield_count": 1,
+                    "active_projectiles": [],
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                game_meta=game_meta,
+            )
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+
+        self.assertEqual(payload["game_meta"], game_meta)
+
+    def test_finalization_payload_omits_game_meta_when_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                include_game_meta=False,
+            )
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+
+        self.assertNotIn("game_meta", payload)
 
 
 if __name__ == "__main__":
