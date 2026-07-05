@@ -25,6 +25,8 @@ def _write_replay_json(
     game_meta: dict[str, object] | None = None,
     include_game_meta: bool = True,
     gametype_settings: dict[str, object] | None = None,
+    network_game_client: dict[str, object] | None = None,
+    participant_context: dict[str, object] | None = None,
     summary_overrides: dict[str, object] | None = None,
     tick_overrides: dict[str, object] | None = None,
 ) -> Path:
@@ -66,6 +68,10 @@ def _write_replay_json(
         replay["game_meta"] = game_meta or {"players": {}}
     if gametype_settings is not None:
         replay["gametype_settings"] = gametype_settings
+    if network_game_client is not None:
+        replay["network_game_client"] = network_game_client
+    if participant_context is not None:
+        replay["participant_context"] = participant_context
 
     path.write_text(
         json.dumps(replay),
@@ -288,6 +294,260 @@ class ReplayParserGametypeSettingsTests(unittest.TestCase):
                 self.assertEqual(parsed.game["game_type"], "ctf")
                 self.assertEqual(parsed.game["variant_name"], "Classic CTF")
                 self.assertNotEqual(parsed.game["variant_name"], name.strip())
+
+
+class ReplayParserFactFinalizationTests(unittest.TestCase):
+    def test_finalization_payload_includes_normalized_gametype_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                gametype_settings={
+                    "name": "Team Slayer",
+                    "mode": "slayer",
+                    "score_limit": "50",
+                    "time_limit": 12,
+                    "teamplay": 1,
+                    "teams_enabled": True,
+                    "mode_settings": {
+                        "kill_in_order": False,
+                    },
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+
+        self.assertEqual(payload["facts"]["schema"], "halospawns.replayFacts.v1")
+        game_facts = payload["facts"]["game"]
+        self.assertEqual(game_facts["gametype.name"], "Team Slayer")
+        self.assertEqual(game_facts["gametype.mode"], "slayer")
+        self.assertEqual(game_facts["gametype.score_limit"], 50)
+        self.assertEqual(game_facts["gametype.time_limit"], 12)
+        self.assertIs(game_facts["gametype.teamplay"], True)
+        self.assertIs(game_facts["gametype.teams_enabled"], True)
+        self.assertIs(game_facts["gametype.mode_settings.kill_in_order"], False)
+
+    def test_parse_replay_derives_participant_context_from_network_game_client(self) -> None:
+        players = [
+            {
+                "player_index": 0,
+                "name": "Host Top",
+                "team": 0,
+                "kills": 3,
+                "deaths": 1,
+                "assists": 0,
+                "score": 3,
+            },
+            {
+                "player_index": 1,
+                "name": "Host Bottom",
+                "team": 0,
+                "kills": 1,
+                "deaths": 2,
+                "assists": 1,
+                "score": 1,
+            },
+            {
+                "player_index": 2,
+                "name": "Remote",
+                "team": 1,
+                "kills": 2,
+                "deaths": 3,
+                "assists": 0,
+                "score": 2,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                network_game_client={
+                    "machine_index": 0,
+                    "network_game_data": {
+                        "network_players": [
+                            {
+                                "name": "Host Top",
+                                "machine_index": 0,
+                                "controller_index": 0,
+                                "team": 0,
+                                "player_list_index": 0,
+                            },
+                            {
+                                "name": "Host Bottom",
+                                "machine_index": 0,
+                                "controller_index": 1,
+                                "team": 0,
+                                "player_list_index": 1,
+                            },
+                            {
+                                "name": "Remote",
+                                "machine_index": 1,
+                                "controller_index": 0,
+                                "team": 1,
+                                "player_list_index": 2,
+                            },
+                        ],
+                    },
+                },
+                tick_overrides={"players": players},
+            )
+            parsed = handler._parse_replay(path)
+
+        participants = {participant["slot_index"]: participant for participant in parsed.participants}
+        self.assertEqual(participants[0]["metadata"]["machine_index"], 0)
+        self.assertEqual(participants[0]["metadata"]["controller_index"], 0)
+        self.assertIs(participants[0]["metadata"]["is_host"], True)
+        self.assertEqual(participants[0]["metadata"]["screen_slot"], "top")
+        self.assertEqual(participants[0]["metadata"]["screen_layout"], "vertical_2")
+        self.assertEqual(participants[1]["metadata"]["screen_slot"], "bottom")
+        self.assertIs(participants[1]["metadata"]["is_host"], True)
+        self.assertEqual(participants[2]["metadata"]["machine_index"], 1)
+        self.assertIs(participants[2]["metadata"]["is_host"], False)
+        self.assertEqual(participants[2]["metadata"]["screen_slot"], "full")
+        self.assertEqual(participants[2]["metadata"]["screen_layout"], "single")
+
+        payload = _finalization_payload(parsed)
+        participant_facts = {
+            item["slot_index"]: item["facts"]
+            for item in payload["facts"]["participants"]
+        }
+        self.assertIs(participant_facts[0]["participant.is_host"], True)
+        self.assertEqual(participant_facts[0]["participant.screen_slot"], "top")
+        self.assertEqual(participant_facts[1]["participant.screen_slot"], "bottom")
+        self.assertEqual(participant_facts[2]["participant.screen_slot"], "full")
+
+    def test_parse_replay_uses_explicit_participant_context_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                network_game_client={
+                    "network_game_data": {
+                        "network_players": [
+                            {
+                                "machine_index": 0,
+                                "controller_index": 0,
+                                "player_list_index": 0,
+                            },
+                        ],
+                    },
+                },
+                participant_context={
+                    "schema": "halospawns.participantContext.v1",
+                    "players": {
+                        "0": {
+                            "machine_index": 2,
+                            "controller_index": 3,
+                            "is_host": False,
+                            "screen_slot": "bottom-right",
+                            "screen_layout": "quad",
+                        },
+                    },
+                },
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Explicit",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        metadata = parsed.participants[0]["metadata"]
+        self.assertEqual(metadata["machine_index"], 2)
+        self.assertEqual(metadata["controller_index"], 3)
+        self.assertIs(metadata["is_host"], False)
+        self.assertEqual(metadata["screen_slot"], "bottom-right")
+        self.assertEqual(metadata["screen_layout"], "quad")
+        facts = parsed.facts["participants"][0]["facts"]
+        self.assertEqual(facts["participant.machine_index"], 2)
+        self.assertEqual(facts["participant.controller_index"], 3)
+        self.assertIs(facts["participant.is_host"], False)
+        self.assertEqual(facts["participant.screen_slot"], "bottom-right")
+
+    def test_parse_replay_projects_streak_and_multikill_stats(self) -> None:
+        game_meta = {
+            "players": {
+                "0": {
+                    "kills_by_tick": {"10": 1, "20": 1},
+                    "streak_by_tick": {"10": 2, "20": 3},
+                    "streak_counts_by_amount": {"5": 1},
+                    "multikills_by_tick": {"10": [2], "20": [3, 4]},
+                    "multikill_counts_by_amount": {"2": 3, "3": 1, "4": 1, "5": 1},
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                game_meta=game_meta,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Streaky",
+                            "team": 0,
+                            "kills": 2,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 2,
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(
+            parsed.game_meta["players"]["0"]["streak_by_tick"],
+            {"10": 2, "20": 3},
+        )
+        raw_stats = parsed.participants[0]["stats"]["raw_stats"]
+        self.assertEqual(raw_stats["max_kill_streak"], 5)
+        self.assertEqual(raw_stats["double_kills"], 3)
+        self.assertEqual(raw_stats["triple_kills"], 1)
+        self.assertEqual(raw_stats["multikills_4_plus"], 2)
+
+        payload = _finalization_payload(parsed)
+        facts = payload["facts"]["participants"][0]["facts"]
+        self.assertEqual(facts["participant.max_kill_streak"], 5)
+        self.assertEqual(facts["participant.double_kills"], 3)
+        self.assertEqual(facts["participant.triple_kills"], 1)
+        self.assertEqual(facts["participant.multikills_4_plus"], 2)
+
+    def test_parse_replay_omits_missing_streak_and_context_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Legacy",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        raw_stats = parsed.participants[0]["stats"]["raw_stats"]
+        self.assertNotIn("max_kill_streak", raw_stats)
+        self.assertNotIn("double_kills", raw_stats)
+        self.assertIsNone(parsed.facts)
 
 
 class ReplayParserMapInfoEvidenceTests(unittest.TestCase):

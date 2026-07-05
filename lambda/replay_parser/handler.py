@@ -44,10 +44,12 @@ MAX_GAMETYPE_SETTINGS_DEPTH = 4
 MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
 REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
+FACT_SCHEMA_VERSION = "halospawns.replayFacts.v1"
 NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES = {"NoSuchBucket", "NoSuchKey", "NotFound", "404"}
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
 SAFE_GAMETYPE_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+SAFE_FACT_KEY_PART_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 GAME_RELEASE_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 UNKNOWN_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:unknown|unknown\s*<[^>]+>|unknown\s+[-+]?(?:0x[0-9a-f]+|\d+))$",
@@ -113,6 +115,35 @@ META_PLAYER_MAPPING_FIELDS = {
     "kills_by_tick",
     "deaths_by_tick",
     "assists_by_tick",
+    "streak_by_tick",
+    "streak_counts_by_amount",
+    "multikills_by_tick",
+    "multikill_counts_by_amount",
+}
+SCREEN_SLOTS_BY_PLAYER_COUNT = {
+    1: ("full",),
+    2: ("top", "bottom"),
+    3: ("top", "bottom-left", "bottom-right"),
+    4: ("top-left", "top-right", "bottom-left", "bottom-right"),
+}
+SCREEN_LAYOUT_BY_PLAYER_COUNT = {
+    1: "single",
+    2: "vertical_2",
+    3: "three_player",
+    4: "quad",
+}
+VALID_SCREEN_SLOTS = frozenset(
+    slot
+    for slots in SCREEN_SLOTS_BY_PLAYER_COUNT.values()
+    for slot in slots
+)
+GAMETYPE_BOOL_FACT_KEYS = {
+    "gametype.teamplay",
+    "gametype.teams_enabled",
+}
+GAMETYPE_INT_FACT_KEYS = {
+    "gametype.score_limit",
+    "gametype.time_limit",
 }
 
 
@@ -176,6 +207,7 @@ class ParsedReplay:
     spawn_source: dict[str, Any] | None
     metadata: dict[str, Any]
     game_meta: dict[str, Any] | None = None
+    facts: dict[str, Any] | None = None
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -577,14 +609,27 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
     first_tick = replay_document["first_tick"]
     last_tick = replay_document["last_tick"]
     gametype_settings = replay_document["gametype_settings"]
+    network_game_client = replay_document["network_game_client"]
+    participant_context = replay_document["participant_context"]
     first_players = [_proxy_dict(player) for player in first_tick.get("players", [])]
     last_players = [_proxy_dict(player) for player in last_tick.get("players", [])]
     meta_players = {
         str(player_id): _proxy_dict(player)
         for player_id, player in game_meta_players.items()
     }
+    participant_contexts = _participant_contexts_from_replay(
+        network_game_client=network_game_client,
+        participant_context=participant_context,
+        first_players=first_players,
+        last_players=last_players,
+    )
 
-    participants = _participants_from_replay(first_players, last_players, meta_players)
+    participants = _participants_from_replay(
+        first_players,
+        last_players,
+        meta_players,
+        participant_contexts,
+    )
     team_stats = _team_stats_from_participants(participants)
     game = _game_from_replay(
         summary=summary,
@@ -592,6 +637,10 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         last_tick=last_tick,
         team_stats=team_stats,
         gametype_settings=gametype_settings,
+    )
+    facts = _facts_from_replay(
+        gametype_settings=gametype_settings,
+        participants=participants,
     )
     metadata = {
         "summary": summary,
@@ -620,6 +669,7 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         spawn_source=spawn_source,
         metadata=metadata,
         game_meta=callback_game_meta,
+        facts=facts,
     )
 
 
@@ -631,6 +681,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     current_tick: dict[str, Any] | None = None
     current_player: dict[str, Any] | None = None
     gametype_settings: dict[str, Any] = {}
+    network_game_client: dict[str, Any] = {}
+    participant_context: dict[str, Any] = {}
     callback_game_meta: dict[str, Any] | None = None
     spawn_points: list[dict[str, float]] = []
     spawn_source_path: str | None = None
@@ -653,6 +705,10 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         summary = _proxy_dict(built_value)
                     elif active_context and active_context[0] == "gametype_settings":
                         gametype_settings = _sanitize_gametype_settings(built_value)
+                    elif active_context and active_context[0] == "network_game_client":
+                        network_game_client = _proxy_dict(_json_compatible_value(built_value))
+                    elif active_context and active_context[0] == "participant_context":
+                        participant_context = _proxy_dict(_json_compatible_value(built_value))
                     elif active_context and active_context[0] == "callback_game_meta":
                         callback_game_meta = _callback_game_meta(built_value)
                     elif active_context and active_context[0] == "meta_player_field":
@@ -667,6 +723,13 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     elif active_context and active_context[0] == "tick_map_info":
                         if current_tick is not None:
                             current_tick["map_info"] = _proxy_dict(built_value)
+                    elif active_context and active_context[0] == "tick_network_game_client":
+                        if current_tick is not None:
+                            current_tick["network_game_client"] = _proxy_dict(
+                                _json_compatible_value(built_value)
+                            )
+                        if not network_game_client:
+                            network_game_client = _proxy_dict(_json_compatible_value(built_value))
                     elif active_target == "events.item":
                         event_count += 1
                         if len(event_sample) < 10:
@@ -716,6 +779,34 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     event,
                     value,
                     context=("gametype_settings",),
+                )
+                continue
+
+            if prefix == "network_game_client" and event == "start_map":
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                    context=("network_game_client",),
+                )
+                continue
+
+            if prefix == "participant_context" and event == "start_map":
+                (
+                    active_builder,
+                    active_target,
+                    active_end_event,
+                    active_context,
+                ) = _start_json_builder(
+                    prefix,
+                    event,
+                    value,
+                    context=("participant_context",),
                 )
                 continue
 
@@ -793,6 +884,24 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     )
                     continue
 
+                if (
+                    not network_game_client
+                    and prefix == "ticks.item.network_game_client"
+                    and event == "start_map"
+                ):
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                        context=("tick_network_game_client",),
+                    )
+                    continue
+
                 if prefix == "ticks.item.players.item" and event == "start_map":
                     current_player = {}
                     continue
@@ -806,6 +915,11 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     player_field = _direct_child_field(prefix, "ticks.item.players.item")
                     if player_field in PLAYER_FIELDS and _is_scalar_json_event(event):
                         current_player[player_field] = value
+                    if (
+                        prefix == "ticks.item.players.item.derived_stats.is_host"
+                        and _is_scalar_json_event(event)
+                    ):
+                        current_player["is_host"] = value
                     continue
 
                 tick_field = _direct_child_field(prefix, "ticks.item")
@@ -835,6 +949,8 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
         "game_meta_players": game_meta_players,
         "callback_game_meta": callback_game_meta,
         "gametype_settings": gametype_settings,
+        "network_game_client": network_game_client,
+        "participant_context": participant_context,
         "first_tick": first_tick or {},
         "last_tick": last_tick or {},
         "spawn_points": spawn_points,
@@ -1008,10 +1124,209 @@ def _map_info_from_ticks(first_tick: Any, last_tick: Any) -> dict[str, Any]:
     return {}
 
 
+def _participant_contexts_from_replay(
+    *,
+    network_game_client: dict[str, Any],
+    participant_context: dict[str, Any],
+    first_players: list[dict[str, Any]],
+    last_players: list[dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    derived = _participant_contexts_from_network_client(network_game_client)
+    tick_contexts = _participant_contexts_from_tick_players(
+        first_players=first_players,
+        last_players=last_players,
+        network_game_client=network_game_client,
+    )
+    for slot_index, context in tick_contexts.items():
+        derived.setdefault(slot_index, {}).update(
+            {
+                key: value
+                for key, value in context.items()
+                if key not in derived.get(slot_index, {})
+            }
+        )
+
+    explicit = _participant_contexts_from_payload(participant_context)
+    for slot_index, context in explicit.items():
+        derived.setdefault(slot_index, {}).update(context)
+
+    return {
+        slot_index: context
+        for slot_index, context in derived.items()
+        if context
+    }
+
+
+def _participant_contexts_from_network_client(
+    network_game_client: dict[str, Any],
+) -> dict[int, dict[str, Any]]:
+    network_game_data = _proxy_dict(network_game_client.get("network_game_data"))
+    network_players = network_game_data.get("network_players")
+    if not isinstance(network_players, list):
+        return {}
+
+    contexts: dict[int, dict[str, Any]] = {}
+    players_by_machine: dict[int, list[tuple[int, int]]] = {}
+    fallback_order_by_machine: dict[int, int] = {}
+
+    for fallback_order, raw_player in enumerate(network_players):
+        player = _proxy_dict(raw_player)
+        slot_index = _optional_int(player.get("player_list_index"))
+        machine_index = _optional_int(player.get("machine_index"))
+        controller_index = _optional_int(player.get("controller_index"))
+        if slot_index is None:
+            continue
+
+        context: dict[str, Any] = {}
+        if machine_index is not None:
+            context["machine_index"] = machine_index
+            context["is_host"] = machine_index == 0
+            fallback_order_by_machine[machine_index] = fallback_order
+        if controller_index is not None:
+            context["controller_index"] = controller_index
+
+        contexts[slot_index] = context
+        if machine_index is not None:
+            players_by_machine.setdefault(machine_index, []).append(
+                (
+                    controller_index if controller_index is not None else fallback_order,
+                    slot_index,
+                )
+            )
+
+    _assign_screen_contexts(contexts, players_by_machine, fallback_order_by_machine)
+    return contexts
+
+
+def _participant_contexts_from_tick_players(
+    *,
+    first_players: list[dict[str, Any]],
+    last_players: list[dict[str, Any]],
+    network_game_client: dict[str, Any],
+) -> dict[int, dict[str, Any]]:
+    local_machine_index = _optional_int(network_game_client.get("machine_index"))
+    players_by_machine: dict[int, list[tuple[int, int]]] = {}
+    contexts: dict[int, dict[str, Any]] = {}
+    first_by_index = {
+        _player_index(player, fallback=index): player
+        for index, player in enumerate(first_players)
+    }
+
+    for fallback_index, last_player in enumerate(last_players):
+        slot_index = _player_index(last_player, fallback=fallback_index)
+        first_player = first_by_index.get(slot_index, {})
+        local_player = _optional_int(last_player.get("local_player"))
+        if local_player is None:
+            local_player = _optional_int(first_player.get("local_player"))
+        is_host = _optional_bool(last_player.get("is_host"))
+        if is_host is None:
+            is_host = _optional_bool(first_player.get("is_host"))
+
+        context: dict[str, Any] = {}
+        if local_player is not None and local_player >= 0:
+            context["controller_index"] = local_player
+            if local_machine_index is not None:
+                context["machine_index"] = local_machine_index
+                context["is_host"] = local_machine_index == 0
+                players_by_machine.setdefault(local_machine_index, []).append(
+                    (local_player, slot_index)
+                )
+        if is_host is not None:
+            context["is_host"] = is_host
+        if context:
+            contexts[slot_index] = context
+
+    _assign_screen_contexts(
+        contexts,
+        players_by_machine,
+        {machine_index: 0 for machine_index in players_by_machine},
+    )
+    return contexts
+
+
+def _participant_contexts_from_payload(value: Any) -> dict[int, dict[str, Any]]:
+    context_payload = _proxy_dict(value)
+    players = context_payload.get("players")
+    if isinstance(players, dict):
+        items = players.items()
+    elif isinstance(players, list):
+        items = enumerate(players)
+    else:
+        return {}
+
+    contexts: dict[int, dict[str, Any]] = {}
+    for raw_slot_index, raw_context in items:
+        context_mapping = _proxy_dict(raw_context)
+        slot_index = None
+        for candidate in (
+            context_mapping.get("slot_index"),
+            context_mapping.get("player_list_index"),
+            context_mapping.get("player_index"),
+            raw_slot_index,
+        ):
+            slot_index = _optional_int(candidate)
+            if slot_index is not None:
+                break
+        if slot_index is None:
+            continue
+        context = _normalized_participant_context(context_mapping)
+        if context:
+            contexts[slot_index] = context
+    return contexts
+
+
+def _normalized_participant_context(value: dict[str, Any]) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    for key in ("machine_index", "controller_index"):
+        integer = _optional_int(value.get(key))
+        if integer is not None and integer >= 0:
+            context[key] = integer
+
+    is_host = _optional_bool(value.get("is_host"))
+    if is_host is not None:
+        context["is_host"] = is_host
+
+    screen_slot = _screen_slot(value.get("screen_slot"))
+    if screen_slot is not None:
+        context["screen_slot"] = screen_slot
+
+    screen_layout = _safe_gametype_text(value.get("screen_layout"))
+    if screen_layout is not None:
+        context["screen_layout"] = screen_layout
+
+    return context
+
+
+def _assign_screen_contexts(
+    contexts: dict[int, dict[str, Any]],
+    players_by_machine: dict[int, list[tuple[int, int]]],
+    fallback_order_by_machine: dict[int, int],
+) -> None:
+    for machine_index, players in players_by_machine.items():
+        ordered = sorted(
+            players,
+            key=lambda item: (
+                item[0],
+                fallback_order_by_machine.get(machine_index, 0),
+                item[1],
+            ),
+        )
+        player_count = len(ordered)
+        slots = SCREEN_SLOTS_BY_PLAYER_COUNT.get(player_count)
+        layout = SCREEN_LAYOUT_BY_PLAYER_COUNT.get(player_count)
+        if not slots or layout is None:
+            continue
+        for order, (_, slot_index) in enumerate(ordered):
+            context = contexts.setdefault(slot_index, {})
+            context.setdefault("screen_slot", slots[order])
+            context.setdefault("screen_layout", layout)
+
+
 def _participants_from_replay(
     first_players: list[dict[str, Any]],
     last_players: list[dict[str, Any]],
     meta_players: dict[str, dict[str, Any]],
+    participant_contexts: dict[int, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     first_by_index = {
         _player_index(player, fallback=index): player
@@ -1036,6 +1351,24 @@ def _participants_from_replay(
         assists = _optional_int(last_player.get("assists")) or _sum_numeric_values(
             meta_player.get("assists_by_tick")
         )
+        metadata = {
+            "replay_player_index": slot_index,
+            "local_player": last_player.get("local_player"),
+            "ctf_score": ctf_score,
+            "player_quit": last_player.get("player_quit"),
+        }
+        for key, value in participant_contexts.get(slot_index, {}).items():
+            if value is not None:
+                metadata[key] = value
+
+        raw_stats = {
+            "shots_by_weapon": _small_mapping(meta_player.get("shots_by_weapon")),
+            "damage_to_player": _small_mapping(meta_player.get("damage_to_player")),
+            "damage_from_player": _small_mapping(meta_player.get("damage_from_player")),
+            "camo_count": meta_player.get("camo_count"),
+            "overshield_count": meta_player.get("overshield_count"),
+        }
+        raw_stats.update(_streak_multikill_stats(meta_player))
 
         participants.append(
             {
@@ -1043,12 +1376,7 @@ def _participants_from_replay(
                 "team_index": team_index,
                 "team_name": _team_name(team_index),
                 "in_game_name": _player_name(last_player, first_player, slot_index),
-                "metadata": {
-                    "replay_player_index": slot_index,
-                    "local_player": last_player.get("local_player"),
-                    "ctf_score": ctf_score,
-                    "player_quit": last_player.get("player_quit"),
-                },
+                "metadata": metadata,
                 "stats": {
                     "kills": kills,
                     "deaths": deaths,
@@ -1059,18 +1387,176 @@ def _participants_from_replay(
                     "shots_fired": shots_fired,
                     "damage_dealt": _optional_float(meta_player.get("damage_dealt")),
                     "damage_taken": _optional_float(meta_player.get("damage_received")),
-                    "raw_stats": {
-                        "shots_by_weapon": _small_mapping(meta_player.get("shots_by_weapon")),
-                        "damage_to_player": _small_mapping(meta_player.get("damage_to_player")),
-                        "damage_from_player": _small_mapping(meta_player.get("damage_from_player")),
-                        "camo_count": meta_player.get("camo_count"),
-                        "overshield_count": meta_player.get("overshield_count"),
-                    },
+                    "raw_stats": raw_stats,
                 },
             }
         )
 
     return participants
+
+
+def _streak_multikill_stats(meta_player: dict[str, Any]) -> dict[str, int]:
+    stats: dict[str, int] = {}
+    max_streak = _max_kill_streak(meta_player)
+    if max_streak is not None:
+        stats["max_kill_streak"] = max_streak
+
+    multikill_counts = _multikill_counts(meta_player)
+    if multikill_counts is not None:
+        stats["double_kills"] = multikill_counts.get(2, 0)
+        stats["triple_kills"] = multikill_counts.get(3, 0)
+        stats["multikills_4_plus"] = sum(
+            count
+            for amount, count in multikill_counts.items()
+            if amount >= 4
+        )
+    return stats
+
+
+def _max_kill_streak(meta_player: dict[str, Any]) -> int | None:
+    values: list[int] = []
+    streak_by_tick = _proxy_dict(meta_player.get("streak_by_tick"))
+    values.extend(
+        streak
+        for raw_value in streak_by_tick.values()
+        if (streak := _optional_int(raw_value)) is not None
+    )
+
+    streak_counts_by_amount = _proxy_dict(meta_player.get("streak_counts_by_amount"))
+    values.extend(
+        amount
+        for raw_amount, raw_count in streak_counts_by_amount.items()
+        if (amount := _optional_int(raw_amount)) is not None
+        and (count := _optional_int(raw_count)) is not None
+        and count > 0
+    )
+    return max(values) if values else None
+
+
+def _multikill_counts(meta_player: dict[str, Any]) -> dict[int, int] | None:
+    counts_by_amount = _proxy_dict(meta_player.get("multikill_counts_by_amount"))
+    if counts_by_amount:
+        counts: dict[int, int] = {}
+        for raw_amount, raw_count in counts_by_amount.items():
+            amount = _optional_int(raw_amount)
+            count = _optional_int(raw_count)
+            if amount is not None and amount >= 2 and count is not None:
+                counts[amount] = count
+        return counts
+
+    multikills_by_tick = _proxy_dict(meta_player.get("multikills_by_tick"))
+    if not multikills_by_tick:
+        return None
+    counts: dict[int, int] = {}
+    for raw_values in multikills_by_tick.values():
+        values = raw_values if isinstance(raw_values, list | tuple) else [raw_values]
+        for raw_amount in values:
+            amount = _optional_int(raw_amount)
+            if amount is not None and amount >= 2:
+                counts[amount] = counts.get(amount, 0) + 1
+    return counts
+
+
+def _facts_from_replay(
+    *,
+    gametype_settings: dict[str, Any],
+    participants: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    game_facts = _gametype_fact_values(gametype_settings)
+    participant_facts = [
+        {
+            "slot_index": participant["slot_index"],
+            "facts": facts,
+        }
+        for participant in participants
+        if (facts := _participant_fact_values(participant))
+    ]
+    if not game_facts and not participant_facts:
+        return None
+    return {
+        "schema": FACT_SCHEMA_VERSION,
+        "game": game_facts,
+        "participants": participant_facts,
+    }
+
+
+def _gametype_fact_values(settings: dict[str, Any]) -> dict[str, Any]:
+    facts: dict[str, Any] = {}
+    for path, raw_value in _iter_fact_paths(settings):
+        key = "gametype." + ".".join(path)
+        value = _gametype_fact_value(key, raw_value)
+        if value is not OMIT:
+            facts[key] = value
+    return facts
+
+
+def _iter_fact_paths(value: Any, prefix: tuple[str, ...] = ()) -> list[tuple[tuple[str, ...], Any]]:
+    mapping = _proxy_dict(value)
+    if not mapping:
+        return []
+
+    paths: list[tuple[tuple[str, ...], Any]] = []
+    for raw_key, raw_value in mapping.items():
+        part = _fact_key_part(raw_key)
+        if part is None:
+            continue
+        path = (*prefix, part)
+        if isinstance(raw_value, dict) or hasattr(raw_value, "as_dict"):
+            paths.extend(_iter_fact_paths(raw_value, path))
+        else:
+            paths.append((path, raw_value))
+    return paths
+
+
+def _gametype_fact_value(key: str, value: Any) -> Any:
+    if key in GAMETYPE_BOOL_FACT_KEYS:
+        boolean = _optional_bool(value)
+        return boolean if boolean is not None else OMIT
+    if key in GAMETYPE_INT_FACT_KEYS:
+        integer = _optional_int(value)
+        return integer if integer is not None else OMIT
+
+    jsonable = _jsonable(value)
+    if jsonable is None:
+        return OMIT
+    if isinstance(jsonable, bool):
+        return jsonable
+    if isinstance(jsonable, int):
+        return jsonable
+    if isinstance(jsonable, float):
+        return jsonable if math.isfinite(jsonable) else OMIT
+    if isinstance(jsonable, str):
+        text = _safe_gametype_text(jsonable)
+        return text if text is not None else OMIT
+    return OMIT
+
+
+def _participant_fact_values(participant: dict[str, Any]) -> dict[str, Any]:
+    metadata = _proxy_dict(participant.get("metadata"))
+    stats = _proxy_dict(participant.get("stats"))
+    raw_stats = _proxy_dict(stats.get("raw_stats"))
+    facts: dict[str, Any] = {}
+
+    for key in (
+        "is_host",
+        "machine_index",
+        "controller_index",
+        "screen_slot",
+        "screen_layout",
+    ):
+        if metadata.get(key) is not None:
+            facts[f"participant.{key}"] = metadata[key]
+
+    for key in (
+        "max_kill_streak",
+        "double_kills",
+        "triple_kills",
+        "multikills_4_plus",
+    ):
+        if raw_stats.get(key) is not None:
+            facts[f"participant.{key}"] = raw_stats[key]
+
+    return facts
 
 
 def _team_stats_from_participants(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1159,6 +1645,8 @@ def _finalize_replay_upload(
         payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
     if parsed.game_meta is not None:
         payload["game_meta"] = parsed.game_meta
+    if parsed.facts is not None:
+        payload["facts"] = parsed.facts
     _call_app_api("POST", _settings()["replay_finalization_path"], payload)
 
 
@@ -1565,6 +2053,22 @@ def _safe_gametype_text(value: Any) -> str | None:
     return text
 
 
+def _fact_key_part(value: Any) -> str | None:
+    text = _optional_text(value)
+    if text is None:
+        return None
+    normalized = re.sub(r"[^a-z0-9_]+", "_", text.lower()).strip("_")
+    return normalized if SAFE_FACT_KEY_PART_PATTERN.fullmatch(normalized) else None
+
+
+def _screen_slot(value: Any) -> str | None:
+    text = _optional_text(value)
+    if text is None:
+        return None
+    normalized = text.lower()
+    return normalized if normalized in VALID_SCREEN_SLOTS else None
+
+
 def _game_release_key(value: Any) -> str | None:
     text = _optional_text(value)
     if text is None:
@@ -1679,6 +2183,24 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    text = _optional_text(value)
+    if text is None:
+        return None
+    normalized = text.lower()
+    if normalized in {"1", "true", "yes", "on", "y", "t"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "n", "f"}:
+        return False
+    return None
 
 
 def _optional_float(value: Any) -> float | None:
