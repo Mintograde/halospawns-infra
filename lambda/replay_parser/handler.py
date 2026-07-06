@@ -920,6 +920,11 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         and _is_scalar_json_event(event)
                     ):
                         current_player["is_host"] = value
+                    if (
+                        prefix == "ticks.item.players.item.derived_stats.is_hostman"
+                        and _is_scalar_json_event(event)
+                    ):
+                        current_player["is_hostman"] = value
                     continue
 
                 tick_field = _direct_child_field(prefix, "ticks.item")
@@ -1221,6 +1226,9 @@ def _participant_contexts_from_tick_players(
         is_host = _optional_bool(last_player.get("is_host"))
         if is_host is None:
             is_host = _optional_bool(first_player.get("is_host"))
+        is_hostman = _optional_bool(last_player.get("is_hostman"))
+        if is_hostman is None:
+            is_hostman = _optional_bool(first_player.get("is_hostman"))
 
         context: dict[str, Any] = {}
         if local_player is not None and local_player >= 0:
@@ -1233,6 +1241,8 @@ def _participant_contexts_from_tick_players(
                 )
         if is_host is not None:
             context["is_host"] = is_host
+        if is_hostman is not None:
+            context["is_hostman"] = is_hostman
         if context:
             contexts[slot_index] = context
 
@@ -1285,6 +1295,10 @@ def _normalized_participant_context(value: dict[str, Any]) -> dict[str, Any]:
     is_host = _optional_bool(value.get("is_host"))
     if is_host is not None:
         context["is_host"] = is_host
+
+    is_hostman = _optional_bool(value.get("is_hostman"))
+    if is_hostman is not None:
+        context["is_hostman"] = is_hostman
 
     screen_slot = _screen_slot(value.get("screen_slot"))
     if screen_slot is not None:
@@ -1463,6 +1477,7 @@ def _facts_from_replay(
     participants: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     game_facts = _gametype_fact_values(gametype_settings)
+    game_facts["game.host_style"] = _host_style_fact_value(participants)
     participant_facts = [
         {
             "slot_index": participant["slot_index"],
@@ -1539,6 +1554,7 @@ def _participant_fact_values(participant: dict[str, Any]) -> dict[str, Any]:
 
     for key in (
         "is_host",
+        "is_hostman",
         "machine_index",
         "controller_index",
         "screen_slot",
@@ -1557,6 +1573,21 @@ def _participant_fact_values(participant: dict[str, Any]) -> dict[str, Any]:
             facts[f"participant.{key}"] = raw_stats[key]
 
     return facts
+
+
+def _host_style_fact_value(participants: list[dict[str, Any]]) -> str:
+    host_players = [
+        participant
+        for participant in participants
+        if _optional_bool(_proxy_dict(participant.get("metadata")).get("is_host")) is True
+    ]
+    if not host_players:
+        return "neutral"
+    if len(host_players) == 1:
+        metadata = _proxy_dict(host_players[0].get("metadata"))
+        if _optional_bool(metadata.get("is_hostman")) is True:
+            return "neutral"
+    return "on_off"
 
 
 def _team_stats_from_participants(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:

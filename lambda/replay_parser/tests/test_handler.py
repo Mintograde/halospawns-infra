@@ -328,6 +328,125 @@ class ReplayParserFactFinalizationTests(unittest.TestCase):
         self.assertIs(game_facts["gametype.teams_enabled"], True)
         self.assertIs(game_facts["gametype.mode_settings.kill_in_order"], False)
 
+    def test_parse_replay_sets_neutral_host_style_without_host_participants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Player 0",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                            "derived_stats": {"is_host": False},
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.facts["game"]["game.host_style"], "neutral")
+
+    def test_parse_replay_sets_neutral_host_style_for_single_hostman(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Hostman",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                            "derived_stats": {
+                                "is_host": True,
+                                "is_hostman": True,
+                            },
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertIs(parsed.participants[0]["metadata"]["is_hostman"], True)
+        self.assertEqual(parsed.facts["game"]["game.host_style"], "neutral")
+        participant_facts = parsed.facts["participants"][0]["facts"]
+        self.assertIs(participant_facts["participant.is_host"], True)
+        self.assertIs(participant_facts["participant.is_hostman"], True)
+
+    def test_parse_replay_sets_on_off_host_style_for_single_non_hostman_host(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Host",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                            "derived_stats": {"is_host": True},
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.facts["game"]["game.host_style"], "on_off")
+        participant_facts = parsed.facts["participants"][0]["facts"]
+        self.assertIs(participant_facts["participant.is_host"], True)
+        self.assertNotIn("participant.is_hostman", participant_facts)
+
+    def test_parse_replay_sets_on_off_host_style_for_multiple_hosts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Host 0",
+                            "team": 0,
+                            "kills": 1,
+                            "deaths": 0,
+                            "assists": 0,
+                            "score": 1,
+                            "derived_stats": {
+                                "is_host": True,
+                                "is_hostman": True,
+                            },
+                        },
+                        {
+                            "player_index": 1,
+                            "name": "Host 1",
+                            "team": 1,
+                            "kills": 0,
+                            "deaths": 1,
+                            "assists": 0,
+                            "score": 0,
+                            "derived_stats": {"is_host": True},
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.facts["game"]["game.host_style"], "on_off")
+
     def test_parse_replay_derives_participant_context_from_network_game_client(self) -> None:
         players = [
             {
@@ -547,7 +666,14 @@ class ReplayParserFactFinalizationTests(unittest.TestCase):
         raw_stats = parsed.participants[0]["stats"]["raw_stats"]
         self.assertNotIn("max_kill_streak", raw_stats)
         self.assertNotIn("double_kills", raw_stats)
-        self.assertIsNone(parsed.facts)
+        self.assertEqual(
+            parsed.facts,
+            {
+                "schema": "halospawns.replayFacts.v1",
+                "game": {"game.host_style": "neutral"},
+                "participants": [],
+            },
+        )
 
 
 class ReplayParserMapInfoEvidenceTests(unittest.TestCase):
