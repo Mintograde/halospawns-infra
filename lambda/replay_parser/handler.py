@@ -45,6 +45,9 @@ MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
 REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
 FACT_SCHEMA_VERSION = "halospawns.replayFacts.v1"
+GRAPH_CONTEXT_SCHEMA_VERSION = "halospawns.graphContext.v1"
+GAME_TICKS_PER_SECOND = 30
+MAX_GRAPH_CONTEXT_PLAYERS = 16
 NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES = {"NoSuchBucket", "NoSuchKey", "NotFound", "404"}
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
@@ -611,8 +614,8 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
     gametype_settings = replay_document["gametype_settings"]
     network_game_client = replay_document["network_game_client"]
     participant_context = replay_document["participant_context"]
-    first_players = [_proxy_dict(player) for player in first_tick.get("players", [])]
-    last_players = [_proxy_dict(player) for player in last_tick.get("players", [])]
+    first_players = _tick_players(first_tick)
+    last_players = _tick_players(last_tick)
     meta_players = {
         str(player_id): _proxy_dict(player)
         for player_id, player in game_meta_players.items()
@@ -653,6 +656,13 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
             "ijson_backend": getattr(ijson.backend, "__name__", str(ijson.backend)),
         },
     }
+    graph_context = _graph_context_from_replay(
+        first_tick=first_tick,
+        last_tick=last_tick,
+        participant_contexts=participant_contexts,
+    )
+    if graph_context is not None:
+        metadata["graph_context"] = graph_context
     spawn_points = replay_document["spawn_points"]
     spawn_source = None
     if spawn_points:
@@ -723,6 +733,11 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                     elif active_context and active_context[0] == "tick_map_info":
                         if current_tick is not None:
                             current_tick["map_info"] = _proxy_dict(built_value)
+                    elif active_context and active_context[0] == "tick_game_time_info":
+                        if current_tick is not None:
+                            current_tick["game_time_info"] = _proxy_dict(
+                                _json_compatible_value(built_value)
+                            )
                     elif active_context and active_context[0] == "tick_network_game_client":
                         if current_tick is not None:
                             current_tick["network_game_client"] = _proxy_dict(
@@ -881,6 +896,20 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
                         event,
                         value,
                         context=("tick_map_info",),
+                    )
+                    continue
+
+                if prefix == "ticks.item.game_time_info" and event == "start_map":
+                    (
+                        active_builder,
+                        active_target,
+                        active_end_event,
+                        active_context,
+                    ) = _start_json_builder(
+                        prefix,
+                        event,
+                        value,
+                        context=("tick_game_time_info",),
                     )
                     continue
 
@@ -1127,6 +1156,166 @@ def _map_info_from_ticks(first_tick: Any, last_tick: Any) -> dict[str, Any]:
         if map_info:
             return map_info
     return {}
+
+
+def _tick_players(tick: Any) -> list[dict[str, Any]]:
+    players = _proxy_dict(tick).get("players")
+    if not isinstance(players, list):
+        return []
+    return [_proxy_dict(player) for player in players]
+
+
+def _graph_context_from_replay(
+    *,
+    first_tick: Any,
+    last_tick: Any,
+    participant_contexts: dict[int, dict[str, Any]],
+) -> dict[str, Any] | None:
+    first_tick_data = _proxy_dict(first_tick)
+    last_tick_data = _proxy_dict(last_tick)
+    first_recorded_tick = _recorded_game_tick(first_tick_data)
+    last_recorded_tick = _recorded_game_tick(last_tick_data)
+    first_recorded_seconds = _recorded_time_seconds(
+        first_tick_data,
+        game_tick=first_recorded_tick,
+    )
+    last_recorded_seconds = _recorded_time_seconds(
+        last_tick_data,
+        game_tick=last_recorded_tick,
+    )
+
+    coverage: dict[str, Any] = {}
+    if first_recorded_tick is not None:
+        starts_after_game_start = first_recorded_tick > 0
+        coverage["first_recorded_tick"] = first_recorded_tick
+        coverage["starts_after_game_start"] = starts_after_game_start
+        coverage["incomplete_before_first_tick"] = starts_after_game_start
+    if first_recorded_seconds is not None:
+        coverage["first_recorded_time_seconds"] = first_recorded_seconds
+    if last_recorded_tick is not None:
+        coverage["last_recorded_tick"] = last_recorded_tick
+    if last_recorded_seconds is not None:
+        coverage["last_recorded_time_seconds"] = last_recorded_seconds
+
+    players = _graph_context_players(
+        first_players=_tick_players(first_tick_data),
+        participant_contexts=participant_contexts,
+        first_recorded_tick=first_recorded_tick,
+        first_recorded_seconds=first_recorded_seconds,
+    )
+    if not coverage and not players:
+        return None
+
+    graph_context: dict[str, Any] = {"schema": GRAPH_CONTEXT_SCHEMA_VERSION}
+    if coverage:
+        graph_context["coverage"] = coverage
+    if players:
+        graph_context["players"] = players
+    return graph_context
+
+
+def _recorded_game_tick(tick: dict[str, Any]) -> int | None:
+    game_time_info = _proxy_dict(tick.get("game_time_info"))
+    return _nonnegative_int(game_time_info.get("game_time"))
+
+
+def _recorded_time_seconds(tick: dict[str, Any], *, game_tick: int | None) -> int | float | None:
+    game_time_info = _proxy_dict(tick.get("game_time_info"))
+    for key in (
+        "elapsed_seconds",
+        "time_seconds",
+        "game_time_seconds",
+        "current_game_time_seconds",
+    ):
+        seconds = _nonnegative_seconds(game_time_info.get(key))
+        if seconds is not None:
+            return seconds
+
+    if game_tick is not None:
+        return _seconds_from_game_tick(game_tick)
+
+    real_time_elapsed = _duration_seconds(game_time_info.get("real_time_elapsed"))
+    return real_time_elapsed if real_time_elapsed is not None and real_time_elapsed >= 0 else None
+
+
+def _seconds_from_game_tick(game_tick: int) -> int | float:
+    if game_tick % GAME_TICKS_PER_SECOND == 0:
+        return game_tick // GAME_TICKS_PER_SECOND
+    return round(game_tick / GAME_TICKS_PER_SECOND, 3)
+
+
+def _graph_context_players(
+    *,
+    first_players: list[dict[str, Any]],
+    participant_contexts: dict[int, dict[str, Any]],
+    first_recorded_tick: int | None,
+    first_recorded_seconds: int | float | None,
+) -> dict[str, Any]:
+    players: dict[str, Any] = {}
+
+    for fallback_index, player in enumerate(first_players):
+        slot_index = _player_index(player, fallback=fallback_index)
+        if slot_index < 0 or _is_graph_context_hostman(slot_index, player, participant_contexts):
+            continue
+
+        baselines = {
+            field: value
+            for field in ("kills", "deaths", "assists")
+            if (value := _nonnegative_int(player.get(field))) is not None
+        }
+        if not baselines:
+            continue
+
+        player_context: dict[str, Any] = {
+            "player_index": slot_index,
+            "baselines": baselines,
+            "source": "first_recorded_tick_player_counter",
+        }
+        if first_recorded_tick is not None:
+            player_context["tick"] = first_recorded_tick
+        if first_recorded_seconds is not None:
+            player_context["time_seconds"] = first_recorded_seconds
+
+        players.setdefault(str(slot_index), player_context)
+        if len(players) >= MAX_GRAPH_CONTEXT_PLAYERS:
+            break
+
+    return players
+
+
+def _is_graph_context_hostman(
+    slot_index: int,
+    player: dict[str, Any],
+    participant_contexts: dict[int, dict[str, Any]],
+) -> bool:
+    if _optional_bool(player.get("is_hostman")) is True:
+        return True
+    context = _proxy_dict(participant_contexts.get(slot_index))
+    return _optional_bool(context.get("is_hostman")) is True
+
+
+def _nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value >= 0 and value.is_integer() else None
+    text = _optional_text(value)
+    if text is None or re.fullmatch(r"\d+", text) is None:
+        return None
+    return int(text)
+
+
+def _nonnegative_seconds(value: Any) -> int | float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    number = _optional_float(value)
+    if number is None or not math.isfinite(number) or number < 0:
+        return None
+    if number.is_integer():
+        return int(number)
+    return round(number, 3)
 
 
 def _participant_contexts_from_replay(

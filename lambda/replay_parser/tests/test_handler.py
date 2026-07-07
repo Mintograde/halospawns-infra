@@ -29,6 +29,7 @@ def _write_replay_json(
     participant_context: dict[str, object] | None = None,
     summary_overrides: dict[str, object] | None = None,
     tick_overrides: dict[str, object] | None = None,
+    ticks: list[dict[str, object]] | None = None,
 ) -> Path:
     tick: dict[str, object] = {
         "current_time": "2026-05-09 15:52:20.278065",
@@ -61,7 +62,7 @@ def _write_replay_json(
     path = directory / "replay.json"
     replay: dict[str, object] = {
         "summary": summary,
-        "ticks": [tick],
+        "ticks": ticks if ticks is not None else [tick],
         "events": [],
     }
     if include_game_meta:
@@ -215,6 +216,266 @@ class ReplayParserStatusTests(unittest.TestCase):
 
         self.assertEqual(parsed.game["status"], "imported")
         self.assertIs(parsed.game["metadata"]["game_ended_this_tick"], False)
+
+
+class ReplayParserGraphContextTests(unittest.TestCase):
+    def test_full_game_graph_context_has_zero_start_coverage(self) -> None:
+        ticks = [
+            {
+                "current_time": "2026-05-09 15:51:32.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "full-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "game_time_info": {"game_time": 0},
+                "players": [
+                    {
+                        "player_index": 0,
+                        "name": "Player 0",
+                        "team": 0,
+                        "kills": 0,
+                        "deaths": 0,
+                        "assists": 0,
+                        "score": 0,
+                    },
+                ],
+            },
+            {
+                "current_time": "2026-05-09 15:51:34.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "full-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "game_time_info": {"game_time": 60},
+                "players": [
+                    {
+                        "player_index": 0,
+                        "name": "Player 0",
+                        "team": 0,
+                        "kills": 1,
+                        "deaths": 0,
+                        "assists": 0,
+                        "score": 1,
+                    },
+                ],
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                summary_overrides={
+                    "game_id": "full-game",
+                    "is_full_game": True,
+                    "ticks_elapsed": 61,
+                    "ticks_recorded": 2,
+                    "ticks_dropped": 59,
+                },
+                ticks=ticks,
+            )
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+        graph_context = payload["metadata"]["graph_context"]
+        self.assertEqual(graph_context["schema"], "halospawns.graphContext.v1")
+        self.assertEqual(
+            graph_context["coverage"],
+            {
+                "first_recorded_tick": 0,
+                "starts_after_game_start": False,
+                "incomplete_before_first_tick": False,
+                "first_recorded_time_seconds": 0,
+                "last_recorded_tick": 60,
+                "last_recorded_time_seconds": 2,
+            },
+        )
+        self.assertEqual(
+            graph_context["players"]["0"]["baselines"],
+            {"kills": 0, "deaths": 0, "assists": 0},
+        )
+        self.assertEqual(graph_context["players"]["0"]["tick"], 0)
+        self.assertEqual(graph_context["players"]["0"]["time_seconds"], 0)
+
+    def test_late_start_graph_context_sends_first_recorded_kda_and_omits_hostman(self) -> None:
+        game_meta = {
+            "players": {
+                "0": {
+                    "shots_by_tick": {"9001": 3},
+                    "damage_dealt": 125.5,
+                    "camo_count": 1,
+                    "streak_by_tick": {"9001": 5},
+                    "multikill_counts_by_amount": {"2": 1},
+                },
+            },
+        }
+        first_players = [
+            {
+                "player_index": 0,
+                "name": "Player 0",
+                "team": 0,
+                "kills": 10,
+                "deaths": 10,
+                "assists": 2,
+                "score": 10,
+            },
+            {
+                "player_index": 1,
+                "name": "Hostman",
+                "team": 1,
+                "kills": 99,
+                "deaths": 0,
+                "assists": 0,
+                "score": 99,
+                "derived_stats": {"is_host": True, "is_hostman": True},
+            },
+        ]
+        last_players = [
+            {
+                "player_index": 0,
+                "name": "Player 0",
+                "team": 0,
+                "kills": 14,
+                "deaths": 11,
+                "assists": 3,
+                "score": 14,
+            },
+            {
+                "player_index": 1,
+                "name": "Hostman",
+                "team": 1,
+                "kills": 100,
+                "deaths": 1,
+                "assists": 0,
+                "score": 100,
+                "derived_stats": {"is_host": True, "is_hostman": True},
+            },
+        ]
+        ticks = [
+            {
+                "current_time": "2026-05-09 15:56:32.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "late-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "game_time_info": {"game_time": 9000},
+                "players": first_players,
+            },
+            {
+                "current_time": "2026-05-09 16:01:32.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "late-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "game_time_info": {"game_time": 18000},
+                "players": last_players,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                game_meta=game_meta,
+                summary_overrides={"game_id": "late-game", "is_full_game": False},
+                ticks=ticks,
+            )
+            parsed = handler._parse_replay(path)
+
+        graph_context = _finalization_payload(parsed)["metadata"]["graph_context"]
+
+        self.assertEqual(
+            graph_context["coverage"],
+            {
+                "first_recorded_tick": 9000,
+                "starts_after_game_start": True,
+                "incomplete_before_first_tick": True,
+                "first_recorded_time_seconds": 300,
+                "last_recorded_tick": 18000,
+                "last_recorded_time_seconds": 600,
+            },
+        )
+        self.assertEqual(set(graph_context["players"]), {"0"})
+        player_context = graph_context["players"]["0"]
+        self.assertEqual(player_context["player_index"], 0)
+        self.assertEqual(
+            player_context["baselines"],
+            {"kills": 10, "deaths": 10, "assists": 2},
+        )
+        self.assertNotIn("damage_dealt", player_context["baselines"])
+        self.assertNotIn("shots", player_context["baselines"])
+        self.assertNotIn("camo_count", player_context["baselines"])
+        self.assertNotIn("max_kill_streak", player_context["baselines"])
+        self.assertNotIn("double_kills", player_context["baselines"])
+        self.assertEqual(player_context["tick"], 9000)
+        self.assertEqual(player_context["time_seconds"], 300)
+        self.assertEqual(player_context["source"], "first_recorded_tick_player_counter")
+
+    def test_graph_context_omits_time_fields_when_game_time_info_is_missing(self) -> None:
+        ticks = [
+            {
+                "current_time": "2026-05-09 15:56:32.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "legacy-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "players": [
+                    {
+                        "player_index": 0,
+                        "name": "Player 0",
+                        "team": 0,
+                        "kills": 2,
+                        "deaths": 1,
+                        "assists": 3,
+                        "score": 2,
+                    },
+                ],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(Path(tmp), map_info=None, ticks=ticks)
+            parsed = handler._parse_replay(path)
+
+        graph_context = _finalization_payload(parsed)["metadata"]["graph_context"]
+
+        self.assertNotIn("coverage", graph_context)
+        self.assertEqual(
+            graph_context["players"]["0"]["baselines"],
+            {"kills": 2, "deaths": 1, "assists": 3},
+        )
+        self.assertNotIn("tick", graph_context["players"]["0"])
+        self.assertNotIn("time_seconds", graph_context["players"]["0"])
+
+    def test_finalization_payload_omits_graph_context_when_context_is_absent(self) -> None:
+        ticks = [
+            {
+                "current_time": "2026-05-09 15:56:32.887485",
+                "start_time": "2026-05-09 15:51:32.887485",
+                "game_id": "legacy-game",
+                "multiplayer_map_name": "levels\\test\\prisoner\\prisoner",
+                "game_type": 2,
+                "variant": "CTF",
+                "players": [
+                    {
+                        "player_index": 0,
+                        "name": "Player 0",
+                        "team": 0,
+                        "score": 0,
+                    },
+                ],
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(Path(tmp), map_info=None, ticks=ticks)
+            parsed = handler._parse_replay(path)
+
+        payload = _finalization_payload(parsed)
+
+        self.assertNotIn("graph_context", parsed.metadata)
+        self.assertNotIn("graph_context", payload["metadata"])
 
 
 class ReplayParserGametypeSettingsTests(unittest.TestCase):
