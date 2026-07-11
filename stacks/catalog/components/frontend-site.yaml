@@ -4,5 +4,22 @@ components:
       metadata:
         component: frontend-site
       vars:
-        github_repository: Mintograde/halospawns-svelte
-        github_branch: main
+        dns:
+          certificate:
+            create: false
+        access:
+          mode: public
+          basic_auth:
+            create_edge_lambda: false
+            create_ssm_parameter: false
+            ssm_placeholder_value: REPLACE_ME_DO_NOT_USE
+            realm: Restricted
+            credential_cache_seconds: 300
+        deployment:
+          github:
+            repository: Mintograde/halospawns-svelte
+            branch: main
+            oidc:
+              create_provider: false
+        cloudfront:
+          price_class: PriceClass_100

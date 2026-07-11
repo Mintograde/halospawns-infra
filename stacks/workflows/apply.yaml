@@ -8,4 +8,3 @@ workflows:
       - command: terraform apply app-api -s dev
       - command: terraform apply ecr -s dev
       - command: terraform apply map-processing -s dev
-      - command: terraform apply current-games -s dev

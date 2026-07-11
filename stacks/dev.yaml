@@ -6,7 +6,6 @@ import:
   - catalog/components/uploads-ingest
   - catalog/components/ecr
   - catalog/components/map-processing
-  - catalog/components/current-games
 
 vars:
   environment: dev
@@ -21,78 +20,104 @@ components:
   terraform:
     frontend-site:
       vars:
-        github_environment: dev
-        create_delegated_hosted_zone: true
-        delegated_zone_name: dev.halospawns.com
-        domain_name: dev.halospawns.com
-        hosted_zone_id: null
-        acm_certificate_arn: null
-        create_certificate: true
-        access_control_mode: basic_auth
-        basic_auth_realm: Halospawns dev
-        basic_auth_ssm_parameter_name: /halospawns/dev/frontend-site/basic-auth/credentials-base64
-        create_basic_auth_ssm_parameter: true
-        basic_auth_ssm_placeholder_value: REPLACE_ME_DO_NOT_USE
-        basic_auth_ssm_kms_key_id: null
-        create_basic_auth_edge_lambda: true
-        basic_auth_cache_ttl_seconds: 300
-        create_github_oidc_provider: true
-        github_oidc_provider_arn: null
+        dns:
+          domain_name: dev.halospawns.com
+          hosted_zone:
+            create: true
+            name: dev.halospawns.com
+          certificate:
+            create: true
+        access:
+          mode: basic_auth
+          basic_auth:
+            create_edge_lambda: true
+            ssm_parameter_name: /halospawns/dev/frontend-site/basic-auth/credentials-base64
+            create_ssm_parameter: true
+            realm: Halospawns dev
+        deployment:
+          github:
+            environment: dev
+            oidc:
+              create_provider: true
     app-api:
       vars:
         enabled: true
-        tfstate_bucket: halospawns-tfstate-283279960672
-        frontend_site_state_key: dev/frontend-site/terraform.tfstate
-        uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
-        api_domain_name: api.dev.halospawns.com
-        app_api_base_url: https://api.dev.halospawns.com
-        map_rendering_queue_name: map-rendering-queue
-        replay_processing_queue_name: replays-processing-queue
-        frontend_allowed_origins:
-          - https://dev.halospawns.com
-          - http://127.0.0.1:5173
-          - http://127.0.0.1:5174
-          - http://127.0.0.1:5175
-          - http://127.0.0.1:5176
-          - http://127.0.0.1:5177
-          - http://127.0.0.1:5178
-          - http://127.0.0.1:5179
-          - http://127.0.0.1:5180
-        github_environment: dev
-        create_github_oidc_provider: false
-        github_oidc_provider_arn: null
-        supabase_project_ref: sozzcczmuwlacqczdmnm
-        supabase_url: https://sozzcczmuwlacqczdmnm.supabase.co
-        supabase_jwt_issuer: https://sozzcczmuwlacqczdmnm.supabase.co/auth/v1
-        supabase_database_url_secret_name: /halospawns/dev/app-api/supabase/database-url
-        supabase_service_role_secret_name: /halospawns/dev/app-api/supabase/service-role-key
-        create_supabase_service_role_secret: false
-        trusted_service_hmac_secret_names:
-          live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
-          map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
-          map-rendering: /halospawns/dev/app-api/trusted-clients/map-rendering/hmac-secret
-          replay-processing: /halospawns/dev/app-api/trusted-clients/replay-processing/hmac-secret
-        trusted_service_hmac_timestamp_tolerance_seconds: 300
-        map_support_resource_auto_approve_uploads: true
+        dependencies:
+          state_bucket: halospawns-tfstate-283279960672
+          state_keys:
+            frontend_site: dev/frontend-site/terraform.tfstate
+            uploads_ingest: dev/uploads-ingest/terraform.tfstate
+          queues:
+            map_rendering: map-rendering-queue
+            replay_processing: replays-processing-queue
+        domain:
+          name: api.dev.halospawns.com
+          base_url: https://api.dev.halospawns.com
+        cors:
+          allowed_origins:
+            - https://dev.halospawns.com
+            - http://127.0.0.1:5173
+            - http://127.0.0.1:5174
+            - http://127.0.0.1:5175
+            - http://127.0.0.1:5176
+            - http://127.0.0.1:5177
+            - http://127.0.0.1:5178
+            - http://127.0.0.1:5179
+            - http://127.0.0.1:5180
+        supabase:
+          project_ref: sozzcczmuwlacqczdmnm
+          url: https://sozzcczmuwlacqczdmnm.supabase.co
+          jwt:
+            issuer: https://sozzcczmuwlacqczdmnm.supabase.co/auth/v1
+          secrets:
+            database_url_name: /halospawns/dev/app-api/supabase/database-url
+            service_role_name: /halospawns/dev/app-api/supabase/service-role-key
+            create_service_role_secret: false
+        uploads:
+          maps:
+            support_resource_auto_approve: true
+        release:
+          github:
+            environment: dev
+        trusted_services:
+          secret_names:
+            live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
+            map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
+            map-rendering: /halospawns/dev/app-api/trusted-clients/map-rendering/hmac-secret
+            replay-processing: /halospawns/dev/app-api/trusted-clients/replay-processing/hmac-secret
+          timestamp_tolerance_seconds: 300
     uploads-ingest:
       vars:
-        allowed_cors_origins:
-          - https://dev.halospawns.com
-          - http://127.0.0.1:5173
-          - http://127.0.0.1:5174
-          - http://127.0.0.1:5175
-          - http://127.0.0.1:5176
-          - http://127.0.0.1:5177
-          - http://127.0.0.1:5178
-          - http://127.0.0.1:5179
-          - http://127.0.0.1:5180
+        storage:
+          allowed_cors_origins:
+            - https://dev.halospawns.com
+            - http://127.0.0.1:5173
+            - http://127.0.0.1:5174
+            - http://127.0.0.1:5175
+            - http://127.0.0.1:5176
+            - http://127.0.0.1:5177
+            - http://127.0.0.1:5178
+            - http://127.0.0.1:5179
+            - http://127.0.0.1:5180
     map-processing:
       vars:
-        tfstate_bucket: halospawns-tfstate-283279960672
-        ecr_state_key: dev/ecr/terraform.tfstate
-        uploads_ingest_state_key: dev/uploads-ingest/terraform.tfstate
-        app_api_state_key: dev/app-api/terraform.tfstate
-        native_maps_processor_event_source_enabled: true
-        native_maps_processor_map_render_enqueue_enabled: true
-        map_renderer_event_source_enabled: true
-        legacy_maps_processor_event_source_enabled: false
+        dependencies:
+          state_bucket: halospawns-tfstate-283279960672
+          state_keys:
+            ecr: dev/ecr/terraform.tfstate
+            uploads_ingest: dev/uploads-ingest/terraform.tfstate
+            app_api: dev/app-api/terraform.tfstate
+        native_maps:
+          event_source:
+            enabled: true
+          enqueue_render_jobs: true
+        renderer:
+          event_source:
+            enabled: true
+        release:
+          maps:
+            github:
+              environment: dev
+          renderer:
+            github:
+              environment: dev

@@ -34,12 +34,7 @@ output "native_maps_processor_alias_arn" {
 
 output "native_maps_processor_event_source_enabled" {
   description = "Whether the native maps processor SQS event source mapping is enabled."
-  value       = var.native_maps_processor_event_source_enabled
-}
-
-output "legacy_maps_processor_event_source_enabled" {
-  description = "Whether the legacy container maps processor SQS event source mapping is enabled."
-  value       = var.legacy_maps_processor_event_source_enabled
+  value       = var.native_maps.event_source.enabled
 }
 
 output "maps_processor_artifact_bucket_name" {
@@ -64,7 +59,7 @@ output "maps_processor_github_oidc_subject" {
 
 output "maps_code_updater_lambda_function_name" {
   description = "Maps code updater Lambda function name."
-  value       = aws_lambda_function.maps_code_updater.function_name
+  value       = module.maps_code_updater.function_name
 }
 
 output "map_renderer_function_name" {
@@ -89,7 +84,7 @@ output "map_renderer_alias_arn" {
 
 output "map_renderer_event_source_enabled" {
   description = "Whether the map renderer SQS event source mapping is enabled."
-  value       = var.map_renderer_event_source_enabled
+  value       = var.renderer.event_source.enabled
 }
 
 output "map_rendering_queue_arn" {
@@ -129,7 +124,7 @@ output "map_renderer_github_oidc_subject" {
 
 output "map_renderer_code_updater_lambda_function_name" {
   description = "Map renderer code updater Lambda function name."
-  value       = aws_lambda_function.map_renderer_code_updater.function_name
+  value       = module.map_renderer_code_updater.function_name
 }
 
 output "app_api_callback_base_url" {
@@ -139,7 +134,7 @@ output "app_api_callback_base_url" {
 
 output "app_api_trusted_service_hmac_client_name" {
   description = "Trusted HMAC client name configured for processor callbacks."
-  value       = var.trusted_service_hmac_client_name
+  value       = local.native_maps_processor_trusted_hmac_client
 }
 
 output "app_api_trusted_service_hmac_secret_id" {

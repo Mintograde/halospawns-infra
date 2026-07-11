@@ -19,143 +19,93 @@ variable "profile" {
   description = "AWS profile name."
   type        = string
   default     = null
-}
-
-variable "domain_name" {
-  description = "Primary custom domain name for the frontend site. Leave null to use the CloudFront default domain."
-  type        = string
-  default     = null
   nullable    = true
 }
 
-variable "hosted_zone_id" {
-  description = "Route 53 hosted zone ID for custom domain records and ACM validation."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "create_delegated_hosted_zone" {
-  description = "Whether this component should create an environment public hosted zone for delegation from the parent zone."
-  type        = bool
-  default     = false
-}
-
-variable "delegated_zone_name" {
-  description = "Environment hosted zone name, such as dev.halospawns.com."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "acm_certificate_arn" {
-  description = "Existing us-east-1 ACM certificate ARN for the frontend CloudFront distribution."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "create_certificate" {
-  description = "Whether to create and validate an ACM certificate for the frontend domain."
-  type        = bool
-  default     = false
-}
-
-variable "access_control_mode" {
-  description = "Frontend access control mode."
-  type        = string
-  default     = "basic_auth"
+variable "dns" {
+  description = "Frontend domain, hosted zone, certificate, and record-management configuration."
+  type = object({
+    domain_name = optional(string)
+    hosted_zone = optional(object({
+      create = optional(bool, false)
+      name   = optional(string)
+      id     = optional(string)
+    }), {})
+    certificate = optional(object({
+      create = optional(bool, false)
+      arn    = optional(string)
+    }), {})
+  })
+  default = {}
 
   validation {
-    condition     = contains(["public", "basic_auth"], var.access_control_mode)
-    error_message = "access_control_mode must be either public or basic_auth."
+    condition     = var.dns.domain_name == null || trimspace(var.dns.domain_name) != ""
+    error_message = "dns.domain_name must not be empty when set."
   }
 }
 
-variable "viewer_request_lambda_qualified_arn" {
-  description = "External published Lambda@Edge version ARN for Basic Auth. Leave null to let this component create one."
-  type        = string
-  default     = null
-  nullable    = true
+variable "access" {
+  description = "Frontend viewer access-control configuration."
+  type = object({
+    mode                                = optional(string, "public")
+    viewer_request_lambda_qualified_arn = optional(string)
+    basic_auth = optional(object({
+      create_edge_lambda       = optional(bool, false)
+      ssm_parameter_name       = optional(string)
+      create_ssm_parameter     = optional(bool, false)
+      ssm_placeholder_value    = optional(string, "REPLACE_ME_DO_NOT_USE")
+      ssm_kms_key_id           = optional(string)
+      realm                    = optional(string, "Restricted")
+      credential_cache_seconds = optional(number, 300)
+    }), {})
+  })
+  default = {}
+
+  validation {
+    condition     = contains(["public", "basic_auth"], var.access.mode)
+    error_message = "access.mode must be public or basic_auth."
+  }
+
+  validation {
+    condition = (
+      var.access.mode != "basic_auth" ||
+      var.access.viewer_request_lambda_qualified_arn != null ||
+      (
+        var.access.basic_auth.create_edge_lambda &&
+        var.access.basic_auth.ssm_parameter_name != null &&
+        trimspace(var.access.basic_auth.ssm_parameter_name) != ""
+      )
+    )
+    error_message = "Basic Auth requires an external viewer-request Lambda ARN or a managed edge Lambda with an SSM parameter name."
+  }
 }
 
-variable "create_basic_auth_edge_lambda" {
-  description = "Whether to create the Basic Auth Lambda@Edge function."
-  type        = bool
-  default     = true
+variable "deployment" {
+  description = "GitHub Actions deployment identity configuration."
+  type = object({
+    github = object({
+      repository  = string
+      environment = optional(string)
+      branch      = optional(string, "main")
+      oidc = optional(object({
+        create_provider = optional(bool, false)
+        provider_arn    = optional(string)
+      }), {})
+    })
+  })
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.deployment.github.repository))
+    error_message = "deployment.github.repository must be in owner/name form."
+  }
 }
 
-variable "basic_auth_ssm_parameter_name" {
-  description = "SSM SecureString parameter name that stores the Base64 username:password value."
-  type        = string
-  default     = "/halospawns/dev/frontend-site/basic-auth/credentials-base64"
-}
-
-variable "create_basic_auth_ssm_parameter" {
-  description = "Whether Terraform should create the Basic Auth SSM SecureString placeholder parameter."
-  type        = bool
-  default     = true
-}
-
-variable "basic_auth_ssm_placeholder_value" {
-  description = "Non-working sentinel value for the Basic Auth SSM parameter."
-  type        = string
-  default     = "REPLACE_ME_DO_NOT_USE"
-}
-
-variable "basic_auth_ssm_kms_key_id" {
-  description = "Optional customer-managed KMS key ARN or ID for the Basic Auth SSM SecureString parameter."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "basic_auth_realm" {
-  description = "HTTP Basic Auth realm shown by browsers."
-  type        = string
-  default     = "Halospawns dev"
-}
-
-variable "basic_auth_cache_ttl_seconds" {
-  description = "How long each Lambda@Edge execution environment caches the Basic Auth credential."
-  type        = number
-  default     = 300
-}
-
-variable "github_repository" {
-  description = "GitHub frontend repository allowed to deploy, in owner/name form."
-  type        = string
-}
-
-variable "github_environment" {
-  description = "GitHub Environment used by the deploy workflow."
-  type        = string
-  default     = "dev"
-}
-
-variable "github_branch" {
-  description = "GitHub branch used when github_environment is not set."
-  type        = string
-  default     = "main"
-}
-
-variable "create_github_oidc_provider" {
-  description = "Whether to create the account-level GitHub Actions OIDC provider."
-  type        = bool
-  default     = true
-}
-
-variable "github_oidc_provider_arn" {
-  description = "Existing GitHub Actions OIDC provider ARN when create_github_oidc_provider is false."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "price_class" {
-  description = "CloudFront price class for the frontend distribution."
-  type        = string
-  default     = "PriceClass_100"
+variable "cloudfront" {
+  description = "Frontend CloudFront distribution configuration."
+  type = object({
+    price_class = optional(string, "PriceClass_100")
+  })
+  default = {}
 }
 
 variable "tags" {

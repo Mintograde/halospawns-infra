@@ -3,3 +3,27 @@ components:
     uploads-ingest:
       metadata:
         component: uploads-ingest
+      vars:
+        storage:
+          bucket_prefix: uploads
+        pipelines:
+          maps:
+            unprocessed_prefix: maps/unprocessed/
+            processed_prefix: maps/processed/
+            failed_prefix: maps/failed/
+            visibility_timeout_seconds: 900
+            message_retention_seconds: 604800
+            receive_wait_time_seconds: 20
+            max_receive_count: 4
+          replays:
+            unprocessed_prefix: replays/unprocessed/
+            processed_prefix: replays/processed/
+            failed_prefix: replays/failed/
+            visibility_timeout_seconds: 300
+            message_retention_seconds: 604800
+            receive_wait_time_seconds: 20
+            max_receive_count: 4
+        cdn:
+          public_key_name: s3-upload-key
+          key_group_name: s3-upload-key-group
+          price_class: PriceClass_All

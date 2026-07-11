@@ -1,5 +1,5 @@
 variable "enabled" {
-  description = "Whether to create app API resources. Keep false until dev Supabase values are ready."
+  description = "Whether to create app API resources."
   type        = bool
   default     = true
 }
@@ -34,345 +34,151 @@ variable "tags" {
   default     = {}
 }
 
-variable "tfstate_bucket" {
-  description = "Terraform state bucket used for remote-state reads."
-  type        = string
-  default     = null
-  nullable    = true
+variable "dependencies" {
+  description = "Remote-state and existing queue dependencies."
+  type = object({
+    state_bucket = optional(string)
+    state_keys = optional(object({
+      frontend_site  = optional(string)
+      uploads_ingest = optional(string)
+    }), {})
+    queues = optional(object({
+      map_rendering     = optional(string)
+      replay_processing = optional(string)
+    }), {})
+  })
+  default = {}
 }
 
-variable "frontend_site_state_key" {
-  description = "Remote-state key for the frontend-site component."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "uploads_ingest_state_key" {
-  description = "Remote-state key for the uploads-ingest component."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "app_api_base_url" {
-  description = "Optional explicit public base URL for the app API. Defaults to https://api_domain_name when a custom domain is configured."
-  type        = string
-  default     = null
-  nullable    = true
+variable "domain" {
+  description = "App API public URL, custom domain, certificate, and DNS configuration."
+  type = object({
+    base_url           = optional(string)
+    name               = optional(string)
+    hosted_zone_id     = optional(string)
+    certificate_arn    = optional(string)
+    create_certificate = optional(bool, true)
+    create_dns_records = optional(bool, true)
+  })
+  default = {}
 
   validation {
-    condition     = var.app_api_base_url == null || can(regex("^https?://", trimspace(var.app_api_base_url)))
-    error_message = "app_api_base_url must start with http:// or https:// when set."
+    condition     = var.domain.base_url == null || can(regex("^https?://", trimspace(var.domain.base_url)))
+    error_message = "domain.base_url must start with http:// or https:// when set."
   }
 }
 
-variable "map_rendering_queue_name" {
-  description = "Optional existing SQS queue name that app-api may send screenshot render jobs to."
-  type        = string
-  default     = null
-  nullable    = true
+variable "cors" {
+  description = "App API CORS configuration."
+  type = object({
+    allowed_origins = optional(set(string), [])
+  })
+  default = {}
+}
+
+variable "supabase" {
+  description = "Public Supabase identifiers, JWT configuration, and secret metadata names."
+  type = object({
+    project_ref = optional(string)
+    url         = optional(string)
+    jwt = optional(object({
+      issuer            = optional(string)
+      audience          = optional(string, "authenticated")
+      create_authorizer = optional(bool, true)
+    }), {})
+    secrets = object({
+      database_url_name          = string
+      service_role_name          = string
+      create_service_role_secret = optional(bool, false)
+    })
+  })
+}
+
+variable "uploads" {
+  description = "Uploads bucket prefixes and presigned URL behavior exposed to the app API."
+  type = object({
+    maps = optional(object({
+      upload_prefix                 = optional(string, "maps/unprocessed")
+      asset_read_prefix             = optional(string, "maps/processed")
+      support_resource_prefix       = optional(string, "maps/support-resources")
+      support_resource_auto_approve = optional(bool, false)
+    }), {})
+    replays = optional(object({
+      upload_prefix     = optional(string, "replays/unprocessed")
+      asset_read_prefix = optional(string, "replays/processed")
+    }), {})
+    url_ttl_seconds = optional(number, 900)
+  })
+  default = {}
+}
+
+variable "rendering" {
+  description = "Map screenshot render-job contract exposed to the app API."
+  type = object({
+    output_prefix_template = optional(string, "maps/processed/{upload_id}/screenshots/v1/")
+    screenshot_ingest_path = optional(string, "/v1/ingest/map-screenshots")
+    render_set = optional(object({
+      name    = optional(string, "default-map-screenshots")
+      version = optional(number, 1)
+    }), {})
+  })
+  default = {}
 
   validation {
-    condition     = var.map_rendering_queue_name == null || trimspace(var.map_rendering_queue_name) != ""
-    error_message = "map_rendering_queue_name must not be empty when set."
+    condition     = startswith(var.rendering.screenshot_ingest_path, "/")
+    error_message = "rendering.screenshot_ingest_path must start with '/'."
   }
 }
 
-variable "replay_processing_queue_name" {
-  description = "Optional existing SQS queue name that app-api may send replay reprocess jobs to."
-  type        = string
-  default     = null
-  nullable    = true
+variable "release" {
+  description = "App Lambda runtime, artifact publishing, updater, and GitHub OIDC configuration."
+  type = object({
+    artifact_prefix = optional(string, "releases/")
+    lambda = optional(object({
+      runtime         = optional(string, "python3.12")
+      handler         = optional(string, "halospawns_api.lambda_handler.handler")
+      memory_mb       = optional(number, 512)
+      timeout_seconds = optional(number, 30)
+      alias_name      = optional(string, "live")
+    }), {})
+    updater_reserved_concurrent_executions = optional(number)
+    github = object({
+      repository  = string
+      environment = optional(string)
+      branch      = optional(string, "main")
+      subject     = optional(string)
+      oidc = optional(object({
+        provider_arn    = optional(string)
+        create_provider = optional(bool, false)
+        thumbprint_list = optional(list(string), ["6938fd4d98bab03faadb97b34396831e3780aea1"])
+      }), {})
+    })
+  })
 
   validation {
-    condition     = var.replay_processing_queue_name == null || trimspace(var.replay_processing_queue_name) != ""
-    error_message = "replay_processing_queue_name must not be empty when set."
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.release.github.repository))
+    error_message = "release.github.repository must be in owner/name form."
   }
 }
 
-variable "hosted_zone_id" {
-  description = "Route 53 hosted zone ID for the API domain. Defaults to frontend-site delegated zone remote state."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "api_domain_name" {
-  description = "Custom domain name for the app API."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "create_api_domain_certificate" {
-  description = "Whether to create and validate an ACM certificate for api_domain_name."
-  type        = bool
-  default     = true
-}
-
-variable "create_api_dns_records" {
-  description = "Whether to create API custom-domain DNS records."
-  type        = bool
-  default     = true
-}
-
-variable "api_certificate_arn" {
-  description = "Existing ACM certificate ARN for api_domain_name."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "frontend_allowed_origins" {
-  description = "Allowed frontend origins for API CORS."
-  type        = list(string)
-  default     = []
-}
-
-variable "supabase_project_ref" {
-  description = "Supabase project ref. Public identifier; do not put secret keys here."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "supabase_url" {
-  description = "Supabase project URL. Public identifier; do not put secret keys here."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "supabase_jwt_issuer" {
-  description = "Supabase JWT issuer URL for API Gateway native JWT auth."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "supabase_jwt_audience" {
-  description = "Supabase JWT audience for API Gateway native JWT auth."
-  type        = string
-  default     = "authenticated"
-}
-
-variable "create_jwt_authorizer" {
-  description = "Whether protected routes should use API Gateway's native JWT authorizer."
-  type        = bool
-  default     = true
-}
-
-variable "artifact_release_prefix" {
-  description = "S3 prefix that receives API release zip artifacts."
-  type        = string
-  default     = "releases/"
-}
-
-variable "map_upload_prefix" {
-  description = "Stable root S3 prefix for presigned map uploads."
-  type        = string
-  default     = "maps/unprocessed"
-}
-
-variable "replay_upload_prefix" {
-  description = "Stable root S3 prefix for presigned replay uploads."
-  type        = string
-  default     = "replays/unprocessed"
-}
-
-variable "map_asset_read_prefix" {
-  description = "Stable root S3 prefix for processed map assets that the app API may presign for browser reads."
-  type        = string
-  default     = "maps/processed"
-}
-
-variable "replay_asset_read_prefix" {
-  description = "Stable root S3 prefix for processed replay assets that the app API may presign for browser reads."
-  type        = string
-  default     = "replays/processed"
-}
-
-variable "map_support_resource_prefix" {
-  description = "Stable root S3 prefix for durable map support-resource objects that the app API may hard-delete."
-  type        = string
-  default     = "maps/support-resources"
-}
-
-variable "map_render_output_prefix_template" {
-  description = "S3 key prefix template where map screenshot render outputs are written."
-  type        = string
-  default     = "maps/processed/{upload_id}/screenshots/v1/"
-
-  validation {
-    condition     = trimspace(var.map_render_output_prefix_template) != ""
-    error_message = "map_render_output_prefix_template must not be empty."
-  }
-}
-
-variable "app_api_map_screenshot_ingest_path" {
-  description = "Path for app-api map screenshot ingest callbacks."
-  type        = string
-  default     = "/v1/ingest/map-screenshots"
-
-  validation {
-    condition     = startswith(var.app_api_map_screenshot_ingest_path, "/")
-    error_message = "app_api_map_screenshot_ingest_path must start with '/'."
-  }
-}
-
-variable "map_screenshot_render_set_name" {
-  description = "Render set name used for app-api screenshot regeneration jobs."
-  type        = string
-  default     = "default-map-screenshots"
-
-  validation {
-    condition     = trimspace(var.map_screenshot_render_set_name) != ""
-    error_message = "map_screenshot_render_set_name must not be empty."
-  }
-}
-
-variable "map_screenshot_render_set_version" {
-  description = "Render set version used for app-api screenshot regeneration jobs."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.map_screenshot_render_set_version > 0
-    error_message = "map_screenshot_render_set_version must be positive."
-  }
-}
-
-variable "upload_url_ttl_seconds" {
-  description = "TTL in seconds for presigned upload URLs generated by the app API."
-  type        = number
-  default     = 900
-}
-
-variable "map_support_resource_auto_approve_uploads" {
-  description = "Whether validated map support-resource uploads auto-activate. Dev rollout only."
-  type        = bool
-  default     = false
-}
-
-variable "github_repository" {
-  description = "GitHub API repository allowed to upload release artifacts, in owner/name form."
-  type        = string
-}
-
-variable "github_environment" {
-  description = "GitHub Environment used by the deploy workflow."
-  type        = string
-  default     = "dev"
-}
-
-variable "github_branch" {
-  description = "GitHub branch used when github_environment is empty."
-  type        = string
-  default     = "main"
-}
-
-variable "github_subject" {
-  description = "Optional explicit GitHub OIDC subject. Overrides github_environment/github_branch."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "github_oidc_provider_arn" {
-  description = "Existing GitHub Actions OIDC provider ARN. When null and create_github_oidc_provider is false, the provider is looked up by URL."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "create_github_oidc_provider" {
-  description = "Whether this component should create the account-level GitHub Actions OIDC provider."
-  type        = bool
-  default     = false
-}
-
-variable "github_oidc_thumbprint_list" {
-  description = "Thumbprint list for the GitHub Actions OIDC provider."
-  type        = list(string)
-  default     = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
-variable "app_lambda_runtime" {
-  description = "Runtime for the app Lambda."
-  type        = string
-  default     = "python3.12"
-}
-
-variable "app_lambda_handler" {
-  description = "Handler for the real app Lambda package."
-  type        = string
-  default     = "halospawns_api.lambda_handler.handler"
-}
-
-variable "app_lambda_memory_size" {
-  description = "Memory size for the app Lambda in MB."
-  type        = number
-  default     = 512
-}
-
-variable "app_lambda_timeout" {
-  description = "Timeout for the app Lambda in seconds."
-  type        = number
-  default     = 30
-}
-
-variable "app_lambda_alias_name" {
-  description = "Alias used by API Gateway and the release updater."
-  type        = string
-  default     = "live"
-}
-
-variable "code_updater_reserved_concurrent_executions" {
-  description = "Reserved concurrency for the code updater Lambda. Leave null to use account-level unreserved concurrency."
-  type        = number
-  default     = null
-  nullable    = true
-}
-
-variable "supabase_database_url_secret_name" {
-  description = "Secrets Manager secret name for the Supabase transaction pooler database URL."
-  type        = string
-}
-
-variable "supabase_service_role_secret_name" {
-  description = "Secrets Manager secret name for the optional Supabase service role key."
-  type        = string
-}
-
-variable "create_supabase_service_role_secret" {
-  description = "Whether to create the optional Supabase service role key secret metadata and grant the app Lambda read access."
-  type        = bool
-  default     = false
-}
-
-variable "trusted_service_hmac_secret_names" {
-  description = "Secrets Manager secret names to create for trusted HMAC clients, keyed by client name. Values are secret identifiers, not secret values."
-  type        = map(string)
-  default     = {}
+variable "trusted_services" {
+  description = "Trusted HMAC client secret metadata and request timestamp tolerance."
+  type = object({
+    secret_names                = optional(map(string), {})
+    timestamp_tolerance_seconds = optional(number)
+  })
+  default = {}
 
   validation {
     condition = alltrue([
-      for client, secret_name in var.trusted_service_hmac_secret_names :
+      for client, secret_name in var.trusted_services.secret_names :
       trimspace(client) != "" && trimspace(secret_name) != ""
     ])
-    error_message = "trusted_service_hmac_secret_names keys and values must be non-empty."
+    error_message = "trusted_services.secret_names keys and values must be non-empty."
   }
-}
-
-variable "trusted_service_hmac_timestamp_tolerance_seconds" {
-  description = "Optional timestamp tolerance in seconds for trusted service HMAC requests. Leave null to use the app default."
-  type        = number
-  default     = null
-  nullable    = true
 
   validation {
-    condition     = var.trusted_service_hmac_timestamp_tolerance_seconds == null || var.trusted_service_hmac_timestamp_tolerance_seconds > 0
-    error_message = "trusted_service_hmac_timestamp_tolerance_seconds must be positive when set."
+    condition     = var.trusted_services.timestamp_tolerance_seconds == null || var.trusted_services.timestamp_tolerance_seconds > 0
+    error_message = "trusted_services.timestamp_tolerance_seconds must be positive when set."
   }
 }

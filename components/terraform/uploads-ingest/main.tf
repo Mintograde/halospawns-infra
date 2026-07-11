@@ -1,13 +1,13 @@
 module "uploads_bucket" {
   source                  = "../../../modules/s3-bucket"
-  bucket_prefix           = "uploads"
+  bucket_prefix           = var.storage.bucket_prefix
   environment             = var.environment
-  allowed_cors_origins    = var.allowed_cors_origins
+  allowed_cors_origins    = var.storage.allowed_cors_origins
   source_policy_documents = [data.aws_iam_policy_document.cloudfront_to_s3_policy.json]
 }
 
 data "aws_iam_policy_document" "s3_to_sns_policy" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
 
   statement {
     effect    = "Allow"
@@ -28,7 +28,7 @@ data "aws_iam_policy_document" "s3_to_sns_policy" {
 }
 
 resource "aws_sns_topic_policy" "s3_publish_permission" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
   arn      = aws_sns_topic.file_uploaded[each.key].arn
   policy   = data.aws_iam_policy_document.s3_to_sns_policy[each.key].json
 }
@@ -37,11 +37,11 @@ resource "aws_s3_bucket_notification" "uploads_notification" {
   bucket = module.uploads_bucket.s3_bucket_id
 
   dynamic "topic" {
-    for_each = toset(local.file_upload_types)
+    for_each = local.pipelines
     content {
       topic_arn     = aws_sns_topic.file_uploaded[topic.key].arn
       events        = ["s3:ObjectCreated:*"]
-      filter_prefix = "${topic.key}/unprocessed/"
+      filter_prefix = topic.value.unprocessed_prefix
     }
   }
 
@@ -49,29 +49,29 @@ resource "aws_s3_bucket_notification" "uploads_notification" {
 }
 
 resource "aws_sns_topic" "file_uploaded" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
   name     = "${each.key}-uploaded-topic"
 }
 
 resource "aws_sqs_queue" "file_processing" {
-  for_each                   = toset(local.file_upload_types)
+  for_each                   = local.pipelines
   name                       = "${each.key}-processing-queue"
-  visibility_timeout_seconds = local.file_processing_visibility_timeout_seconds[each.key]
-  message_retention_seconds  = 604800 # 7 days
-  receive_wait_time_seconds  = 20
+  visibility_timeout_seconds = each.value.visibility_timeout_seconds
+  message_retention_seconds  = each.value.message_retention_seconds
+  receive_wait_time_seconds  = each.value.receive_wait_time_seconds
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.file_dlq[each.key].arn
-    maxReceiveCount     = 4
+    maxReceiveCount     = each.value.max_receive_count
   })
 }
 
 resource "aws_sqs_queue" "file_dlq" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
   name     = "${each.key}-processing-dlq"
 }
 
 resource "aws_sqs_queue_redrive_allow_policy" "example" {
-  for_each  = toset(local.file_upload_types)
+  for_each  = local.pipelines
   queue_url = aws_sqs_queue.file_dlq[each.key].id
   redrive_allow_policy = jsonencode({
     redrivePermission = "byQueue",
@@ -80,7 +80,7 @@ resource "aws_sqs_queue_redrive_allow_policy" "example" {
 }
 
 resource "aws_sns_topic_subscription" "file_subscription" {
-  for_each   = toset(local.file_upload_types)
+  for_each   = local.pipelines
   topic_arn  = aws_sns_topic.file_uploaded[each.key].arn
   protocol   = "sqs"
   endpoint   = aws_sqs_queue.file_processing[each.key].arn
@@ -88,7 +88,7 @@ resource "aws_sns_topic_subscription" "file_subscription" {
 }
 
 data "aws_iam_policy_document" "file_sqs_policy" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
 
   statement {
     actions   = ["sqs:SendMessage"]
@@ -108,7 +108,7 @@ data "aws_iam_policy_document" "file_sqs_policy" {
 }
 
 resource "aws_sqs_queue_policy" "file_policy" {
-  for_each = toset(local.file_upload_types)
+  for_each = local.pipelines
 
   queue_url = aws_sqs_queue.file_processing[each.key].id
   policy    = data.aws_iam_policy_document.file_sqs_policy[each.key].json
@@ -160,7 +160,7 @@ resource "aws_ssm_parameter" "upload_signing_public_key" {
 resource "aws_cloudfront_public_key" "main" {
   comment     = "Public key for signing upload URLs"
   encoded_key = nonsensitive(aws_ssm_parameter.upload_signing_public_key.value)
-  name        = "s3-upload-key"
+  name        = var.cdn.public_key_name
 
   lifecycle {
     precondition {
@@ -176,7 +176,7 @@ resource "aws_cloudfront_public_key" "main" {
 resource "aws_cloudfront_key_group" "main" {
   comment = "Key group for signing upload URLs"
   items   = [aws_cloudfront_public_key.main.id]
-  name    = "s3-upload-key-group"
+  name    = var.cdn.key_group_name
 }
 
 resource "aws_acm_certificate" "cert" {
@@ -234,4 +234,6 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
       restriction_type = "none"
     }
   }
+
+  price_class = var.cdn.price_class
 }

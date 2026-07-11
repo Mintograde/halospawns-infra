@@ -21,6 +21,21 @@ output "file_processing_queue_arns" {
   }
 }
 
+output "pipelines" {
+  description = "Upload processing contracts keyed by upload type."
+  value = {
+    for name, queue in aws_sqs_queue.file_processing : name => {
+      queue_name         = queue.name
+      queue_arn          = queue.arn
+      queue_url          = queue.url
+      dlq_arn            = aws_sqs_queue.file_dlq[name].arn
+      unprocessed_prefix = local.pipelines[name].unprocessed_prefix
+      processed_prefix   = local.pipelines[name].processed_prefix
+      failed_prefix      = local.pipelines[name].failed_prefix
+    }
+  }
+}
+
 output "cloudfront_distribution_domain_name" {
   description = "Domain name of the CloudFront distribution."
   value       = aws_cloudfront_distribution.s3_distribution.domain_name

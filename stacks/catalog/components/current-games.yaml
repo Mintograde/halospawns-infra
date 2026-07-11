@@ -1,5 +1,0 @@
-components:
-  terraform:
-    current-games:
-      metadata:
-        component: current-games

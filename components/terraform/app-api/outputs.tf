@@ -70,7 +70,21 @@ output "supabase_database_url_secret_arn" {
 
 output "supabase_service_role_secret_arn" {
   description = "ARN of the optional Supabase service role key secret metadata."
-  value       = var.enabled && var.create_supabase_service_role_secret ? aws_secretsmanager_secret.supabase_service_role[0].arn : null
+  value       = var.enabled && var.supabase.secrets.create_service_role_secret ? aws_secretsmanager_secret.supabase_service_role[0].arn : null
+}
+
+output "api_contract" {
+  description = "Stable public and trusted callback paths exposed by the app API."
+  value = {
+    base_url                        = local.app_api_base_url
+    upload_processing_status        = "/v1/uploads/{upload_id}/processing-status"
+    replay_finalization             = "/v1/ingest/replay-uploads"
+    replay_reprocess_attempt_status = "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+    map_finalization                = "/v1/ingest/map-uploads"
+    map_support_resource_ingest     = "/v1/ingest/map-support-resources"
+    map_support_resource_resolve    = "/v1/ingest/map-support-resources/resolve"
+    map_screenshot_ingest           = var.rendering.screenshot_ingest_path
+  }
 }
 
 output "trusted_service_hmac_secret_names" {
@@ -88,5 +102,5 @@ output "trusted_service_hmac_secret_arns" {
 
 output "code_updater_lambda_function_name" {
   description = "Code updater Lambda function name."
-  value       = var.enabled ? aws_lambda_function.code_updater[0].function_name : null
+  value       = var.enabled ? module.code_updater[0].function_name : null
 }

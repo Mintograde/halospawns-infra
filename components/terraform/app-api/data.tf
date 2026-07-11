@@ -3,24 +3,24 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 data "terraform_remote_state" "frontend_site" {
-  count = var.enabled && var.frontend_site_state_key != null ? 1 : 0
+  count = var.enabled && var.dependencies.state_keys.frontend_site != null ? 1 : 0
 
   backend = "s3"
   config = {
-    bucket  = var.tfstate_bucket
-    key     = var.frontend_site_state_key
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.frontend_site
     region  = var.region
     profile = var.profile
   }
 }
 
 data "terraform_remote_state" "uploads_ingest" {
-  count = var.enabled && var.uploads_ingest_state_key != null ? 1 : 0
+  count = var.enabled && var.dependencies.state_keys.uploads_ingest != null ? 1 : 0
 
   backend = "s3"
   config = {
-    bucket  = var.tfstate_bucket
-    key     = var.uploads_ingest_state_key
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.uploads_ingest
     region  = var.region
     profile = var.profile
   }
@@ -39,16 +39,16 @@ data "aws_sqs_queue" "replay_processing" {
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
-  count = var.enabled && var.create_github_oidc_provider ? 1 : 0
+  count = var.enabled && var.release.github.oidc.create_provider ? 1 : 0
 
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = var.github_oidc_thumbprint_list
+  thumbprint_list = var.release.github.oidc.thumbprint_list
   tags            = var.tags
 }
 
 data "aws_iam_openid_connect_provider" "github" {
-  count = var.enabled && !var.create_github_oidc_provider && var.github_oidc_provider_arn == null ? 1 : 0
+  count = var.enabled && !var.release.github.oidc.create_provider && var.release.github.oidc.provider_arn == null ? 1 : 0
 
   url = "https://token.actions.githubusercontent.com"
 }
@@ -145,64 +145,6 @@ data "aws_iam_policy_document" "app_runtime" {
       actions   = ["sqs:SendMessage"]
       resources = [statement.value]
     }
-  }
-}
-
-data "archive_file" "code_updater" {
-  count = var.enabled ? 1 : 0
-
-  type        = "zip"
-  source_dir  = "../../../lambda/app_api_code_updater"
-  output_path = "${path.module}/app-api-code-updater.zip"
-  excludes    = ["**/__pycache__/**", "**/*.pyc"]
-}
-
-data "aws_iam_policy_document" "lambda_assume_role" {
-  count = var.enabled ? 1 : 0
-
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
-data "aws_iam_policy_document" "code_updater" {
-  count = var.enabled ? 1 : 0
-
-  statement {
-    sid = "ReadReleaseArtifacts"
-    actions = [
-      "s3:GetObject",
-      "s3:GetObjectVersion",
-    ]
-    resources = ["${aws_s3_bucket.artifacts[0].arn}/${local.normalized_artifact_release_prefix}*"]
-  }
-
-  statement {
-    sid = "UpdateAppLambdaCode"
-    actions = [
-      "lambda:GetFunction",
-      "lambda:GetFunctionConfiguration",
-      "lambda:UpdateFunctionCode",
-      "lambda:PublishVersion",
-    ]
-    resources = [module.app_lambda[0].function_arn]
-  }
-
-  statement {
-    sid = "UpdateLiveAlias"
-    actions = [
-      "lambda:GetAlias",
-      "lambda:UpdateAlias",
-    ]
-    resources = [
-      module.app_lambda[0].function_arn,
-      module.app_lambda[0].alias_arn,
-    ]
   }
 }
 

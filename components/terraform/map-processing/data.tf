@@ -5,8 +5,8 @@ data "aws_partition" "current" {}
 data "terraform_remote_state" "ecr" {
   backend = "s3"
   config = {
-    bucket  = var.tfstate_bucket
-    key     = var.ecr_state_key
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.ecr
     region  = var.region
     profile = var.profile
   }
@@ -15,20 +15,20 @@ data "terraform_remote_state" "ecr" {
 data "terraform_remote_state" "uploads_ingest" {
   backend = "s3"
   config = {
-    bucket  = var.tfstate_bucket
-    key     = var.uploads_ingest_state_key
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.uploads_ingest
     region  = var.region
     profile = var.profile
   }
 }
 
 data "terraform_remote_state" "app_api" {
-  count = var.app_api_state_key == null ? 0 : 1
+  count = var.dependencies.state_keys.app_api == null ? 0 : 1
 
   backend = "s3"
   config = {
-    bucket  = var.tfstate_bucket
-    key     = var.app_api_state_key
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.app_api
     region  = var.region
     profile = var.profile
   }
@@ -44,31 +44,17 @@ data "aws_iam_policy_document" "trusted_service_hmac_secret" {
   }
 }
 
-data "archive_file" "maps_code_updater" {
-  type        = "zip"
-  source_dir  = "../../../lambda/app_api_code_updater"
-  output_path = "${path.module}/maps-code-updater.zip"
-  excludes    = ["**/__pycache__/**", "**/*.pyc"]
-}
-
-data "archive_file" "map_renderer_code_updater" {
-  type        = "zip"
-  source_dir  = "../../../lambda/app_api_code_updater"
-  output_path = "${path.module}/map-renderer-code-updater.zip"
-  excludes    = ["**/__pycache__/**", "**/*.pyc"]
-}
-
 resource "aws_iam_openid_connect_provider" "maps_github" {
-  count = var.maps_github_create_oidc_provider ? 1 : 0
+  count = var.release.oidc.create_provider ? 1 : 0
 
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = var.maps_github_oidc_thumbprint_list
+  thumbprint_list = var.release.oidc.thumbprint_list
   tags            = {}
 }
 
 data "aws_iam_openid_connect_provider" "github" {
-  count = !var.maps_github_create_oidc_provider && (var.maps_github_oidc_provider_arn == null || trimspace(var.maps_github_oidc_provider_arn) == "") ? 1 : 0
+  count = !var.release.oidc.create_provider && (var.release.oidc.provider_arn == null || trimspace(var.release.oidc.provider_arn) == "") ? 1 : 0
 
   url = "https://token.actions.githubusercontent.com"
 }
@@ -160,85 +146,6 @@ data "aws_iam_policy_document" "map_renderer_runtime" {
       actions   = ["secretsmanager:GetSecretValue"]
       resources = [statement.value]
     }
-  }
-}
-
-data "aws_iam_policy_document" "lambda_assume_role" {
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
-data "aws_iam_policy_document" "maps_code_updater" {
-  statement {
-    sid = "ReadReleaseArtifacts"
-    actions = [
-      "s3:GetObject",
-      "s3:GetObjectVersion",
-    ]
-    resources = ["${aws_s3_bucket.maps_artifacts.arn}/${local.normalized_maps_artifact_release_prefix}*"]
-  }
-
-  statement {
-    sid = "UpdateNativeMapsProcessorCode"
-    actions = [
-      "lambda:GetFunction",
-      "lambda:GetFunctionConfiguration",
-      "lambda:UpdateFunctionCode",
-      "lambda:PublishVersion",
-    ]
-    resources = [module.native_maps_processor.function_arn]
-  }
-
-  statement {
-    sid = "UpdateLiveAlias"
-    actions = [
-      "lambda:GetAlias",
-      "lambda:UpdateAlias",
-    ]
-    resources = [
-      module.native_maps_processor.function_arn,
-      module.native_maps_processor.alias_arn,
-    ]
-  }
-}
-
-data "aws_iam_policy_document" "map_renderer_code_updater" {
-  statement {
-    sid = "ReadReleaseArtifacts"
-    actions = [
-      "s3:GetObject",
-      "s3:GetObjectVersion",
-    ]
-    resources = ["${aws_s3_bucket.maps_artifacts.arn}/${local.normalized_map_renderer_release_prefix}*"]
-  }
-
-  statement {
-    sid = "UpdateMapRendererCode"
-    actions = [
-      "lambda:GetFunction",
-      "lambda:GetFunctionConfiguration",
-      "lambda:UpdateFunctionCode",
-      "lambda:PublishVersion",
-    ]
-    resources = [module.map_renderer.function_arn]
-  }
-
-  statement {
-    sid = "UpdateLiveAlias"
-    actions = [
-      "lambda:GetAlias",
-      "lambda:UpdateAlias",
-    ]
-    resources = [
-      module.map_renderer.function_arn,
-      module.map_renderer.alias_arn,
-    ]
   }
 }
 

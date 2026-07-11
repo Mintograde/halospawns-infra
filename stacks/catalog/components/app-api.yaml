@@ -4,15 +4,41 @@ components:
       metadata:
         component: app-api
       vars:
-        artifact_release_prefix: releases/
-        github_repository: Mintograde/halospawns-api
-        github_branch: main
-        app_lambda_runtime: python3.12
-        app_lambda_handler: halospawns_api.lambda_handler.handler
-        supabase_jwt_audience: authenticated
-        map_upload_prefix: maps/unprocessed
-        replay_upload_prefix: replays/unprocessed
-        map_asset_read_prefix: maps/processed
-        replay_asset_read_prefix: replays/processed
-        map_support_resource_prefix: maps/support-resources
-        upload_url_ttl_seconds: 900
+        domain:
+          create_certificate: true
+          create_dns_records: true
+        supabase:
+          jwt:
+            audience: authenticated
+            create_authorizer: true
+        uploads:
+          maps:
+            upload_prefix: maps/unprocessed
+            asset_read_prefix: maps/processed
+            support_resource_prefix: maps/support-resources
+            support_resource_auto_approve: false
+          replays:
+            upload_prefix: replays/unprocessed
+            asset_read_prefix: replays/processed
+          url_ttl_seconds: 900
+        rendering:
+          output_prefix_template: maps/processed/{upload_id}/screenshots/v1/
+          screenshot_ingest_path: /v1/ingest/map-screenshots
+          render_set:
+            name: default-map-screenshots
+            version: 1
+        release:
+          artifact_prefix: releases/
+          lambda:
+            runtime: python3.12
+            handler: halospawns_api.lambda_handler.handler
+            memory_mb: 512
+            timeout_seconds: 30
+            alias_name: live
+          github:
+            repository: Mintograde/halospawns-api
+            branch: main
+            oidc:
+              create_provider: false
+              thumbprint_list:
+                - 6938fd4d98bab03faadb97b34396831e3780aea1

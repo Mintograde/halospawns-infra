@@ -3,3 +3,80 @@ components:
     map-processing:
       metadata:
         component: map-processing
+      vars:
+        callbacks:
+          clients:
+            maps: map-processing
+            replays: replay-processing
+            renderer: map-rendering
+          paths:
+            processing_status_template: /v1/uploads/{upload_id}/processing-status
+            replay_finalization: /v1/ingest/replay-uploads
+            replay_reprocess_status_template: /v1/ingest/replay-reprocess-attempts/{attempt_id}/status
+            map_finalization: /v1/ingest/map-uploads
+            map_support_resource_ingest: /v1/ingest/map-support-resources
+            map_support_resource_resolve: /v1/ingest/map-support-resources/resolve
+            map_screenshot_ingest: /v1/ingest/map-screenshots
+        storage:
+          maps:
+            unprocessed: maps/unprocessed
+            processed: maps/processed
+            failed: maps/failed
+            support_resources: maps/support-resources
+        native_maps:
+          runtime: python3.14
+          handler: halo_map.lambda_handler.handler
+          alias_name: live
+          lambda:
+            timeout_seconds: 900
+            memory_mb: 2048
+            ephemeral_storage_mb: 10240
+          event_source:
+            enabled: false
+            batch_size: 1
+            report_batch_item_failures: true
+          enqueue_render_jobs: false
+        replay_parser:
+          enabled: true
+          repository_name: halospawns-replay-parser
+          timeout_seconds: 300
+          memory_mb: 2048
+          ephemeral_storage_mb: 10240
+          batch_size: 1
+          report_batch_item_failures: true
+          event_source_enabled: true
+        renderer:
+          runtime: nodejs24.x
+          handler: packages/viewer-renderer/src/lambda/handler.handler
+          alias_name: live
+          lambda:
+            timeout_seconds: 300
+            memory_mb: 2048
+            ephemeral_storage_mb: 2048
+          event_source:
+            enabled: false
+            batch_size: 1
+            report_batch_item_failures: true
+          queue:
+            visibility_timeout_seconds: 360
+            message_retention_seconds: 604800
+            receive_wait_time_seconds: 20
+            max_receive_count: 4
+          render_set:
+            name: default-map-screenshots
+            version: 1
+        release:
+          oidc:
+            create_provider: false
+            thumbprint_list:
+              - 6938fd4d98bab03faadb97b34396831e3780aea1
+          maps:
+            artifact_prefix: releases/
+            github:
+              repository: Mintograde/halospawns-maps
+              branch: main
+          renderer:
+            artifact_prefix: renderer/releases/
+            github:
+              repository: Mintograde/halospawns-svelte
+              branch: main

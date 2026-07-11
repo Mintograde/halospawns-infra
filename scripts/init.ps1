@@ -19,8 +19,7 @@ if (-not $Component) {
         "app-api",
         "uploads-ingest",
         "ecr",
-        "map-processing",
-        "current-games"
+        "map-processing"
     )
 
     foreach ($componentName in $components) {
