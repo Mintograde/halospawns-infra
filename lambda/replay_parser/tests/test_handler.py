@@ -903,6 +903,62 @@ class ReplayParserFactFinalizationTests(unittest.TestCase):
         self.assertEqual(facts["participant.triple_kills"], 1)
         self.assertEqual(facts["participant.multikills_4_plus"], 2)
 
+    def test_parse_replay_counts_legacy_and_coordinate_tick_events(self) -> None:
+        game_meta = {
+            "players": {
+                "0": {
+                    "kills_by_tick": {"10": 1, "20": 2},
+                    "deaths_by_tick": {"30": 1},
+                },
+                "1": {
+                    "kills_by_tick": {
+                        "10": [[-1.8, 1.7, 1.4]],
+                        "20": [[2.0, 3.0, 4.0], [5.0, 6.0, 7.0]],
+                    },
+                    "deaths_by_tick": {
+                        "30": [[-9.9, -0.8, 1.4]],
+                        "40": [],
+                    },
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                game_meta=game_meta,
+                tick_overrides={
+                    "players": [
+                        {
+                            "player_index": 0,
+                            "name": "Legacy",
+                            "team": 0,
+                            "kills": 0,
+                            "deaths": 0,
+                            "assists": 0,
+                        },
+                        {
+                            "player_index": 1,
+                            "name": "Coordinates",
+                            "team": 1,
+                            "kills": 0,
+                            "deaths": 0,
+                            "assists": 0,
+                        },
+                    ],
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        self.assertEqual(parsed.participants[0]["stats"]["kills"], 3)
+        self.assertEqual(parsed.participants[0]["stats"]["deaths"], 1)
+        self.assertEqual(parsed.participants[1]["stats"]["kills"], 3)
+        self.assertEqual(parsed.participants[1]["stats"]["deaths"], 1)
+        self.assertEqual(
+            parsed.game_meta["players"]["1"]["kills_by_tick"],
+            game_meta["players"]["1"]["kills_by_tick"],
+        )
+
     def test_parse_replay_omits_missing_streak_and_context_facts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = _write_replay_json(

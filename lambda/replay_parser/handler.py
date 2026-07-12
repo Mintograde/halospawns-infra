@@ -1545,10 +1545,10 @@ def _participants_from_replay(
         score = _optional_int(last_player.get("score"))
         ctf_score = _optional_int(last_player.get("ctf_score"))
         shots_fired = _sum_numeric_values(meta_player.get("shots_by_tick"))
-        kills = _optional_int(last_player.get("kills")) or _sum_numeric_values(
+        kills = _optional_int(last_player.get("kills")) or _sum_tick_event_counts(
             meta_player.get("kills_by_tick")
         )
-        deaths = _optional_int(last_player.get("deaths")) or _sum_numeric_values(
+        deaths = _optional_int(last_player.get("deaths")) or _sum_tick_event_counts(
             meta_player.get("deaths_by_tick")
         )
         assists = _optional_int(last_player.get("assists")) or _sum_numeric_values(
@@ -2383,6 +2383,19 @@ def _sum_numeric_values(value: Any) -> int:
     mapping = _proxy_dict(value)
     total = 0
     for item in mapping.values():
+        number = _optional_float(item)
+        if number is not None:
+            total += int(number)
+    return total
+
+
+def _sum_tick_event_counts(value: Any) -> int:
+    mapping = _proxy_dict(value)
+    total = 0
+    for item in mapping.values():
+        if isinstance(item, list | tuple):
+            total += len(item)
+            continue
         number = _optional_float(item)
         if number is not None:
             total += int(number)
