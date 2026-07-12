@@ -12,3 +12,4 @@ __pycache__/
 backend.tf.json
 *.terraform.tfvars.json
 .build/
+lambda/replay_parser/native/target/

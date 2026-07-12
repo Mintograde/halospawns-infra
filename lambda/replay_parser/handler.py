@@ -10,13 +10,16 @@ import os
 import posixpath
 import re
 import shutil
+import subprocess
 import time
 import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
-from dataclasses import dataclass
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -46,8 +49,20 @@ PROCESSOR_NAME = "halospawns-replay-parser"
 REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
 FACT_SCHEMA_VERSION = "halospawns.replayFacts.v1"
 GRAPH_CONTEXT_SCHEMA_VERSION = "halospawns.graphContext.v1"
+SPATIAL_FACTS_SCHEMA_VERSION = "halospawns.spatialFacts.v1"
+SPATIAL_COORDINATE_SPACE = "halo1.replay_world.v1"
+NATIVE_EXTRACTOR_SCHEMA_VERSION = "halospawns.replayExtractor.v1"
 GAME_TICKS_PER_SECOND = 30
 MAX_GRAPH_CONTEXT_PLAYERS = 16
+MAX_SPATIAL_PLAYER_SLOTS = 64
+MAX_SPATIAL_COORDINATE_ABS = 1_000_000.0
+MAX_SPATIAL_CELLS_PER_SLOT = 50_000
+MAX_SPATIAL_CELLS_TOTAL = 200_000
+MAX_SPATIAL_ARTIFACT_BYTES = 10 * 1024 * 1024
+MAX_SPATIAL_ARTIFACT_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+MAX_NATIVE_EXTRACTOR_OUTPUT_BYTES = 64 * 1024 * 1024
+MAX_SPATIAL_COUNTER = 2_147_483_647
+SUPPORTED_SPATIAL_CELL_SIZES = frozenset({0.5, 1.0})
 NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES = {"NoSuchBucket", "NoSuchKey", "NotFound", "404"}
 COMPOSITE_JSON_EVENTS = {"start_map", "end_map", "start_array", "end_array", "map_key"}
 KNOWN_GAMETYPE_MODES = {"ctf", "slayer", "oddball", "king", "race"}
@@ -202,6 +217,14 @@ class DownloadedReplay:
 
 
 @dataclass(frozen=True)
+class SpatialFacts:
+    cell_size: float
+    cells: dict[tuple[int, int, int, int], int]
+    coverage: dict[str, Any]
+    runtime_metrics: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ParsedReplay:
     game: dict[str, Any]
     participants: list[dict[str, Any]]
@@ -211,6 +234,138 @@ class ParsedReplay:
     metadata: dict[str, Any]
     game_meta: dict[str, Any] | None = None
     facts: dict[str, Any] | None = None
+    spatial_facts: SpatialFacts | None = None
+
+
+class SpatialOccupancyAccumulator:
+    def __init__(
+        self,
+        cell_size: float,
+        *,
+        parser_metadata: dict[str, str] | None = None,
+    ) -> None:
+        if cell_size not in SUPPORTED_SPATIAL_CELL_SIZES:
+            raise ReplayProcessingError(
+                f"Spatial cell size must be one of {sorted(SUPPORTED_SPATIAL_CELL_SIZES)}"
+            )
+        self.cell_size = cell_size
+        self.cells: dict[tuple[int, int, int, int], int] = {}
+        self.cell_counts_by_slot: Counter[int] = Counter()
+        self.observations_by_slot: Counter[int] = Counter()
+        self.discarded: Counter[str] = Counter()
+        self.samples_seen = 0
+        self.parser_metadata = parser_metadata or {"json_library": "ijson"}
+
+    def observe(
+        self,
+        player: dict[str, Any],
+        *,
+        position_object_seen: bool,
+        position: dict[str, Any],
+    ) -> None:
+        self.samples_seen = _bounded_add(self.samples_seen, 1)
+        slot_index = _spatial_slot_index(player.get("player_index"))
+        if slot_index is None:
+            self._discard("invalid_slot")
+            return
+        if _optional_bool(player.get("is_hostman")) is True:
+            self._discard("hostman")
+            return
+        if not position_object_seen:
+            self._discard("missing_player_object")
+            return
+        if any(axis not in position for axis in ("x", "y", "z")):
+            self._discard("missing_coordinate")
+            return
+
+        coordinates: list[float] = []
+        for axis in ("x", "y", "z"):
+            coordinate = _spatial_coordinate(position[axis])
+            if coordinate is None:
+                self._discard("non_finite")
+                return
+            if abs(coordinate) > MAX_SPATIAL_COORDINATE_ABS:
+                self._discard("out_of_bounds")
+                return
+            coordinates.append(coordinate)
+
+        key = (
+            slot_index,
+            math.floor(coordinates[0] / self.cell_size),
+            math.floor(coordinates[1] / self.cell_size),
+            math.floor(coordinates[2] / self.cell_size),
+        )
+        if key not in self.cells:
+            if self.cell_counts_by_slot[slot_index] >= MAX_SPATIAL_CELLS_PER_SLOT:
+                self._discard("slot_cell_limit")
+                return
+            if len(self.cells) >= MAX_SPATIAL_CELLS_TOTAL:
+                self._discard("global_cell_limit")
+                return
+            self.cell_counts_by_slot[slot_index] += 1
+            self.cells[key] = 0
+
+        self.cells[key] = _bounded_add(self.cells[key], 1)
+        self.observations_by_slot[slot_index] = _bounded_add(
+            self.observations_by_slot[slot_index], 1
+        )
+
+    def exclude_slots(self, slot_indexes: set[int]) -> None:
+        for key in [key for key in self.cells if key[0] in slot_indexes]:
+            del self.cells[key]
+        for slot_index in slot_indexes:
+            excluded_observations = self.observations_by_slot.pop(slot_index, 0)
+            if excluded_observations:
+                self._discard("hostman", excluded_observations)
+            self.cell_counts_by_slot.pop(slot_index, None)
+
+    def spatial_facts(
+        self,
+        *,
+        summary: dict[str, Any],
+        tick_count: int,
+        parse_duration_ms: int,
+    ) -> SpatialFacts:
+        observations = sum(self.observations_by_slot.values())
+        discarded_by_reason = {
+            reason: count for reason, count in sorted(self.discarded.items()) if count > 0
+        }
+        coverage: dict[str, Any] = {
+            "status": "available" if observations else "unavailable",
+            "ticks_observed": tick_count,
+            "position_samples_seen": self.samples_seen,
+            "position_observations": observations,
+            "position_samples_discarded": sum(discarded_by_reason.values()),
+            "discarded_by_reason": discarded_by_reason,
+            "participant_slots_observed": sorted(self.observations_by_slot),
+            "distinct_cells": len(self.cells),
+            "parser": {
+                "name": PROCESSOR_NAME,
+                **self.parser_metadata,
+            },
+            "limits": {
+                "coordinate_absolute_max": MAX_SPATIAL_COORDINATE_ABS,
+                "cells_per_slot": MAX_SPATIAL_CELLS_PER_SLOT,
+                "cells_total": MAX_SPATIAL_CELLS_TOTAL,
+            },
+        }
+        for key in ("ticks_elapsed", "ticks_recorded", "ticks_dropped"):
+            value = _nonnegative_int(summary.get(key))
+            if value is not None:
+                coverage[key] = value
+        runtime_metrics = {"parse_duration_ms": parse_duration_ms}
+        peak_rss_kib = _process_peak_rss_kib()
+        if peak_rss_kib is not None:
+            runtime_metrics["process_peak_rss_kib"] = peak_rss_kib
+        return SpatialFacts(
+            cell_size=self.cell_size,
+            cells=self.cells,
+            coverage=coverage,
+            runtime_metrics=runtime_metrics,
+        )
+
+    def _discard(self, reason: str, count: int = 1) -> None:
+        self.discarded[reason] = _bounded_add(self.discarded[reason], count)
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -257,14 +412,20 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
 
         downloaded = _download_replay(replay_object, compressed_path)
         upload_id = downloaded.metadata.get("upload-id") or upload_id
-        _decompress_replay(downloaded.path, json_path)
-        parsed = _parse_replay(json_path)
+        parsed = _parse_downloaded_replay(downloaded.path, json_path)
         processed_key = _processed_key(
             replay_object.key,
             unprocessed_prefix=settings["unprocessed_prefix"],
             processed_prefix=settings["processed_prefix"],
         )
         _copy_object(replay_object.bucket, replay_object.key, processed_key)
+        spatial_artifact = _write_spatial_artifact(
+            parsed=parsed,
+            bucket=replay_object.bucket,
+            upload_id=upload_id,
+            generation=1,
+            source_replay_sha256=downloaded.sha256,
+        )
 
         try:
             _finalize_replay_upload(
@@ -274,6 +435,7 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
                 processed_key=processed_key,
                 downloaded=downloaded,
                 parsed=parsed,
+                spatial_artifact=spatial_artifact,
             )
         except Exception:
             LOGGER.exception("Replay finalization API call failed; keeping source object for retry")
@@ -333,8 +495,7 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
     try:
         try:
             downloaded = _download_replay(source_object, compressed_path)
-            _decompress_replay(downloaded.path, json_path)
-            parsed = _parse_replay(json_path)
+            parsed = _parse_downloaded_replay(downloaded.path, json_path)
         except ClientError as error:
             if not _is_nonretryable_s3_download_error(error):
                 raise
@@ -356,6 +517,13 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             _send_reprocess_attempt_status(job, "failed", error)
             return
 
+        spatial_artifact = _write_spatial_artifact(
+            parsed=parsed,
+            bucket=job.current_replay_file.bucket,
+            upload_id=job.upload_id,
+            generation=_reprocess_spatial_generation(job.attempt_id),
+            source_replay_sha256=job.current_replay_file.sha256 or downloaded.sha256,
+        )
         _finalize_replay_upload(
             upload_id=job.upload_id,
             source_external_id=job.upload_id,
@@ -365,6 +533,7 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             parsed=parsed,
             replay_file=job.current_replay_file,
             reprocess_attempt_id=job.attempt_id,
+            spatial_artifact=spatial_artifact,
         )
         LOGGER.info(
             "Reprocessed replay upload %s from s3://%s/%s for attempt %s",
@@ -594,12 +763,284 @@ def _extract_json_from_zip(source: Path, destination: Path) -> None:
             shutil.copyfileobj(compressed, output, length=1024 * 1024)
 
 
-def _parse_replay(json_path: Path) -> ParsedReplay:
+def _parse_downloaded_replay(source_path: Path, json_path: Path) -> ParsedReplay:
+    mode = _native_extractor_mode()
+    binary_path = _native_extractor_path()
+    native_available = binary_path.is_file()
+    if mode != "python" and native_available:
+        try:
+            return _parse_replay_native(source_path, binary_path=binary_path)
+        except Exception as error:
+            if mode == "native":
+                raise
+            LOGGER.warning(
+                "Native replay extraction failed; using ijson fallback: %s",
+                error,
+                exc_info=True,
+            )
+    elif mode == "native":
+        raise ReplayProcessingError(f"Native replay extractor was not found: {binary_path}")
+
+    _decompress_replay(source_path, json_path)
+    return _parse_replay(json_path)
+
+
+def _parse_replay_native(
+    source_path: Path,
+    *,
+    binary_path: Path | None = None,
+) -> ParsedReplay:
+    parse_started = time.perf_counter()
+    extractor_path = binary_path or _native_extractor_path()
+    output_path = source_path.with_name(f"{source_path.name}.extractor.json")
     try:
-        replay_document = _extract_replay_document(json_path)
+        result = subprocess.run(
+            [
+                str(extractor_path),
+                "--input",
+                str(source_path),
+                "--output",
+                str(output_path),
+                "--cell-size",
+                str(_spatial_cell_size()),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            diagnostic = (result.stderr or result.stdout or "unknown error").strip()[:2000]
+            raise ReplayProcessingError(
+                f"Native replay extractor exited with {result.returncode}: {diagnostic}"
+            )
+        try:
+            output_size = output_path.stat().st_size
+        except OSError as error:
+            raise ReplayProcessingError("Native replay extractor did not write output") from error
+        if not 0 < output_size <= MAX_NATIVE_EXTRACTOR_OUTPUT_BYTES:
+            raise ReplayProcessingError(
+                f"Native replay extractor output size is invalid: {output_size}"
+            )
+        with output_path.open("r", encoding="utf-8") as output_file:
+            native_document = json.load(output_file)
+        replay_document = _replay_document_from_native(native_document)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReplayProcessingError(f"Native replay extraction failed: {error}") from error
+    finally:
+        _unlink_if_exists(output_path)
+
+    return _parsed_replay_from_document(replay_document, parse_started=parse_started)
+
+
+def _replay_document_from_native(value: Any) -> dict[str, Any]:
+    document = _proxy_dict(value)
+    if document.get("schema") != NATIVE_EXTRACTOR_SCHEMA_VERSION:
+        raise ReplayProcessingError("Native replay extractor returned an unsupported schema")
+
+    raw_game_meta = document.get("game_meta")
+    callback_game_meta = _callback_game_meta(raw_game_meta)
+    parser = _proxy_dict(document.get("parser"))
+    extractor_name = _optional_text(parser.get("name")) or "replay-extractor"
+    extractor_version = _optional_text(parser.get("version"))
+    parser_metadata = {
+        "name": PROCESSOR_NAME,
+        "json_library": _optional_text(parser.get("json_library")) or "serde_json",
+        "native_extractor": extractor_name,
+    }
+    if extractor_version is not None:
+        parser_metadata["native_extractor_version"] = extractor_version
+
+    return {
+        "summary": _native_json_mapping(document.get("summary")),
+        "game_meta_players": _game_meta_players_from_native(raw_game_meta),
+        "callback_game_meta": callback_game_meta,
+        "gametype_settings": _sanitize_gametype_settings(document.get("gametype_settings")),
+        "network_game_client": _native_json_mapping(document.get("network_game_client")),
+        "participant_context": _native_json_mapping(document.get("participant_context")),
+        "first_tick": _native_json_mapping(document.get("first_tick")),
+        "last_tick": _native_json_mapping(document.get("last_tick")),
+        "spawn_points": _spawn_points_from_records(document.get("spawn_points")),
+        "spawn_source_path": _optional_text(document.get("spawn_source_path")),
+        "tick_count": _native_nonnegative_int(document.get("tick_count"), "tick_count"),
+        "event_count": _native_nonnegative_int(document.get("event_count"), "event_count"),
+        "event_sample": _native_json_list(document.get("event_sample")),
+        "spatial_occupancy": _spatial_occupancy_from_native(
+            document.get("spatial_occupancy"),
+            parser_metadata={
+                "json_library": parser_metadata["json_library"],
+                "native_extractor": extractor_name,
+                **(
+                    {"native_extractor_version": extractor_version}
+                    if extractor_version is not None
+                    else {}
+                ),
+            },
+        ),
+        "parser": parser_metadata,
+    }
+
+
+def _native_json_mapping(value: Any) -> dict[str, Any]:
+    jsonable = _json_compatible_value(value)
+    return jsonable if isinstance(jsonable, dict) else {}
+
+
+def _native_json_list(value: Any) -> list[Any]:
+    jsonable = _json_compatible_value(value)
+    return jsonable if isinstance(jsonable, list) else []
+
+
+def _game_meta_players_from_native(value: Any) -> dict[str, Any]:
+    players = _proxy_dict(_proxy_dict(value).get("players"))
+    selected: dict[str, Any] = {}
+    for raw_player_id, raw_player in players.items():
+        player = _proxy_dict(raw_player)
+        fields: dict[str, Any] = {}
+        for field in META_PLAYER_SCALAR_FIELDS:
+            field_value = player.get(field)
+            if field in player and not isinstance(field_value, (dict, list)):
+                fields[field] = field_value
+        for field in META_PLAYER_MAPPING_FIELDS:
+            field_value = player.get(field)
+            if isinstance(field_value, (dict, list)):
+                fields[field] = field_value
+        if fields:
+            selected[str(raw_player_id)] = fields
+    return selected
+
+
+def _spatial_occupancy_from_native(
+    value: Any,
+    *,
+    parser_metadata: dict[str, str],
+) -> SpatialOccupancyAccumulator:
+    document = _proxy_dict(value)
+    cell_size = _native_number(document.get("cell_size"), "spatial_occupancy.cell_size")
+    if cell_size != _spatial_cell_size():
+        raise ReplayProcessingError("Native replay extractor used an unexpected cell size")
+
+    limits = _proxy_dict(document.get("limits"))
+    expected_limits = {
+        "coordinate_absolute_max": MAX_SPATIAL_COORDINATE_ABS,
+        "cells_per_slot": MAX_SPATIAL_CELLS_PER_SLOT,
+        "cells_total": MAX_SPATIAL_CELLS_TOTAL,
+        "counter": MAX_SPATIAL_COUNTER,
+    }
+    for key, expected in expected_limits.items():
+        if _native_number(limits.get(key), f"spatial_occupancy.limits.{key}") != expected:
+            raise ReplayProcessingError(f"Native replay extractor limit mismatch: {key}")
+
+    occupancy = SpatialOccupancyAccumulator(
+        cell_size,
+        parser_metadata=parser_metadata,
+    )
+    occupancy.samples_seen = _native_bounded_counter(
+        document.get("samples_seen"),
+        "spatial_occupancy.samples_seen",
+    )
+    for raw_slot, raw_count in _proxy_dict(document.get("observations_by_slot")).items():
+        slot_index = _spatial_slot_index(raw_slot)
+        if slot_index is None:
+            raise ReplayProcessingError("Native replay extractor returned an invalid slot")
+        occupancy.observations_by_slot[slot_index] = _native_bounded_counter(
+            raw_count,
+            f"spatial_occupancy.observations_by_slot.{raw_slot}",
+        )
+    for raw_reason, raw_count in _proxy_dict(document.get("discarded")).items():
+        reason = _optional_text(raw_reason)
+        if reason is None:
+            raise ReplayProcessingError("Native replay extractor returned an invalid discard reason")
+        occupancy.discarded[reason] = _native_bounded_counter(
+            raw_count,
+            f"spatial_occupancy.discarded.{reason}",
+        )
+
+    cells = document.get("cells")
+    if not isinstance(cells, list) or len(cells) > MAX_SPATIAL_CELLS_TOTAL:
+        raise ReplayProcessingError("Native replay extractor returned an invalid cell collection")
+    for raw_cell in cells:
+        cell = _proxy_dict(raw_cell)
+        slot_index = _spatial_slot_index(cell.get("slot_index"))
+        coordinates = cell.get("cell")
+        if slot_index is None or not isinstance(coordinates, list) or len(coordinates) != 3:
+            raise ReplayProcessingError("Native replay extractor returned an invalid cell")
+        cell_coordinates = tuple(
+            _native_int(coordinate, "spatial_occupancy.cells.cell")
+            for coordinate in coordinates
+        )
+        key = (slot_index, *cell_coordinates)
+        if key in occupancy.cells:
+            raise ReplayProcessingError("Native replay extractor returned a duplicate cell")
+        occupancy.cells[key] = _native_bounded_counter(
+            cell.get("observed_ticks"),
+            "spatial_occupancy.cells.observed_ticks",
+            positive=True,
+        )
+        occupancy.cell_counts_by_slot[slot_index] += 1
+        if occupancy.cell_counts_by_slot[slot_index] > MAX_SPATIAL_CELLS_PER_SLOT:
+            raise ReplayProcessingError("Native replay extractor exceeded the per-slot cell limit")
+    return occupancy
+
+
+def _native_number(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ReplayProcessingError(f"Native replay extractor returned invalid {field}")
+    return float(value)
+
+
+def _native_int(value: Any, field: str) -> int:
+    number = _native_number(value, field)
+    if not number.is_integer():
+        raise ReplayProcessingError(f"Native replay extractor returned non-integer {field}")
+    return int(number)
+
+
+def _native_nonnegative_int(value: Any, field: str) -> int:
+    number = _native_int(value, field)
+    if number < 0:
+        raise ReplayProcessingError(f"Native replay extractor returned negative {field}")
+    return number
+
+
+def _native_bounded_counter(value: Any, field: str, *, positive: bool = False) -> int:
+    number = _native_nonnegative_int(value, field)
+    if number > MAX_SPATIAL_COUNTER or (positive and number == 0):
+        raise ReplayProcessingError(f"Native replay extractor returned out-of-range {field}")
+    return number
+
+
+def _native_extractor_mode() -> str:
+    mode = (os.getenv("REPLAY_EXTRACTOR_MODE") or "auto").strip().lower()
+    if mode not in {"auto", "native", "native_with_fallback", "python"}:
+        raise ReplayProcessingError(
+            "REPLAY_EXTRACTOR_MODE must be auto, native, native_with_fallback, or python"
+        )
+    return mode
+
+
+def _native_extractor_path() -> Path:
+    configured = (os.getenv("REPLAY_NATIVE_EXTRACTOR_PATH") or "").strip()
+    return Path(configured) if configured else Path(__file__).with_name("replay-extractor")
+
+
+def _parse_replay(json_path: Path) -> ParsedReplay:
+    parse_started = time.perf_counter()
+    try:
+        replay_document = _extract_replay_document(
+            json_path,
+            spatial_cell_size=_spatial_cell_size(),
+        )
     except Exception as error:
         raise NonRetryableReplayError(f"Replay JSON parse failed: {error}") from error
 
+    return _parsed_replay_from_document(replay_document, parse_started=parse_started)
+
+
+def _parsed_replay_from_document(
+    replay_document: dict[str, Any],
+    *,
+    parse_started: float,
+) -> ParsedReplay:
     tick_count = replay_document["tick_count"]
     if tick_count < 1:
         raise NonRetryableReplayError("Replay JSON did not contain ticks")
@@ -633,6 +1074,19 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         meta_players,
         participant_contexts,
     )
+    hostman_slots = {
+        int(participant["slot_index"])
+        for participant in participants
+        if _optional_bool(_proxy_dict(participant.get("metadata")).get("is_hostman")) is True
+    }
+    occupancy: SpatialOccupancyAccumulator = replay_document["spatial_occupancy"]
+    occupancy.exclude_slots(hostman_slots)
+    parse_duration_ms = round((time.perf_counter() - parse_started) * 1000)
+    spatial_facts = occupancy.spatial_facts(
+        summary=summary,
+        tick_count=tick_count,
+        parse_duration_ms=parse_duration_ms,
+    )
     team_stats = _team_stats_from_participants(participants)
     game = _game_from_replay(
         summary=summary,
@@ -650,7 +1104,8 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         "tick_count": tick_count,
         "event_count": replay_document["event_count"],
         "event_sample": replay_document["event_sample"],
-        "parser": {
+        "parser": replay_document.get("parser")
+        or {
             "name": PROCESSOR_NAME,
             "json_library": "ijson",
             "ijson_backend": getattr(ijson.backend, "__name__", str(ijson.backend)),
@@ -680,16 +1135,23 @@ def _parse_replay(json_path: Path) -> ParsedReplay:
         metadata=metadata,
         game_meta=callback_game_meta,
         facts=facts,
+        spatial_facts=spatial_facts,
     )
 
 
-def _extract_replay_document(json_path: Path) -> dict[str, Any]:
+def _extract_replay_document(
+    json_path: Path,
+    *,
+    spatial_cell_size: float = 0.5,
+) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     game_meta_players: dict[str, Any] = {}
     first_tick: dict[str, Any] | None = None
     last_tick: dict[str, Any] | None = None
     current_tick: dict[str, Any] | None = None
     current_player: dict[str, Any] | None = None
+    current_player_position: dict[str, Any] = {}
+    current_player_position_object_seen = False
     gametype_settings: dict[str, Any] = {}
     network_game_client: dict[str, Any] = {}
     participant_context: dict[str, Any] = {}
@@ -699,6 +1161,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
     tick_count = 0
     event_count = 0
     event_sample: list[Any] = []
+    spatial_occupancy = SpatialOccupancyAccumulator(spatial_cell_size)
 
     active_builder: ijson.ObjectBuilder | None = None
     active_target: str | None = None
@@ -933,14 +1396,32 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
 
                 if prefix == "ticks.item.players.item" and event == "start_map":
                     current_player = {}
+                    current_player_position = {}
+                    current_player_position_object_seen = False
                     continue
 
                 if current_player is not None:
                     if prefix == "ticks.item.players.item" and event == "end_map":
+                        spatial_occupancy.observe(
+                            current_player,
+                            position_object_seen=current_player_position_object_seen,
+                            position=current_player_position,
+                        )
                         current_tick["players"].append(current_player)
                         current_player = None
                         continue
 
+                    if (
+                        prefix == "ticks.item.players.item.player_object_data"
+                        and event == "start_map"
+                    ):
+                        current_player_position_object_seen = True
+                    position_field = _direct_child_field(
+                        prefix,
+                        "ticks.item.players.item.player_object_data",
+                    )
+                    if position_field in {"x", "y", "z"} and _is_scalar_json_event(event):
+                        current_player_position[position_field] = value
                     player_field = _direct_child_field(prefix, "ticks.item.players.item")
                     if player_field in PLAYER_FIELDS and _is_scalar_json_event(event):
                         current_player[player_field] = value
@@ -992,6 +1473,7 @@ def _extract_replay_document(json_path: Path) -> dict[str, Any]:
         "tick_count": tick_count,
         "event_count": event_count,
         "event_sample": event_sample,
+        "spatial_occupancy": spatial_occupancy,
     }
 
 
@@ -1805,6 +2287,123 @@ def _team_stats_from_participants(participants: list[dict[str, Any]]) -> list[di
     return [teams[team_index] for team_index in sorted(teams)]
 
 
+def _write_spatial_artifact(
+    *,
+    parsed: ParsedReplay,
+    bucket: str,
+    upload_id: str,
+    generation: int,
+    source_replay_sha256: str,
+) -> dict[str, Any] | None:
+    spatial_facts = parsed.spatial_facts
+    if spatial_facts is None:
+        return None
+
+    source_hash = _sha256_text(source_replay_sha256)
+    if source_hash is None:
+        raise ReplayProcessingError("Spatial artifact source replay SHA-256 was invalid")
+    coverage = {
+        **spatial_facts.coverage,
+        "source": {
+            "replay_sha256": source_hash,
+            "parser": PROCESSOR_NAME,
+        },
+    }
+    occupancy = [
+        {
+            "slot_index": slot_index,
+            "cell": [cell_x, cell_y, cell_z],
+            "observed_ticks": observed_ticks,
+        }
+        for (slot_index, cell_x, cell_y, cell_z), observed_ticks in sorted(
+            spatial_facts.cells.items()
+        )
+    ]
+    document = {
+        "schema": SPATIAL_FACTS_SCHEMA_VERSION,
+        "coordinate_space": SPATIAL_COORDINATE_SPACE,
+        "ticks_per_second": GAME_TICKS_PER_SECOND,
+        "cell_size": spatial_facts.cell_size,
+        "coverage": coverage,
+        "occupancy": occupancy,
+    }
+    raw_bytes = json.dumps(
+        document,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    if len(raw_bytes) > MAX_SPATIAL_ARTIFACT_UNCOMPRESSED_BYTES:
+        raise ReplayProcessingError("Spatial artifact exceeded the uncompressed size limit")
+    compressed_bytes = gzip.compress(raw_bytes, compresslevel=6, mtime=0)
+    if not 0 < len(compressed_bytes) <= MAX_SPATIAL_ARTIFACT_BYTES:
+        raise ReplayProcessingError("Spatial artifact exceeded the compressed size limit")
+
+    key = _spatial_artifact_key(upload_id, generation=generation)
+    artifact_sha256 = hashlib.sha256(compressed_bytes).hexdigest()
+    S3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=compressed_bytes,
+        ContentType="application/json",
+        ContentEncoding="gzip",
+        Metadata={
+            "schema": SPATIAL_FACTS_SCHEMA_VERSION,
+            "generation": str(generation),
+            "source-replay-sha256": source_hash,
+        },
+    )
+    metrics = {
+        "position_observations": coverage["position_observations"],
+        "distinct_cells": coverage["distinct_cells"],
+        "discarded_samples": coverage["position_samples_discarded"],
+        "uncompressed_size_bytes": len(raw_bytes),
+        "compressed_size_bytes": len(compressed_bytes),
+        "parse_duration_ms": spatial_facts.runtime_metrics.get("parse_duration_ms"),
+        "process_peak_rss_kib": _process_peak_rss_kib()
+        or spatial_facts.runtime_metrics.get("process_peak_rss_kib"),
+    }
+    LOGGER.info(
+        "Spatial occupancy artifact metrics: %s",
+        json.dumps(metrics, separators=(",", ":"), sort_keys=True),
+    )
+    return {
+        "schema": SPATIAL_FACTS_SCHEMA_VERSION,
+        "generation": generation,
+        "s3_bucket": bucket,
+        "s3_key": key,
+        "content_type": "application/json",
+        "encoding": "gzip",
+        "size_bytes": len(compressed_bytes),
+        "sha256": artifact_sha256,
+        "source_replay_sha256": source_hash,
+        "coordinate_space": SPATIAL_COORDINATE_SPACE,
+        "cell_size": spatial_facts.cell_size,
+        "ticks_per_second": GAME_TICKS_PER_SECOND,
+        "metrics": ["occupancy"],
+        "coverage": coverage,
+        "metadata": {
+            "parser": PROCESSOR_NAME,
+            "uncompressed_size_bytes": len(raw_bytes),
+            **spatial_facts.runtime_metrics,
+        },
+    }
+
+
+def _spatial_artifact_key(upload_id: str, *, generation: int) -> str:
+    prefix = _prefix_env("SPATIAL_ARTIFACT_PREFIX", "replays/derived/spatial/")
+    return (
+        f"{prefix}{upload_id}/generations/{generation}/"
+        f"{SPATIAL_FACTS_SCHEMA_VERSION}.json.gz"
+    )
+
+
+def _reprocess_spatial_generation(attempt_id: str) -> int:
+    # UUID-derived generations are stable across SQS retries and fit PostgreSQL integer.
+    attempt_value = uuid.UUID(attempt_id).int
+    return (attempt_value % (2_147_483_647 - 1)) + 2
+
+
 def _finalize_replay_upload(
     *,
     upload_id: str,
@@ -1815,6 +2414,7 @@ def _finalize_replay_upload(
     parsed: ParsedReplay,
     replay_file: ReplayOutputFile | None = None,
     reprocess_attempt_id: str | None = None,
+    spatial_artifact: dict[str, Any] | None = None,
 ) -> None:
     output_file = replay_file or ReplayOutputFile(
         bucket=original_object.bucket,
@@ -1860,6 +2460,8 @@ def _finalize_replay_upload(
     }
     if reprocess_attempt_id is not None:
         payload["reprocess_attempt_id"] = reprocess_attempt_id
+    if spatial_artifact is not None:
+        payload["spatial_artifact"] = spatial_artifact
     if parsed.spawn_points:
         payload["spawn_points"] = parsed.spawn_points
         payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
@@ -2119,6 +2721,10 @@ def _settings() -> dict[str, str]:
         "unprocessed_prefix": _prefix_env("REPLAY_UNPROCESSED_PREFIX", "replays/unprocessed/"),
         "processed_prefix": _prefix_env("REPLAY_PROCESSED_PREFIX", "replays/processed/"),
         "failed_prefix": _prefix_env("REPLAY_FAILED_PREFIX", "replays/failed/"),
+        "spatial_artifact_prefix": _prefix_env(
+            "SPATIAL_ARTIFACT_PREFIX",
+            "replays/derived/spatial/",
+        ),
     }
 
 
@@ -2132,6 +2738,64 @@ def _required_env(name: str) -> str:
 def _prefix_env(name: str, default: str) -> str:
     value = (os.getenv(name) or default).strip().strip("/")
     return f"{value}/"
+
+
+def _spatial_cell_size() -> float:
+    raw_value = (os.getenv("SPATIAL_OCCUPANCY_CELL_SIZE") or "0.5").strip()
+    try:
+        cell_size = float(raw_value)
+    except ValueError as error:
+        raise ReplayProcessingError("SPATIAL_OCCUPANCY_CELL_SIZE must be numeric") from error
+    if cell_size not in SUPPORTED_SPATIAL_CELL_SIZES:
+        raise ReplayProcessingError(
+            f"SPATIAL_OCCUPANCY_CELL_SIZE must be one of "
+            f"{sorted(SUPPORTED_SPATIAL_CELL_SIZES)}"
+        )
+    return cell_size
+
+
+def _spatial_slot_index(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(numeric) or not numeric.is_integer():
+        return None
+    slot_index = int(numeric)
+    if not 0 <= slot_index < MAX_SPATIAL_PLAYER_SLOTS:
+        return None
+    return slot_index
+
+
+def _spatial_coordinate(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        coordinate = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return coordinate if math.isfinite(coordinate) else None
+
+
+def _bounded_add(current: int, amount: int) -> int:
+    return min(MAX_SPATIAL_COUNTER, current + max(0, amount))
+
+
+def _sha256_text(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    return text if re.fullmatch(r"[0-9a-f]{64}", text) else None
+
+
+def _process_peak_rss_kib() -> int | None:
+    try:
+        for line in Path("/proc/self/status").read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
 
 
 def _proxy_dict(value: Any) -> dict[str, Any]:

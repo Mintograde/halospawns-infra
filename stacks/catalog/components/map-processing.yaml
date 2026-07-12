@@ -23,6 +23,8 @@ components:
             processed: maps/processed
             failed: maps/failed
             support_resources: maps/support-resources
+          replays:
+            spatial_artifacts: replays/derived/spatial
         native_maps:
           runtime: python3.14
           handler: halo_map.lambda_handler.handler
@@ -45,6 +47,9 @@ components:
           batch_size: 1
           report_batch_item_failures: true
           event_source_enabled: true
+          environment_variables:
+            REPLAY_EXTRACTOR_MODE: native_with_fallback
+            SPATIAL_OCCUPANCY_CELL_SIZE: "0.5"
         renderer:
           runtime: nodejs24.x
           handler: packages/viewer-renderer/src/lambda/handler.handler

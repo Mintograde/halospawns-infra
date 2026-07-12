@@ -82,8 +82,22 @@ variable "storage" {
       failed            = optional(string, "maps/failed")
       support_resources = optional(string, "maps/support-resources")
     }), {})
+    replays = optional(object({
+      spatial_artifacts = optional(string, "replays/derived/spatial")
+    }), {})
   })
   default = {}
+
+  validation {
+    condition = (
+      trim(var.storage.maps.unprocessed, "/") != "" &&
+      trim(var.storage.maps.processed, "/") != "" &&
+      trim(var.storage.maps.failed, "/") != "" &&
+      trim(var.storage.maps.support_resources, "/") != "" &&
+      trim(var.storage.replays.spatial_artifacts, "/") != ""
+    )
+    error_message = "Map and replay storage prefixes must be non-empty."
+  }
 }
 
 variable "native_maps" {

@@ -27,12 +27,26 @@ variable "storage" {
   type = object({
     bucket_prefix        = optional(string, "uploads")
     allowed_cors_origins = optional(set(string), [])
+    replay_spatial_artifacts = optional(object({
+      prefix                             = optional(string, "replays/derived/spatial")
+      noncurrent_version_expiration_days = optional(number, 30)
+      abort_incomplete_multipart_days    = optional(number, 7)
+    }), {})
   })
   default = {}
 
   validation {
     condition     = trimspace(var.storage.bucket_prefix) != ""
     error_message = "storage.bucket_prefix must not be empty."
+  }
+
+  validation {
+    condition = (
+      trim(var.storage.replay_spatial_artifacts.prefix, "/") != "" &&
+      var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days > 0 &&
+      var.storage.replay_spatial_artifacts.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Replay spatial artifact lifecycle values must use a non-empty prefix and positive day counts."
   }
 }
 

@@ -20,10 +20,11 @@ locals {
     }
   })
 
-  map_unprocessed_prefix      = trim(local.upload_pipelines.maps.unprocessed_prefix, "/")
-  map_processed_prefix        = trim(local.upload_pipelines.maps.processed_prefix, "/")
-  map_failed_prefix           = trim(local.upload_pipelines.maps.failed_prefix, "/")
-  map_support_resource_prefix = trim(var.storage.maps.support_resources, "/")
+  map_unprocessed_prefix         = trim(local.upload_pipelines.maps.unprocessed_prefix, "/")
+  map_processed_prefix           = trim(local.upload_pipelines.maps.processed_prefix, "/")
+  map_failed_prefix              = trim(local.upload_pipelines.maps.failed_prefix, "/")
+  map_support_resource_prefix    = trim(var.storage.maps.support_resources, "/")
+  replay_spatial_artifact_prefix = trim(var.storage.replays.spatial_artifacts, "/")
 
   maps_github_environment_subject = var.release.maps.github.environment == null || trimspace(var.release.maps.github.environment) == "" ? null : "repo:${var.release.maps.github.repository}:environment:${var.release.maps.github.environment}"
   maps_github_branch_subject      = "repo:${var.release.maps.github.repository}:ref:refs/heads/${var.release.maps.github.branch}"
@@ -72,6 +73,7 @@ locals {
         REPLAY_UNPROCESSED_PREFIX        = local.upload_pipelines.replays.unprocessed_prefix
         REPLAY_PROCESSED_PREFIX          = local.upload_pipelines.replays.processed_prefix
         REPLAY_FAILED_PREFIX             = local.upload_pipelines.replays.failed_prefix
+        SPATIAL_ARTIFACT_PREFIX          = local.replay_spatial_artifact_prefix
       }, var.replay_parser.environment_variables)
     }
   } : {}

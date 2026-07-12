@@ -121,6 +121,16 @@ data "aws_iam_policy_document" "app_runtime" {
     for_each = local.uploads_bucket_arn == null ? [] : [1]
 
     content {
+      sid       = "ReadReplaySpatialArtifacts"
+      actions   = ["s3:GetObject"]
+      resources = local.replay_spatial_artifact_get_object_resource_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+
+    content {
       sid       = "DeleteMapSupportResourceObjects"
       actions   = ["s3:DeleteObject"]
       resources = local.map_support_resource_delete_object_resource_arns

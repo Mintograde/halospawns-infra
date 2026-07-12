@@ -4,6 +4,7 @@ locals {
   replay_upload_prefix               = trim(var.uploads.replays.upload_prefix, "/")
   map_asset_read_prefix              = trim(var.uploads.maps.asset_read_prefix, "/")
   replay_asset_read_prefix           = trim(var.uploads.replays.asset_read_prefix, "/")
+  replay_spatial_artifact_prefix     = trim(var.uploads.replays.spatial_artifact_prefix, "/")
   map_support_resource_prefix        = trim(var.uploads.maps.support_resource_prefix, "/")
 
   frontend_hosted_zone_id      = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
@@ -53,6 +54,10 @@ locals {
 
   replay_asset_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
     "${local.uploads_bucket_arn}/${local.replay_asset_read_prefix}/*",
+  ]
+
+  replay_spatial_artifact_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+    "${local.uploads_bucket_arn}/${local.replay_spatial_artifact_prefix}/*",
   ]
 
   map_support_resource_delete_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
@@ -233,8 +238,8 @@ resource "terraform_data" "required_inputs" {
     }
 
     precondition {
-      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != "" && local.map_asset_read_prefix != "" && local.replay_asset_read_prefix != "" && local.map_support_resource_prefix != ""
-      error_message = "map_upload_prefix, replay_upload_prefix, map_asset_read_prefix, replay_asset_read_prefix, and map_support_resource_prefix must be non-empty stable root prefixes."
+      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != "" && local.map_asset_read_prefix != "" && local.replay_asset_read_prefix != "" && local.replay_spatial_artifact_prefix != "" && local.map_support_resource_prefix != ""
+      error_message = "Upload, asset-read, spatial-artifact, and support-resource prefixes must be non-empty stable root prefixes."
     }
   }
 }

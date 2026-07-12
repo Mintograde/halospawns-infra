@@ -7,6 +7,8 @@ locals {
     })
   }
 
+  replay_spatial_artifact_prefix = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
+
   full_domain_name = coalesce(var.cdn.domain_name, "api-${var.environment}.halospawns.com")
 
   upload_signing_private_key_secret_name = coalesce(

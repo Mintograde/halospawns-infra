@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -88,6 +91,7 @@ def _finalization_payload(
     processed_key: str = "replays/processed/22222222-2222-4222-8222-222222222222.json.zst",
     replay_file: handler.ReplayOutputFile | None = None,
     reprocess_attempt_id: str | None = None,
+    spatial_artifact: dict[str, object] | None = None,
 ) -> dict[str, object]:
     calls: list[tuple[str, str, dict[str, object]]] = []
 
@@ -123,6 +127,7 @@ def _finalization_payload(
             parsed=parsed,
             replay_file=replay_file,
             reprocess_attempt_id=reprocess_attempt_id,
+            spatial_artifact=spatial_artifact,
         )
 
     return calls[0][2]
@@ -1142,6 +1147,339 @@ class ReplayParserGameMetaCallbackTests(unittest.TestCase):
         self.assertNotIn("game_meta", payload)
 
 
+class ReplayParserSpatialFactsTests(unittest.TestCase):
+    @staticmethod
+    def _player(
+        slot_index: int,
+        position: tuple[object, object, object] | None,
+        *,
+        is_hostman: bool = False,
+    ) -> dict[str, object]:
+        player: dict[str, object] = {
+            "player_index": slot_index,
+            "name": f"Player {slot_index}",
+            "team": slot_index % 2,
+            "derived_stats": {"is_hostman": is_hostman},
+        }
+        if position is not None:
+            player["player_object_data"] = dict(zip(("x", "y", "z"), position))
+        return player
+
+    def test_streams_positions_into_stable_slot_cells_without_filling_tick_gaps(self) -> None:
+        ticks = [
+            {
+                "players": [
+                    self._player(0, (-0.1, -1.0, 1.49)),
+                    self._player(1, (2.0, 3.0, 4.0)),
+                ],
+            },
+            {"players": [self._player(0, (-0.1, -1.0, 1.49))]},
+            {"players": []},
+            {"players": [self._player(0, (1.0, 1.0, 1.0))]},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                ticks=ticks,
+                summary_overrides={
+                    "ticks_elapsed": 7,
+                    "ticks_recorded": 4,
+                    "ticks_dropped": 3,
+                },
+            )
+            parsed = handler._parse_replay(path)
+
+        assert parsed.spatial_facts is not None
+        self.assertEqual(
+            parsed.spatial_facts.cells,
+            {
+                (0, -1, -2, 2): 2,
+                (0, 2, 2, 2): 1,
+                (1, 4, 6, 8): 1,
+            },
+        )
+        coverage = parsed.spatial_facts.coverage
+        self.assertEqual(coverage["ticks_observed"], 4)
+        self.assertEqual(coverage["ticks_dropped"], 3)
+        self.assertEqual(coverage["position_observations"], 4)
+        self.assertEqual(coverage["participant_slots_observed"], [0, 1])
+
+    def test_discards_hostman_missing_malformed_nonfinite_and_out_of_bounds_samples(self) -> None:
+        accumulator = handler.SpatialOccupancyAccumulator(0.5)
+        accumulator.observe(
+            {"player_index": 0},
+            position_object_seen=True,
+            position={"x": 1, "y": 2, "z": 3},
+        )
+        accumulator.observe(
+            {"player_index": 1, "is_hostman": True},
+            position_object_seen=True,
+            position={"x": 1, "y": 2, "z": 3},
+        )
+        accumulator.observe(
+            {"player_index": 2}, position_object_seen=False, position={}
+        )
+        accumulator.observe(
+            {"player_index": 3},
+            position_object_seen=True,
+            position={"x": 1, "y": 2},
+        )
+        accumulator.observe(
+            {"player_index": 4},
+            position_object_seen=True,
+            position={"x": math.nan, "y": 2, "z": 3},
+        )
+        accumulator.observe(
+            {"player_index": 5},
+            position_object_seen=True,
+            position={"x": handler.MAX_SPATIAL_COORDINATE_ABS + 1, "y": 2, "z": 3},
+        )
+        accumulator.observe(
+            {"player_index": 999},
+            position_object_seen=True,
+            position={"x": 1, "y": 2, "z": 3},
+        )
+        accumulator.exclude_slots({0})
+        facts = accumulator.spatial_facts(summary={}, tick_count=1, parse_duration_ms=2)
+
+        self.assertEqual(facts.cells, {})
+        self.assertEqual(facts.coverage["status"], "unavailable")
+        self.assertEqual(
+            facts.coverage["discarded_by_reason"],
+            {
+                "hostman": 2,
+                "invalid_slot": 1,
+                "missing_coordinate": 1,
+                "missing_player_object": 1,
+                "non_finite": 1,
+                "out_of_bounds": 1,
+            },
+        )
+
+    def test_post_filters_hostman_identified_by_participant_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_replay_json(
+                Path(tmp),
+                map_info=None,
+                participant_context={
+                    "schema": "halospawns.participantContext.v1",
+                    "players": {"0": {"is_hostman": True}},
+                },
+                tick_overrides={"players": [self._player(0, (1.0, 2.0, 3.0))]},
+            )
+            parsed = handler._parse_replay(path)
+
+        assert parsed.spatial_facts is not None
+        self.assertEqual(parsed.spatial_facts.cells, {})
+        self.assertEqual(
+            parsed.spatial_facts.coverage["discarded_by_reason"]["hostman"], 1
+        )
+
+    def test_bounds_distinct_cells_but_keeps_counting_existing_cells(self) -> None:
+        with (
+            patch.object(handler, "MAX_SPATIAL_CELLS_PER_SLOT", 2),
+            patch.object(handler, "MAX_SPATIAL_CELLS_TOTAL", 2),
+        ):
+            accumulator = handler.SpatialOccupancyAccumulator(1.0)
+            for x in (0.1, 1.1, 2.1, 0.1):
+                accumulator.observe(
+                    {"player_index": 0},
+                    position_object_seen=True,
+                    position={"x": x, "y": 0, "z": 0},
+                )
+
+        self.assertEqual(accumulator.cells, {(0, 0, 0, 0): 2, (0, 1, 0, 0): 1})
+        self.assertEqual(accumulator.discarded["slot_cell_limit"], 1)
+
+    def test_writes_deterministic_gzip_artifact_and_sends_only_manifest(self) -> None:
+        parsed = _minimal_parsed_replay()
+        parsed = handler.ParsedReplay(
+            **{
+                **parsed.__dict__,
+                "spatial_facts": handler.SpatialFacts(
+                    cell_size=0.5,
+                    cells={(1, 4, -2, 0): 3, (0, -1, 0, 2): 7},
+                    coverage={
+                        "status": "available",
+                        "position_observations": 10,
+                        "position_samples_discarded": 0,
+                        "distinct_cells": 2,
+                    },
+                    runtime_metrics={"parse_duration_ms": 4},
+                ),
+            }
+        )
+        retry_parsed = handler.ParsedReplay(
+            **{
+                **parsed.__dict__,
+                "spatial_facts": handler.SpatialFacts(
+                    cell_size=parsed.spatial_facts.cell_size,
+                    cells=parsed.spatial_facts.cells,
+                    coverage=parsed.spatial_facts.coverage,
+                    runtime_metrics={"parse_duration_ms": 9999},
+                ),
+            }
+        )
+        writes: list[dict[str, object]] = []
+
+        with patch.object(handler.S3, "put_object", side_effect=lambda **kwargs: writes.append(kwargs)):
+            first = handler._write_spatial_artifact(
+                parsed=parsed,
+                bucket="uploads-bucket",
+                upload_id="22222222-2222-4222-8222-222222222222",
+                generation=1,
+                source_replay_sha256="a" * 64,
+            )
+            second = handler._write_spatial_artifact(
+                parsed=retry_parsed,
+                bucket="uploads-bucket",
+                upload_id="22222222-2222-4222-8222-222222222222",
+                generation=1,
+                source_replay_sha256="a" * 64,
+            )
+
+        assert first is not None and second is not None
+        self.assertEqual(writes[0]["Body"], writes[1]["Body"])
+        body = writes[0]["Body"]
+        assert isinstance(body, bytes)
+        document = json.loads(gzip.decompress(body))
+        self.assertEqual(
+            document["occupancy"],
+            [
+                {"cell": [-1, 0, 2], "observed_ticks": 7, "slot_index": 0},
+                {"cell": [4, -2, 0], "observed_ticks": 3, "slot_index": 1},
+            ],
+        )
+        self.assertEqual(set(document), {
+            "schema", "coordinate_space", "ticks_per_second", "cell_size", "coverage", "occupancy"
+        })
+        self.assertEqual(first["sha256"], hashlib.sha256(body).hexdigest())
+        self.assertEqual(first["size_bytes"], len(body))
+        self.assertEqual(first["encoding"], "gzip")
+
+        payload = _finalization_payload(parsed, spatial_artifact=first)
+        self.assertEqual(payload["spatial_artifact"], first)
+        self.assertNotIn("occupancy", payload["spatial_artifact"])
+
+    def test_reprocess_generation_is_stable_and_not_initial_generation(self) -> None:
+        attempt_id = "77777777-7777-4777-8777-777777777777"
+        generation = handler._reprocess_spatial_generation(attempt_id)
+        self.assertEqual(generation, handler._reprocess_spatial_generation(attempt_id))
+        self.assertGreaterEqual(generation, 2)
+        self.assertLessEqual(generation, 2_147_483_647)
+
+
+class ReplayParserNativeExtractorTests(unittest.TestCase):
+    @staticmethod
+    def _native_document() -> dict[str, object]:
+        return {
+            "schema": handler.NATIVE_EXTRACTOR_SCHEMA_VERSION,
+            "parser": {
+                "name": "replay-extractor",
+                "json_library": "serde_json",
+                "version": "0.1.0",
+            },
+            "summary": {"ticks_recorded": 2},
+            "game_meta": {
+                "players": {
+                    "0": {
+                        "damage_dealt": 42,
+                        "shots_by_tick": {"0": 3},
+                        "ignored": "value",
+                    }
+                }
+            },
+            "gametype_settings": {"mode": "slayer"},
+            "network_game_client": {},
+            "participant_context": {},
+            "first_tick": {"players": [{"player_index": 0, "kills": 0}]},
+            "last_tick": {"players": [{"player_index": 0, "kills": 1}]},
+            "spawn_points": [],
+            "spawn_source_path": None,
+            "tick_count": 2,
+            "event_count": 1,
+            "event_sample": [{"type": "kill"}],
+            "spatial_occupancy": {
+                "cell_size": 0.5,
+                "samples_seen": 2,
+                "observations_by_slot": {"0": 2},
+                "discarded": {},
+                "cells": [
+                    {"slot_index": 0, "cell": [-1, 2, 3], "observed_ticks": 2}
+                ],
+                "limits": {
+                    "coordinate_absolute_max": handler.MAX_SPATIAL_COORDINATE_ABS,
+                    "cells_per_slot": handler.MAX_SPATIAL_CELLS_PER_SLOT,
+                    "cells_total": handler.MAX_SPATIAL_CELLS_TOTAL,
+                    "counter": handler.MAX_SPATIAL_COUNTER,
+                },
+            },
+        }
+
+    def test_adapts_versioned_native_output_to_existing_python_contract(self) -> None:
+        replay_document = handler._replay_document_from_native(self._native_document())
+
+        self.assertEqual(replay_document["tick_count"], 2)
+        self.assertEqual(replay_document["event_sample"], [{"type": "kill"}])
+        self.assertEqual(
+            replay_document["game_meta_players"],
+            {"0": {"damage_dealt": 42, "shots_by_tick": {"0": 3}}},
+        )
+        occupancy = replay_document["spatial_occupancy"]
+        self.assertEqual(occupancy.cells, {(0, -1, 2, 3): 2})
+        self.assertEqual(occupancy.observations_by_slot, {0: 2})
+        self.assertEqual(occupancy.parser_metadata["json_library"], "serde_json")
+
+    def test_native_dispatch_skips_decompressed_json_file(self) -> None:
+        parsed = _minimal_parsed_replay()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "replay.json.zst"
+            source_path.touch()
+            binary_path = Path(tmp) / "replay-extractor"
+            binary_path.touch()
+            json_path = Path(tmp) / "replay.json"
+            with (
+                patch.dict(os.environ, {"REPLAY_EXTRACTOR_MODE": "native"}),
+                patch.object(handler, "_native_extractor_path", return_value=binary_path),
+                patch.object(handler, "_parse_replay_native", return_value=parsed) as native,
+                patch.object(
+                    handler,
+                    "_decompress_replay",
+                    side_effect=AssertionError("native parsing must not decompress to disk"),
+                ),
+            ):
+                result = handler._parse_downloaded_replay(source_path, json_path)
+
+        self.assertIs(result, parsed)
+        native.assert_called_once_with(source_path, binary_path=binary_path)
+
+    def test_native_with_fallback_uses_existing_ijson_parser_after_failure(self) -> None:
+        parsed = _minimal_parsed_replay()
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "replay.json.zst"
+            source_path.touch()
+            binary_path = Path(tmp) / "replay-extractor"
+            binary_path.touch()
+            json_path = Path(tmp) / "replay.json"
+            with (
+                patch.dict(os.environ, {"REPLAY_EXTRACTOR_MODE": "native_with_fallback"}),
+                patch.object(handler, "_native_extractor_path", return_value=binary_path),
+                patch.object(
+                    handler,
+                    "_parse_replay_native",
+                    side_effect=handler.ReplayProcessingError("native failure"),
+                ),
+                patch.object(handler, "_decompress_replay") as decompress,
+                patch.object(handler, "_parse_replay", return_value=parsed) as python_parser,
+            ):
+                result = handler._parse_downloaded_replay(source_path, json_path)
+
+        self.assertIs(result, parsed)
+        decompress.assert_called_once_with(source_path, json_path)
+        python_parser.assert_called_once_with(json_path)
+
+
 class ReplayParserReprocessJobTests(unittest.TestCase):
     def test_iter_replay_work_items_accepts_reprocess_job(self) -> None:
         payload = _reprocess_job_payload()
@@ -1179,6 +1517,7 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
         )
         download_calls: list[handler.S3ReplayObject] = []
         finalize_calls: list[dict[str, object]] = []
+        spatial_manifest = {"schema": "halospawns.spatialFacts.v1", "generation": 2}
 
         def capture_download(
             replay_object: handler.S3ReplayObject,
@@ -1194,6 +1533,11 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             patch.object(handler, "_download_replay", side_effect=capture_download),
             patch.object(handler, "_decompress_replay"),
             patch.object(handler, "_parse_replay", return_value=parsed),
+            patch.object(
+                handler,
+                "_write_spatial_artifact",
+                return_value=spatial_manifest,
+            ) as write_spatial,
             patch.object(handler, "_finalize_replay_upload", side_effect=capture_finalize),
             patch.object(handler, "_copy_object", side_effect=AssertionError("no copy")),
             patch.object(handler, "_delete_object", side_effect=AssertionError("no delete")),
@@ -1212,6 +1556,14 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
         self.assertEqual(finalize_calls[0]["processed_key"], job.current_replay_file.key)
         self.assertEqual(finalize_calls[0]["replay_file"], job.current_replay_file)
         self.assertEqual(finalize_calls[0]["reprocess_attempt_id"], job.attempt_id)
+        self.assertEqual(finalize_calls[0]["spatial_artifact"], spatial_manifest)
+        write_spatial.assert_called_once_with(
+            parsed=parsed,
+            bucket=job.current_replay_file.bucket,
+            upload_id=job.upload_id,
+            generation=handler._reprocess_spatial_generation(job.attempt_id),
+            source_replay_sha256=job.current_replay_file.sha256,
+        )
 
     def test_process_reprocess_job_marks_missing_source_failed(self) -> None:
         job = handler._reprocess_job_from_payload(_reprocess_job_payload(), "message-1")

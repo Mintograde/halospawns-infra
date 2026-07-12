@@ -6,6 +6,29 @@ module "uploads_bucket" {
   source_policy_documents = [data.aws_iam_policy_document.cloudfront_to_s3_policy.json]
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
+  bucket = module.uploads_bucket.s3_bucket_id
+
+  rule {
+    id     = "replay-spatial-artifact-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = local.replay_spatial_artifact_prefix
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.storage.replay_spatial_artifacts.abort_incomplete_multipart_days
+    }
+  }
+
+  depends_on = [module.uploads_bucket]
+}
+
 data "aws_iam_policy_document" "s3_to_sns_policy" {
   for_each = local.pipelines
 
