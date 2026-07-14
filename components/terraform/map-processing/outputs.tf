@@ -9,7 +9,25 @@ output "function_arns" {
       "halospawns-maps-processor" = module.native_maps_processor.function_arn
       "halospawns-map-renderer"   = module.map_renderer.function_arn
     },
+    var.heatmap_rollup_worker.enabled ? {
+      "halospawns-heatmap-rollup-worker" = module.heatmap_rollup_worker[0].function_arn
+    } : {},
   )
+}
+
+output "heatmap_rollup_worker_function_name" {
+  description = "Scheduled heatmap rollup worker Lambda function name."
+  value       = var.heatmap_rollup_worker.enabled ? module.heatmap_rollup_worker[0].function_name : null
+}
+
+output "heatmap_rollup_worker_alias_arn" {
+  description = "Scheduled heatmap rollup worker live alias ARN."
+  value       = var.heatmap_rollup_worker.enabled ? module.heatmap_rollup_worker[0].alias_arn : null
+}
+
+output "heatmap_rollup_schedule_dlq_arn" {
+  description = "DLQ ARN for failed scheduled heatmap rollup invocations."
+  value       = var.heatmap_rollup_worker.enabled ? aws_sqs_queue.heatmap_rollup_schedule_dlq[0].arn : null
 }
 
 output "native_maps_processor_function_name" {

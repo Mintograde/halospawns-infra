@@ -154,6 +154,200 @@ resource "aws_lambda_event_source_mapping" "native_maps_processor_sqs_trigger" {
   function_response_types = var.native_maps.event_source.report_batch_item_failures ? ["ReportBatchItemFailures"] : []
 }
 
+resource "terraform_data" "heatmap_rollup_worker_required_inputs" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  input = {
+    app_api_base_url = local.app_api_base_url
+    hmac_secret_id   = local.heatmap_rollup_worker_trusted_service_hmac_secret_id
+    input_prefix     = local.replay_spatial_artifact_prefix
+    output_prefix    = local.heatmap_rollup_artifact_prefix
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.app_api_base_url != null && local.heatmap_rollup_worker_trusted_service_hmac_secret_id != null && local.heatmap_rollup_worker_trusted_service_hmac_secret_arn != null
+      error_message = "The heatmap rollup worker requires an app API base URL and a dedicated heatmap-processing HMAC secret in app-api remote state."
+    }
+
+    precondition {
+      condition     = local.replay_spatial_artifact_prefix != "" && local.heatmap_rollup_artifact_prefix != ""
+      error_message = "The heatmap rollup worker input and output prefixes must be non-empty."
+    }
+  }
+}
+
+resource "aws_sqs_queue" "heatmap_rollup_schedule_dlq" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  name                      = "heatmap-rollup-schedule-dlq"
+  message_retention_seconds = var.heatmap_rollup_worker.dlq.message_retention_seconds
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_sqs_queue_policy" "heatmap_rollup_schedule_dlq" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  queue_url = aws_sqs_queue.heatmap_rollup_schedule_dlq[0].id
+  policy    = data.aws_iam_policy_document.heatmap_rollup_schedule_dlq[0].json
+}
+
+module "heatmap_rollup_worker" {
+  count  = var.heatmap_rollup_worker.enabled ? 1 : 0
+  source = "../../../modules/lambda-s3-managed"
+
+  function_name                  = local.heatmap_rollup_worker_function_name
+  runtime                        = var.heatmap_rollup_worker.runtime
+  handler                        = var.heatmap_rollup_worker.handler
+  source_dir                     = "../../../lambda/heatmap_rollup_worker"
+  alias_name                     = var.heatmap_rollup_worker.alias_name
+  timeout                        = var.heatmap_rollup_worker.lambda.timeout_seconds
+  memory_size                    = var.heatmap_rollup_worker.lambda.memory_mb
+  ephemeral_storage_size         = var.heatmap_rollup_worker.lambda.ephemeral_storage_mb
+  reserved_concurrent_executions = var.heatmap_rollup_worker.lambda.reserved_concurrent_executions
+
+  environment_variables = merge(
+    {
+      ENVIRONMENT                                   = var.environment
+      UPLOADS_BUCKET_NAME                           = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
+      SPATIAL_ARTIFACT_PREFIX                       = "${local.replay_spatial_artifact_prefix}/"
+      HEATMAP_ROLLUP_ARTIFACT_PREFIX                = "${local.heatmap_rollup_artifact_prefix}/"
+      APP_API_BASE_URL                              = local.app_api_base_url
+      APP_API_TRUSTED_CLIENT_NAME                   = local.heatmap_rollup_worker_trusted_hmac_client
+      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID         = local.heatmap_rollup_worker_trusted_service_hmac_secret_id
+      APP_API_HEATMAP_ROLLUP_CLAIM_PATH             = var.callbacks.paths.heatmap_rollup_claim
+      APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE   = var.callbacks.paths.heatmap_rollup_inputs_template
+      APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE = var.callbacks.paths.heatmap_rollup_complete_template
+      APP_API_HEATMAP_ROLLUP_FAILED_PATH_TEMPLATE   = var.callbacks.paths.heatmap_rollup_failed_template
+      HEATMAP_ROLLUP_INPUT_PAGE_LIMIT               = tostring(var.heatmap_rollup_worker.processing.input_page_limit)
+      HEATMAP_ROLLUP_MAX_SCOPES_PER_INVOCATION      = tostring(var.heatmap_rollup_worker.processing.max_scopes_per_invocation)
+      HEATMAP_ROLLUP_RETRY_AFTER_SECONDS            = tostring(var.heatmap_rollup_worker.processing.retry_after_seconds)
+    },
+    var.heatmap_rollup_worker.lambda.environment_variables,
+  )
+
+  policies_json = [
+    data.aws_iam_policy_document.heatmap_rollup_worker_runtime[0].json,
+    data.aws_iam_policy_document.trusted_service_hmac_secret[local.heatmap_rollup_worker_trusted_hmac_client].json,
+  ]
+
+  depends_on = [terraform_data.heatmap_rollup_worker_required_inputs]
+}
+
+resource "aws_cloudwatch_event_rule" "heatmap_rollup" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  name                = "${var.project}-${var.environment}-heatmap-rollup"
+  description         = "Claims and builds dirty all-time heatmap rollup scopes."
+  schedule_expression = var.heatmap_rollup_worker.schedule.expression
+}
+
+resource "aws_cloudwatch_event_target" "heatmap_rollup" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.heatmap_rollup[0].name
+  target_id = "heatmap-rollup-worker"
+  arn       = module.heatmap_rollup_worker[0].alias_arn
+
+  dead_letter_config {
+    arn = aws_sqs_queue.heatmap_rollup_schedule_dlq[0].arn
+  }
+
+  retry_policy {
+    maximum_event_age_in_seconds = var.heatmap_rollup_worker.schedule.maximum_event_age_seconds
+    maximum_retry_attempts       = var.heatmap_rollup_worker.schedule.maximum_retry_attempts
+  }
+
+  depends_on = [aws_sqs_queue_policy.heatmap_rollup_schedule_dlq]
+}
+
+resource "aws_lambda_permission" "heatmap_rollup_schedule" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  statement_id  = "AllowHeatmapRollupSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = module.heatmap_rollup_worker[0].function_name
+  qualifier     = module.heatmap_rollup_worker[0].alias_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.heatmap_rollup[0].arn
+}
+
+resource "aws_cloudwatch_metric_alarm" "heatmap_rollup_errors" {
+  count = var.heatmap_rollup_worker.enabled && var.heatmap_rollup_worker.alarms.enabled ? 1 : 0
+
+  alarm_name          = "${var.project}-${var.environment}-heatmap-rollup-errors"
+  alarm_description   = "Heatmap rollup worker invocations are failing."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = var.heatmap_rollup_worker.alarms.error_evaluation_periods
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = module.heatmap_rollup_worker[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "heatmap_rollup_duration" {
+  count = var.heatmap_rollup_worker.enabled && var.heatmap_rollup_worker.alarms.enabled ? 1 : 0
+
+  alarm_name          = "${var.project}-${var.environment}-heatmap-rollup-duration"
+  alarm_description   = "Heatmap rollup worker duration is approaching the Lambda timeout."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = var.heatmap_rollup_worker.alarms.duration_threshold_ms
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = module.heatmap_rollup_worker[0].function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "heatmap_rollup_dlq" {
+  count = var.heatmap_rollup_worker.enabled && var.heatmap_rollup_worker.alarms.enabled ? 1 : 0
+
+  alarm_name          = "${var.project}-${var.environment}-heatmap-rollup-dlq"
+  alarm_description   = "The heatmap rollup schedule DLQ contains a failed invocation."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.heatmap_rollup_schedule_dlq[0].name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "heatmap_rollup_scope_failures" {
+  count = var.heatmap_rollup_worker.enabled && var.heatmap_rollup_worker.alarms.enabled ? 1 : 0
+
+  alarm_name          = "${var.project}-${var.environment}-heatmap-rollup-scope-failures"
+  alarm_description   = "The heatmap rollup worker reported a scope build failure."
+  namespace           = "Halospawns/HeatmapRollups"
+  metric_name         = "ScopesFailed"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Worker = "heatmap-rollup-worker.v1"
+  }
+}
+
 module "map_renderer" {
   source = "../../../modules/lambda-s3-managed"
 

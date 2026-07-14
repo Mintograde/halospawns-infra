@@ -6,6 +6,7 @@ components:
       vars:
         callbacks:
           clients:
+            heatmaps: heatmap-processing
             maps: map-processing
             replays: replay-processing
             renderer: map-rendering
@@ -17,6 +18,10 @@ components:
             map_support_resource_ingest: /v1/ingest/map-support-resources
             map_support_resource_resolve: /v1/ingest/map-support-resources/resolve
             map_screenshot_ingest: /v1/ingest/map-screenshots
+            heatmap_rollup_claim: /v1/ingest/heatmap-rollups/claim
+            heatmap_rollup_inputs_template: /v1/ingest/heatmap-rollups/{scope_id}/inputs
+            heatmap_rollup_complete_template: /v1/ingest/heatmap-rollups/{scope_id}/complete
+            heatmap_rollup_failed_template: /v1/ingest/heatmap-rollups/{scope_id}/failed
         storage:
           maps:
             unprocessed: maps/unprocessed
@@ -25,6 +30,7 @@ components:
             support_resources: maps/support-resources
           replays:
             spatial_artifacts: replays/derived/spatial
+            heatmap_rollups: replays/derived/heatmap-rollups
         native_maps:
           runtime: python3.14
           handler: halo_map.lambda_handler.handler
@@ -50,6 +56,30 @@ components:
           environment_variables:
             REPLAY_EXTRACTOR_MODE: native_with_fallback
             SPATIAL_OCCUPANCY_CELL_SIZE: "0.5"
+        heatmap_rollup_worker:
+          enabled: true
+          runtime: python3.14
+          handler: handler.lambda_handler
+          alias_name: live
+          lambda:
+            timeout_seconds: 840
+            memory_mb: 3008
+            ephemeral_storage_mb: 2048
+            reserved_concurrent_executions: 1
+          schedule:
+            expression: rate(5 minutes)
+            maximum_event_age_seconds: 3600
+            maximum_retry_attempts: 2
+          processing:
+            input_page_limit: 100
+            max_scopes_per_invocation: 4
+            retry_after_seconds: 300
+          dlq:
+            message_retention_seconds: 1209600
+          alarms:
+            enabled: true
+            error_evaluation_periods: 1
+            duration_threshold_ms: 780000
         renderer:
           runtime: nodejs24.x
           handler: packages/viewer-renderer/src/lambda/handler.handler

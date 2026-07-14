@@ -81,6 +81,7 @@ components:
             environment: dev
         trusted_services:
           secret_names:
+            heatmap-processing: /halospawns/dev/app-api/trusted-clients/heatmap-processing/hmac-secret
             live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
             map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
             map-rendering: /halospawns/dev/app-api/trusted-clients/map-rendering/hmac-secret

@@ -84,6 +84,10 @@ output "api_contract" {
     map_support_resource_ingest     = "/v1/ingest/map-support-resources"
     map_support_resource_resolve    = "/v1/ingest/map-support-resources/resolve"
     map_screenshot_ingest           = var.rendering.screenshot_ingest_path
+    heatmap_rollup_claim            = "/v1/ingest/heatmap-rollups/claim"
+    heatmap_rollup_inputs           = "/v1/ingest/heatmap-rollups/{scope_id}/inputs"
+    heatmap_rollup_complete         = "/v1/ingest/heatmap-rollups/{scope_id}/complete"
+    heatmap_rollup_failed           = "/v1/ingest/heatmap-rollups/{scope_id}/failed"
   }
 }
 

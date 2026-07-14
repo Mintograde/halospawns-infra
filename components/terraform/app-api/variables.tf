@@ -104,9 +104,10 @@ variable "uploads" {
       support_resource_auto_approve = optional(bool, false)
     }), {})
     replays = optional(object({
-      upload_prefix           = optional(string, "replays/unprocessed")
-      asset_read_prefix       = optional(string, "replays/processed")
-      spatial_artifact_prefix = optional(string, "replays/derived/spatial")
+      upload_prefix                  = optional(string, "replays/unprocessed")
+      asset_read_prefix              = optional(string, "replays/processed")
+      spatial_artifact_prefix        = optional(string, "replays/derived/spatial")
+      heatmap_rollup_artifact_prefix = optional(string, "replays/derived/heatmap-rollups")
     }), {})
     url_ttl_seconds = optional(number, 900)
   })

@@ -44,6 +44,48 @@ data "aws_iam_policy_document" "trusted_service_hmac_secret" {
   }
 }
 
+data "aws_iam_policy_document" "heatmap_rollup_worker_runtime" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  statement {
+    sid       = "ReadGameOccupancyArtifacts"
+    actions   = ["s3:GetObject"]
+    resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.replay_spatial_artifact_prefix}/*"]
+  }
+
+  statement {
+    sid = "ManageHeatmapRollupArtifacts"
+    actions = [
+      "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:PutObjectTagging",
+    ]
+    resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.heatmap_rollup_artifact_prefix}/*"]
+  }
+}
+
+data "aws_iam_policy_document" "heatmap_rollup_schedule_dlq" {
+  count = var.heatmap_rollup_worker.enabled ? 1 : 0
+
+  statement {
+    sid       = "AllowEventBridgeScheduleFailures"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.heatmap_rollup_schedule_dlq[0].arn]
+
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudwatch_event_rule.heatmap_rollup[0].arn]
+    }
+  }
+}
+
 resource "aws_iam_openid_connect_provider" "maps_github" {
   count = var.release.oidc.create_provider ? 1 : 0
 

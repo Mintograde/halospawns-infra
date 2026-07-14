@@ -8,6 +8,7 @@ locals {
   }
 
   replay_spatial_artifact_prefix = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
+  heatmap_rollup_artifact_prefix = "${trim(var.storage.heatmap_rollup_artifacts.prefix, "/")}/"
 
   full_domain_name = coalesce(var.cdn.domain_name, "api-${var.environment}.halospawns.com")
 
