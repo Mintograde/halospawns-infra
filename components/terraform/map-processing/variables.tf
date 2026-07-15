@@ -88,8 +88,9 @@ variable "storage" {
       support_resources = optional(string, "maps/support-resources")
     }), {})
     replays = optional(object({
-      spatial_artifacts = optional(string, "replays/derived/spatial")
-      heatmap_rollups   = optional(string, "replays/derived/heatmap-rollups")
+      spatial_artifacts   = optional(string, "replays/derived/spatial")
+      heatmap_rollups     = optional(string, "replays/derived/heatmap-rollups")
+      region_stat_rollups = optional(string, "replays/derived/region-stat-rollups")
     }), {})
   })
   default = {}
@@ -101,9 +102,10 @@ variable "storage" {
       trim(var.storage.maps.failed, "/") != "" &&
       trim(var.storage.maps.support_resources, "/") != "" &&
       trim(var.storage.replays.spatial_artifacts, "/") != "" &&
-      trim(var.storage.replays.heatmap_rollups, "/") != ""
+      trim(var.storage.replays.heatmap_rollups, "/") != "" &&
+      trim(var.storage.replays.region_stat_rollups, "/") != ""
     )
-    error_message = "Map and replay storage prefixes, including heatmap rollups, must be non-empty."
+    error_message = "Map and replay storage prefixes, including heatmap and region-stat rollups, must be non-empty."
   }
 }
 
@@ -172,6 +174,10 @@ variable "heatmap_rollup_worker" {
       max_scopes_per_invocation = optional(number, 4)
       retry_after_seconds       = optional(number, 300)
     }), {})
+    region_stats = optional(object({
+      enabled               = optional(bool, true)
+      max_membership_checks = optional(number, 5000000)
+    }), {})
     dlq = optional(object({
       message_retention_seconds = optional(number, 1209600)
     }), {})
@@ -197,6 +203,8 @@ variable "heatmap_rollup_worker" {
       var.heatmap_rollup_worker.processing.max_scopes_per_invocation <= 10 &&
       var.heatmap_rollup_worker.processing.retry_after_seconds >= 30 &&
       var.heatmap_rollup_worker.processing.retry_after_seconds <= 86400 &&
+      var.heatmap_rollup_worker.region_stats.max_membership_checks >= 1 &&
+      var.heatmap_rollup_worker.region_stats.max_membership_checks <= 100000000 &&
       var.heatmap_rollup_worker.schedule.maximum_event_age_seconds >= 60 &&
       var.heatmap_rollup_worker.schedule.maximum_retry_attempts >= 0 &&
       var.heatmap_rollup_worker.dlq.message_retention_seconds > 0 &&

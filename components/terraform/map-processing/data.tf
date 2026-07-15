@@ -63,6 +63,17 @@ data "aws_iam_policy_document" "heatmap_rollup_worker_runtime" {
     ]
     resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.heatmap_rollup_artifact_prefix}/*"]
   }
+
+  statement {
+    sid = "ManageRegionStatRollupArtifacts"
+    actions = [
+      "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:PutObjectTagging",
+    ]
+    resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.region_stat_rollup_artifact_prefix}/*"]
+  }
 }
 
 data "aws_iam_policy_document" "heatmap_rollup_schedule_dlq" {

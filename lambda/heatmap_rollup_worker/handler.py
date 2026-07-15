@@ -14,11 +14,19 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, Callable, Mapping
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+
+from region_stats import (
+    RegionAccumulator,
+    RegionConfiguration,
+    RegionStatsError,
+    parse_region_configuration,
+)
 
 try:
     import resource
@@ -34,6 +42,8 @@ SECRETS = boto3.client("secretsmanager")
 
 WORKER_VERSION = "heatmap-rollup-worker.v1"
 ROLLUP_SCHEMA = "halospawns.heatmapRollup.v1"
+REGION_ROLLUP_SCHEMA = "halospawns.regionStatsRollup.v1"
+REGION_STATS_CAPABILITY = "region_stats_v1"
 INPUT_SCHEMA = "halospawns.spatialFacts.v1"
 SOURCE_COORDINATE_SPACE = "halo1.replay_world.v1"
 PLANE_COORDINATE_SPACE = "halospawns.map_render_world.v1"
@@ -43,6 +53,8 @@ MAX_INPUT_ARTIFACT_BYTES = 10 * 1024 * 1024
 MAX_DECOMPRESSED_INPUT_BYTES = 64 * 1024 * 1024
 MAX_DECOMPRESSED_OUTPUT_BYTES = 256 * 1024 * 1024
 MAX_OUTPUT_ARTIFACT_BYTES = 64 * 1024 * 1024
+MAX_DECOMPRESSED_REGION_OUTPUT_BYTES = 32 * 1024 * 1024
+MAX_REGION_OUTPUT_ARTIFACT_BYTES = 16 * 1024 * 1024
 MAX_CELLS_PER_GROUP = 2_000_000
 MAX_GROUPS_PER_METRIC = 64
 MAX_CELL_VALUE = 9_007_199_254_740_991
@@ -77,6 +89,11 @@ class Settings:
     uploads_bucket: str
     input_prefix: str
     output_prefix: str
+    region_output_prefix: str
+    region_schema: str
+    region_capability: str
+    region_stats_enabled: bool
+    region_max_membership_checks: int
     claim_path: str
     input_path_template: str
     complete_path_template: str
@@ -95,7 +112,7 @@ class GeneratedArtifact:
     size_bytes: int
     sha256: str
     cell_count: int
-    summary: dict[str, int]
+    summary: dict[str, object]
     decoded_size_bytes: int = 0
 
 
@@ -108,6 +125,12 @@ class ScopeResult:
     output_cells: int
     duration_ms: int
     output_decoded_bytes: int = 0
+    region_output_bytes: int = 0
+    region_output_decoded_bytes: int = 0
+    region_membership_checks: int = 0
+    region_source_cells: int = 0
+    region_missing_games: int = 0
+    region_incompatible_games: int = 0
 
 
 @dataclass
@@ -192,8 +215,14 @@ class MetricAccumulator:
 
 
 class RollupAccumulator:
-    def __init__(self, claim: Mapping[str, object]) -> None:
+    def __init__(
+        self,
+        claim: Mapping[str, object],
+        *,
+        region_accumulator: RegionAccumulator | None = None,
+    ) -> None:
         self.claim = _validated_claim(claim)
+        self.region_accumulator = region_accumulator
         self.games_selected = 0
         self.participants_selected = 0
         self.input_bytes = 0
@@ -215,6 +244,7 @@ class RollupAccumulator:
             raise _invalid_input("Heatmap participants were missing")
 
         participants_by_slot: dict[int, tuple[str, tuple[int, int]]] = {}
+        region_participants_by_slot: dict[int, tuple[str, int | None]] = {}
         for participant_raw in participants_raw:
             if not isinstance(participant_raw, Mapping):
                 raise _invalid_input("A heatmap participant was invalid")
@@ -223,10 +253,15 @@ class RollupAccumulator:
             if slot_index in participants_by_slot:
                 raise _invalid_input("A heatmap participant slot was duplicated")
             team_index = participant_raw.get("team_index")
-            if team_index is not None and (isinstance(team_index, bool) or not isinstance(team_index, int)):
+            if team_index is not None and (
+                isinstance(team_index, bool)
+                or not isinstance(team_index, int)
+                or not -1 <= team_index <= 63
+            ):
                 raise _invalid_input("A heatmap participant team was invalid")
             group = (1, 0) if team_index is None else (0, team_index)
             participants_by_slot[slot_index] = (participant_id, group)
+            region_participants_by_slot[slot_index] = (participant_id, team_index)
             self.participants_selected += 1
             self._add_events(
                 game_id=game_id,
@@ -238,16 +273,30 @@ class RollupAccumulator:
         self.games_selected += 1
         manifest = game.get("occupancy_artifact")
         if manifest is None:
+            if self.region_accumulator is not None:
+                self.region_accumulator.begin_game(
+                    participants_by_slot=region_participants_by_slot,
+                    document=None,
+                )
+                self.region_accumulator.finish_game()
             return
         if not isinstance(manifest, Mapping):
             raise _invalid_input("A heatmap occupancy manifest was invalid")
         document, downloaded_bytes = occupancy_loader(manifest)
         self.input_bytes += downloaded_bytes
+        _validate_occupancy_document(document)
+        if self.region_accumulator is not None:
+            self.region_accumulator.begin_game(
+                participants_by_slot=region_participants_by_slot,
+                document=document,
+            )
         self._add_occupancy(
             game_id=game_id,
             participants_by_slot=participants_by_slot,
             document=document,
         )
+        if self.region_accumulator is not None:
+            self.region_accumulator.finish_game()
 
     def document(self) -> dict[str, object]:
         metrics = {
@@ -324,16 +373,14 @@ class RollupAccumulator:
         participants_by_slot: Mapping[int, tuple[str, tuple[int, int]]],
         document: Mapping[str, object],
     ) -> None:
-        _validate_occupancy_document(document)
         occupancy = document.get("occupancy")
         assert isinstance(occupancy, list)
+        cell_size = float(document["cell_size"])
+        cell_ratio = cell_size / SOURCE_CELL_SIZE
         for row in occupancy:
             if not isinstance(row, Mapping):
                 raise _invalid_artifact("An occupancy row was invalid")
             slot_index = _required_int(row, "slot_index", minimum=0, artifact=True)
-            selected = participants_by_slot.get(slot_index)
-            if selected is None:
-                continue
             cell = row.get("cell")
             if (
                 not isinstance(cell, list)
@@ -342,9 +389,22 @@ class RollupAccumulator:
             ):
                 raise _invalid_artifact("An occupancy cell was invalid")
             observed_ticks = _required_int(row, "observed_ticks", minimum=1, artifact=True)
+            source_cell = (cell[0], cell[1], cell[2])
+            if self.region_accumulator is not None:
+                self.region_accumulator.add_cell(
+                    slot_index=slot_index,
+                    cell=source_cell,
+                    observed_ticks=observed_ticks,
+                )
+            selected = participants_by_slot.get(slot_index)
+            if selected is None:
+                continue
             participant_id, group = selected
             # Project the center of the replay-space source voxel onto render x/-y.
-            plane_cell = _plane_cell(cell[0], -cell[1] - 1)
+            plane_cell = _plane_cell(
+                math.floor((cell[0] + 0.5) * cell_ratio),
+                math.floor(-(cell[1] + 0.5) * cell_ratio),
+            )
             self.metrics["occupancy"].add(
                 group=group,
                 cell=plane_cell,
@@ -369,6 +429,13 @@ def lambda_handler(event: object, context: object) -> dict[str, object]:
         "output_bytes": 0,
         "output_decoded_bytes": 0,
         "output_cells": 0,
+        "region_output_bytes": 0,
+        "region_output_decoded_bytes": 0,
+        "region_membership_checks": 0,
+        "region_source_cells": 0,
+        "region_missing_games": 0,
+        "region_incompatible_games": 0,
+        "region_artifacts_written": 0,
         "s3_gets": 0,
         "api_requests": 0,
         "api_duration_ms": 0,
@@ -387,6 +454,13 @@ def lambda_handler(event: object, context: object) -> dict[str, object]:
         totals["output_bytes"] += result.output_bytes
         totals["output_decoded_bytes"] += result.output_decoded_bytes
         totals["output_cells"] += result.output_cells
+        totals["region_output_bytes"] += result.region_output_bytes
+        totals["region_output_decoded_bytes"] += result.region_output_decoded_bytes
+        totals["region_membership_checks"] += result.region_membership_checks
+        totals["region_source_cells"] += result.region_source_cells
+        totals["region_missing_games"] += result.region_missing_games
+        totals["region_incompatible_games"] += result.region_incompatible_games
+        totals["region_artifacts_written"] += int(result.region_output_bytes > 0)
 
     totals["input_decoded_bytes"] = runtime_metrics.input_decoded_bytes
     totals["s3_gets"] = runtime_metrics.s3_gets
@@ -411,14 +485,40 @@ def _process_claim(
     claim = _validated_claim(claim_raw)
     scope_id = str(claim["scope_id"])
     output_key = _rollup_key(settings.output_prefix, scope_id, int(claim["next_generation"]))
+    region_output_key = _rollup_key(
+        settings.region_output_prefix,
+        scope_id,
+        int(claim["next_generation"]),
+    )
     generated: GeneratedArtifact | None = None
+    region_generated: GeneratedArtifact | None = None
     completion_attempted = False
 
     try:
-        accumulator = RollupAccumulator(claim)
+        accumulator: RollupAccumulator | None = None
+        region_configuration: RegionConfiguration | None = None
         cursor: str | None = None
         while True:
             page = _list_inputs(settings, claim, cursor=cursor, runtime_metrics=runtime_metrics)
+            region_configuration = _page_region_configuration(
+                claim,
+                page,
+                current=region_configuration,
+            )
+            if accumulator is None:
+                region_accumulator = (
+                    RegionAccumulator(
+                        claim=claim,
+                        configuration=region_configuration,
+                        max_membership_checks=settings.region_max_membership_checks,
+                    )
+                    if region_configuration is not None
+                    else None
+                )
+                accumulator = RollupAccumulator(
+                    claim,
+                    region_accumulator=region_accumulator,
+                )
             games = page.get("games")
             if not isinstance(games, list):
                 raise _invalid_input("The heatmap input page was invalid")
@@ -440,6 +540,7 @@ def _process_claim(
                 raise _invalid_input("The heatmap input cursor was invalid")
             cursor = next_cursor
 
+        assert accumulator is not None
         generated = _write_rollup_artifact(
             settings=settings,
             claim=claim,
@@ -448,18 +549,49 @@ def _process_claim(
             summary=accumulator.summary(),
             cell_count=accumulator.cell_count(),
         )
+        if accumulator.region_accumulator is not None:
+            generated_at = _region_generated_at(
+                settings,
+                claim,
+                region_output_key,
+            )
+            region_generated = _write_region_rollup_artifact(
+                settings=settings,
+                claim=claim,
+                document=accumulator.region_accumulator.document(
+                    generated_at=generated_at,
+                ),
+                output_key=region_output_key,
+                summary=accumulator.region_accumulator.summary(),
+                source_cells=accumulator.region_accumulator.source_cells,
+                generated_at=generated_at,
+            )
         completion_attempted = True
-        completion = _complete_scope(settings, claim, generated, runtime_metrics)
+        completion = _complete_scope(
+            settings,
+            claim,
+            generated,
+            region_generated,
+            runtime_metrics,
+        )
         if completion.get("stale") is True:
             _delete_generated_artifact(generated)
-            return _scope_result("stale", accumulator, generated, started)
+            if region_generated is not None:
+                _delete_generated_artifact(region_generated)
+            return _scope_result(
+                "stale",
+                accumulator,
+                generated,
+                region_generated,
+                started,
+            )
         if completion.get("activated") is not True:
             raise RollupError(
                 "completion_not_activated",
                 "The heatmap rollup completion was not activated",
                 retryable=True,
             )
-        _mark_generation_active(settings, claim, generated)
+        _mark_generation_active(settings, claim, generated, region_generated)
         LOGGER.info(
             "Heatmap rollup scope completed: %s",
             json.dumps(
@@ -469,15 +601,31 @@ def _process_claim(
                     "generation": claim["next_generation"],
                     **generated.summary,
                     "output_bytes": generated.size_bytes,
+                    "region_output_bytes": (
+                        region_generated.size_bytes if region_generated is not None else 0
+                    ),
+                    "region_membership_checks": (
+                        accumulator.region_accumulator.membership_checks
+                        if accumulator.region_accumulator is not None
+                        else 0
+                    ),
                 },
                 separators=(",", ":"),
                 sort_keys=True,
             ),
         )
-        return _scope_result("completed", accumulator, generated, started)
+        return _scope_result(
+            "completed",
+            accumulator,
+            generated,
+            region_generated,
+            started,
+        )
     except StaleRevisionError:
         if generated is not None:
             _delete_generated_artifact(generated)
+        if region_generated is not None:
+            _delete_generated_artifact(region_generated)
         return ScopeResult("stale", 0, 0, 0, 0, round((time.monotonic() - started) * 1000))
     except Exception as error:
         if completion_attempted:
@@ -485,6 +633,8 @@ def _process_claim(
             raise
         if generated is not None:
             _delete_generated_artifact(generated)
+        if region_generated is not None:
+            _delete_generated_artifact(region_generated)
         rollup_error = _classified_error(error)
         _fail_scope(settings, claim, rollup_error, runtime_metrics)
         LOGGER.warning(
@@ -504,6 +654,8 @@ def _process_claim(
     finally:
         if generated is not None:
             generated.path.unlink(missing_ok=True)
+        if region_generated is not None:
+            region_generated.path.unlink(missing_ok=True)
 
 
 def _claim_scopes(
@@ -514,7 +666,12 @@ def _claim_scopes(
         settings,
         "POST",
         settings.claim_path,
-        payload={"limit": 1},
+        payload={
+            "limit": 1,
+            "capabilities": (
+                [settings.region_capability] if settings.region_stats_enabled else []
+            ),
+        },
         runtime_metrics=runtime_metrics,
     )
     processed = _processed_result(data)
@@ -554,36 +711,89 @@ def _list_inputs(
     return _processed_result(data)
 
 
+def _page_region_configuration(
+    claim: Mapping[str, object],
+    page: Mapping[str, object],
+    *,
+    current: RegionConfiguration | None,
+) -> RegionConfiguration | None:
+    if claim.get("region_stats_requested") is not True:
+        return None
+    raw = page.get("region_configuration")
+    if current is None:
+        return parse_region_configuration(
+            raw,
+            expected_revision=int(claim["region_configuration_revision"]),
+            expected_hash=str(claim["region_configuration_hash"]),
+        )
+    if not isinstance(raw, Mapping):
+        raise RegionStatsError(
+            "invalid_region_configuration",
+            "The pinned region configuration was invalid",
+        )
+    if (
+        raw.get("revision") != current.revision
+        or raw.get("hash") != current.hash
+        or raw.get("coordinate_space") != current.coordinate_space
+    ):
+        raise RegionStatsError(
+            "region_configuration_changed",
+            "The pinned region configuration changed during the build",
+        )
+    return current
+
+
 def _complete_scope(
     settings: Settings,
     claim: Mapping[str, object],
     artifact: GeneratedArtifact,
+    region_artifact: GeneratedArtifact | None = None,
     runtime_metrics: RuntimeMetrics | None = None,
 ) -> Mapping[str, object]:
     path = settings.complete_path_template.format(scope_id=claim["scope_id"])
+    payload: dict[str, object] = {
+        "artifact": {
+            "schema": ROLLUP_SCHEMA,
+            "generation": claim["next_generation"],
+            "source_revision": claim["source_revision"],
+            "source_coordinate_space": SOURCE_COORDINATE_SPACE,
+            "plane_coordinate_space": PLANE_COORDINATE_SPACE,
+            "source_cell_size": SOURCE_CELL_SIZE,
+            "metrics": list(METRICS),
+            "s3_bucket": artifact.bucket,
+            "s3_key": artifact.key,
+            "content_type": "application/json",
+            "encoding": "gzip",
+            "size_bytes": artifact.size_bytes,
+            "sha256": artifact.sha256,
+            "summary": artifact.summary,
+            "metadata": {"producer": WORKER_VERSION},
+        }
+    }
+    if region_artifact is not None:
+        payload["region_artifact"] = {
+            "schema": settings.region_schema,
+            "generation": claim["next_generation"],
+            "source_revision": claim["source_revision"],
+            "region_configuration": {
+                "revision": claim["region_configuration_revision"],
+                "hash": claim["region_configuration_hash"],
+                "coordinate_space": SOURCE_COORDINATE_SPACE,
+            },
+            "s3_bucket": region_artifact.bucket,
+            "s3_key": region_artifact.key,
+            "content_type": "application/json",
+            "encoding": "gzip",
+            "size_bytes": region_artifact.size_bytes,
+            "sha256": region_artifact.sha256,
+            "summary": region_artifact.summary,
+            "metadata": {"producer": WORKER_VERSION},
+        }
     data = _api_request(
         settings,
         "POST",
         path,
-        payload={
-            "artifact": {
-                "schema": ROLLUP_SCHEMA,
-                "generation": claim["next_generation"],
-                "source_revision": claim["source_revision"],
-                "source_coordinate_space": SOURCE_COORDINATE_SPACE,
-                "plane_coordinate_space": PLANE_COORDINATE_SPACE,
-                "source_cell_size": SOURCE_CELL_SIZE,
-                "metrics": list(METRICS),
-                "s3_bucket": artifact.bucket,
-                "s3_key": artifact.key,
-                "content_type": "application/json",
-                "encoding": "gzip",
-                "size_bytes": artifact.size_bytes,
-                "sha256": artifact.sha256,
-                "summary": artifact.summary,
-                "metadata": {"producer": WORKER_VERSION},
-            }
-        },
+        payload=payload,
         runtime_metrics=runtime_metrics,
     )
     return _processed_result(data)
@@ -858,6 +1068,181 @@ def _write_rollup_artifact(
     )
 
 
+def _write_region_rollup_artifact(
+    *,
+    settings: Settings,
+    claim: Mapping[str, object],
+    document: Mapping[str, object],
+    output_key: str,
+    summary: dict[str, object],
+    source_cells: int,
+    generated_at: str,
+) -> GeneratedArtifact:
+    with tempfile.NamedTemporaryFile(
+        prefix="region-stat-rollup-",
+        suffix=".json.gz",
+        delete=False,
+    ) as target:
+        path = Path(target.name)
+        try:
+            with gzip.GzipFile(
+                filename="",
+                fileobj=target,
+                mode="wb",
+                compresslevel=6,
+                mtime=0,
+            ) as compressed:
+                writer = _BoundedJsonWriter(
+                    compressed,
+                    MAX_DECOMPRESSED_REGION_OUTPUT_BYTES,
+                )
+                json.dump(
+                    document,
+                    writer,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+    size_bytes = path.stat().st_size
+    if size_bytes <= 0 or size_bytes > MAX_REGION_OUTPUT_ARTIFACT_BYTES:
+        path.unlink(missing_ok=True)
+        raise RollupError(
+            "region_output_artifact_too_large",
+            "The region-stat rollup output exceeded its supported size",
+            retryable=False,
+        )
+    digest = _file_sha256(path)
+    output_summary = {**summary, "decoded_size_bytes": writer.written}
+    metadata = {
+        "schema": settings.region_schema,
+        "scope-id": str(claim["scope_id"]),
+        "source-revision": str(claim["source_revision"]),
+        "generation": str(claim["next_generation"]),
+        "region-configuration-revision": str(
+            claim["region_configuration_revision"]
+        ),
+        "region-configuration-hash": str(claim["region_configuration_hash"]),
+        "generated-at": generated_at,
+        "sha256": digest,
+    }
+    try:
+        with path.open("rb") as source:
+            S3.put_object(
+                Bucket=settings.uploads_bucket,
+                Key=output_key,
+                Body=source,
+                ContentLength=size_bytes,
+                ContentType="application/json",
+                ContentEncoding="gzip",
+                ServerSideEncryption="AES256",
+                Metadata=metadata,
+                IfNoneMatch="*",
+            )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") not in {
+            "PreconditionFailed",
+            "412",
+        }:
+            path.unlink(missing_ok=True)
+            raise RollupError(
+                "region_output_storage_request_failed",
+                "The region-stat rollup output could not be written",
+                retryable=True,
+            ) from error
+        try:
+            _require_matching_existing_output(
+                settings,
+                output_key,
+                size_bytes,
+                digest,
+            )
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+    except BotoCoreError as error:
+        path.unlink(missing_ok=True)
+        raise RollupError(
+            "region_output_storage_request_failed",
+            "The region-stat rollup output could not be written",
+            retryable=True,
+        ) from error
+    return GeneratedArtifact(
+        path=path,
+        bucket=settings.uploads_bucket,
+        key=output_key,
+        size_bytes=size_bytes,
+        sha256=digest,
+        cell_count=source_cells,
+        summary=output_summary,
+        decoded_size_bytes=writer.written,
+    )
+
+
+def _region_generated_at(
+    settings: Settings,
+    claim: Mapping[str, object],
+    output_key: str,
+) -> str:
+    try:
+        existing = S3.head_object(
+            Bucket=settings.uploads_bucket,
+            Key=output_key,
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        }:
+            return _current_timestamp()
+        raise RollupError(
+            "region_output_storage_request_failed",
+            "The region-stat rollup output could not be inspected",
+            retryable=True,
+        ) from error
+    except BotoCoreError as error:
+        raise RollupError(
+            "region_output_storage_request_failed",
+            "The region-stat rollup output could not be inspected",
+            retryable=True,
+        ) from error
+
+    metadata = existing.get("Metadata") or {}
+    generated_at = metadata.get("generated-at")
+    expected = {
+        "schema": settings.region_schema,
+        "scope-id": str(claim["scope_id"]),
+        "source-revision": str(claim["source_revision"]),
+        "generation": str(claim["next_generation"]),
+        "region-configuration-revision": str(
+            claim["region_configuration_revision"]
+        ),
+        "region-configuration-hash": str(claim["region_configuration_hash"]),
+    }
+    if (
+        not isinstance(generated_at, str)
+        or not generated_at
+        or any(metadata.get(key) != value for key, value in expected.items())
+    ):
+        raise RollupError(
+            "immutable_generation_conflict",
+            "A region-stat rollup generation already contained incompatible metadata",
+            retryable=False,
+        )
+    try:
+        datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise RollupError(
+            "immutable_generation_conflict",
+            "A region-stat rollup generation already contained incompatible metadata",
+            retryable=False,
+        ) from error
+    return generated_at
+
+
 class _BoundedJsonWriter:
     def __init__(self, target: BinaryIO, max_bytes: int) -> None:
         self.target = target
@@ -895,7 +1280,7 @@ def _require_matching_existing_output(
     if existing.get("ContentLength") != size_bytes or metadata.get("sha256") != sha256:
         raise RollupError(
             "immutable_generation_conflict",
-            "A heatmap rollup generation already contained different content",
+            "A spatial rollup generation already contained different content",
             retryable=False,
         )
 
@@ -904,6 +1289,29 @@ def _mark_generation_active(
     settings: Settings,
     claim: Mapping[str, object],
     generated: GeneratedArtifact,
+    region_generated: GeneratedArtifact | None = None,
+) -> None:
+    _mark_artifact_active(
+        settings,
+        claim,
+        generated,
+        prefix=settings.output_prefix,
+    )
+    if region_generated is not None:
+        _mark_artifact_active(
+            settings,
+            claim,
+            region_generated,
+            prefix=settings.region_output_prefix,
+        )
+
+
+def _mark_artifact_active(
+    settings: Settings,
+    claim: Mapping[str, object],
+    generated: GeneratedArtifact,
+    *,
+    prefix: str,
 ) -> None:
     try:
         S3.put_object_tagging(
@@ -913,7 +1321,7 @@ def _mark_generation_active(
         )
         generation = int(claim["next_generation"])
         if generation > 1:
-            previous_key = _rollup_key(settings.output_prefix, str(claim["scope_id"]), generation - 1)
+            previous_key = _rollup_key(prefix, str(claim["scope_id"]), generation - 1)
             try:
                 S3.put_object_tagging(
                     Bucket=generated.bucket,
@@ -925,14 +1333,14 @@ def _mark_generation_active(
                     raise
     except (BotoCoreError, ClientError):
         # Activation already succeeded. Preserve readability and let lifecycle cleanup lag.
-        LOGGER.exception("Heatmap rollup generation tags could not be updated")
+        LOGGER.exception("Spatial rollup generation tags could not be updated")
 
 
 def _delete_generated_artifact(artifact: GeneratedArtifact) -> None:
     try:
         S3.delete_object(Bucket=artifact.bucket, Key=artifact.key)
     except (BotoCoreError, ClientError):
-        LOGGER.exception("A stale heatmap rollup generation could not be removed")
+        LOGGER.exception("A stale spatial rollup generation could not be removed")
 
 
 def _validate_input_manifest(settings: Settings, manifest: Mapping[str, object]) -> None:
@@ -941,7 +1349,7 @@ def _validate_input_manifest(settings: Settings, manifest: Mapping[str, object])
     if _required_string(manifest, "coordinate_space") != SOURCE_COORDINATE_SPACE:
         raise _invalid_artifact("An occupancy artifact coordinate space was unsupported")
     cell_size = _finite_number(manifest, "cell_size", artifact=True)
-    if not math.isclose(cell_size, SOURCE_CELL_SIZE):
+    if not _compatible_source_cell_size(cell_size):
         raise _invalid_artifact("An occupancy artifact cell size was unsupported")
     if _required_string(manifest, "s3_bucket") != settings.uploads_bucket:
         raise _invalid_artifact("An occupancy artifact bucket was not permitted")
@@ -960,8 +1368,19 @@ def _validate_occupancy_document(document: Mapping[str, object]) -> None:
     if document.get("coordinate_space") != SOURCE_COORDINATE_SPACE:
         raise _invalid_artifact("An occupancy artifact coordinate space was unsupported")
     cell_size = document.get("cell_size")
-    if isinstance(cell_size, bool) or not isinstance(cell_size, (int, float)) or not math.isclose(float(cell_size), SOURCE_CELL_SIZE):
+    if (
+        isinstance(cell_size, bool)
+        or not isinstance(cell_size, (int, float))
+        or not _compatible_source_cell_size(float(cell_size))
+    ):
         raise _invalid_artifact("An occupancy artifact cell size was unsupported")
+    ticks_per_second = document.get("ticks_per_second")
+    if (
+        isinstance(ticks_per_second, bool)
+        or not isinstance(ticks_per_second, (int, float))
+        or not math.isclose(float(ticks_per_second), 30.0)
+    ):
+        raise _invalid_artifact("An occupancy artifact tick rate was unsupported")
     occupancy = document.get("occupancy")
     if not isinstance(occupancy, list) or len(occupancy) > MAX_CELLS_PER_GROUP:
         raise _invalid_artifact("An occupancy artifact cell list was invalid")
@@ -979,6 +1398,34 @@ def _validated_claim(claim: Mapping[str, object]) -> dict[str, object]:
     eligibility = _required_string(claim, "eligibility")
     if eligibility not in {"public_stats", "validated"}:
         raise _invalid_input("A heatmap claim eligibility was invalid")
+    region_configuration_revision = claim.get("region_configuration_revision", 0)
+    if (
+        isinstance(region_configuration_revision, bool)
+        or not isinstance(region_configuration_revision, int)
+        or region_configuration_revision < 0
+    ):
+        raise _invalid_input("A heatmap claim region configuration was invalid")
+    region_configuration_hash = claim.get("region_configuration_hash")
+    if region_configuration_hash is not None:
+        if (
+            not isinstance(region_configuration_hash, str)
+            or len(region_configuration_hash) != 64
+            or any(
+                character not in "0123456789abcdefABCDEF"
+                for character in region_configuration_hash
+            )
+        ):
+            raise _invalid_input("A heatmap claim region configuration was invalid")
+        region_configuration_hash = region_configuration_hash.lower()
+    region_stats_requested = claim.get("region_stats_requested", False)
+    if not isinstance(region_stats_requested, bool):
+        raise _invalid_input("A heatmap claim region capability was invalid")
+    if region_stats_requested and (
+        region_configuration_revision < 1 or region_configuration_hash is None
+    ):
+        raise _invalid_input("A heatmap claim region configuration was missing")
+    if region_configuration_revision == 0 and region_configuration_hash is not None:
+        raise _invalid_input("A heatmap claim region configuration was invalid")
     return {
         "scope_id": _required_string(claim, "scope_id"),
         "scope_type": scope_type,
@@ -988,6 +1435,9 @@ def _validated_claim(claim: Mapping[str, object]) -> dict[str, object]:
         "source_revision": _required_int(claim, "source_revision", minimum=1),
         "built_revision": _required_int(claim, "built_revision", minimum=0),
         "next_generation": _required_int(claim, "next_generation", minimum=1),
+        "region_configuration_revision": region_configuration_revision,
+        "region_configuration_hash": region_configuration_hash,
+        "region_stats_requested": region_stats_requested,
     }
 
 
@@ -1044,13 +1494,29 @@ def _secret_value(secret_id: str) -> str:
 
 
 def _settings() -> Settings:
-    return Settings(
+    settings = Settings(
         app_api_base_url=_required_env("APP_API_BASE_URL").rstrip("/"),
         trusted_client_name=_required_env("APP_API_TRUSTED_CLIENT_NAME"),
         trusted_client_secret_id=_required_env("APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID"),
         uploads_bucket=_required_env("UPLOADS_BUCKET_NAME"),
         input_prefix=_prefix_env("SPATIAL_ARTIFACT_PREFIX", "replays/derived/spatial/"),
         output_prefix=_prefix_env("HEATMAP_ROLLUP_ARTIFACT_PREFIX", "replays/derived/heatmap-rollups/"),
+        region_output_prefix=_prefix_env(
+            "REGION_STAT_ROLLUP_ARTIFACT_PREFIX",
+            "replays/derived/region-stat-rollups/",
+        ),
+        region_schema=os.getenv("REGION_STAT_ROLLUP_SCHEMA", REGION_ROLLUP_SCHEMA),
+        region_capability=os.getenv(
+            "REGION_STATS_CAPABILITY",
+            REGION_STATS_CAPABILITY,
+        ),
+        region_stats_enabled=_bool_env("REGION_STATS_ENABLED", True),
+        region_max_membership_checks=_bounded_int_env(
+            "REGION_STATS_MAX_MEMBERSHIP_CHECKS",
+            5_000_000,
+            1,
+            100_000_000,
+        ),
         claim_path=os.getenv("APP_API_HEATMAP_ROLLUP_CLAIM_PATH", "/v1/ingest/heatmap-rollups/claim"),
         input_path_template=os.getenv("APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE", "/v1/ingest/heatmap-rollups/{scope_id}/inputs"),
         complete_path_template=os.getenv("APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE", "/v1/ingest/heatmap-rollups/{scope_id}/complete"),
@@ -1060,6 +1526,16 @@ def _settings() -> Settings:
         retry_after_seconds=_bounded_int_env("HEATMAP_ROLLUP_RETRY_AFTER_SECONDS", 300, 30, 86_400),
         request_timeout_seconds=_bounded_int_env("APP_API_REQUEST_TIMEOUT_SECONDS", 30, 1, 120),
     )
+    if (
+        settings.region_schema != REGION_ROLLUP_SCHEMA
+        or settings.region_capability != REGION_STATS_CAPABILITY
+    ):
+        raise RollupError(
+            "invalid_worker_configuration",
+            "The region-stat worker contract version was invalid",
+            retryable=False,
+        )
+    return settings
 
 
 def _rollup_key(prefix: str, scope_id: str, generation: int) -> str:
@@ -1070,8 +1546,10 @@ def _scope_result(
     status: str,
     accumulator: RollupAccumulator,
     artifact: GeneratedArtifact,
+    region_artifact: GeneratedArtifact | None,
     started: float,
 ) -> ScopeResult:
+    region_accumulator = accumulator.region_accumulator
     return ScopeResult(
         status=status,
         input_games=accumulator.games_selected,
@@ -1080,12 +1558,42 @@ def _scope_result(
         output_cells=artifact.cell_count,
         duration_ms=round((time.monotonic() - started) * 1000),
         output_decoded_bytes=artifact.decoded_size_bytes,
+        region_output_bytes=(
+            region_artifact.size_bytes if region_artifact is not None else 0
+        ),
+        region_output_decoded_bytes=(
+            region_artifact.decoded_size_bytes if region_artifact is not None else 0
+        ),
+        region_membership_checks=(
+            region_accumulator.membership_checks
+            if region_accumulator is not None
+            else 0
+        ),
+        region_source_cells=(
+            region_accumulator.source_cells if region_accumulator is not None else 0
+        ),
+        region_missing_games=(
+            region_accumulator.games_missing_data
+            if region_accumulator is not None
+            else 0
+        ),
+        region_incompatible_games=(
+            region_accumulator.incompatible_games
+            if region_accumulator is not None
+            else 0
+        ),
     )
 
 
 def _classified_error(error: Exception) -> RollupError:
     if isinstance(error, RollupError):
         return error
+    if isinstance(error, RegionStatsError):
+        return RollupError(
+            error.error_code,
+            error.safe_message,
+            retryable=False,
+        )
     if isinstance(error, (BotoCoreError, ClientError, OSError)):
         return RollupError(
             "worker_runtime_failed",
@@ -1183,6 +1691,39 @@ def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int
     return value
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    raise RollupError(
+        "invalid_worker_configuration",
+        f"The {name} worker setting was invalid",
+        retryable=False,
+    )
+
+
+def _compatible_source_cell_size(value: float) -> bool:
+    return (
+        math.isfinite(value)
+        and SOURCE_CELL_SIZE <= value <= 1_000
+        and math.isclose(value / SOURCE_CELL_SIZE, round(value / SOURCE_CELL_SIZE))
+    )
+
+
+def _current_timestamp() -> str:
+    return (
+        datetime.now(UTC)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
 def _group_sort_key(group: tuple[int, int]) -> tuple[int, int]:
     return group
 
@@ -1226,6 +1767,13 @@ def _emit_metrics(totals: Mapping[str, int], *, duration_ms: int) -> None:
         "OutputBytes": totals["output_bytes"],
         "OutputDecodedBytes": totals["output_decoded_bytes"],
         "OutputCells": totals["output_cells"],
+        "RegionOutputBytes": totals["region_output_bytes"],
+        "RegionOutputDecodedBytes": totals["region_output_decoded_bytes"],
+        "RegionMembershipChecks": totals["region_membership_checks"],
+        "RegionSourceCells": totals["region_source_cells"],
+        "RegionMissingGames": totals["region_missing_games"],
+        "RegionIncompatibleGames": totals["region_incompatible_games"],
+        "RegionArtifactsWritten": totals["region_artifacts_written"],
         "S3Gets": totals["s3_gets"],
         "ApiRequests": totals["api_requests"],
         "ApiDuration": totals["api_duration_ms"],
@@ -1253,6 +1801,8 @@ def _emit_metrics(totals: Mapping[str, int], *, duration_ms: int) -> None:
                                             "InputDecodedBytes",
                                             "OutputBytes",
                                             "OutputDecodedBytes",
+                                            "RegionOutputBytes",
+                                            "RegionOutputDecodedBytes",
                                         }
                                         else "Kilobytes"
                                         if name == "ProcessPeakRssKiB"

@@ -38,6 +38,12 @@ variable "storage" {
       noncurrent_version_expiration_days = optional(number, 30)
       abort_incomplete_multipart_days    = optional(number, 7)
     }), {})
+    region_stat_rollup_artifacts = optional(object({
+      prefix                             = optional(string, "replays/derived/region-stat-rollups")
+      superseded_expiration_days         = optional(number, 30)
+      noncurrent_version_expiration_days = optional(number, 30)
+      abort_incomplete_multipart_days    = optional(number, 7)
+    }), {})
   })
   default = {}
 
@@ -63,6 +69,16 @@ variable "storage" {
       var.storage.heatmap_rollup_artifacts.abort_incomplete_multipart_days > 0
     )
     error_message = "Heatmap rollup artifact lifecycle values must use a non-empty prefix and positive day counts."
+  }
+
+  validation {
+    condition = (
+      trim(var.storage.region_stat_rollup_artifacts.prefix, "/") != "" &&
+      var.storage.region_stat_rollup_artifacts.superseded_expiration_days > 0 &&
+      var.storage.region_stat_rollup_artifacts.noncurrent_version_expiration_days > 0 &&
+      var.storage.region_stat_rollup_artifacts.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Region-stat rollup artifact lifecycle values must use a non-empty prefix and positive day counts."
   }
 }
 

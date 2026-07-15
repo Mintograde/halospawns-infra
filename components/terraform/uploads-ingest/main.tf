@@ -63,6 +63,43 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
     }
   }
 
+  rule {
+    id     = "region-stat-rollup-artifact-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = local.region_stat_rollup_artifact_prefix
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.storage.region_stat_rollup_artifacts.noncurrent_version_expiration_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.storage.region_stat_rollup_artifacts.abort_incomplete_multipart_days
+    }
+  }
+
+  rule {
+    id     = "region-stat-rollup-superseded-generations"
+    status = "Enabled"
+
+    filter {
+      and {
+        prefix                   = local.region_stat_rollup_artifact_prefix
+        object_size_greater_than = 0
+        object_size_less_than    = 5368709120
+        tags = {
+          halospawns-rollup-state = "superseded"
+        }
+      }
+    }
+
+    expiration {
+      days = var.storage.region_stat_rollup_artifacts.superseded_expiration_days
+    }
+  }
+
   depends_on = [module.uploads_bucket]
 }
 

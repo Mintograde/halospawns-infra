@@ -171,8 +171,8 @@ resource "terraform_data" "heatmap_rollup_worker_required_inputs" {
     }
 
     precondition {
-      condition     = local.replay_spatial_artifact_prefix != "" && local.heatmap_rollup_artifact_prefix != ""
-      error_message = "The heatmap rollup worker input and output prefixes must be non-empty."
+      condition     = local.replay_spatial_artifact_prefix != "" && local.heatmap_rollup_artifact_prefix != "" && local.region_stat_rollup_artifact_prefix != ""
+      error_message = "The spatial rollup worker input and output prefixes must be non-empty."
     }
   }
 }
@@ -212,6 +212,11 @@ module "heatmap_rollup_worker" {
       UPLOADS_BUCKET_NAME                           = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       SPATIAL_ARTIFACT_PREFIX                       = "${local.replay_spatial_artifact_prefix}/"
       HEATMAP_ROLLUP_ARTIFACT_PREFIX                = "${local.heatmap_rollup_artifact_prefix}/"
+      REGION_STAT_ROLLUP_ARTIFACT_PREFIX            = "${local.region_stat_rollup_artifact_prefix}/"
+      REGION_STAT_ROLLUP_SCHEMA                     = "halospawns.regionStatsRollup.v1"
+      REGION_STATS_CAPABILITY                       = "region_stats_v1"
+      REGION_STATS_ENABLED                          = tostring(var.heatmap_rollup_worker.region_stats.enabled)
+      REGION_STATS_MAX_MEMBERSHIP_CHECKS            = tostring(var.heatmap_rollup_worker.region_stats.max_membership_checks)
       APP_API_BASE_URL                              = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME                   = local.heatmap_rollup_worker_trusted_hmac_client
       APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID         = local.heatmap_rollup_worker_trusted_service_hmac_secret_id

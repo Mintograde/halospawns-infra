@@ -21,6 +21,7 @@ components:
             upload_prefix: replays/unprocessed
             asset_read_prefix: replays/processed
             heatmap_rollup_artifact_prefix: replays/derived/heatmap-rollups
+            region_stat_rollup_artifact_prefix: replays/derived/region-stat-rollups
           url_ttl_seconds: 900
         rendering:
           output_prefix_template: maps/processed/{upload_id}/screenshots/v1/

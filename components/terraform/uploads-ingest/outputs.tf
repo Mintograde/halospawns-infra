@@ -21,6 +21,11 @@ output "file_processing_queue_arns" {
   }
 }
 
+output "region_stat_rollup_artifact_prefix" {
+  description = "Stable S3 prefix for immutable region-stat rollup generations."
+  value       = local.region_stat_rollup_artifact_prefix
+}
+
 output "pipelines" {
   description = "Upload processing contracts keyed by upload type."
   value = {
