@@ -14,6 +14,8 @@ TICKS_PER_SECOND = 30.0
 MAX_REGION_SETS = 20
 MAX_REGIONS = 100
 MAX_COLLECTIONS = 50
+MAX_GEOMETRIES_PER_REGION = 16
+MAX_GEOMETRIES_PER_SET = 400
 MAX_GROUPS = 64
 MAX_COUNTER = 9_007_199_254_740_991
 STABLE_KEY_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
@@ -45,12 +47,7 @@ class CellBounds:
 
 
 @dataclass(frozen=True)
-class RegionDefinition:
-    set_id: str
-    id: str
-    key: str
-    label: str | None
-    display_color: str | None
+class RegionGeometry:
     minimum: tuple[float, float, float]
     maximum: tuple[float, float, float]
     exact_bounds: CellBounds
@@ -66,6 +63,19 @@ class RegionDefinition:
                 math.ceil(value / cell_size - 0.5) for value in self.maximum
             ),
         )
+
+
+@dataclass(frozen=True)
+class RegionDefinition:
+    set_id: str
+    id: str
+    key: str
+    label: str | None
+    display_color: str | None
+    geometries: tuple[RegionGeometry, ...]
+
+    def bounds_for(self, cell_size: float) -> tuple[CellBounds, ...]:
+        return tuple(geometry.bounds_for(cell_size) for geometry in self.geometries)
 
 
 @dataclass(frozen=True)
@@ -111,6 +121,10 @@ class RegionAccumulator:
         self.source_cell_sizes: set[float] = set()
         self.precisions: set[str] = set()
         self.membership_checks = 0
+        self._charged_membership_checks = 0
+        self._component_count = sum(
+            len(region.geometries) for region in configuration.regions
+        )
         self.source_cells = 0
         self.group_totals: dict[str, int] = defaultdict(int)
         self.region_totals: dict[tuple[str, str], int] = defaultdict(int)
@@ -119,7 +133,7 @@ class RegionAccumulator:
         self._participants_by_slot: Mapping[int, tuple[str, int | None]] = {}
         self._game_ticks = 0
         self._classify_current_game = False
-        self._bounds: dict[str, CellBounds] = {}
+        self._bounds: dict[str, tuple[CellBounds, ...]] = {}
         self._collection_members = {
             item.id: frozenset(item.region_ids) for item in configuration.collections
         }
@@ -188,7 +202,10 @@ class RegionAccumulator:
                 observed_ticks,
             )
             return
-        if self.membership_checks + len(self.configuration.regions) > self.max_membership_checks:
+        if (
+            self._charged_membership_checks + self._component_count
+            > self.max_membership_checks
+        ):
             raise RegionStatsError(
                 "region_membership_limit_exceeded",
                 "Region classification exceeded its configured work limit",
@@ -198,7 +215,7 @@ class RegionAccumulator:
         group_keys = ("all", _team_group_key(team_index))
         matched_ids: set[str] = set()
         self.source_cells += 1
-        self.membership_checks += len(self.configuration.regions)
+        self._charged_membership_checks += self._component_count
         self._game_ticks = _checked_add(self._game_ticks, observed_ticks)
         self.observed_player_ticks_total = _checked_add(
             self.observed_player_ticks_total,
@@ -207,8 +224,11 @@ class RegionAccumulator:
         self.participants_contributing.add(participant_id)
 
         for region in self.configuration.regions:
-            if self._bounds[region.id].contains(cell):
-                matched_ids.add(region.id)
+            for component_bounds in self._bounds[region.id]:
+                self.membership_checks += 1
+                if component_bounds.contains(cell):
+                    matched_ids.add(region.id)
+                    break
 
         for group_key in group_keys:
             self.group_totals[group_key] = _checked_add(
@@ -411,6 +431,7 @@ def parse_region_configuration(
         set_regions: list[dict[str, object]] = []
         set_region_ids: set[str] = set()
         set_region_keys: set[str] = set()
+        set_geometry_count = 0
         for region_raw in regions_raw:
             region = _parse_region(region_raw, set_id=set_id)
             if (
@@ -422,6 +443,7 @@ def parse_region_configuration(
             region_ids.add(region.id)
             set_region_ids.add(region.id)
             set_region_keys.add(region.key)
+            set_geometry_count += len(region.geometries)
             regions.append(region)
             set_regions.append(
                 {
@@ -430,6 +452,11 @@ def parse_region_configuration(
                     "display_name": region.label,
                     "display_color": region.display_color,
                 }
+            )
+        if set_geometry_count > MAX_GEOMETRIES_PER_SET:
+            raise RegionStatsError(
+                "region_configuration_limit_exceeded",
+                "The published region configuration exceeded rollup schema limits",
             )
 
         set_collections: list[dict[str, object]] = []
@@ -491,7 +518,30 @@ def _parse_region(value: object, *, set_id: str) -> RegionDefinition:
     color = _optional_bounded_string(value, "display_color", maximum=7)
     if color is not None and not DISPLAY_COLOR_PATTERN.fullmatch(color):
         raise _configuration_error()
-    geometry = value.get("geometry")
+    geometries_raw = value.get("geometries")
+    if geometries_raw is None:
+        geometries_raw = [value.get("geometry")]
+    elif (
+        not isinstance(geometries_raw, list)
+        or not 1 <= len(geometries_raw) <= MAX_GEOMETRIES_PER_REGION
+    ):
+        raise _configuration_error()
+    geometries = tuple(_parse_geometry(item) for item in geometries_raw)
+    bounds = {(geometry.minimum, geometry.maximum) for geometry in geometries}
+    if len(bounds) != len(geometries):
+        raise _configuration_error()
+    return RegionDefinition(
+        set_id=set_id,
+        id=region_id,
+        key=key,
+        label=label,
+        display_color=color,
+        geometries=geometries,
+    )
+
+
+def _parse_geometry(value: object) -> RegionGeometry:
+    geometry = value
     if not isinstance(geometry, Mapping):
         raise _configuration_error()
     if (
@@ -516,12 +566,7 @@ def _parse_region(value: object, *, set_id: str) -> RegionDefinition:
         minimum=tuple(round(value / SOURCE_CELL_SIZE) for value in minimum),
         maximum=tuple(round(value / SOURCE_CELL_SIZE) for value in maximum),
     )
-    return RegionDefinition(
-        set_id=set_id,
-        id=region_id,
-        key=key,
-        label=label,
-        display_color=color,
+    return RegionGeometry(
         minimum=minimum,
         maximum=maximum,
         exact_bounds=exact_bounds,

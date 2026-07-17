@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -62,6 +63,20 @@ def _region_claim(**overrides: object) -> dict[str, object]:
     return claim
 
 
+def _region_geometry(
+    minimum: tuple[float, float, float],
+    maximum: tuple[float, float, float],
+) -> dict[str, object]:
+    return {
+        "type": "axis_aligned_box",
+        "coordinate_space": handler.SOURCE_COORDINATE_SPACE,
+        "boundary": "min_inclusive_max_exclusive",
+        "snap_size": 0.5,
+        "min": dict(zip(("x", "y", "z"), minimum, strict=True)),
+        "max": dict(zip(("x", "y", "z"), maximum, strict=True)),
+    }
+
+
 def _region_configuration() -> dict[str, object]:
     region_ids = [
         "10000000-0000-4000-8000-000000000001",
@@ -81,14 +96,10 @@ def _region_configuration() -> dict[str, object]:
             "key": key,
             "display_name": key.title(),
             "display_color": color,
-            "geometry": {
-                "type": "axis_aligned_box",
-                "coordinate_space": handler.SOURCE_COORDINATE_SPACE,
-                "boundary": "min_inclusive_max_exclusive",
-                "snap_size": 0.5,
-                "min": {"x": minimum_x, "y": -1.0, "z": 0.0},
-                "max": {"x": maximum_x, "y": 1.0, "z": 1.0},
-            },
+            "geometry": _region_geometry(
+                (minimum_x, -1.0, 0.0),
+                (maximum_x, 1.0, 1.0),
+            ),
         }
 
     return {
@@ -322,17 +333,18 @@ class RegionRollupTests(unittest.TestCase):
         self,
         *,
         claim: dict[str, object] | None = None,
+        configuration: dict[str, object] | None = None,
         max_membership_checks: int = 5_000_000,
     ) -> handler.RollupAccumulator:
         selected_claim = claim or _region_claim()
-        configuration = handler.parse_region_configuration(
-            _region_configuration(),
+        parsed_configuration = handler.parse_region_configuration(
+            configuration if configuration is not None else _region_configuration(),
             expected_revision=2,
             expected_hash="b" * 64,
         )
         region_accumulator = handler.RegionAccumulator(
             claim=selected_claim,
-            configuration=configuration,
+            configuration=parsed_configuration,
             max_membership_checks=max_membership_checks,
         )
         return handler.RollupAccumulator(
@@ -389,6 +401,143 @@ class RegionRollupTests(unittest.TestCase):
         self.assertEqual(summary["region_membership_checks"], 15)
         self.assertFalse(summary["coverage_complete"])
 
+    def test_parser_retains_singular_fallback_and_accepts_compatibility_list(self) -> None:
+        configuration = _region_configuration()
+        first_region = configuration["sets"][0]["regions"][0]
+        first_region["geometries"] = [deepcopy(first_region["geometry"])]
+
+        parsed = handler.parse_region_configuration(
+            configuration,
+            expected_revision=2,
+            expected_hash="b" * 64,
+        )
+
+        self.assertEqual([len(region.geometries) for region in parsed.regions], [1, 1, 1])
+
+    def test_disjoint_components_match_direct_api_fixture_as_one_region(self) -> None:
+        configuration = _region_configuration()
+        set_document = configuration["sets"][0]
+        region = set_document["regions"][0]
+        region["geometries"] = [
+            region["geometry"],
+            _region_geometry((2.0, -1.0, 0.0), (3.0, 1.0, 1.0)),
+        ]
+        region["geometry"] = None
+        set_document["regions"] = [region]
+        set_document["collections"] = []
+        document = _region_occupancy_document()
+        document["coverage"] = {"status": "available"}
+        document["occupancy"] = [
+            {"slot_index": 0, "cell": [-1, 0, 0], "observed_ticks": 45},
+            {"slot_index": 0, "cell": [4, 0, 0], "observed_ticks": 15},
+        ]
+
+        accumulator = self._accumulator(configuration=configuration)
+        accumulator.add_game(
+            _region_game(document=document),
+            occupancy_loader=lambda manifest: (document, 20),
+        )
+
+        assert accumulator.region_accumulator is not None
+        region_document = accumulator.region_accumulator.document(
+            generated_at="2026-07-17T12:00:00Z"
+        )
+        self.assertEqual(
+            {
+                "observed_player_ticks": region_document["groups"][0]["regions"][0][
+                    "observed_player_ticks"
+                ],
+                "region_membership_checks": region_document["summary"][
+                    "region_membership_checks"
+                ],
+            },
+            {
+                "observed_player_ticks": 60,
+                "region_membership_checks": 3,
+            },
+        )
+        heatmap_ticks = sum(
+            cell["value"]
+            for group in accumulator.document()["metrics"]["occupancy"]["groups"]
+            for cell in group["cells"]
+        )
+        self.assertEqual(heatmap_ticks, 60)
+
+    def test_adjacent_components_preserve_exclusive_max_boundary(self) -> None:
+        configuration = _region_configuration()
+        set_document = configuration["sets"][0]
+        region = set_document["regions"][0]
+        region["geometry"] = None
+        region["geometries"] = [
+            _region_geometry((-2.0, -1.0, 0.0), (0.0, 1.0, 1.0)),
+            _region_geometry((0.0, -1.0, 0.0), (2.0, 1.0, 1.0)),
+        ]
+        set_document["regions"] = [region]
+        set_document["collections"] = []
+        document = _region_occupancy_document()
+        document["coverage"] = {"status": "available"}
+        document["occupancy"] = [
+            {"slot_index": 0, "cell": [-1, 0, 0], "observed_ticks": 3},
+            {"slot_index": 0, "cell": [0, 0, 0], "observed_ticks": 4},
+        ]
+
+        accumulator = self._accumulator(configuration=configuration)
+        accumulator.add_game(
+            _region_game(document=document),
+            occupancy_loader=lambda manifest: (document, 20),
+        )
+
+        assert accumulator.region_accumulator is not None
+        result = accumulator.region_accumulator.document(
+            generated_at="2026-07-17T12:00:00Z"
+        )
+        self.assertEqual(result["groups"][0]["regions"][0]["observed_player_ticks"], 7)
+        self.assertEqual(result["summary"]["region_membership_checks"], 3)
+
+    def test_self_overlap_counts_once_and_collection_overlap_remains_logical(self) -> None:
+        configuration = _region_configuration()
+        set_document = configuration["sets"][0]
+        multi_box = set_document["regions"][0]
+        center = set_document["regions"][2]
+        multi_box["geometries"] = [
+            multi_box["geometry"],
+            _region_geometry((-1.0, -1.0, 0.0), (1.0, 1.0, 1.0)),
+        ]
+        multi_box["geometry"] = None
+        set_document["regions"] = [multi_box, center]
+        collection = set_document["collections"][1]
+        collection["region_ids"] = [multi_box["id"], center["id"]]
+        set_document["collections"] = [collection]
+        document = _region_occupancy_document()
+        document["coverage"] = {"status": "available"}
+        document["occupancy"] = [
+            {"slot_index": 0, "cell": [-1, 0, 0], "observed_ticks": 30},
+            {"slot_index": 0, "cell": [-3, 0, 0], "observed_ticks": 15},
+        ]
+
+        accumulator = self._accumulator(configuration=configuration)
+        accumulator.add_game(
+            _region_game(document=document),
+            occupancy_loader=lambda manifest: (document, 20),
+        )
+
+        assert accumulator.region_accumulator is not None
+        result = accumulator.region_accumulator.document(
+            generated_at="2026-07-17T12:00:00Z"
+        )
+        all_group = result["groups"][0]
+        self.assertEqual(
+            [item["observed_player_ticks"] for item in all_group["regions"]],
+            [45, 30],
+        )
+        self.assertEqual(
+            {
+                key: all_group["collections"][0][key]
+                for key in ("member_ticks", "union_ticks", "overlap_ticks")
+            },
+            {"member_ticks": 75, "union_ticks": 45, "overlap_ticks": 30},
+        )
+
     def test_coarser_voxels_use_center_membership_and_projection(self) -> None:
         document = _region_occupancy_document(cell_size=1.0)
         document["coverage"] = {"status": "available"}
@@ -416,6 +565,37 @@ class RegionRollupTests(unittest.TestCase):
         )
         heatmap_cells = accumulator.document()["metrics"]["occupancy"]["groups"][0]["cells"]
         self.assertEqual(heatmap_cells, [{"cell": [-1, -1], "value": 3}, {"cell": [1, -1], "value": 4}])
+
+    def test_coarser_voxel_center_matches_later_component(self) -> None:
+        configuration = _region_configuration()
+        set_document = configuration["sets"][0]
+        region = set_document["regions"][0]
+        region["geometry"] = None
+        region["geometries"] = [
+            _region_geometry((-2.0, -1.0, 0.0), (0.0, 1.0, 1.0)),
+            _region_geometry((2.0, -1.0, 0.0), (3.0, 1.0, 1.0)),
+        ]
+        set_document["regions"] = [region]
+        set_document["collections"] = []
+        document = _region_occupancy_document(cell_size=1.0)
+        document["coverage"] = {"status": "available"}
+        document["occupancy"] = [
+            {"slot_index": 0, "cell": [2, 0, 0], "observed_ticks": 4},
+        ]
+
+        accumulator = self._accumulator(configuration=configuration)
+        accumulator.add_game(
+            _region_game(document=document),
+            occupancy_loader=lambda manifest: (document, 20),
+        )
+
+        assert accumulator.region_accumulator is not None
+        result = accumulator.region_accumulator.document(
+            generated_at="2026-07-17T12:00:00Z"
+        )
+        self.assertEqual(result["groups"][0]["regions"][0]["observed_player_ticks"], 4)
+        self.assertEqual(result["summary"]["membership_precision"], "voxel_center")
+        self.assertEqual(result["summary"]["region_membership_checks"], 2)
 
     def test_missing_and_incompatible_games_are_bounded_coverage_not_failures(self) -> None:
         accumulator = self._accumulator()
@@ -450,6 +630,46 @@ class RegionRollupTests(unittest.TestCase):
         self.assertEqual(raised.exception.error_code, "region_membership_limit_exceeded")
         self.assertNotIn("axis_aligned_box", raised.exception.safe_message)
 
+    def test_membership_limit_charges_all_components_but_metric_counts_attempts(self) -> None:
+        configuration = _region_configuration()
+        set_document = configuration["sets"][0]
+        region = set_document["regions"][0]
+        region["geometry"] = None
+        region["geometries"] = [
+            _region_geometry((-2.0, -1.0, 0.0), (0.0, 1.0, 1.0)),
+            _region_geometry((2.0, -1.0, 0.0), (3.0, 1.0, 1.0)),
+            _region_geometry((4.0, -1.0, 0.0), (5.0, 1.0, 1.0)),
+        ]
+        set_document["regions"] = [region]
+        set_document["collections"] = []
+        document = _region_occupancy_document()
+        document["coverage"] = {"status": "available"}
+        document["occupancy"] = [
+            {"slot_index": 0, "cell": [-1, 0, 0], "observed_ticks": 3},
+        ]
+
+        limited = self._accumulator(
+            configuration=configuration,
+            max_membership_checks=2,
+        )
+        with self.assertRaises(handler.RegionStatsError) as raised:
+            limited.add_game(
+                _region_game(document=document),
+                occupancy_loader=lambda manifest: (document, 20),
+            )
+        self.assertEqual(raised.exception.error_code, "region_membership_limit_exceeded")
+
+        allowed = self._accumulator(
+            configuration=configuration,
+            max_membership_checks=3,
+        )
+        allowed.add_game(
+            _region_game(document=document),
+            occupancy_loader=lambda manifest: (document, 20),
+        )
+        assert allowed.region_accumulator is not None
+        self.assertEqual(allowed.region_accumulator.summary()["region_membership_checks"], 1)
+
     def test_configuration_parser_rejects_unsnapped_geometry(self) -> None:
         configuration = _region_configuration()
         configuration["sets"][0]["regions"][0]["geometry"]["min"]["x"] = -1.9
@@ -460,6 +680,71 @@ class RegionRollupTests(unittest.TestCase):
                 expected_hash="b" * 64,
             )
         self.assertEqual(raised.exception.error_code, "invalid_region_configuration")
+
+    def test_configuration_parser_rejects_invalid_component_lists(self) -> None:
+        duplicate = _region_geometry((-2.0, -1.0, 0.0), (0.0, 1.0, 1.0))
+        invalid_second = _region_geometry((2.0, -1.0, 0.0), (3.0, 1.0, 1.0))
+        invalid_second["min"]["x"] = 2.25
+        cases = {
+            "empty": [],
+            "duplicate": [duplicate, deepcopy(duplicate)],
+            "over_limit": [
+                _region_geometry(
+                    (float(index), -1.0, 0.0),
+                    (float(index) + 0.5, 1.0, 1.0),
+                )
+                for index in range(17)
+            ],
+            "invalid_later_component": [duplicate, invalid_second],
+            "not_a_list": "invalid",
+        }
+        for name, geometries in cases.items():
+            with self.subTest(name=name):
+                configuration = _region_configuration()
+                configuration["sets"][0]["regions"][0]["geometries"] = geometries
+                with self.assertRaises(handler.RegionStatsError) as raised:
+                    handler.parse_region_configuration(
+                        configuration,
+                        expected_revision=2,
+                        expected_hash="b" * 64,
+                    )
+                self.assertEqual(
+                    raised.exception.error_code,
+                    "invalid_region_configuration",
+                )
+
+    def test_configuration_parser_rejects_per_set_component_limit(self) -> None:
+        configuration = _region_configuration()
+        geometries = [
+            _region_geometry(
+                (float(index), -1.0, 0.0),
+                (float(index) + 0.5, 1.0, 1.0),
+            )
+            for index in range(16)
+        ]
+        configuration["sets"][0]["regions"] = [
+            {
+                "id": f"50000000-0000-4000-8000-{index + 1:012d}",
+                "key": f"region-{index}",
+                "display_name": f"Region {index}",
+                "display_color": None,
+                "geometry": None,
+                "geometries": deepcopy(geometries),
+            }
+            for index in range(26)
+        ]
+        configuration["sets"][0]["collections"] = []
+
+        with self.assertRaises(handler.RegionStatsError) as raised:
+            handler.parse_region_configuration(
+                configuration,
+                expected_revision=2,
+                expected_hash="b" * 64,
+            )
+        self.assertEqual(
+            raised.exception.error_code,
+            "region_configuration_limit_exceeded",
+        )
 
 
 class DeterminismAndIntegrityTests(unittest.TestCase):

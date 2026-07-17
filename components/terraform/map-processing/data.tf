@@ -48,6 +48,18 @@ data "aws_iam_policy_document" "heatmap_rollup_worker_runtime" {
   count = var.heatmap_rollup_worker.enabled ? 1 : 0
 
   statement {
+    sid       = "ListRegionStatRollupArtifacts"
+    actions   = ["s3:ListBucket"]
+    resources = [data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${local.region_stat_rollup_artifact_prefix}/*"]
+    }
+  }
+
+  statement {
     sid       = "ReadGameOccupancyArtifacts"
     actions   = ["s3:GetObject"]
     resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.replay_spatial_artifact_prefix}/*"]
