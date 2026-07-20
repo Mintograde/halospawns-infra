@@ -75,6 +75,10 @@ resource "aws_lambda_function" "this" {
     variables = var.environment_variables
   }
 
+  tracing_config {
+    mode = var.tracing_mode
+  }
+
   lifecycle {
     ignore_changes = [
       filename,

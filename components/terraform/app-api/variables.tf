@@ -133,6 +133,26 @@ variable "rendering" {
   }
 }
 
+variable "observability" {
+  description = "App API dashboard, saved queries, alerts, and X-Ray tracing configuration. Alert subscriptions are optional and keyed by a stable subscription name."
+  type = object({
+    enabled = optional(bool, false)
+    alert_subscriptions = optional(map(object({
+      protocol = string
+      endpoint = string
+    })), {})
+  })
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for name, subscription in var.observability.alert_subscriptions :
+      trimspace(name) != "" && trimspace(subscription.protocol) != "" && trimspace(subscription.endpoint) != ""
+    ])
+    error_message = "observability.alert_subscriptions keys, protocols, and endpoints must be non-empty."
+  }
+}
+
 variable "release" {
   description = "App Lambda runtime, artifact publishing, updater, and GitHub OIDC configuration."
   type = object({

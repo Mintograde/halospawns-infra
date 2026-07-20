@@ -88,6 +88,19 @@ data "aws_iam_policy_document" "app_runtime" {
   }
 
   dynamic "statement" {
+    for_each = var.observability.enabled ? [1] : []
+
+    content {
+      sid = "EmitXRayTraces"
+      actions = [
+        "xray:PutTelemetryRecords",
+        "xray:PutTraceSegments",
+      ]
+      resources = ["*"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = local.uploads_bucket_arn == null ? [] : [1]
 
     content {

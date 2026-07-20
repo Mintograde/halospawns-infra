@@ -43,6 +43,26 @@ output "app_lambda_alias_arn" {
   value       = var.enabled ? module.app_lambda[0].alias_arn : null
 }
 
+output "app_api_dashboard_name" {
+  description = "CloudWatch dashboard name for the app API observability bundle."
+  value       = local.app_api_observability_enabled ? aws_cloudwatch_dashboard.app_api[0].dashboard_name : null
+}
+
+output "app_api_alert_topic_arn" {
+  description = "SNS topic ARN receiving app API alarm and OK notifications."
+  value       = local.app_api_observability_enabled ? aws_sns_topic.app_api_alerts[0].arn : null
+}
+
+output "app_api_alarm_names" {
+  description = "CloudWatch alarm names for the app API observability bundle."
+  value       = local.app_api_observability_enabled ? local.app_api_alarm_names : {}
+}
+
+output "app_api_query_definition_names" {
+  description = "Saved CloudWatch Logs Insights query names for the app API."
+  value       = sort([for query in aws_cloudwatch_query_definition.app_api : query.name])
+}
+
 output "artifact_bucket_name" {
   description = "S3 bucket used for API release artifacts."
   value       = var.enabled ? aws_s3_bucket.artifacts[0].id : null

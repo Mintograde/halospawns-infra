@@ -362,6 +362,7 @@ module "app_lambda" {
   alias_name    = var.release.lambda.alias_name
   timeout       = var.release.lambda.timeout_seconds
   memory_size   = var.release.lambda.memory_mb
+  tracing_mode  = var.observability.enabled ? "Active" : "PassThrough"
 
   environment_variables = local.app_lambda_environment
   policies_json         = [data.aws_iam_policy_document.app_runtime[0].json]

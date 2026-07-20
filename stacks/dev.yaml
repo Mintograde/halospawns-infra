@@ -79,6 +79,9 @@ components:
         release:
           github:
             environment: dev
+        observability:
+          enabled: true
+          alert_subscriptions: {}
         trusted_services:
           secret_names:
             heatmap-processing: /halospawns/dev/app-api/trusted-clients/heatmap-processing/hmac-secret

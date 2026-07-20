@@ -86,6 +86,17 @@ variable "layers" {
   default     = []
 }
 
+variable "tracing_mode" {
+  description = "Lambda X-Ray tracing mode."
+  type        = string
+  default     = "PassThrough"
+
+  validation {
+    condition     = contains(["Active", "PassThrough"], var.tracing_mode)
+    error_message = "tracing_mode must be Active or PassThrough."
+  }
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention in days. Leave null for CloudWatch's default retention."
   type        = number
