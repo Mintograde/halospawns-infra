@@ -43,12 +43,18 @@ variable "dependencies" {
       uploads_ingest = optional(string)
     }), {})
     queues = optional(object({
-      map_rendering     = optional(string)
-      map_rendering_dlq = optional(string)
-      replay_processing = optional(string)
+      map_rendering                       = optional(string)
+      map_rendering_dlq                   = optional(string)
+      map_rendering_age_threshold_seconds = optional(number, 300)
+      replay_processing                   = optional(string)
     }), {})
   })
   default = {}
+
+  validation {
+    condition     = var.dependencies.queues.map_rendering_age_threshold_seconds > 0
+    error_message = "dependencies.queues.map_rendering_age_threshold_seconds must be positive."
+  }
 }
 
 variable "domain" {
@@ -137,7 +143,8 @@ variable "rendering" {
 variable "observability" {
   description = "App API dashboard, saved queries, alerts, and X-Ray tracing configuration. Alert subscriptions are optional and keyed by a stable subscription name."
   type = object({
-    enabled = optional(bool, false)
+    enabled                = optional(bool, false)
+    additional_alarm_names = optional(set(string), [])
     alert_subscriptions = optional(map(object({
       protocol = string
       endpoint = string
@@ -151,6 +158,14 @@ variable "observability" {
       trimspace(name) != "" && trimspace(subscription.protocol) != "" && trimspace(subscription.endpoint) != ""
     ])
     error_message = "observability.alert_subscriptions keys, protocols, and endpoints must be non-empty."
+  }
+
+  validation {
+    condition = alltrue([
+      for alarm_name in var.observability.additional_alarm_names :
+      trimspace(alarm_name) != ""
+    ])
+    error_message = "observability.additional_alarm_names values must be non-empty."
   }
 }
 

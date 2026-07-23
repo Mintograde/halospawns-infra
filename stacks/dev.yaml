@@ -50,6 +50,7 @@ components:
           queues:
             map_rendering: map-rendering-queue
             map_rendering_dlq: map-rendering-dlq
+            map_rendering_age_threshold_seconds: 300
             replay_processing: replays-processing-queue
         domain:
           name: api.dev.halospawns.com
@@ -82,6 +83,13 @@ components:
             environment: dev
         observability:
           enabled: true
+          additional_alarm_names:
+            - halospawns-dev-heatmap-rollup-dlq
+            - halospawns-dev-heatmap-rollup-duration
+            - halospawns-dev-heatmap-rollup-errors
+            - halospawns-dev-heatmap-rollup-scope-failures
+            - halospawns-dev-map-rendering-dlq-depth
+            - halospawns-dev-map-rendering-queue-age
           alert_subscriptions: {}
         trusted_services:
           secret_names:

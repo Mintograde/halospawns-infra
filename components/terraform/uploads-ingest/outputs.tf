@@ -30,9 +30,14 @@ output "pipelines" {
   description = "Upload processing contracts keyed by upload type."
   value = {
     for name, queue in aws_sqs_queue.file_processing : name => {
-      queue_name         = queue.name
-      queue_arn          = queue.arn
-      queue_url          = queue.url
+      queue_name = queue.name
+      queue_arn  = queue.arn
+      queue_url  = queue.url
+      queue_age_threshold_seconds = lookup(
+        var.observability.queue_age_threshold_seconds,
+        name,
+        local.pipelines[name].visibility_timeout_seconds,
+      )
       dlq_name           = aws_sqs_queue.file_dlq[name].name
       dlq_arn            = aws_sqs_queue.file_dlq[name].arn
       dlq_url            = aws_sqs_queue.file_dlq[name].url

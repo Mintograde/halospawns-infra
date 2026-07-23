@@ -75,7 +75,7 @@ locals {
     )
 
     recent-server-errors = trimspace(<<-QUERY
-      fields @timestamp, @message
+      fields @timestamp
       | filter @message like /"event":"api_error"/
           or @message like /"event":"unhandled_exception"/
           or @message like /"outcome":"server_error"/
@@ -85,6 +85,7 @@ locals {
       | parse @message /"event":"(?<event>[^"]+)"/
       | parse @message /"error_type":"(?<error_type>[^"]+)"/
       | sort @timestamp desc
+      | display @timestamp, request_id, trace_value, route, event, error_type
       | limit 100
     QUERY
     )
@@ -115,35 +116,75 @@ locals {
     },
   )
 
+  dashboard_processing_palette = {
+    maps = {
+      primary   = "#2F80ED"
+      secondary = "#56CCF2"
+    }
+    replays = {
+      primary   = "#27AE60"
+      secondary = "#6FCF97"
+    }
+    map-rendering = {
+      primary   = "#F2994A"
+      secondary = "#F2C94C"
+    }
+  }
+
   dashboard_upload_pipelines = try(data.terraform_remote_state.uploads_ingest[0].outputs.pipelines, {})
   dashboard_processing_queues = concat(
     [
       for name, pipeline in local.dashboard_upload_pipelines : {
-        label      = "${title(name)} processing"
-        queue_name = pipeline.queue_name
-        dlq_name   = try(pipeline.dlq_name, element(split(":", pipeline.dlq_arn), 5))
+        key                         = name
+        label                       = "${title(name)} processing"
+        short_label                 = title(name)
+        queue_name                  = pipeline.queue_name
+        dlq_name                    = try(pipeline.dlq_name, element(split(":", pipeline.dlq_arn), 5))
+        queue_age_threshold_seconds = try(pipeline.queue_age_threshold_seconds, name == "maps" ? 900 : 300)
+        primary_color               = local.dashboard_processing_palette[name].primary
+        secondary_color             = local.dashboard_processing_palette[name].secondary
       }
     ],
     local.map_rendering_queue_name == null || local.map_rendering_dlq_name == null ? [] : [
       {
-        label      = "Map rendering"
-        queue_name = local.map_rendering_queue_name
-        dlq_name   = local.map_rendering_dlq_name
+        key                         = "map-rendering"
+        label                       = "Map rendering"
+        short_label                 = "Rendering"
+        queue_name                  = local.map_rendering_queue_name
+        dlq_name                    = local.map_rendering_dlq_name
+        queue_age_threshold_seconds = var.dependencies.queues.map_rendering_age_threshold_seconds
+        primary_color               = local.dashboard_processing_palette["map-rendering"].primary
+        secondary_color             = local.dashboard_processing_palette["map-rendering"].secondary
       }
     ],
   )
+
+  dashboard_queue_age_threshold_labels = {
+    for queue in local.dashboard_processing_queues :
+    tostring(queue.queue_age_threshold_seconds) => queue.short_label...
+  }
 
   dashboard_cloudfront_distributions = concat(
     try(data.terraform_remote_state.frontend_site[0].outputs.cloudfront_distribution_id, null) == null ? [] : [
       {
         label           = "Frontend"
         distribution_id = data.terraform_remote_state.frontend_site[0].outputs.cloudfront_distribution_id
+        primary_color   = "#2F80ED"
+        secondary_color = "#56CCF2"
+        tertiary_color  = "#9B51E0"
+        error_4xx_color = "#F2C94C"
+        error_5xx_color = "#EB5757"
       }
     ],
     try(data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_distribution_id, null) == null ? [] : [
       {
         label           = "Uploads CDN"
         distribution_id = data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_distribution_id
+        primary_color   = "#27AE60"
+        secondary_color = "#6FCF97"
+        tertiary_color  = "#219653"
+        error_4xx_color = "#F2994A"
+        error_5xx_color = "#B83280"
       }
     ],
   )
@@ -156,6 +197,20 @@ locals {
     lambda_errors                   = "${var.project}-${var.environment}-app-api-lambda-errors"
     lambda_throttles                = "${var.project}-${var.environment}-app-api-lambda-throttles"
   }
+
+  dashboard_upload_alarm_names = flatten([
+    for alarm_group in values(try(data.terraform_remote_state.uploads_ingest[0].outputs.processing_queue_alarm_names, {})) :
+    values(alarm_group)
+  ])
+  dashboard_alarm_names = sort(distinct(concat(
+    values(local.app_api_alarm_names),
+    local.dashboard_upload_alarm_names,
+    tolist(var.observability.additional_alarm_names),
+  )))
+  dashboard_alarm_arns = [
+    for alarm_name in local.dashboard_alarm_names :
+    "arn:${data.aws_partition.current.partition}:cloudwatch:${var.region}:${data.aws_caller_identity.current.account_id}:alarm:${alarm_name}"
+  ]
 }
 
 resource "aws_cloudwatch_query_definition" "app_api" {
@@ -324,12 +379,69 @@ resource "aws_cloudwatch_dashboard" "app_api" {
 
   dashboard_name = local.app_api_dashboard_name
   dashboard_body = jsonencode({
-    start = "-PT24H"
+    start          = "-PT6H"
+    periodOverride = "inherit"
     widgets = [
+      {
+        type   = "alarm"
+        x      = 0
+        y      = 0
+        width  = 18
+        height = 4
+        properties = {
+          title  = "Active alarms"
+          alarms = local.dashboard_alarm_arns
+          states = [
+            "ALARM",
+            "INSUFFICIENT_DATA",
+          ]
+          sortBy = "stateUpdatedTimestamp"
+        }
+      },
+      {
+        type   = "text"
+        x      = 0
+        y      = 4
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "### API and Lambda"
+        }
+      },
+      {
+        type   = "text"
+        x      = 0
+        y      = 17
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "### Processing"
+        }
+      },
+      {
+        type   = "text"
+        x      = 0
+        y      = 24
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "### Edge delivery"
+        }
+      },
+      {
+        type   = "text"
+        x      = 0
+        y      = 31
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "### Diagnostics"
+        }
+      },
       {
         type   = "metric"
         x      = 0
-        y      = 0
+        y      = 5
         width  = 12
         height = 6
         properties = {
@@ -339,16 +451,36 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           period  = 300
           stacked = false
           metrics = [
-            ["AWS/ApiGateway", "Count", "ApiId", module.api[0].api_id, { label = "Requests", stat = "Sum" }],
-            ["AWS/ApiGateway", "4xx", "ApiId", module.api[0].api_id, { label = "4xx", stat = "Sum" }],
-            ["AWS/ApiGateway", "5xx", "ApiId", module.api[0].api_id, { label = "5xx", stat = "Sum" }],
+            ["AWS/ApiGateway", "Count", "ApiId", module.api[0].api_id, { color = "#2F80ED", label = "Requests", stat = "Sum" }],
+            ["AWS/ApiGateway", "4xx", "ApiId", module.api[0].api_id, { color = "#F2C94C", label = "4xx", stat = "Sum", yAxis = "right" }],
+            ["AWS/ApiGateway", "5xx", "ApiId", module.api[0].api_id, { color = "#EB5757", label = "5xx", stat = "Sum", yAxis = "right" }],
           ]
+          annotations = {
+            horizontal = [
+              {
+                color = "#EB5757"
+                label = "5xx alarm (3)"
+                value = 3
+                yAxis = "right"
+              },
+            ]
+          }
+          yAxis = {
+            left = {
+              label = "Requests"
+              min   = 0
+            }
+            right = {
+              label = "Errors"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "metric"
         x      = 12
-        y      = 0
+        y      = 5
         width  = 12
         height = 6
         properties = {
@@ -358,19 +490,34 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           period  = 300
           stacked = false
           metrics = [
-            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { label = "Latency p50", stat = "p50" }],
-            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { label = "Latency p95", stat = "p95" }],
-            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { label = "Latency p99", stat = "p99" }],
-            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { label = "Integration p50", stat = "p50" }],
-            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { label = "Integration p95", stat = "p95" }],
-            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { label = "Integration p99", stat = "p99" }],
+            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { color = "#2F80ED", label = "Latency p50", stat = "p50" }],
+            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { color = "#F2994A", label = "Latency p95", stat = "p95" }],
+            ["AWS/ApiGateway", "Latency", "ApiId", module.api[0].api_id, { color = "#EB5757", label = "Latency p99", stat = "p99" }],
+            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { color = "#56CCF2", label = "Integration p50", stat = "p50" }],
+            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { color = "#27AE60", label = "Integration p95", stat = "p95" }],
+            ["AWS/ApiGateway", "IntegrationLatency", "ApiId", module.api[0].api_id, { color = "#9B51E0", label = "Integration p99", stat = "p99" }],
           ]
+          annotations = {
+            horizontal = [
+              {
+                color = "#EB5757"
+                label = "Integration p95 alarm (3s)"
+                value = 3000
+              },
+            ]
+          }
+          yAxis = {
+            left = {
+              label = "Milliseconds"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "metric"
         x      = 0
-        y      = 6
+        y      = 11
         width  = 8
         height = 6
         properties = {
@@ -380,16 +527,36 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           period  = 300
           stacked = false
           metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", module.app_lambda[0].function_name, { label = "Invocations", stat = "Sum" }],
-            ["AWS/Lambda", "Errors", "FunctionName", module.app_lambda[0].function_name, { label = "Errors", stat = "Sum" }],
-            ["AWS/Lambda", "Throttles", "FunctionName", module.app_lambda[0].function_name, { label = "Throttles", stat = "Sum" }],
+            ["AWS/Lambda", "Invocations", "FunctionName", module.app_lambda[0].function_name, { color = "#2F80ED", label = "Invocations", stat = "Sum" }],
+            ["AWS/Lambda", "Errors", "FunctionName", module.app_lambda[0].function_name, { color = "#EB5757", label = "Errors", stat = "Sum", yAxis = "right" }],
+            ["AWS/Lambda", "Throttles", "FunctionName", module.app_lambda[0].function_name, { color = "#F2994A", label = "Throttles", stat = "Sum", yAxis = "right" }],
           ]
+          annotations = {
+            horizontal = [
+              {
+                color = "#EB5757"
+                label = "Error/throttle alarm (1)"
+                value = 1
+                yAxis = "right"
+              },
+            ]
+          }
+          yAxis = {
+            left = {
+              label = "Invocations"
+              min   = 0
+            }
+            right = {
+              label = "Errors"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "metric"
         x      = 8
-        y      = 6
+        y      = 11
         width  = 10
         height = 6
         properties = {
@@ -399,17 +566,32 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           period  = 300
           stacked = false
           metrics = [
-            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { label = "p50", stat = "p50" }],
-            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { label = "p95", stat = "p95" }],
-            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { label = "p99", stat = "p99" }],
-            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { label = "Maximum", stat = "Maximum" }],
+            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { color = "#2F80ED", label = "p50", stat = "p50" }],
+            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { color = "#F2994A", label = "p95", stat = "p95" }],
+            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { color = "#EB5757", label = "p99", stat = "p99" }],
+            ["AWS/Lambda", "Duration", "FunctionName", module.app_lambda[0].function_name, { color = "#9B51E0", label = "Maximum", stat = "Maximum" }],
           ]
+          annotations = {
+            horizontal = [
+              {
+                color = "#EB5757"
+                label = "p95 alarm (5s)"
+                value = 5000
+              },
+            ]
+          }
+          yAxis = {
+            left = {
+              label = "Milliseconds"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "metric"
         x      = 18
-        y      = 6
+        y      = 11
         width  = 6
         height = 6
         properties = {
@@ -419,16 +601,22 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           period  = 300
           stacked = false
           metrics = [
-            ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", module.app_lambda[0].function_name, { label = "Maximum", stat = "Maximum" }],
+            ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", module.app_lambda[0].function_name, { color = "#27AE60", label = "Maximum", stat = "Maximum" }],
           ]
+          yAxis = {
+            left = {
+              label = "Executions"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "log"
         x      = 0
-        y      = 12
+        y      = 39
         width  = 12
-        height = 8
+        height = 7
         properties = {
           title   = "Route performance"
           view    = "table"
@@ -440,9 +628,9 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       {
         type   = "log"
         x      = 12
-        y      = 12
+        y      = 39
         width  = 12
-        height = 8
+        height = 7
         properties = {
           title   = "Database hotspots"
           view    = "table"
@@ -453,10 +641,10 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       },
       {
         type   = "log"
-        x      = 0
-        y      = 20
-        width  = 12
-        height = 8
+        x      = 14
+        y      = 46
+        width  = 10
+        height = 5
         properties = {
           title   = "Cold versus warm"
           view    = "table"
@@ -467,10 +655,10 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       },
       {
         type   = "log"
-        x      = 12
-        y      = 20
+        x      = 0
+        y      = 32
         width  = 12
-        height = 8
+        height = 7
         properties = {
           title   = "Recent server errors"
           view    = "table"
@@ -482,9 +670,9 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       {
         type   = "log"
         x      = 0
-        y      = 28
-        width  = 12
-        height = 8
+        y      = 46
+        width  = 14
+        height = 7
         properties = {
           title   = "Slow requests"
           view    = "table"
@@ -496,9 +684,9 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       {
         type   = "log"
         x      = 12
-        y      = 28
+        y      = 32
         width  = 12
-        height = 8
+        height = 7
         properties = {
           title   = "Recent API Gateway failures"
           view    = "table"
@@ -510,43 +698,58 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       {
         type   = "metric"
         x      = 0
-        y      = 36
+        y      = 18
         width  = 12
         height = 6
         properties = {
           title   = "Processing queue backlog"
           view    = "timeSeries"
           region  = var.region
-          period  = 300
+          period  = 60
           stacked = false
           metrics = concat(
             [
               for queue in local.dashboard_processing_queues :
-              ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.queue_name, { label = "${queue.label} visible", stat = "Maximum" }]
+              ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.queue_name, { color = queue.primary_color, label = "${queue.short_label} visible", stat = "Maximum" }]
             ],
             [
               for queue in local.dashboard_processing_queues :
-              ["AWS/SQS", "ApproximateNumberOfMessagesNotVisible", "QueueName", queue.queue_name, { label = "${queue.label} in flight", stat = "Maximum" }]
+              ["AWS/SQS", "ApproximateNumberOfMessagesNotVisible", "QueueName", queue.queue_name, { color = queue.secondary_color, label = "${queue.short_label} in flight", stat = "Maximum" }]
             ],
           )
+          yAxis = {
+            left = {
+              label = "Messages"
+              min   = 0
+            }
+          }
         }
       },
       {
         type   = "metric"
         x      = 12
-        y      = 36
+        y      = 18
         width  = 12
         height = 6
         properties = {
           title   = "Oldest processing message"
           view    = "timeSeries"
           region  = var.region
-          period  = 300
+          period  = 60
           stacked = false
           metrics = [
             for queue in local.dashboard_processing_queues :
-            ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", queue.queue_name, { label = queue.label, stat = "Maximum" }]
+            ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", queue.queue_name, { color = queue.primary_color, label = queue.short_label, stat = "Maximum" }]
           ]
+          annotations = {
+            horizontal = [
+              for threshold, labels in local.dashboard_queue_age_threshold_labels : {
+                color = threshold == "300" ? "#EB5757" : "#F2994A"
+                label = "${join("/", labels)} alarm (${threshold}s)"
+                value = tonumber(threshold)
+              }
+            ]
+          }
           yAxis = {
             left = {
               label = "Seconds"
@@ -557,26 +760,26 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       },
       {
         type   = "metric"
-        x      = 0
-        y      = 42
-        width  = 24
-        height = 6
+        x      = 18
+        y      = 0
+        width  = 6
+        height = 4
         properties = {
           title     = "Processing dead-letter queues"
           view      = "singleValue"
           region    = var.region
-          period    = 300
+          period    = 60
           sparkline = true
           metrics = [
             for queue in local.dashboard_processing_queues :
-            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.dlq_name, { label = "${queue.label} DLQ", stat = "Maximum" }]
+            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.dlq_name, { color = queue.primary_color, label = "${queue.short_label} DLQ", stat = "Maximum" }]
           ]
         }
       },
       {
         type   = "metric"
         x      = 0
-        y      = 48
+        y      = 25
         width  = 12
         height = 6
         properties = {
@@ -588,15 +791,15 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           metrics = concat(
             [
               for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "Requests", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} requests", stat = "Sum" }]
+              ["AWS/CloudFront", "Requests", "DistributionId", distribution.distribution_id, "Region", "Global", { color = distribution.primary_color, label = "${distribution.label} requests", stat = "Sum" }]
             ],
             [
               for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "BytesDownloaded", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} downloaded", stat = "Sum", yAxis = "right" }]
+              ["AWS/CloudFront", "BytesDownloaded", "DistributionId", distribution.distribution_id, "Region", "Global", { color = distribution.secondary_color, label = "${distribution.label} downloaded", stat = "Sum", yAxis = "right" }]
             ],
             [
               for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "BytesUploaded", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} uploaded", stat = "Sum", yAxis = "right" }]
+              ["AWS/CloudFront", "BytesUploaded", "DistributionId", distribution.distribution_id, "Region", "Global", { color = distribution.tertiary_color, label = "${distribution.label} uploaded", stat = "Sum", yAxis = "right" }]
             ],
           )
           yAxis = {
@@ -614,7 +817,7 @@ resource "aws_cloudwatch_dashboard" "app_api" {
       {
         type   = "metric"
         x      = 12
-        y      = 48
+        y      = 25
         width  = 12
         height = 6
         properties = {
@@ -626,15 +829,11 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           metrics = concat(
             [
               for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "TotalErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} total", stat = "Average" }]
+              ["AWS/CloudFront", "4xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { color = distribution.error_4xx_color, label = "${distribution.label} 4xx", stat = "Average" }]
             ],
             [
               for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "4xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} 4xx", stat = "Average" }]
-            ],
-            [
-              for distribution in local.dashboard_cloudfront_distributions :
-              ["AWS/CloudFront", "5xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} 5xx", stat = "Average" }]
+              ["AWS/CloudFront", "5xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { color = distribution.error_5xx_color, label = "${distribution.label} 5xx", stat = "Average" }]
             ],
           )
           yAxis = {
