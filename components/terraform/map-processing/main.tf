@@ -108,16 +108,16 @@ module "native_maps_processor" {
       MAP_PROCESSED_PREFIX                           = "${local.map_processed_prefix}/"
       MAP_FAILED_PREFIX                              = "${local.map_failed_prefix}/"
       MAP_SUPPORT_RESOURCE_PREFIX                    = "${local.map_support_resource_prefix}/"
-      APP_API_MAP_FINALIZATION_PATH                  = var.callbacks.paths.map_finalization
-      APP_API_MAP_SUPPORT_RESOURCE_INGEST_PATH       = var.callbacks.paths.map_support_resource_ingest
-      APP_API_MAP_SUPPORT_RESOURCE_RESOLVE_PATH      = var.callbacks.paths.map_support_resource_resolve
-      APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = var.callbacks.paths.processing_status_template
+      APP_API_MAP_FINALIZATION_PATH                  = local.app_api_contract.map_finalization
+      APP_API_MAP_SUPPORT_RESOURCE_INGEST_PATH       = local.app_api_contract.map_support_resource_ingest
+      APP_API_MAP_SUPPORT_RESOURCE_RESOLVE_PATH      = local.app_api_contract.map_support_resource_resolve
+      APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = local.app_api_contract.upload_processing_status
       REPORT_BATCH_ITEM_FAILURES                     = tostring(var.native_maps.event_source.report_batch_item_failures)
     },
     var.native_maps.enqueue_render_jobs ? {
       MAP_RENDERING_QUEUE_URL            = aws_sqs_queue.map_rendering.url
       MAP_RENDER_OUTPUT_PREFIX_TEMPLATE  = "${local.map_processed_prefix}/{upload_id}/screenshots/v1/"
-      APP_API_MAP_SCREENSHOT_INGEST_PATH = var.callbacks.paths.map_screenshot_ingest
+      APP_API_MAP_SCREENSHOT_INGEST_PATH = local.app_api_contract.map_screenshot_ingest
       RENDER_SET_NAME                    = var.renderer.render_set.name
       RENDER_SET_VERSION                 = tostring(var.renderer.render_set.version)
     } : {},
@@ -220,10 +220,10 @@ module "heatmap_rollup_worker" {
       APP_API_BASE_URL                              = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME                   = local.heatmap_rollup_worker_trusted_hmac_client
       APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID         = local.heatmap_rollup_worker_trusted_service_hmac_secret_id
-      APP_API_HEATMAP_ROLLUP_CLAIM_PATH             = var.callbacks.paths.heatmap_rollup_claim
-      APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE   = var.callbacks.paths.heatmap_rollup_inputs_template
-      APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE = var.callbacks.paths.heatmap_rollup_complete_template
-      APP_API_HEATMAP_ROLLUP_FAILED_PATH_TEMPLATE   = var.callbacks.paths.heatmap_rollup_failed_template
+      APP_API_HEATMAP_ROLLUP_CLAIM_PATH             = local.app_api_contract.heatmap_rollup_claim
+      APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE   = local.app_api_contract.heatmap_rollup_inputs
+      APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE = local.app_api_contract.heatmap_rollup_complete
+      APP_API_HEATMAP_ROLLUP_FAILED_PATH_TEMPLATE   = local.app_api_contract.heatmap_rollup_failed
       HEATMAP_ROLLUP_INPUT_PAGE_LIMIT               = tostring(var.heatmap_rollup_worker.processing.input_page_limit)
       HEATMAP_ROLLUP_MAX_SCOPES_PER_INVOCATION      = tostring(var.heatmap_rollup_worker.processing.max_scopes_per_invocation)
       HEATMAP_ROLLUP_RETRY_AFTER_SECONDS            = tostring(var.heatmap_rollup_worker.processing.retry_after_seconds)
@@ -371,7 +371,7 @@ module "map_renderer" {
       ENVIRONMENT                        = var.environment
       UPLOADS_BUCKET_NAME                = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       MAP_RENDER_OUTPUT_PREFIX_TEMPLATE  = "${local.map_processed_prefix}/{upload_id}/screenshots/v1/"
-      APP_API_MAP_SCREENSHOT_INGEST_PATH = var.callbacks.paths.map_screenshot_ingest
+      APP_API_MAP_SCREENSHOT_INGEST_PATH = local.app_api_contract.map_screenshot_ingest
       APP_API_TRUSTED_CLIENT_NAME        = local.map_renderer_trusted_hmac_client
       REPORT_BATCH_ITEM_FAILURES         = tostring(var.renderer.event_source.report_batch_item_failures)
       RENDER_SET_NAME                    = var.renderer.render_set.name
@@ -518,7 +518,7 @@ module "sqs_lambda_consumers" {
       APP_API_BASE_URL                               = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME                    = each.value.trusted_service_hmac_client_name
       APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID          = local.trusted_service_hmac_secret_ids_by_client[each.value.trusted_service_hmac_client_name]
-      APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = var.callbacks.paths.processing_status_template
+      APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = local.app_api_contract.upload_processing_status
     },
     each.value.environment_variables,
   )

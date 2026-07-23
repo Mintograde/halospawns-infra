@@ -23,8 +23,6 @@ data "terraform_remote_state" "uploads_ingest" {
 }
 
 data "terraform_remote_state" "app_api" {
-  count = var.dependencies.state_keys.app_api == null ? 0 : 1
-
   backend = "s3"
   config = {
     bucket  = var.dependencies.state_bucket

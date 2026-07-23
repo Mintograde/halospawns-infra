@@ -23,29 +23,29 @@ variable "profile" {
 }
 
 variable "dependencies" {
-  description = "Remote-state dependencies and optional app API URL override."
+  description = "Remote-state dependencies."
   type = object({
     state_bucket = string
     state_keys = object({
       ecr            = string
       uploads_ingest = string
-      app_api        = optional(string)
+      app_api        = string
     })
-    app_api_base_url = optional(string)
   })
 
   validation {
     condition = (
       trimspace(var.dependencies.state_bucket) != "" &&
       trimspace(var.dependencies.state_keys.ecr) != "" &&
-      trimspace(var.dependencies.state_keys.uploads_ingest) != ""
+      trimspace(var.dependencies.state_keys.uploads_ingest) != "" &&
+      trimspace(var.dependencies.state_keys.app_api) != ""
     )
-    error_message = "dependencies state bucket and required state keys must not be empty."
+    error_message = "dependencies state bucket and state keys must not be empty."
   }
 }
 
 variable "callbacks" {
-  description = "App API callback paths and trusted HMAC client names."
+  description = "Trusted HMAC client names used for App API callbacks."
   type = object({
     clients = optional(object({
       maps     = optional(string, "map-processing")
@@ -53,28 +53,12 @@ variable "callbacks" {
       renderer = optional(string, "map-rendering")
       heatmaps = optional(string, "heatmap-processing")
     }), {})
-    paths = optional(object({
-      processing_status_template       = optional(string, "/v1/uploads/{upload_id}/processing-status")
-      replay_finalization              = optional(string, "/v1/ingest/replay-uploads")
-      replay_reprocess_status_template = optional(string, "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status")
-      map_finalization                 = optional(string, "/v1/ingest/map-uploads")
-      map_support_resource_ingest      = optional(string, "/v1/ingest/map-support-resources")
-      map_support_resource_resolve     = optional(string, "/v1/ingest/map-support-resources/resolve")
-      map_screenshot_ingest            = optional(string, "/v1/ingest/map-screenshots")
-      heatmap_rollup_claim             = optional(string, "/v1/ingest/heatmap-rollups/claim")
-      heatmap_rollup_inputs_template   = optional(string, "/v1/ingest/heatmap-rollups/{scope_id}/inputs")
-      heatmap_rollup_complete_template = optional(string, "/v1/ingest/heatmap-rollups/{scope_id}/complete")
-      heatmap_rollup_failed_template   = optional(string, "/v1/ingest/heatmap-rollups/{scope_id}/failed")
-    }), {})
   })
   default = {}
 
   validation {
-    condition = alltrue(concat(
-      [for client in values(var.callbacks.clients) : trimspace(client) != ""],
-      [for path in values(var.callbacks.paths) : startswith(path, "/")],
-    ))
-    error_message = "Callback client names must not be empty and callback paths must start with '/'."
+    condition     = alltrue([for client in values(var.callbacks.clients) : trimspace(client) != ""])
+    error_message = "Callback client names must not be empty."
   }
 }
 
@@ -82,9 +66,6 @@ variable "storage" {
   description = "Uploads bucket prefixes used by processing workloads."
   type = object({
     maps = optional(object({
-      unprocessed       = optional(string, "maps/unprocessed")
-      processed         = optional(string, "maps/processed")
-      failed            = optional(string, "maps/failed")
       support_resources = optional(string, "maps/support-resources")
     }), {})
     replays = optional(object({
@@ -97,15 +78,12 @@ variable "storage" {
 
   validation {
     condition = (
-      trim(var.storage.maps.unprocessed, "/") != "" &&
-      trim(var.storage.maps.processed, "/") != "" &&
-      trim(var.storage.maps.failed, "/") != "" &&
       trim(var.storage.maps.support_resources, "/") != "" &&
       trim(var.storage.replays.spatial_artifacts, "/") != "" &&
       trim(var.storage.replays.heatmap_rollups, "/") != "" &&
       trim(var.storage.replays.region_stat_rollups, "/") != ""
     )
-    error_message = "Map and replay storage prefixes, including heatmap and region-stat rollups, must be non-empty."
+    error_message = "Support-resource and replay artifact storage prefixes must be non-empty."
   }
 }
 

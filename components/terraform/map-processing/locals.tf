@@ -5,20 +5,7 @@ locals {
   normalized_maps_artifact_release_prefix = trimsuffix(var.release.maps.artifact_prefix, "/") == "" ? "" : "${trimsuffix(var.release.maps.artifact_prefix, "/")}/"
   normalized_map_renderer_release_prefix  = trimsuffix(var.release.renderer.artifact_prefix, "/") == "" ? "" : "${trimsuffix(var.release.renderer.artifact_prefix, "/")}/"
 
-  upload_pipelines = try(data.terraform_remote_state.uploads_ingest.outputs.pipelines, {
-    maps = {
-      queue_arn          = data.terraform_remote_state.uploads_ingest.outputs.file_processing_queue_arns["maps"]
-      unprocessed_prefix = "${trim(var.storage.maps.unprocessed, "/")}/"
-      processed_prefix   = "${trim(var.storage.maps.processed, "/")}/"
-      failed_prefix      = "${trim(var.storage.maps.failed, "/")}/"
-    }
-    replays = {
-      queue_arn          = data.terraform_remote_state.uploads_ingest.outputs.file_processing_queue_arns["replays"]
-      unprocessed_prefix = "replays/unprocessed/"
-      processed_prefix   = "replays/processed/"
-      failed_prefix      = "replays/failed/"
-    }
-  })
+  upload_pipelines = data.terraform_remote_state.uploads_ingest.outputs.pipelines
 
   map_unprocessed_prefix             = trim(local.upload_pipelines.maps.unprocessed_prefix, "/")
   map_processed_prefix               = trim(local.upload_pipelines.maps.processed_prefix, "/")
@@ -42,16 +29,14 @@ locals {
   map_renderer_trusted_hmac_client          = var.callbacks.clients.renderer
   heatmap_rollup_worker_trusted_hmac_client = var.callbacks.clients.heatmaps
 
-  app_api_remote_domain_name = try(data.terraform_remote_state.app_api[0].outputs.api_domain_name, null)
-  app_api_remote_endpoint    = try(data.terraform_remote_state.app_api[0].outputs.api_endpoint, null)
-  app_api_remote_base_url    = local.app_api_remote_domain_name != null && local.app_api_remote_domain_name != "" ? "https://${local.app_api_remote_domain_name}" : local.app_api_remote_endpoint
-  app_api_base_url           = var.dependencies.app_api_base_url != null && trimspace(var.dependencies.app_api_base_url) != "" ? trimsuffix(trimspace(var.dependencies.app_api_base_url), "/") : (local.app_api_remote_base_url == null ? null : trimsuffix(trimspace(local.app_api_remote_base_url), "/"))
-
-  trusted_service_hmac_secret_ids_by_client = try(data.terraform_remote_state.app_api[0].outputs.trusted_service_hmac_secret_names, {})
-  trusted_service_hmac_secret_arns_by_client = try(
-    data.terraform_remote_state.app_api[0].outputs.trusted_service_hmac_secret_arns,
-    {},
+  app_api_contract = data.terraform_remote_state.app_api.outputs.api_contract
+  app_api_base_url = local.app_api_contract.base_url == null ? null : trimsuffix(
+    trimspace(local.app_api_contract.base_url),
+    "/",
   )
+
+  trusted_service_hmac_secret_ids_by_client  = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_secret_names
+  trusted_service_hmac_secret_arns_by_client = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_secret_arns
 
   trusted_service_hmac_secret_id = try(local.trusted_service_hmac_secret_ids_by_client[local.native_maps_processor_trusted_hmac_client], null)
 
@@ -76,7 +61,7 @@ locals {
       event_source_enabled             = var.replay_parser.event_source_enabled
       trusted_service_hmac_client_name = local.replay_parser_trusted_hmac_client
       environment_variables = merge({
-        APP_API_REPLAY_FINALIZATION_PATH = var.callbacks.paths.replay_finalization
+        APP_API_REPLAY_FINALIZATION_PATH = local.app_api_contract.replay_finalization
         REPLAY_UNPROCESSED_PREFIX        = local.upload_pipelines.replays.unprocessed_prefix
         REPLAY_PROCESSED_PREFIX          = local.upload_pipelines.replays.processed_prefix
         REPLAY_FAILED_PREFIX             = local.upload_pipelines.replays.failed_prefix
