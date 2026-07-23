@@ -33,7 +33,9 @@ output "pipelines" {
       queue_name         = queue.name
       queue_arn          = queue.arn
       queue_url          = queue.url
+      dlq_name           = aws_sqs_queue.file_dlq[name].name
       dlq_arn            = aws_sqs_queue.file_dlq[name].arn
+      dlq_url            = aws_sqs_queue.file_dlq[name].url
       unprocessed_prefix = local.pipelines[name].unprocessed_prefix
       processed_prefix   = local.pipelines[name].processed_prefix
       failed_prefix      = local.pipelines[name].failed_prefix
@@ -44,6 +46,16 @@ output "pipelines" {
 output "cloudfront_distribution_domain_name" {
   description = "Domain name of the CloudFront distribution."
   value       = aws_cloudfront_distribution.s3_distribution.domain_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "ID of the uploads CloudFront distribution."
+  value       = aws_cloudfront_distribution.s3_distribution.id
+}
+
+output "processing_queue_alarm_names" {
+  description = "CloudWatch queue-age and dead-letter queue alarm names by upload type."
+  value       = var.observability.enabled ? local.processing_queue_alarm_names : {}
 }
 
 output "cloudfront_key_id" {

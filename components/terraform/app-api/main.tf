@@ -16,6 +16,7 @@ locals {
   uploads_bucket_name          = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
   uploads_bucket_arn           = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
   map_rendering_queue_name     = var.dependencies.queues.map_rendering == null || trimspace(var.dependencies.queues.map_rendering) == "" ? null : trimspace(var.dependencies.queues.map_rendering)
+  map_rendering_dlq_name       = var.dependencies.queues.map_rendering_dlq == null || trimspace(var.dependencies.queues.map_rendering_dlq) == "" ? null : trimspace(var.dependencies.queues.map_rendering_dlq)
   map_rendering_queue_url      = try(data.aws_sqs_queue.map_rendering[0].url, null)
   map_rendering_queue_arn      = try(data.aws_sqs_queue.map_rendering[0].arn, null)
   replay_processing_queue_name = var.dependencies.queues.replay_processing == null || trimspace(var.dependencies.queues.replay_processing) == "" ? null : trimspace(var.dependencies.queues.replay_processing)

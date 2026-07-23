@@ -49,6 +49,7 @@ components:
             uploads_ingest: dev/uploads-ingest/terraform.tfstate
           queues:
             map_rendering: map-rendering-queue
+            map_rendering_dlq: map-rendering-dlq
             replay_processing: replays-processing-queue
         domain:
           name: api.dev.halospawns.com
@@ -92,6 +93,8 @@ components:
           timestamp_tolerance_seconds: 300
     uploads-ingest:
       vars:
+        observability:
+          enabled: true
         storage:
           allowed_cors_origins:
             - https://dev.halospawns.com
@@ -118,6 +121,9 @@ components:
         renderer:
           event_source:
             enabled: true
+          alarms:
+            enabled: true
+            queue_age_threshold_seconds: 300
         release:
           maps:
             github:

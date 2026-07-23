@@ -1,8 +1,9 @@
 locals {
-  app_api_observability_enabled = var.enabled && var.observability.enabled
-  app_api_dashboard_name        = "${var.project}-${var.environment}-app-api"
-  app_api_alert_topic_name      = "${var.project}-${var.environment}-app-api-alerts"
-  app_api_lambda_log_group_name = "/aws/lambda/${var.project}-${var.environment}-app-api"
+  app_api_observability_enabled  = var.enabled && var.observability.enabled
+  app_api_dashboard_name         = "${var.project}-${var.environment}-app-api"
+  app_api_alert_topic_name       = "${var.project}-${var.environment}-app-api-alerts"
+  app_api_lambda_log_group_name  = "/aws/lambda/${var.project}-${var.environment}-app-api"
+  app_api_gateway_log_group_name = "/aws/apigateway/${var.project}-${var.environment}-app-api"
 
   app_api_log_queries = {
     route-performance = trimspace(<<-QUERY
@@ -25,7 +26,7 @@ locals {
     )
 
     slow-requests = trimspace(<<-QUERY
-      fields @timestamp, @message
+      fields @timestamp
       | filter @message like /"event":"request_completed"/
       | parse @message /"request_id":"(?<request_id>[^"]+)"/
       | parse @message /"trace_id":(?<trace_value>null|"[^"]+")/
@@ -36,6 +37,7 @@ locals {
       | parse @message /"db_query_count":(?<db_query_count>[0-9]+)/
       | filter duration_ms >= 2000
       | sort duration_ms desc
+      | display @timestamp, request_id, trace_value, route, status, duration_ms, db_query_ms, db_query_count
       | limit 100
     QUERY
     )
@@ -88,6 +90,64 @@ locals {
     )
   }
 
+  app_api_gateway_failure_query = trimspace(<<-QUERY
+    fields @timestamp, requestId, routeKey, status, responseLatency,
+      integrationStatus, integrationLatency, errorResponseType,
+      integrationErrorMessage
+    | filter status >= 400
+    | sort @timestamp desc
+    | limit 100
+  QUERY
+  )
+
+  app_api_saved_log_queries = merge(
+    {
+      for name, query in local.app_api_log_queries : name => {
+        log_group_name = local.app_api_lambda_log_group_name
+        query_string   = query
+      }
+    },
+    {
+      gateway-failures = {
+        log_group_name = local.app_api_gateway_log_group_name
+        query_string   = local.app_api_gateway_failure_query
+      }
+    },
+  )
+
+  dashboard_upload_pipelines = try(data.terraform_remote_state.uploads_ingest[0].outputs.pipelines, {})
+  dashboard_processing_queues = concat(
+    [
+      for name, pipeline in local.dashboard_upload_pipelines : {
+        label      = "${title(name)} processing"
+        queue_name = pipeline.queue_name
+        dlq_name   = try(pipeline.dlq_name, element(split(":", pipeline.dlq_arn), 5))
+      }
+    ],
+    local.map_rendering_queue_name == null || local.map_rendering_dlq_name == null ? [] : [
+      {
+        label      = "Map rendering"
+        queue_name = local.map_rendering_queue_name
+        dlq_name   = local.map_rendering_dlq_name
+      }
+    ],
+  )
+
+  dashboard_cloudfront_distributions = concat(
+    try(data.terraform_remote_state.frontend_site[0].outputs.cloudfront_distribution_id, null) == null ? [] : [
+      {
+        label           = "Frontend"
+        distribution_id = data.terraform_remote_state.frontend_site[0].outputs.cloudfront_distribution_id
+      }
+    ],
+    try(data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_distribution_id, null) == null ? [] : [
+      {
+        label           = "Uploads CDN"
+        distribution_id = data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_distribution_id
+      }
+    ],
+  )
+
   app_api_alarm_names = {
     gateway_5xx                     = "${var.project}-${var.environment}-app-api-gateway-5xx"
     gateway_integration_latency_p95 = "${var.project}-${var.environment}-app-api-gateway-integration-latency-p95"
@@ -99,11 +159,11 @@ locals {
 }
 
 resource "aws_cloudwatch_query_definition" "app_api" {
-  for_each = local.app_api_observability_enabled ? local.app_api_log_queries : {}
+  for_each = local.app_api_observability_enabled ? local.app_api_saved_log_queries : {}
 
   name            = "halospawns/app-api/${each.key}"
-  log_group_names = [local.app_api_lambda_log_group_name]
-  query_string    = each.value
+  log_group_names = [each.value.log_group_name]
+  query_string    = each.value.query_string
 }
 
 resource "aws_sns_topic" "app_api_alerts" {
@@ -417,6 +477,173 @@ resource "aws_cloudwatch_dashboard" "app_api" {
           region  = var.region
           stacked = false
           query   = "SOURCE '${local.app_api_lambda_log_group_name}'\n| ${local.app_api_log_queries.recent-server-errors}"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 28
+        width  = 12
+        height = 8
+        properties = {
+          title   = "Slow requests"
+          view    = "table"
+          region  = var.region
+          stacked = false
+          query   = "SOURCE '${local.app_api_lambda_log_group_name}'\n| ${local.app_api_log_queries.slow-requests}"
+        }
+      },
+      {
+        type   = "log"
+        x      = 12
+        y      = 28
+        width  = 12
+        height = 8
+        properties = {
+          title   = "Recent API Gateway failures"
+          view    = "table"
+          region  = var.region
+          stacked = false
+          query   = "SOURCE '${local.app_api_gateway_log_group_name}'\n| ${local.app_api_gateway_failure_query}"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 36
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Processing queue backlog"
+          view    = "timeSeries"
+          region  = var.region
+          period  = 300
+          stacked = false
+          metrics = concat(
+            [
+              for queue in local.dashboard_processing_queues :
+              ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.queue_name, { label = "${queue.label} visible", stat = "Maximum" }]
+            ],
+            [
+              for queue in local.dashboard_processing_queues :
+              ["AWS/SQS", "ApproximateNumberOfMessagesNotVisible", "QueueName", queue.queue_name, { label = "${queue.label} in flight", stat = "Maximum" }]
+            ],
+          )
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 36
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Oldest processing message"
+          view    = "timeSeries"
+          region  = var.region
+          period  = 300
+          stacked = false
+          metrics = [
+            for queue in local.dashboard_processing_queues :
+            ["AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", queue.queue_name, { label = queue.label, stat = "Maximum" }]
+          ]
+          yAxis = {
+            left = {
+              label = "Seconds"
+              min   = 0
+            }
+          }
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 42
+        width  = 24
+        height = 6
+        properties = {
+          title     = "Processing dead-letter queues"
+          view      = "singleValue"
+          region    = var.region
+          period    = 300
+          sparkline = true
+          metrics = [
+            for queue in local.dashboard_processing_queues :
+            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", queue.dlq_name, { label = "${queue.label} DLQ", stat = "Maximum" }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 48
+        width  = 12
+        height = 6
+        properties = {
+          title   = "CloudFront traffic"
+          view    = "timeSeries"
+          region  = "us-east-1"
+          period  = 300
+          stacked = false
+          metrics = concat(
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "Requests", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} requests", stat = "Sum" }]
+            ],
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "BytesDownloaded", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} downloaded", stat = "Sum", yAxis = "right" }]
+            ],
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "BytesUploaded", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} uploaded", stat = "Sum", yAxis = "right" }]
+            ],
+          )
+          yAxis = {
+            left = {
+              label = "Requests"
+              min   = 0
+            }
+            right = {
+              label = "Bytes"
+              min   = 0
+            }
+          }
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 48
+        width  = 12
+        height = 6
+        properties = {
+          title   = "CloudFront error rates"
+          view    = "timeSeries"
+          region  = "us-east-1"
+          period  = 300
+          stacked = false
+          metrics = concat(
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "TotalErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} total", stat = "Average" }]
+            ],
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "4xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} 4xx", stat = "Average" }]
+            ],
+            [
+              for distribution in local.dashboard_cloudfront_distributions :
+              ["AWS/CloudFront", "5xxErrorRate", "DistributionId", distribution.distribution_id, "Region", "Global", { label = "${distribution.label} 5xx", stat = "Average" }]
+            ],
+          )
+          yAxis = {
+            left = {
+              label = "Percent"
+              min   = 0
+              max   = 100
+            }
+          }
         }
       },
     ]

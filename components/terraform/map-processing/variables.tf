@@ -240,12 +240,21 @@ variable "renderer" {
       receive_wait_time_seconds  = optional(number, 20)
       max_receive_count          = optional(number, 4)
     }), {})
+    alarms = optional(object({
+      enabled                     = optional(bool, false)
+      queue_age_threshold_seconds = optional(number, 300)
+    }), {})
     render_set = optional(object({
       name    = optional(string, "default-map-screenshots")
       version = optional(number, 1)
     }), {})
   })
   default = {}
+
+  validation {
+    condition     = var.renderer.alarms.queue_age_threshold_seconds > 0
+    error_message = "renderer.alarms.queue_age_threshold_seconds must be positive."
+  }
 }
 
 variable "release" {

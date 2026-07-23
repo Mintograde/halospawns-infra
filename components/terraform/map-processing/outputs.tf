@@ -110,6 +110,11 @@ output "map_rendering_queue_arn" {
   value       = aws_sqs_queue.map_rendering.arn
 }
 
+output "map_rendering_queue_name" {
+  description = "Name of the map rendering SQS queue."
+  value       = aws_sqs_queue.map_rendering.name
+}
+
 output "map_rendering_queue_url" {
   description = "URL of the map rendering SQS queue."
   value       = aws_sqs_queue.map_rendering.url
@@ -118,6 +123,16 @@ output "map_rendering_queue_url" {
 output "map_rendering_dlq_arn" {
   description = "ARN of the map rendering DLQ."
   value       = aws_sqs_queue.map_rendering_dlq.arn
+}
+
+output "map_rendering_dlq_name" {
+  description = "Name of the map rendering dead-letter queue."
+  value       = aws_sqs_queue.map_rendering_dlq.name
+}
+
+output "map_rendering_alarm_names" {
+  description = "CloudWatch queue-age and dead-letter queue alarm names for map rendering."
+  value       = var.renderer.alarms.enabled ? local.map_rendering_alarm_names : {}
 }
 
 output "map_renderer_artifact_bucket_name" {

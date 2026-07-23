@@ -127,6 +127,23 @@ variable "pipelines" {
   }
 }
 
+variable "observability" {
+  description = "Processing queue age and dead-letter queue alarm configuration."
+  type = object({
+    enabled                     = optional(bool, false)
+    queue_age_threshold_seconds = optional(map(number), {})
+  })
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for threshold in values(var.observability.queue_age_threshold_seconds) :
+      threshold > 0
+    ])
+    error_message = "observability.queue_age_threshold_seconds values must be positive."
+  }
+}
+
 variable "cdn" {
   description = "Legacy signed-upload CloudFront configuration. Key values are seeded outside Terraform."
   type = object({

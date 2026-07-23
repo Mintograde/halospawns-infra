@@ -44,6 +44,7 @@ variable "dependencies" {
     }), {})
     queues = optional(object({
       map_rendering     = optional(string)
+      map_rendering_dlq = optional(string)
       replay_processing = optional(string)
     }), {})
   })
