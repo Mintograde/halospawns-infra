@@ -1,6 +1,7 @@
 import:
   - _defaults
   - catalog/components/tfstate-backend
+  - catalog/components/supabase-settings
   - catalog/components/frontend-site
   - catalog/components/app-api
   - catalog/components/uploads-ingest
@@ -18,6 +19,20 @@ terraform:
 
 components:
   terraform:
+    supabase-settings:
+      vars:
+        enabled: false
+        project_ref: sozzcczmuwlacqczdmnm
+        settings:
+          api:
+            db_schema: public,graphql_public
+            db_extra_search_path: public, extensions
+            max_rows: 1000
+          auth:
+            site_url: http://localhost:63342
+            disable_signup: false
+            external_anonymous_users_enabled: true
+            jwt_exp: 3600
     frontend-site:
       vars:
         dns:

@@ -2,6 +2,7 @@
 .terraform.lock.hcl
 .venv
 .idea
+supabase/.temp/
 __pycache__/
 *.pyc
 *.zip

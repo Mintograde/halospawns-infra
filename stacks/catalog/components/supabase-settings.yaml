@@ -1,0 +1,8 @@
+components:
+  terraform:
+    supabase-settings:
+      metadata:
+        component: supabase-settings
+      vars:
+        enabled: false
+        settings: {}

@@ -24,6 +24,14 @@ if (-not $Component) {
     exit 0
 }
 
+if (
+    $Component -ieq "supabase-settings" -and
+    [string]::IsNullOrWhiteSpace($env:SUPABASE_ACCESS_TOKEN)
+) {
+    Write-Error "Set SUPABASE_ACCESS_TOKEN in the current process before applying supabase-settings."
+    exit 1
+}
+
 $commandText = "atmos terraform apply $Component -s $Stack"
 Write-Host "+ $commandText"
 

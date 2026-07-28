@@ -15,6 +15,7 @@ if (-not $Component) {
 
     $components = @(
         "tfstate-backend",
+        "supabase-settings",
         "frontend-site",
         "app-api",
         "uploads-ingest",
