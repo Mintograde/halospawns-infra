@@ -22,6 +22,17 @@ variable "profile" {
   nullable    = true
 }
 
+variable "dependencies" {
+  description = "Optional remote-state dependencies."
+  type = object({
+    state_bucket = optional(string)
+    state_keys = optional(object({
+      environment_dns = optional(string)
+    }), {})
+  })
+  default = {}
+}
+
 variable "storage" {
   description = "Uploads bucket configuration."
   type = object({
@@ -147,7 +158,14 @@ variable "observability" {
 variable "cdn" {
   description = "Legacy signed-upload CloudFront configuration. Key values are seeded outside Terraform."
   type = object({
+    enabled                   = optional(bool, true)
     domain_name               = optional(string)
+    hosted_zone_id            = optional(string)
+    hosted_zone_key           = optional(string)
+    certificate_arn           = optional(string)
+    create_certificate        = optional(bool, true)
+    create_dns_records        = optional(bool, false)
+    create_aaaa_record        = optional(bool, true)
     private_key_secret_name   = optional(string)
     public_key_parameter_name = optional(string)
     public_key_name           = optional(string, "s3-upload-key")
@@ -159,5 +177,15 @@ variable "cdn" {
   validation {
     condition     = var.cdn.domain_name == null || trimspace(var.cdn.domain_name) != ""
     error_message = "cdn.domain_name must not be empty when set."
+  }
+
+  validation {
+    condition     = var.cdn.hosted_zone_key == null || trimspace(var.cdn.hosted_zone_key) != ""
+    error_message = "cdn.hosted_zone_key must not be empty when set."
+  }
+
+  validation {
+    condition     = var.cdn.certificate_arn == null || trimspace(var.cdn.certificate_arn) != ""
+    error_message = "cdn.certificate_arn must not be empty when set."
   }
 }

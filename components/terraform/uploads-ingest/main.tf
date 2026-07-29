@@ -3,7 +3,7 @@ module "uploads_bucket" {
   bucket_prefix           = var.storage.bucket_prefix
   environment             = var.environment
   allowed_cors_origins    = var.storage.allowed_cors_origins
-  source_policy_documents = [data.aws_iam_policy_document.cloudfront_to_s3_policy.json]
+  source_policy_documents = var.cdn.enabled ? [data.aws_iam_policy_document.cloudfront_to_s3_policy[0].json] : []
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
@@ -212,6 +212,8 @@ resource "aws_sqs_queue_policy" "file_policy" {
 }
 
 resource "aws_cloudfront_origin_access_control" "uploads_oac" {
+  count = var.cdn.enabled ? 1 : 0
+
   name                              = "OAC for ${module.uploads_bucket.s3_bucket_id}"
   description                       = "Origin Access Control for S3 uploads"
   origin_access_control_origin_type = "s3"
@@ -220,6 +222,8 @@ resource "aws_cloudfront_origin_access_control" "uploads_oac" {
 }
 
 data "aws_iam_policy_document" "cloudfront_to_s3_policy" {
+  count = var.cdn.enabled ? 1 : 0
+
   statement {
     actions   = ["s3:PutObject", "s3:GetObject"]
     resources = ["${module.uploads_bucket.s3_bucket_arn}/*"]
@@ -232,7 +236,7 @@ data "aws_iam_policy_document" "cloudfront_to_s3_policy" {
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.s3_distribution.arn]
+      values   = [aws_cloudfront_distribution.s3_distribution[0].arn]
     }
   }
 }
@@ -255,6 +259,8 @@ resource "aws_ssm_parameter" "upload_signing_public_key" {
 }
 
 resource "aws_cloudfront_public_key" "main" {
+  count = var.cdn.enabled ? 1 : 0
+
   comment     = "Public key for signing upload URLs"
   encoded_key = nonsensitive(aws_ssm_parameter.upload_signing_public_key.value)
   name        = var.cdn.public_key_name
@@ -271,12 +277,16 @@ resource "aws_cloudfront_public_key" "main" {
 }
 
 resource "aws_cloudfront_key_group" "main" {
+  count = var.cdn.enabled ? 1 : 0
+
   comment = "Key group for signing upload URLs"
-  items   = [aws_cloudfront_public_key.main.id]
+  items   = [aws_cloudfront_public_key.main[0].id]
   name    = var.cdn.key_group_name
 }
 
 resource "aws_acm_certificate" "cert" {
+  count = local.create_managed_cdn_certificate ? 1 : 0
+
   domain_name       = local.full_domain_name
   validation_method = "DNS"
 
@@ -285,11 +295,38 @@ resource "aws_acm_certificate" "cert" {
   }
 }
 
+resource "aws_route53_record" "cdn_certificate_validation" {
+  for_each = local.validate_managed_cdn_certificate ? {
+    for option in aws_acm_certificate.cert[0].domain_validation_options :
+    option.domain_name => {
+      name   = option.resource_record_name
+      record = option.resource_record_value
+      type   = option.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+  zone_id         = local.cdn_hosted_zone_id
+}
+
+resource "aws_acm_certificate_validation" "cdn" {
+  count = local.validate_managed_cdn_certificate ? 1 : 0
+
+  certificate_arn         = aws_acm_certificate.cert[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cdn_certificate_validation : record.fqdn]
+}
+
 resource "aws_cloudfront_distribution" "s3_distribution" {
+  count = var.cdn.enabled ? 1 : 0
+
   origin {
     domain_name              = module.uploads_bucket.bucket_regional_domain_name
     origin_id                = "S3-${module.uploads_bucket.s3_bucket_id}"
-    origin_access_control_id = aws_cloudfront_origin_access_control.uploads_oac.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.uploads_oac[0].id
   }
 
   enabled             = true
@@ -304,7 +341,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "S3-${module.uploads_bucket.s3_bucket_id}"
 
-    trusted_key_groups = [aws_cloudfront_key_group.main.id]
+    trusted_key_groups = [aws_cloudfront_key_group.main[0].id]
 
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
@@ -321,7 +358,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate.cert.arn
+    acm_certificate_arn      = local.cdn_certificate_arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
@@ -333,4 +370,60 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 
   price_class = var.cdn.price_class
+
+  lifecycle {
+    precondition {
+      condition     = var.region == "us-east-1"
+      error_message = "The signed-upload CloudFront certificate must be created or supplied in us-east-1."
+    }
+
+    precondition {
+      condition     = var.cdn.create_certificate || var.cdn.certificate_arn != null
+      error_message = "An enabled signed-upload CDN requires cdn.create_certificate = true or cdn.certificate_arn."
+    }
+
+    precondition {
+      condition     = !local.create_cdn_dns_records || local.cdn_hosted_zone_id != null
+      error_message = "cdn.create_dns_records requires cdn.hosted_zone_id or environment-dns remote state."
+    }
+
+    precondition {
+      condition = (
+        var.cdn.hosted_zone_key == null ||
+        (
+          var.dependencies.state_bucket != null &&
+          var.dependencies.state_keys.environment_dns != null
+        )
+      )
+      error_message = "cdn.hosted_zone_key requires dependencies.state_bucket and dependencies.state_keys.environment_dns."
+    }
+  }
+}
+
+resource "aws_route53_record" "cdn_a" {
+  count = local.create_cdn_dns_records ? 1 : 0
+
+  name    = local.full_domain_name
+  type    = "A"
+  zone_id = local.cdn_hosted_zone_id
+
+  alias {
+    evaluate_target_health = false
+    name                   = aws_cloudfront_distribution.s3_distribution[0].domain_name
+    zone_id                = aws_cloudfront_distribution.s3_distribution[0].hosted_zone_id
+  }
+}
+
+resource "aws_route53_record" "cdn_aaaa" {
+  count = local.create_cdn_dns_records && var.cdn.create_aaaa_record ? 1 : 0
+
+  name    = local.full_domain_name
+  type    = "AAAA"
+  zone_id = local.cdn_hosted_zone_id
+
+  alias {
+    evaluate_target_health = false
+    name                   = aws_cloudfront_distribution.s3_distribution[0].domain_name
+    zone_id                = aws_cloudfront_distribution.s3_distribution[0].hosted_zone_id
+  }
 }

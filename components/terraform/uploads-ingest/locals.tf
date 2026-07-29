@@ -13,6 +13,29 @@ locals {
 
   full_domain_name = coalesce(var.cdn.domain_name, "api-${var.environment}.halospawns.com")
 
+  remote_cdn_hosted_zone_id = try(
+    data.terraform_remote_state.environment_dns[0].outputs.zones[var.cdn.hosted_zone_key].zone_id,
+    null,
+  )
+  cdn_hosted_zone_id = (
+    var.cdn.hosted_zone_id != null ? var.cdn.hosted_zone_id :
+    local.remote_cdn_hosted_zone_id
+  )
+  create_managed_cdn_certificate = var.cdn.enabled && var.cdn.create_certificate
+  create_cdn_dns_records         = var.cdn.enabled && var.cdn.create_dns_records
+  validate_managed_cdn_certificate = (
+    local.create_managed_cdn_certificate &&
+    var.cdn.create_dns_records
+  )
+  cdn_certificate_arn = !var.cdn.enabled ? null : (
+    var.cdn.create_certificate ? (
+      local.validate_managed_cdn_certificate ?
+      aws_acm_certificate_validation.cdn[0].certificate_arn :
+      aws_acm_certificate.cert[0].arn
+    ) :
+    var.cdn.certificate_arn
+  )
+
   upload_signing_private_key_secret_name = coalesce(
     var.cdn.private_key_secret_name,
     "/${var.project}/${var.environment}/cloudfront/upload-signing/private-key",

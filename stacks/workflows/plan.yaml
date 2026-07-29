@@ -8,3 +8,15 @@ workflows:
       - command: terraform plan app-api -s dev
       - command: terraform plan ecr -s dev
       - command: terraform plan map-processing -s dev
+  plan-prod-foundation:
+    description: Plan the bootstrapped prod backend and delegated hosted zones.
+    steps:
+      - command: terraform plan tfstate-backend -s prod
+      - command: terraform plan environment-dns -s prod
+  plan-prod-preview:
+    description: Plan staged prod preview resources; app-api remains disabled and map-processing is not enabled.
+    steps:
+      - command: terraform plan frontend-site -s prod
+      - command: terraform plan uploads-ingest -s prod
+      - command: terraform plan app-api -s prod
+      - command: terraform plan ecr -s prod

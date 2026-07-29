@@ -28,12 +28,34 @@ param (
 
 Set-StrictMode -Version Latest
 
+$accountIds = @{
+    dev  = "283279960672"
+    prod = "659571592246"
+}
+$expectedAccountId = $accountIds[$Stack]
+
 if (-not $Profile) {
     $Profile = "halospawns-$Stack"
 }
 
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
     Write-Error "AWS CLI is required to seed trusted HMAC secret values."
+    exit 1
+}
+
+$callerAccountId = & aws sts get-caller-identity `
+    --profile $Profile `
+    --region $Region `
+    --query Account `
+    --output text `
+    --no-cli-pager
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Could not resolve AWS identity for profile $Profile."
+    exit 1
+}
+
+if ($callerAccountId.Trim() -ne $expectedAccountId) {
+    Write-Error "AWS profile $Profile resolved to account $callerAccountId; expected $expectedAccountId."
     exit 1
 }
 

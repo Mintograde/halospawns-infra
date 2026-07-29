@@ -9,7 +9,7 @@ param (
 
 if (-not $Component) {
     if ($Stack -eq "prod") {
-        Write-Error "Prod Atmos components are disabled until backend bootstrap is ready."
+        Write-Error "Prod uses a staged rollout. Supply a component name or run an explicit prod workflow."
         exit 1
     }
 

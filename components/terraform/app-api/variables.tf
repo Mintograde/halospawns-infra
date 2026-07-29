@@ -39,8 +39,9 @@ variable "dependencies" {
   type = object({
     state_bucket = optional(string)
     state_keys = optional(object({
-      frontend_site  = optional(string)
-      uploads_ingest = optional(string)
+      environment_dns = optional(string)
+      frontend_site   = optional(string)
+      uploads_ingest  = optional(string)
     }), {})
     queues = optional(object({
       map_rendering                       = optional(string)
@@ -63,6 +64,7 @@ variable "domain" {
     base_url           = optional(string)
     name               = optional(string)
     hosted_zone_id     = optional(string)
+    hosted_zone_key    = optional(string)
     certificate_arn    = optional(string)
     create_certificate = optional(bool, true)
     create_dns_records = optional(bool, true)
@@ -72,6 +74,11 @@ variable "domain" {
   validation {
     condition     = var.domain.base_url == null || can(regex("^https?://", trimspace(var.domain.base_url)))
     error_message = "domain.base_url must start with http:// or https:// when set."
+  }
+
+  validation {
+    condition     = var.domain.hosted_zone_key == null || trimspace(var.domain.hosted_zone_key) != ""
+    error_message = "domain.hosted_zone_key must not be empty when set."
   }
 }
 

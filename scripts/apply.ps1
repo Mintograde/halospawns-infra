@@ -9,7 +9,7 @@ param (
 
 if (-not $Component) {
     if ($Stack -eq "prod") {
-        Write-Error "Prod Atmos components are disabled until backend bootstrap is ready."
+        Write-Error "Prod aggregate apply is intentionally disabled. Supply one reviewed component name."
         exit 1
     }
 

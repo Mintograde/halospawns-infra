@@ -116,6 +116,7 @@ variable "replay_parser" {
   type = object({
     enabled                    = optional(bool, true)
     repository_name            = optional(string, "halospawns-replay-parser")
+    image_tag                  = optional(string, "latest")
     timeout_seconds            = optional(number, 300)
     memory_mb                  = optional(number, 2048)
     ephemeral_storage_mb       = optional(number, 10240)
@@ -125,6 +126,11 @@ variable "replay_parser" {
     environment_variables      = optional(map(string), {})
   })
   default = {}
+
+  validation {
+    condition     = trimspace(var.replay_parser.image_tag) != ""
+    error_message = "replay_parser.image_tag must not be empty."
+  }
 }
 
 variable "heatmap_rollup_worker" {

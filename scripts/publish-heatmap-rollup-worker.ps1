@@ -1,6 +1,6 @@
 param (
     [Parameter(Position = 0)]
-    [ValidateSet("dev")]
+    [ValidateSet("dev", "prod")]
     [string]$Stack = "dev",
 
     [Parameter()]
@@ -10,7 +10,8 @@ param (
     [string]$Profile,
 
     [Parameter()]
-    [string]$AccountId = "283279960672",
+    [ValidatePattern("^[0-9]{12}$")]
+    [string]$AccountId,
 
     [Parameter()]
     [string]$FunctionName,
@@ -21,6 +22,20 @@ param (
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$accountIds = @{
+    dev  = "283279960672"
+    prod = "659571592246"
+}
+$expectedAccountId = $accountIds[$Stack]
+
+if (-not $AccountId) {
+    $AccountId = $expectedAccountId
+}
+
+if ($AccountId -ne $expectedAccountId) {
+    throw "Stack '$Stack' is pinned to AWS account $expectedAccountId, not $AccountId."
+}
 
 if (-not $Profile) {
     $Profile = "halospawns-$Stack"
@@ -59,8 +74,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-if ($callerAccountId.Trim() -ne $AccountId) {
-    Write-Error "AWS profile $Profile resolved to account $callerAccountId; expected $AccountId."
+if ($callerAccountId.Trim() -ne $expectedAccountId) {
+    Write-Error "AWS profile $Profile resolved to account $callerAccountId; expected $expectedAccountId."
     exit 1
 }
 

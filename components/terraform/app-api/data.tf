@@ -14,6 +14,23 @@ data "terraform_remote_state" "frontend_site" {
   }
 }
 
+data "terraform_remote_state" "environment_dns" {
+  count = (
+    var.enabled &&
+    var.dependencies.state_bucket != null &&
+    var.dependencies.state_keys.environment_dns != null &&
+    var.domain.hosted_zone_key != null
+  ) ? 1 : 0
+
+  backend = "s3"
+  config = {
+    bucket  = var.dependencies.state_bucket
+    key     = var.dependencies.state_keys.environment_dns
+    region  = var.region
+    profile = var.profile
+  }
+}
+
 data "terraform_remote_state" "uploads_ingest" {
   count = var.enabled && var.dependencies.state_keys.uploads_ingest != null ? 1 : 0
 

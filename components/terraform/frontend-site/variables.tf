@@ -22,6 +22,17 @@ variable "profile" {
   nullable    = true
 }
 
+variable "dependencies" {
+  description = "Optional remote-state dependencies."
+  type = object({
+    state_bucket = optional(string)
+    state_keys = optional(object({
+      environment_dns = optional(string)
+    }), {})
+  })
+  default = {}
+}
+
 variable "dns" {
   description = "Frontend domain, hosted zone, certificate, and record-management configuration."
   type = object({
@@ -30,6 +41,7 @@ variable "dns" {
       create = optional(bool, false)
       name   = optional(string)
       id     = optional(string)
+      key    = optional(string)
     }), {})
     certificate = optional(object({
       create = optional(bool, false)
@@ -41,6 +53,16 @@ variable "dns" {
   validation {
     condition     = var.dns.domain_name == null || trimspace(var.dns.domain_name) != ""
     error_message = "dns.domain_name must not be empty when set."
+  }
+
+  validation {
+    condition     = var.dns.hosted_zone.key == null || trimspace(var.dns.hosted_zone.key) != ""
+    error_message = "dns.hosted_zone.key must not be empty when set."
+  }
+
+  validation {
+    condition     = !var.dns.hosted_zone.create || (var.dns.hosted_zone.id == null && var.dns.hosted_zone.key == null)
+    error_message = "A managed hosted zone cannot also use dns.hosted_zone.id or dns.hosted_zone.key."
   }
 }
 

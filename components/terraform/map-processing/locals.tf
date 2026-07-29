@@ -50,6 +50,7 @@ locals {
   lambda_configurations = var.replay_parser.enabled ? {
     (var.replay_parser.repository_name) = {
       description                      = "Parses replay files from SQS"
+      image_tag                        = var.replay_parser.image_tag
       sqs_queue_arn                    = local.upload_pipelines.replays.queue_arn
       s3_bucket_arn                    = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn
       s3_bucket_path                   = "/replays"

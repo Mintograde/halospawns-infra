@@ -50,12 +50,12 @@ output "pipelines" {
 
 output "cloudfront_distribution_domain_name" {
   description = "Domain name of the CloudFront distribution."
-  value       = aws_cloudfront_distribution.s3_distribution.domain_name
+  value       = var.cdn.enabled ? aws_cloudfront_distribution.s3_distribution[0].domain_name : null
 }
 
 output "cloudfront_distribution_id" {
   description = "ID of the uploads CloudFront distribution."
-  value       = aws_cloudfront_distribution.s3_distribution.id
+  value       = var.cdn.enabled ? aws_cloudfront_distribution.s3_distribution[0].id : null
 }
 
 output "processing_queue_alarm_names" {
@@ -65,12 +65,12 @@ output "processing_queue_alarm_names" {
 
 output "cloudfront_key_id" {
   description = "ID of the CloudFront public key used for signed URLs."
-  value       = aws_cloudfront_public_key.main.id
+  value       = var.cdn.enabled ? aws_cloudfront_public_key.main[0].id : null
 }
 
 output "upload_domain_name" {
   description = "Domain name to use for uploads."
-  value       = local.full_domain_name
+  value       = var.cdn.enabled ? local.full_domain_name : null
 }
 
 output "upload_signing_private_key_secret_arn" {

@@ -5,8 +5,13 @@ locals {
   basic_auth_lambda_qualified_arn         = local.created_basic_auth_lambda_qualified_arn != null ? local.created_basic_auth_lambda_qualified_arn : var.access.viewer_request_lambda_qualified_arn
   delegated_zone_name                     = var.dns.hosted_zone.name != null ? var.dns.hosted_zone.name : "${var.environment}.halospawns.com"
   managed_hosted_zone_id                  = var.dns.hosted_zone.create ? module.delegated_zone[0].zone_id : null
-  site_hosted_zone_id                     = var.dns.hosted_zone.id != null ? var.dns.hosted_zone.id : local.managed_hosted_zone_id
-  create_site_dns_records                 = var.dns.domain_name != null && (var.dns.hosted_zone.id != null || var.dns.hosted_zone.create)
+  remote_hosted_zone_id                   = try(data.terraform_remote_state.environment_dns[0].outputs.zones[var.dns.hosted_zone.key].zone_id, null)
+  site_hosted_zone_id = (
+    var.dns.hosted_zone.id != null ? var.dns.hosted_zone.id :
+    local.remote_hosted_zone_id != null ? local.remote_hosted_zone_id :
+    local.managed_hosted_zone_id
+  )
+  create_site_dns_records = var.dns.domain_name != null && local.site_hosted_zone_id != null
 }
 
 module "delegated_zone" {

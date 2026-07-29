@@ -1,9 +1,123 @@
 import:
   - _defaults
+  - catalog/components/tfstate-backend
+  - catalog/components/environment-dns
+  - catalog/components/frontend-site
+  - catalog/components/uploads-ingest
+  - catalog/components/app-api
+  - catalog/components/ecr
 
 vars:
   environment: prod
   profile: halospawns-prod
 
+terraform:
+  backend:
+    s3:
+      bucket: halospawns-tfstate-659571592246
+
 components:
-  terraform: {}
+  terraform:
+    environment-dns:
+      vars:
+        expected_account_id: "659571592246"
+        zones:
+          environment:
+            name: prod.halospawns.com
+            force_destroy: false
+          preview:
+            name: new.halospawns.com
+            force_destroy: false
+    frontend-site:
+      vars:
+        dependencies:
+          state_bucket: halospawns-tfstate-659571592246
+          state_keys:
+            environment_dns: prod/environment-dns/terraform.tfstate
+        dns:
+          domain_name: new.halospawns.com
+          hosted_zone:
+            create: false
+            key: preview
+          certificate:
+            create: true
+        access:
+          mode: basic_auth
+          basic_auth:
+            create_edge_lambda: true
+            ssm_parameter_name: /halospawns/prod/frontend-site/basic-auth/credentials-base64
+            create_ssm_parameter: true
+            realm: Halospawns prod preview
+        deployment:
+          github:
+            environment: prod
+            oidc:
+              create_provider: true
+    uploads-ingest:
+      vars:
+        dependencies:
+          state_bucket: halospawns-tfstate-659571592246
+          state_keys:
+            environment_dns: prod/environment-dns/terraform.tfstate
+        storage:
+          allowed_cors_origins:
+            - https://new.halospawns.com
+        observability:
+          enabled: true
+        cdn:
+          enabled: false
+          domain_name: uploads.prod.halospawns.com
+          hosted_zone_key: environment
+          create_certificate: true
+          create_dns_records: true
+    app-api:
+      vars:
+        enabled: false
+        dependencies:
+          state_bucket: halospawns-tfstate-659571592246
+          state_keys:
+            environment_dns: prod/environment-dns/terraform.tfstate
+            frontend_site: prod/frontend-site/terraform.tfstate
+            uploads_ingest: prod/uploads-ingest/terraform.tfstate
+          queues:
+            replay_processing: replays-processing-queue
+        domain:
+          name: api.prod.halospawns.com
+          base_url: https://api.prod.halospawns.com
+          hosted_zone_key: environment
+        cors:
+          allowed_origins:
+            - https://new.halospawns.com
+        supabase:
+          secrets:
+            database_url_name: /halospawns/prod/app-api/supabase/database-url
+            service_role_name: /halospawns/prod/app-api/supabase/service-role-key
+            create_service_role_secret: false
+        release:
+          github:
+            environment: prod
+        observability:
+          enabled: true
+          additional_alarm_names:
+            - halospawns-prod-heatmap-rollup-dlq
+            - halospawns-prod-heatmap-rollup-duration
+            - halospawns-prod-heatmap-rollup-errors
+            - halospawns-prod-heatmap-rollup-scope-failures
+            - halospawns-prod-map-rendering-dlq-depth
+            - halospawns-prod-map-rendering-queue-age
+          alert_subscriptions: {}
+        trusted_services:
+          secret_names:
+            heatmap-processing: /halospawns/prod/app-api/trusted-clients/heatmap-processing/hmac-secret
+            live-relay: /halospawns/prod/app-api/trusted-clients/live-relay/hmac-secret
+            map-processing: /halospawns/prod/app-api/trusted-clients/map-processing/hmac-secret
+            map-rendering: /halospawns/prod/app-api/trusted-clients/map-rendering/hmac-secret
+            replay-processing: /halospawns/prod/app-api/trusted-clients/replay-processing/hmac-secret
+          timestamp_tolerance_seconds: 300
+    ecr:
+      vars:
+        repositories:
+          halospawns-replay-parser:
+            image_tag_mutability: IMMUTABLE
+            force_delete: false
+            untagged_image_expiry_days: 7

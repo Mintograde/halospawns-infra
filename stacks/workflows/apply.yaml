@@ -8,3 +8,15 @@ workflows:
       - command: terraform apply app-api -s dev
       - command: terraform apply ecr -s dev
       - command: terraform apply map-processing -s dev
+  apply-prod-foundation:
+    description: Apply prod delegated hosted zones after the state backend has been bootstrapped.
+    steps:
+      - command: terraform apply tfstate-backend -s prod
+      - command: terraform apply environment-dns -s prod
+  apply-prod-preview:
+    description: Apply protected prod preview resources after both child zones have been delegated.
+    steps:
+      - command: terraform apply frontend-site -s prod
+      - command: terraform apply uploads-ingest -s prod
+      - command: terraform apply app-api -s prod
+      - command: terraform apply ecr -s prod

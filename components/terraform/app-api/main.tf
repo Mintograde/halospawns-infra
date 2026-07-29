@@ -9,8 +9,13 @@ locals {
   region_stat_rollup_artifact_prefix = trim(var.uploads.replays.region_stat_rollup_artifact_prefix, "/")
   map_support_resource_prefix        = trim(var.uploads.maps.support_resource_prefix, "/")
 
-  frontend_hosted_zone_id      = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
-  api_hosted_zone_id           = var.domain.hosted_zone_id != null ? var.domain.hosted_zone_id : local.frontend_hosted_zone_id
+  frontend_hosted_zone_id        = try(data.terraform_remote_state.frontend_site[0].outputs.delegated_hosted_zone_id, null)
+  environment_dns_hosted_zone_id = try(data.terraform_remote_state.environment_dns[0].outputs.zones[var.domain.hosted_zone_key].zone_id, null)
+  api_hosted_zone_id = (
+    var.domain.hosted_zone_id != null ? var.domain.hosted_zone_id :
+    local.environment_dns_hosted_zone_id != null ? local.environment_dns_hosted_zone_id :
+    local.frontend_hosted_zone_id
+  )
   api_domain_name              = var.domain.name == null ? null : trimspace(var.domain.name)
   app_api_base_url             = var.domain.base_url != null && trimspace(var.domain.base_url) != "" ? trimsuffix(trimspace(var.domain.base_url), "/") : (local.api_domain_name == null || local.api_domain_name == "" ? null : "https://${local.api_domain_name}")
   uploads_bucket_name          = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
@@ -245,8 +250,19 @@ resource "terraform_data" "required_inputs" {
     }
 
     precondition {
+      condition = (
+        var.domain.hosted_zone_key == null ||
+        (
+          var.dependencies.state_bucket != null &&
+          var.dependencies.state_keys.environment_dns != null
+        )
+      )
+      error_message = "domain.hosted_zone_key requires dependencies.state_bucket and dependencies.state_keys.environment_dns."
+    }
+
+    precondition {
       condition     = !((local.api_domain_name != null && local.api_domain_name != "") && (var.domain.create_dns_records || var.domain.create_certificate)) || local.api_hosted_zone_id != null
-      error_message = "api_domain_name with DNS/certificate automation requires hosted_zone_id or frontend_site_state_key remote state with delegated_hosted_zone_id."
+      error_message = "A custom API domain with DNS/certificate automation requires domain.hosted_zone_id, environment-dns remote state, or frontend-site delegated-zone remote state."
     }
 
     precondition {

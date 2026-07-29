@@ -17,6 +17,11 @@ resource "terraform_data" "native_maps_processor_required_inputs" {
       condition     = local.map_unprocessed_prefix != "" && local.map_processed_prefix != "" && local.map_failed_prefix != "" && local.map_support_resource_prefix != ""
       error_message = "Map S3 prefixes must be non-empty."
     }
+
+    precondition {
+      condition     = !var.replay_parser.enabled || var.environment != "prod" || lower(trimspace(var.replay_parser.image_tag)) != "latest"
+      error_message = "Prod replay parser deployments must use an immutable release tag instead of latest."
+    }
   }
 }
 
@@ -497,7 +502,7 @@ module "sqs_lambda_consumers" {
   source   = "../../../modules/lambda-container"
 
   function_name  = "${each.key}-${var.environment}"
-  image_uri      = "${data.terraform_remote_state.ecr.outputs.repository_urls[each.key]}:latest"
+  image_uri      = "${data.terraform_remote_state.ecr.outputs.repository_urls[each.key]}:${each.value.image_tag}"
   sqs_queue_arn  = each.value.sqs_queue_arn
   s3_bucket_arn  = each.value.s3_bucket_arn
   s3_bucket_path = each.value.s3_bucket_path
