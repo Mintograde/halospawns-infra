@@ -1,18 +1,3 @@
-resource "aws_ssm_parameter" "credential" {
-  count = var.create_ssm_parameter ? 1 : 0
-
-  name        = var.ssm_parameter_name
-  description = "Base64 Basic Auth credential for ${var.project}-${var.environment} frontend site."
-  type        = "SecureString"
-  value       = var.ssm_placeholder_value
-  key_id      = var.ssm_kms_key_id
-  tags        = var.tags
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
 resource "aws_iam_role" "edge" {
   name               = "${var.function_name}-exec-role"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json

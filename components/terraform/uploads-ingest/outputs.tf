@@ -73,14 +73,14 @@ output "upload_domain_name" {
   value       = var.cdn.enabled ? local.full_domain_name : null
 }
 
-output "upload_signing_private_key_secret_arn" {
-  description = "ARN of the Secrets Manager secret that stores the CloudFront private signing key value."
-  value       = aws_secretsmanager_secret.upload_signing_private_key.arn
+output "upload_signing_private_key_parameter_name" {
+  description = "Name of the externally managed SSM SecureString that stores the CloudFront private signing key value."
+  value       = var.cdn.enabled ? local.upload_signing_private_key_parameter_name : null
 }
 
-output "upload_signing_private_key_secret_name" {
-  description = "Name of the Secrets Manager secret that stores the CloudFront private signing key value."
-  value       = aws_secretsmanager_secret.upload_signing_private_key.name
+output "upload_signing_private_key_parameter_arn" {
+  description = "ARN of the externally managed SSM SecureString that stores the CloudFront private signing key value."
+  value       = var.cdn.enabled ? local.upload_signing_private_key_parameter_arn : null
 }
 
 output "upload_signing_public_key_parameter_name" {

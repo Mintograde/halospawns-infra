@@ -126,21 +126,23 @@ module "native_maps_processor" {
       RENDER_SET_NAME                    = var.renderer.render_set.name
       RENDER_SET_VERSION                 = tostring(var.renderer.render_set.version)
     } : {},
-    local.app_api_base_url == null || lookup(local.trusted_service_hmac_secret_ids_by_client, local.native_maps_processor_trusted_hmac_client, null) == null ? {} : {
-      APP_API_BASE_URL                      = local.app_api_base_url
-      APP_API_TRUSTED_CLIENT_NAME           = local.native_maps_processor_trusted_hmac_client
-      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID = local.trusted_service_hmac_secret_ids_by_client[local.native_maps_processor_trusted_hmac_client]
+    local.app_api_base_url == null ? {} : {
+      APP_API_BASE_URL            = local.app_api_base_url
+      APP_API_TRUSTED_CLIENT_NAME = local.native_maps_processor_trusted_hmac_client
+    },
+    local.trusted_service_hmac_parameter_name == null ? {} : {
+      APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME = local.trusted_service_hmac_parameter_name
     },
     var.native_maps.lambda.environment_variables,
   )
 
   policies_json = concat(
     [data.aws_iam_policy_document.native_maps_processor_s3.json],
-    contains(keys(local.trusted_service_hmac_secret_arns_by_client), local.native_maps_processor_trusted_hmac_client) ? [
-      data.aws_iam_policy_document.trusted_service_hmac_secret[local.native_maps_processor_trusted_hmac_client].json
-    ] : [],
     var.native_maps.enqueue_render_jobs ? [
       data.aws_iam_policy_document.native_maps_processor_map_rendering.json
+    ] : [],
+    contains(keys(local.trusted_service_hmac_parameter_arns_by_client), local.native_maps_processor_trusted_hmac_client) ? [
+      data.aws_iam_policy_document.trusted_service_hmac_parameter[local.native_maps_processor_trusted_hmac_client].json
     ] : [],
   )
 
@@ -163,16 +165,20 @@ resource "terraform_data" "heatmap_rollup_worker_required_inputs" {
   count = var.heatmap_rollup_worker.enabled ? 1 : 0
 
   input = {
-    app_api_base_url = local.app_api_base_url
-    hmac_secret_id   = local.heatmap_rollup_worker_trusted_service_hmac_secret_id
-    input_prefix     = local.replay_spatial_artifact_prefix
-    output_prefix    = local.heatmap_rollup_artifact_prefix
+    app_api_base_url    = local.app_api_base_url
+    hmac_parameter_name = local.heatmap_rollup_worker_trusted_service_hmac_parameter_name
+    input_prefix        = local.replay_spatial_artifact_prefix
+    output_prefix       = local.heatmap_rollup_artifact_prefix
   }
 
   lifecycle {
     precondition {
-      condition     = local.app_api_base_url != null && local.heatmap_rollup_worker_trusted_service_hmac_secret_id != null && local.heatmap_rollup_worker_trusted_service_hmac_secret_arn != null
-      error_message = "The heatmap rollup worker requires an app API base URL and a dedicated heatmap-processing HMAC secret in app-api remote state."
+      condition = (
+        local.app_api_base_url != null &&
+        local.heatmap_rollup_worker_trusted_service_hmac_parameter_name != null &&
+        local.heatmap_rollup_worker_trusted_service_hmac_parameter_arn != null
+      )
+      error_message = "The heatmap rollup worker requires an app API base URL and a dedicated Parameter Store HMAC contract in app-api remote state."
     }
 
     precondition {
@@ -224,7 +230,7 @@ module "heatmap_rollup_worker" {
       REGION_STATS_MAX_MEMBERSHIP_CHECKS            = tostring(var.heatmap_rollup_worker.region_stats.max_membership_checks)
       APP_API_BASE_URL                              = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME                   = local.heatmap_rollup_worker_trusted_hmac_client
-      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID         = local.heatmap_rollup_worker_trusted_service_hmac_secret_id
+      APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME    = local.heatmap_rollup_worker_trusted_service_hmac_parameter_name
       APP_API_HEATMAP_ROLLUP_CLAIM_PATH             = local.app_api_contract.heatmap_rollup_claim
       APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE   = local.app_api_contract.heatmap_rollup_inputs
       APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE = local.app_api_contract.heatmap_rollup_complete
@@ -238,7 +244,7 @@ module "heatmap_rollup_worker" {
 
   policies_json = [
     data.aws_iam_policy_document.heatmap_rollup_worker_runtime[0].json,
-    data.aws_iam_policy_document.trusted_service_hmac_secret[local.heatmap_rollup_worker_trusted_hmac_client].json,
+    data.aws_iam_policy_document.trusted_service_hmac_parameter[local.heatmap_rollup_worker_trusted_hmac_client].json,
   ]
 
   depends_on = [terraform_data.heatmap_rollup_worker_required_inputs]
@@ -382,9 +388,11 @@ module "map_renderer" {
       RENDER_SET_NAME                    = var.renderer.render_set.name
       RENDER_SET_VERSION                 = tostring(var.renderer.render_set.version)
     },
-    local.app_api_base_url == null || local.map_renderer_trusted_service_hmac_secret_id == null ? {} : {
-      APP_API_BASE_URL                      = local.app_api_base_url
-      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID = local.map_renderer_trusted_service_hmac_secret_id
+    local.app_api_base_url == null ? {} : {
+      APP_API_BASE_URL = local.app_api_base_url
+    },
+    local.map_renderer_trusted_service_hmac_parameter_name == null ? {} : {
+      APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME = local.map_renderer_trusted_service_hmac_parameter_name
     },
     var.renderer.lambda.environment_variables,
   )
@@ -519,16 +527,18 @@ module "sqs_lambda_consumers" {
       UPLOADS_BUCKET_NAME = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       ENVIRONMENT         = var.environment
     },
-    local.app_api_base_url == null || lookup(local.trusted_service_hmac_secret_ids_by_client, each.value.trusted_service_hmac_client_name, null) == null ? {} : {
+    local.app_api_base_url == null ? {} : {
       APP_API_BASE_URL                               = local.app_api_base_url
       APP_API_TRUSTED_CLIENT_NAME                    = each.value.trusted_service_hmac_client_name
-      APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID          = local.trusted_service_hmac_secret_ids_by_client[each.value.trusted_service_hmac_client_name]
       APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE = local.app_api_contract.upload_processing_status
+    },
+    lookup(local.trusted_service_hmac_parameter_names_by_client, each.value.trusted_service_hmac_client_name, null) == null ? {} : {
+      APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME = local.trusted_service_hmac_parameter_names_by_client[each.value.trusted_service_hmac_client_name]
     },
     each.value.environment_variables,
   )
 
-  additional_iam_policies = !contains(keys(local.trusted_service_hmac_secret_arns_by_client), each.value.trusted_service_hmac_client_name) ? {} : {
-    TrustedServiceHmacSecretRead = data.aws_iam_policy_document.trusted_service_hmac_secret[each.value.trusted_service_hmac_client_name].json
-  }
+  additional_iam_policies = contains(keys(local.trusted_service_hmac_parameter_arns_by_client), each.value.trusted_service_hmac_client_name) ? {
+    TrustedServiceHmacParameterRead = data.aws_iam_policy_document.trusted_service_hmac_parameter[each.value.trusted_service_hmac_client_name].json
+  } : {}
 }

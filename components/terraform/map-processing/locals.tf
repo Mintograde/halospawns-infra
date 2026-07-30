@@ -35,17 +35,29 @@ locals {
     "/",
   )
 
-  trusted_service_hmac_secret_ids_by_client  = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_secret_names
-  trusted_service_hmac_secret_arns_by_client = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_secret_arns
+  trusted_service_hmac_parameter_names_by_client = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_parameter_names
+  trusted_service_hmac_parameter_arns_by_client  = data.terraform_remote_state.app_api.outputs.trusted_service_hmac_parameter_arns
 
-  trusted_service_hmac_secret_id = try(local.trusted_service_hmac_secret_ids_by_client[local.native_maps_processor_trusted_hmac_client], null)
+  trusted_service_hmac_parameter_name = try(local.trusted_service_hmac_parameter_names_by_client[local.native_maps_processor_trusted_hmac_client], null)
 
-  map_renderer_trusted_service_hmac_secret_id  = try(local.trusted_service_hmac_secret_ids_by_client[local.map_renderer_trusted_hmac_client], null)
-  map_renderer_trusted_service_hmac_secret_arn = try(local.trusted_service_hmac_secret_arns_by_client[local.map_renderer_trusted_hmac_client], null)
+  map_renderer_trusted_service_hmac_parameter_name = try(
+    local.trusted_service_hmac_parameter_names_by_client[local.map_renderer_trusted_hmac_client],
+    null,
+  )
+  map_renderer_trusted_service_hmac_parameter_arn = try(
+    local.trusted_service_hmac_parameter_arns_by_client[local.map_renderer_trusted_hmac_client],
+    null,
+  )
 
-  heatmap_rollup_worker_function_name                   = var.heatmap_rollup_worker.function_name == null || trimspace(var.heatmap_rollup_worker.function_name) == "" ? "${var.project}-heatmap-rollup-worker-${var.environment}" : trimspace(var.heatmap_rollup_worker.function_name)
-  heatmap_rollup_worker_trusted_service_hmac_secret_id  = try(local.trusted_service_hmac_secret_ids_by_client[local.heatmap_rollup_worker_trusted_hmac_client], null)
-  heatmap_rollup_worker_trusted_service_hmac_secret_arn = try(local.trusted_service_hmac_secret_arns_by_client[local.heatmap_rollup_worker_trusted_hmac_client], null)
+  heatmap_rollup_worker_function_name = var.heatmap_rollup_worker.function_name == null || trimspace(var.heatmap_rollup_worker.function_name) == "" ? "${var.project}-heatmap-rollup-worker-${var.environment}" : trimspace(var.heatmap_rollup_worker.function_name)
+  heatmap_rollup_worker_trusted_service_hmac_parameter_name = try(
+    local.trusted_service_hmac_parameter_names_by_client[local.heatmap_rollup_worker_trusted_hmac_client],
+    null,
+  )
+  heatmap_rollup_worker_trusted_service_hmac_parameter_arn = try(
+    local.trusted_service_hmac_parameter_arns_by_client[local.heatmap_rollup_worker_trusted_hmac_client],
+    null,
+  )
 
   lambda_configurations = var.replay_parser.enabled ? {
     (var.replay_parser.repository_name) = {

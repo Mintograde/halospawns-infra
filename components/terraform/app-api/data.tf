@@ -100,8 +100,9 @@ data "aws_iam_policy_document" "app_runtime" {
   count = var.enabled ? 1 : 0
 
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = local.app_secret_arns
+    sid       = "ReadRuntimeParameters"
+    actions   = ["ssm:GetParameter"]
+    resources = local.app_parameter_arns
   }
 
   dynamic "statement" {

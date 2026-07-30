@@ -1,3 +1,4 @@
+[CmdletBinding(SupportsShouldProcess = $true)]
 param (
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateSet("dev", "prod")]
@@ -35,6 +36,10 @@ if (-not $Profile) {
 
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
     Write-Error "AWS CLI is required to seed CloudFront signing key material."
+    exit 1
+}
+if (-not $PublicOnly -and -not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Error "uv is required to seed the CloudFront private key through the Parameter Store lifecycle tool."
     exit 1
 }
 
@@ -101,7 +106,7 @@ if (-not $PublicOnly) {
     $privateKeyFullPath = Resolve-KeyPath -Path $PrivateKeyPath -Label "Private key"
 }
 
-$privateSecretName = "/$Project/$Stack/cloudfront/upload-signing/private-key"
+$privateParameterName = "/$Project/$Stack/cloudfront/upload-signing/private-key"
 $publicParameterName = "/$Project/$Stack/cloudfront/upload-signing/public-key"
 
 $awsBaseArgs = @("--profile", $Profile, "--region", $Region, "--no-cli-pager")
@@ -112,31 +117,47 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Invoke-AwsCli -Arguments ($awsBaseArgs + @(
-        "ssm",
-        "put-parameter",
-        "--name", $publicParameterName,
-        "--type", "String",
-        "--value", "file://$publicKeyFullPath",
-        "--overwrite"
-    ))
+$publicKeySeeded = $false
+if ($PSCmdlet.ShouldProcess($publicParameterName, "Update CloudFront public signing-key parameter")) {
+    Invoke-AwsCli -Arguments ($awsBaseArgs + @(
+            "ssm",
+            "put-parameter",
+            "--name", $publicParameterName,
+            "--type", "String",
+            "--value", "file://$publicKeyFullPath",
+            "--overwrite"
+        ))
+    $publicKeySeeded = $true
+}
 
 if ($PublicOnly) {
-    Write-Host "Seeded CloudFront public signing key parameter: $publicParameterName"
+    if ($publicKeySeeded) {
+        Write-Host "Seeded CloudFront public signing key parameter: $publicParameterName"
+    }
     exit 0
 }
 
-& aws @awsBaseArgs secretsmanager describe-secret --secret-id $privateSecretName 1>$null 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Secrets Manager secret does not exist yet: $privateSecretName. Apply the Terraform metadata resource first, then rerun this script without -PublicOnly."
-    exit 1
+$toolArgs = @(
+    "run", "--with", "boto3", "--no-project", "python",
+    (Join-Path $PSScriptRoot "ssm-secret-tool.py"),
+    "--profile", $Profile,
+    "--region", $Region,
+    "--expected-account-id", $expectedAccountId,
+    "--environment", $Stack,
+    "--project", $Project,
+    "--parameter-name", $privateParameterName,
+    "--description", "Private key for signing Halospawns CloudFront upload URLs in $Stack",
+    "--value-file", $privateKeyFullPath
+)
+$privateKeySeeded = $false
+if ($PSCmdlet.ShouldProcess($privateParameterName, "Create or rotate CloudFront private signing-key SecureString")) {
+    & uv @toolArgs
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    $privateKeySeeded = $true
 }
 
-Invoke-AwsCli -Arguments ($awsBaseArgs + @(
-        "secretsmanager",
-        "put-secret-value",
-        "--secret-id", $privateSecretName,
-        "--secret-string", "file://$privateKeyFullPath"
-    ))
-
-Write-Host "Seeded CloudFront signing keys for stack '$Stack'."
+if ($publicKeySeeded -and $privateKeySeeded) {
+    Write-Host "Seeded CloudFront public and private signing-key parameters for stack '$Stack'."
+}

@@ -241,12 +241,6 @@ data "aws_iam_policy_document" "cloudfront_to_s3_policy" {
   }
 }
 
-resource "aws_secretsmanager_secret" "upload_signing_private_key" {
-  name                    = local.upload_signing_private_key_secret_name
-  description             = "Private key for signing CloudFront upload URLs for ${local.full_domain_name}"
-  recovery_window_in_days = 30
-}
-
 resource "aws_ssm_parameter" "upload_signing_public_key" {
   name        = local.upload_signing_public_key_parameter_name
   description = "Public key for signing CloudFront upload URLs for ${local.full_domain_name}"

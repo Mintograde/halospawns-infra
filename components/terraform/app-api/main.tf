@@ -33,22 +33,25 @@ locals {
   github_subject             = var.release.github.subject == null || trimspace(var.release.github.subject) == "" ? (local.github_environment_subject != null ? local.github_environment_subject : local.github_branch_subject) : var.release.github.subject
   github_oidc_provider_arn   = var.release.github.oidc.create_provider ? try(aws_iam_openid_connect_provider.github[0].arn, null) : (var.release.github.oidc.provider_arn != null && trimspace(var.release.github.oidc.provider_arn) != "" ? var.release.github.oidc.provider_arn : try(data.aws_iam_openid_connect_provider.github[0].arn, null))
 
-  trusted_service_hmac_secret_ids = {
-    for client, secret in aws_secretsmanager_secret.trusted_service_hmac :
-    client => secret.name
+  supabase_database_url_parameter_name = coalesce(
+    var.supabase.parameters.database_url_name,
+    "/${var.project}/${var.environment}/app-api/supabase/database-url",
+  )
+  supabase_service_role_parameter_name = coalesce(
+    var.supabase.parameters.service_role_name,
+    "/${var.project}/${var.environment}/app-api/supabase/service-role-key",
+  )
+  trusted_service_hmac_parameter_names = var.enabled ? var.trusted_services.parameter_names : {}
+  trusted_service_hmac_parameter_arns = {
+    for client, parameter_name in local.trusted_service_hmac_parameter_names :
+    client => "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${parameter_name}"
   }
-
-  trusted_service_hmac_secret_arns = [
-    for secret in aws_secretsmanager_secret.trusted_service_hmac :
-    secret.arn
-  ]
-
-  app_secret_arns = concat(
+  app_parameter_arns = concat(
     compact([
-      try(aws_secretsmanager_secret.supabase_database_url[0].arn, null),
-      try(aws_secretsmanager_secret.supabase_service_role[0].arn, null),
+      var.enabled ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_database_url_parameter_name}" : null,
+      var.enabled && var.supabase.parameters.create_service_role_parameter ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_service_role_parameter_name}" : null,
     ]),
-    local.trusted_service_hmac_secret_arns,
+    values(local.trusted_service_hmac_parameter_arns),
   )
 
   upload_put_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
@@ -83,7 +86,7 @@ locals {
   app_lambda_environment = var.enabled ? merge(
     {
       ENVIRONMENT                               = var.environment
-      SUPABASE_DATABASE_URL_SECRET_ARN          = aws_secretsmanager_secret.supabase_database_url[0].arn
+      SUPABASE_DATABASE_URL_PARAMETER_NAME      = local.supabase_database_url_parameter_name
       SUPABASE_PROJECT_REF                      = var.supabase.project_ref == null ? "" : var.supabase.project_ref
       SUPABASE_URL                              = var.supabase.url == null ? "" : var.supabase.url
       UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
@@ -92,13 +95,13 @@ locals {
       UPLOAD_URL_TTL_SECONDS                    = tostring(var.uploads.url_ttl_seconds)
       MAP_SUPPORT_RESOURCE_AUTO_APPROVE_UPLOADS = tostring(var.uploads.maps.support_resource_auto_approve)
     },
-    var.supabase.secrets.create_service_role_secret ? {
-      SUPABASE_SERVICE_ROLE_SECRET_ARN = aws_secretsmanager_secret.supabase_service_role[0].arn
+    var.supabase.parameters.create_service_role_parameter ? {
+      SUPABASE_SERVICE_ROLE_PARAMETER_NAME = local.supabase_service_role_parameter_name
     } : {},
-    length(local.trusted_service_hmac_secret_ids) > 0 ? {
-      TRUSTED_SERVICE_HMAC_SECRET_IDS = jsonencode(local.trusted_service_hmac_secret_ids)
+    length(local.trusted_service_hmac_parameter_names) > 0 ? {
+      TRUSTED_SERVICE_HMAC_PARAMETER_NAMES = jsonencode(local.trusted_service_hmac_parameter_names)
     } : {},
-    length(local.trusted_service_hmac_secret_ids) > 0 && var.trusted_services.timestamp_tolerance_seconds != null ? {
+    length(local.trusted_service_hmac_parameter_names) > 0 && var.trusted_services.timestamp_tolerance_seconds != null ? {
       TRUSTED_SERVICE_HMAC_TIMESTAMP_TOLERANCE_SECONDS = tostring(var.trusted_services.timestamp_tolerance_seconds)
     } : {},
     local.app_api_base_url == null ? {} : {
@@ -338,33 +341,6 @@ resource "aws_s3_bucket_policy" "artifacts" {
   bucket     = aws_s3_bucket.artifacts[0].id
   policy     = data.aws_iam_policy_document.artifact_bucket[0].json
   depends_on = [aws_s3_bucket_public_access_block.artifacts]
-}
-
-resource "aws_secretsmanager_secret" "supabase_database_url" {
-  count = var.enabled ? 1 : 0
-
-  name                    = var.supabase.secrets.database_url_name
-  description             = "Supabase transaction pooler database URL for ${var.project}-${var.environment} app API."
-  recovery_window_in_days = 30
-  tags                    = var.tags
-}
-
-resource "aws_secretsmanager_secret" "supabase_service_role" {
-  count = var.enabled && var.supabase.secrets.create_service_role_secret ? 1 : 0
-
-  name                    = var.supabase.secrets.service_role_name
-  description             = "Optional Supabase service role key for ${var.project}-${var.environment} app API."
-  recovery_window_in_days = 30
-  tags                    = var.tags
-}
-
-resource "aws_secretsmanager_secret" "trusted_service_hmac" {
-  for_each = var.enabled ? var.trusted_services.secret_names : {}
-
-  name                    = each.value
-  description             = "HMAC signing secret for the ${each.key} trusted client calling the ${var.project}-${var.environment} app API."
-  recovery_window_in_days = 30
-  tags                    = merge(var.tags, { TrustedClient = each.key })
 }
 
 module "app_lambda" {

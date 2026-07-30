@@ -156,21 +156,21 @@ variable "observability" {
 }
 
 variable "cdn" {
-  description = "Legacy signed-upload CloudFront configuration. Key values are seeded outside Terraform."
+  description = "Signed-upload CloudFront configuration. Private key values are externally managed in Parameter Store."
   type = object({
-    enabled                   = optional(bool, true)
-    domain_name               = optional(string)
-    hosted_zone_id            = optional(string)
-    hosted_zone_key           = optional(string)
-    certificate_arn           = optional(string)
-    create_certificate        = optional(bool, true)
-    create_dns_records        = optional(bool, false)
-    create_aaaa_record        = optional(bool, true)
-    private_key_secret_name   = optional(string)
-    public_key_parameter_name = optional(string)
-    public_key_name           = optional(string, "s3-upload-key")
-    key_group_name            = optional(string, "s3-upload-key-group")
-    price_class               = optional(string, "PriceClass_All")
+    enabled                    = optional(bool, true)
+    domain_name                = optional(string)
+    hosted_zone_id             = optional(string)
+    hosted_zone_key            = optional(string)
+    certificate_arn            = optional(string)
+    create_certificate         = optional(bool, true)
+    create_dns_records         = optional(bool, false)
+    create_aaaa_record         = optional(bool, true)
+    private_key_parameter_name = optional(string)
+    public_key_parameter_name  = optional(string)
+    public_key_name            = optional(string, "s3-upload-key")
+    key_group_name             = optional(string, "s3-upload-key-group")
+    price_class                = optional(string, "PriceClass_All")
   })
   default = {}
 
@@ -187,5 +187,10 @@ variable "cdn" {
   validation {
     condition     = var.cdn.certificate_arn == null || trimspace(var.cdn.certificate_arn) != ""
     error_message = "cdn.certificate_arn must not be empty when set."
+  }
+
+  validation {
+    condition     = var.cdn.private_key_parameter_name == null || trimspace(var.cdn.private_key_parameter_name) != ""
+    error_message = "cdn.private_key_parameter_name must not be empty when set."
   }
 }

@@ -83,14 +83,24 @@ output "github_oidc_subject" {
   value       = var.enabled ? local.github_subject : null
 }
 
-output "supabase_database_url_secret_arn" {
-  description = "ARN of the Supabase database URL secret metadata."
-  value       = var.enabled ? aws_secretsmanager_secret.supabase_database_url[0].arn : null
+output "supabase_database_url_parameter_name" {
+  description = "Name of the externally managed SSM SecureString containing the Supabase database URL."
+  value       = var.enabled ? local.supabase_database_url_parameter_name : null
 }
 
-output "supabase_service_role_secret_arn" {
-  description = "ARN of the optional Supabase service role key secret metadata."
-  value       = var.enabled && var.supabase.secrets.create_service_role_secret ? aws_secretsmanager_secret.supabase_service_role[0].arn : null
+output "supabase_database_url_parameter_arn" {
+  description = "ARN of the externally managed SSM SecureString containing the Supabase database URL."
+  value       = var.enabled ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_database_url_parameter_name}" : null
+}
+
+output "supabase_service_role_parameter_name" {
+  description = "Name of the optional externally managed SSM SecureString containing the Supabase service role key."
+  value       = var.enabled && var.supabase.parameters.create_service_role_parameter ? local.supabase_service_role_parameter_name : null
+}
+
+output "supabase_service_role_parameter_arn" {
+  description = "ARN of the optional externally managed SSM SecureString containing the Supabase service role key."
+  value       = var.enabled && var.supabase.parameters.create_service_role_parameter ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_service_role_parameter_name}" : null
 }
 
 output "api_contract" {
@@ -111,17 +121,14 @@ output "api_contract" {
   }
 }
 
-output "trusted_service_hmac_secret_names" {
-  description = "Secrets Manager secret names used by trusted HMAC clients, keyed by trusted client name."
-  value       = local.trusted_service_hmac_secret_ids
+output "trusted_service_hmac_parameter_names" {
+  description = "Externally managed SSM SecureString names used by trusted HMAC clients, keyed by trusted client name."
+  value       = local.trusted_service_hmac_parameter_names
 }
 
-output "trusted_service_hmac_secret_arns" {
-  description = "Secrets Manager secret ARNs used by trusted HMAC clients, keyed by trusted client name."
-  value = {
-    for client, secret in aws_secretsmanager_secret.trusted_service_hmac :
-    client => secret.arn
-  }
+output "trusted_service_hmac_parameter_arns" {
+  description = "Externally managed SSM SecureString ARNs used by trusted HMAC clients, keyed by trusted client name."
+  value       = local.trusted_service_hmac_parameter_arns
 }
 
 output "code_updater_lambda_function_name" {

@@ -46,7 +46,6 @@ components:
           basic_auth:
             create_edge_lambda: true
             ssm_parameter_name: /halospawns/prod/frontend-site/basic-auth/credentials-base64
-            create_ssm_parameter: true
             realm: Halospawns prod preview
         deployment:
           github:
@@ -89,10 +88,10 @@ components:
           allowed_origins:
             - https://new.halospawns.com
         supabase:
-          secrets:
+          parameters:
             database_url_name: /halospawns/prod/app-api/supabase/database-url
             service_role_name: /halospawns/prod/app-api/supabase/service-role-key
-            create_service_role_secret: false
+            create_service_role_parameter: false
         release:
           github:
             environment: prod
@@ -107,7 +106,7 @@ components:
             - halospawns-prod-map-rendering-queue-age
           alert_subscriptions: {}
         trusted_services:
-          secret_names:
+          parameter_names:
             heatmap-processing: /halospawns/prod/app-api/trusted-clients/heatmap-processing/hmac-secret
             live-relay: /halospawns/prod/app-api/trusted-clients/live-relay/hmac-secret
             map-processing: /halospawns/prod/app-api/trusted-clients/map-processing/hmac-secret

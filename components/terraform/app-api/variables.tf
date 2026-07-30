@@ -91,7 +91,7 @@ variable "cors" {
 }
 
 variable "supabase" {
-  description = "Public Supabase identifiers, JWT configuration, and secret metadata names."
+  description = "Public Supabase identifiers, JWT configuration, and SSM parameter names."
   type = object({
     project_ref = optional(string)
     url         = optional(string)
@@ -100,12 +100,28 @@ variable "supabase" {
       audience          = optional(string, "authenticated")
       create_authorizer = optional(bool, true)
     }), {})
-    secrets = object({
-      database_url_name          = string
-      service_role_name          = string
-      create_service_role_secret = optional(bool, false)
-    })
+    parameters = optional(object({
+      database_url_name             = optional(string)
+      service_role_name             = optional(string)
+      create_service_role_parameter = optional(bool, false)
+    }), {})
   })
+
+  validation {
+    condition = (
+      var.supabase.parameters.database_url_name == null ||
+      trimspace(var.supabase.parameters.database_url_name) != ""
+    )
+    error_message = "supabase.parameters.database_url_name must not be empty when set."
+  }
+
+  validation {
+    condition = (
+      var.supabase.parameters.service_role_name == null ||
+      trimspace(var.supabase.parameters.service_role_name) != ""
+    )
+    error_message = "supabase.parameters.service_role_name must not be empty when set."
+  }
 }
 
 variable "uploads" {
@@ -208,19 +224,19 @@ variable "release" {
 }
 
 variable "trusted_services" {
-  description = "Trusted HMAC client secret metadata and request timestamp tolerance."
+  description = "Trusted HMAC client SSM parameter names and request timestamp tolerance."
   type = object({
-    secret_names                = optional(map(string), {})
+    parameter_names             = optional(map(string), {})
     timestamp_tolerance_seconds = optional(number)
   })
   default = {}
 
   validation {
     condition = alltrue([
-      for client, secret_name in var.trusted_services.secret_names :
-      trimspace(client) != "" && trimspace(secret_name) != ""
+      for client, parameter_name in var.trusted_services.parameter_names :
+      trimspace(client) != "" && trimspace(parameter_name) != ""
     ])
-    error_message = "trusted_services.secret_names keys and values must be non-empty."
+    error_message = "trusted_services.parameter_names keys and values must be non-empty."
   }
 
   validation {

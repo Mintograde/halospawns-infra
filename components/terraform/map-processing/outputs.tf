@@ -170,12 +170,12 @@ output "app_api_trusted_service_hmac_client_name" {
   value       = local.native_maps_processor_trusted_hmac_client
 }
 
-output "app_api_trusted_service_hmac_secret_id" {
-  description = "Secrets Manager secret identifier configured for processor callback signing."
-  value       = local.trusted_service_hmac_secret_id
+output "app_api_trusted_service_hmac_parameter_name" {
+  description = "Parameter Store parameter name configured for native maps processor callback signing."
+  value       = local.trusted_service_hmac_parameter_name
 }
 
-output "app_api_trusted_service_hmac_secret_ids" {
-  description = "Secrets Manager secret identifiers available to processor callback signers, keyed by trusted client name."
-  value       = local.trusted_service_hmac_secret_ids_by_client
+output "app_api_trusted_service_hmac_parameter_names" {
+  description = "Parameter Store parameter names available to processor callback signers, keyed by trusted client name."
+  value       = local.trusted_service_hmac_parameter_names_by_client
 }

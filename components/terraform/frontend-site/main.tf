@@ -38,9 +38,6 @@ module "basic_auth_edge" {
   function_name = "${var.project}-${var.environment}-frontend-basic-auth"
 
   ssm_parameter_name           = var.access.basic_auth.ssm_parameter_name
-  create_ssm_parameter         = var.access.basic_auth.create_ssm_parameter
-  ssm_placeholder_value        = var.access.basic_auth.ssm_placeholder_value
-  ssm_kms_key_id               = var.access.basic_auth.ssm_kms_key_id
   ssm_region                   = "us-east-1"
   basic_auth_realm             = var.access.basic_auth.realm
   credential_cache_ttl_seconds = var.access.basic_auth.credential_cache_seconds

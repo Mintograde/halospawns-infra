@@ -29,25 +29,6 @@ variable "ssm_parameter_name" {
   }
 }
 
-variable "create_ssm_parameter" {
-  description = "Whether Terraform should create the SSM SecureString placeholder parameter."
-  type        = bool
-  default     = true
-}
-
-variable "ssm_placeholder_value" {
-  description = "Non-working sentinel value used until the real credential is written manually."
-  type        = string
-  default     = "REPLACE_ME_DO_NOT_USE"
-}
-
-variable "ssm_kms_key_id" {
-  description = "Optional customer-managed KMS key ARN or ID for the SSM SecureString parameter."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
 variable "ssm_region" {
   description = "Region that contains the SSM credential parameter."
   type        = string

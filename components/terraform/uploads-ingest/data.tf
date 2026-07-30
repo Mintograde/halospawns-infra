@@ -1,3 +1,7 @@
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
 data "terraform_remote_state" "environment_dns" {
   count = (
     var.dependencies.state_bucket != null &&

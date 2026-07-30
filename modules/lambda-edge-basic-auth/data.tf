@@ -11,7 +11,7 @@ locals {
     ssm_region_json              = jsonencode(var.ssm_region)
     basic_auth_realm_json        = jsonencode(var.basic_auth_realm)
     credential_cache_ttl_seconds = var.credential_cache_ttl_seconds
-    ssm_placeholder_value_json   = jsonencode(var.ssm_placeholder_value)
+    ssm_placeholder_value_json   = jsonencode("REPLACE_ME_DO_NOT_USE")
   })
 
   package_build_dir    = abspath("${path.module}/.build/${var.function_name}")
@@ -37,14 +37,5 @@ data "aws_iam_policy_document" "ssm_access" {
   statement {
     actions   = ["ssm:GetParameter"]
     resources = [local.ssm_parameter_arn]
-  }
-
-  dynamic "statement" {
-    for_each = var.ssm_kms_key_id == null ? [] : [var.ssm_kms_key_id]
-
-    content {
-      actions   = ["kms:Decrypt"]
-      resources = [statement.value]
-    }
   }
 }

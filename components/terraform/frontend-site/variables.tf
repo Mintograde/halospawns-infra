@@ -74,9 +74,6 @@ variable "access" {
     basic_auth = optional(object({
       create_edge_lambda       = optional(bool, false)
       ssm_parameter_name       = optional(string)
-      create_ssm_parameter     = optional(bool, false)
-      ssm_placeholder_value    = optional(string, "REPLACE_ME_DO_NOT_USE")
-      ssm_kms_key_id           = optional(string)
       realm                    = optional(string, "Restricted")
       credential_cache_seconds = optional(number, 300)
     }), {})

@@ -21,6 +21,61 @@ if str(REPLAY_PARSER_DIR) not in sys.path:
 import handler  # noqa: E402
 
 
+class SigningCredentialTests(unittest.TestCase):
+    def setUp(self) -> None:
+        handler.PARAMETER_CACHE.clear()
+
+    def test_parameter_store_value_is_cached(self) -> None:
+        settings = {"trusted_client_parameter_name": "/test/hmac"}
+        with patch.object(
+            handler.SSM,
+            "get_parameter",
+            return_value={"Parameter": {"Value": "parameter-value"}},
+        ) as get_parameter:
+            self.assertEqual(handler._signing_secret(settings), "parameter-value")
+            self.assertEqual(handler._signing_secret(settings), "parameter-value")
+
+        get_parameter.assert_called_once_with(Name="/test/hmac", WithDecryption=True)
+
+    def test_configured_empty_parameter_fails_closed(self) -> None:
+        settings = {"trusted_client_parameter_name": "/test/hmac"}
+        with patch.object(
+            handler.SSM,
+            "get_parameter",
+            return_value={"Parameter": {"Value": ""}},
+        ):
+            with self.assertRaises(handler.ReplayProcessingError) as raised:
+                handler._signing_secret(settings)
+
+        self.assertNotIn("/test/hmac", str(raised.exception))
+
+    def test_settings_require_parameter_store_contract(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "APP_API_BASE_URL": "https://api.example",
+                "APP_API_TRUSTED_CLIENT_NAME": "replay-processing",
+                "APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME": "/test/hmac",
+            },
+            clear=True,
+        ):
+            settings = handler._settings()
+
+        self.assertEqual(settings["trusted_client_parameter_name"], "/test/hmac")
+
+    def test_settings_reject_missing_parameter_name(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "APP_API_BASE_URL": "https://api.example",
+                "APP_API_TRUSTED_CLIENT_NAME": "replay-processing",
+            },
+            clear=True,
+        ):
+            with self.assertRaises(handler.ReplayProcessingError):
+                handler._settings()
+
+
 def _write_replay_json(
     directory: Path,
     *,

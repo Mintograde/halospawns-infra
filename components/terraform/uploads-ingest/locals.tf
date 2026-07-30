@@ -36,10 +36,11 @@ locals {
     var.cdn.certificate_arn
   )
 
-  upload_signing_private_key_secret_name = coalesce(
-    var.cdn.private_key_secret_name,
+  upload_signing_private_key_parameter_name = coalesce(
+    var.cdn.private_key_parameter_name,
     "/${var.project}/${var.environment}/cloudfront/upload-signing/private-key",
   )
+  upload_signing_private_key_parameter_arn = "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.upload_signing_private_key_parameter_name}"
   upload_signing_public_key_parameter_name = coalesce(
     var.cdn.public_key_parameter_name,
     "/${var.project}/${var.environment}/cloudfront/upload-signing/public-key",

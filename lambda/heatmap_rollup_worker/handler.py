@@ -38,7 +38,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 S3 = boto3.client("s3")
-SECRETS = boto3.client("secretsmanager")
+SSM = boto3.client("ssm")
 
 WORKER_VERSION = "heatmap-rollup-worker.v1"
 ROLLUP_SCHEMA = "halospawns.heatmapRollup.v1"
@@ -60,7 +60,7 @@ MAX_GROUPS_PER_METRIC = 64
 MAX_CELL_VALUE = 9_007_199_254_740_991
 DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 MIN_REMAINING_TIME_MS = 30_000
-SECRET_CACHE: dict[str, str] = {}
+PARAMETER_CACHE: dict[str, str] = {}
 
 
 class RollupError(Exception):
@@ -85,7 +85,7 @@ class StaleRevisionError(Exception):
 class Settings:
     app_api_base_url: str
     trusted_client_name: str
-    trusted_client_secret_id: str
+    trusted_client_parameter_name: str
     uploads_bucket: str
     input_prefix: str
     output_prefix: str
@@ -846,7 +846,7 @@ def _api_request(
         sort_keys=True,
     ).encode("utf-8")
     timestamp = str(int(time.time()))
-    secret = _secret_value(settings.trusted_client_secret_id)
+    secret = _signing_secret(settings)
     signature = _hmac_signature(
         client=settings.trusted_client_name,
         timestamp=timestamp,
@@ -1472,32 +1472,39 @@ def _hmac_signature(
     return hmac.new(secret.encode("utf-8"), canonical_request.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _secret_value(secret_id: str) -> str:
-    if secret_id not in SECRET_CACHE:
+def _parameter_value(parameter_name: str) -> str:
+    if parameter_name not in PARAMETER_CACHE:
         try:
-            response = SECRETS.get_secret_value(SecretId=secret_id)
+            response = SSM.get_parameter(Name=parameter_name, WithDecryption=True)
         except (BotoCoreError, ClientError) as error:
             raise RollupError(
-                "secret_read_failed",
-                "The heatmap worker signing secret could not be read",
+                "parameter_read_failed",
+                "The heatmap worker signing parameter could not be read",
                 retryable=True,
             ) from error
-        secret = response.get("SecretString")
-        if not isinstance(secret, str) or not secret:
+        parameter = response.get("Parameter")
+        value = parameter.get("Value") if isinstance(parameter, dict) else None
+        if not isinstance(value, str) or not value.strip():
             raise RollupError(
-                "secret_read_failed",
-                "The heatmap worker signing secret was empty",
+                "parameter_read_failed",
+                "The heatmap worker signing parameter was empty",
                 retryable=False,
             )
-        SECRET_CACHE[secret_id] = secret
-    return SECRET_CACHE[secret_id]
+        PARAMETER_CACHE[parameter_name] = value
+    return PARAMETER_CACHE[parameter_name]
+
+
+def _signing_secret(settings: Settings) -> str:
+    return _parameter_value(settings.trusted_client_parameter_name)
 
 
 def _settings() -> Settings:
     settings = Settings(
         app_api_base_url=_required_env("APP_API_BASE_URL").rstrip("/"),
         trusted_client_name=_required_env("APP_API_TRUSTED_CLIENT_NAME"),
-        trusted_client_secret_id=_required_env("APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID"),
+        trusted_client_parameter_name=_required_env(
+            "APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME"
+        ),
         uploads_bucket=_required_env("UPLOADS_BUCKET_NAME"),
         input_prefix=_prefix_env("SPATIAL_ARTIFACT_PREFIX", "replays/derived/spatial/"),
         output_prefix=_prefix_env("HEATMAP_ROLLUP_ARTIFACT_PREFIX", "replays/derived/heatmap-rollups/"),

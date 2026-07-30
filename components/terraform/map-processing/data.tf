@@ -32,12 +32,12 @@ data "terraform_remote_state" "app_api" {
   }
 }
 
-data "aws_iam_policy_document" "trusted_service_hmac_secret" {
-  for_each = local.trusted_service_hmac_secret_arns_by_client
+data "aws_iam_policy_document" "trusted_service_hmac_parameter" {
+  for_each = local.trusted_service_hmac_parameter_arns_by_client
 
   statement {
-    sid       = "ReadTrustedServiceHmacSecret"
-    actions   = ["secretsmanager:GetSecretValue"]
+    sid       = "ReadTrustedServiceHmacParameter"
+    actions   = ["ssm:GetParameter"]
     resources = [each.value]
   }
 }
@@ -202,11 +202,11 @@ data "aws_iam_policy_document" "map_renderer_runtime" {
   }
 
   dynamic "statement" {
-    for_each = local.map_renderer_trusted_service_hmac_secret_arn == null ? [] : [local.map_renderer_trusted_service_hmac_secret_arn]
+    for_each = local.map_renderer_trusted_service_hmac_parameter_arn == null ? [] : [local.map_renderer_trusted_service_hmac_parameter_arn]
 
     content {
-      sid       = "ReadTrustedServiceHmacSecret"
-      actions   = ["secretsmanager:GetSecretValue"]
+      sid       = "ReadTrustedServiceHmacParameter"
+      actions   = ["ssm:GetParameter"]
       resources = [statement.value]
     }
   }

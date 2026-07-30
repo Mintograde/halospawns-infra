@@ -11,8 +11,6 @@ components:
           mode: public
           basic_auth:
             create_edge_lambda: false
-            create_ssm_parameter: false
-            ssm_placeholder_value: REPLACE_ME_DO_NOT_USE
             realm: Restricted
             credential_cache_seconds: 300
         deployment:

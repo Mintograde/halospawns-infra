@@ -27,19 +27,19 @@ from typing import Any
 import boto3
 import ijson
 import zstandard
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
 
 S3 = boto3.client("s3")
-SECRETS = boto3.client("secretsmanager")
+SSM = boto3.client("ssm")
 
 UUID_PATTERN = re.compile(
     r"(?P<upload_id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})"
 )
-SECRET_CACHE: dict[str, str] = {}
+PARAMETER_CACHE: dict[str, str] = {}
 MAX_SPAWN_POINTS = 512
 MAX_GAMETYPE_SETTINGS_ITEMS = 128
 MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS = 32
@@ -2589,7 +2589,7 @@ def _call_app_api(method: str, path: str, payload: dict[str, Any]) -> dict[str, 
         raw_path=parsed_url.path,
         raw_query_string=parsed_url.query,
         body=body,
-        secret=_secret_value(settings["trusted_client_secret_id"]),
+        secret=_signing_secret(settings),
     )
     request = urllib.request.Request(
         url,
@@ -2691,21 +2691,31 @@ def _upload_id_from_key(key: str) -> str:
     return match.group("upload_id").lower()
 
 
-def _secret_value(secret_id: str) -> str:
-    if secret_id not in SECRET_CACHE:
-        response = SECRETS.get_secret_value(SecretId=secret_id)
-        secret = response.get("SecretString")
-        if not secret:
-            raise ReplayProcessingError(f"Trusted client secret was empty: {secret_id}")
-        SECRET_CACHE[secret_id] = secret
-    return SECRET_CACHE[secret_id]
+def _parameter_value(parameter_name: str) -> str:
+    if parameter_name not in PARAMETER_CACHE:
+        try:
+            response = SSM.get_parameter(Name=parameter_name, WithDecryption=True)
+        except (BotoCoreError, ClientError) as error:
+            raise ReplayProcessingError("Trusted client signing parameter could not be read") from error
+        parameter = response.get("Parameter")
+        value = parameter.get("Value") if isinstance(parameter, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            raise ReplayProcessingError("Trusted client signing parameter was empty")
+        PARAMETER_CACHE[parameter_name] = value
+    return PARAMETER_CACHE[parameter_name]
+
+
+def _signing_secret(settings: dict[str, str]) -> str:
+    return _parameter_value(settings["trusted_client_parameter_name"])
 
 
 def _settings() -> dict[str, str]:
     return {
         "app_api_base_url": _required_env("APP_API_BASE_URL"),
         "trusted_client_name": _required_env("APP_API_TRUSTED_CLIENT_NAME"),
-        "trusted_client_secret_id": _required_env("APP_API_TRUSTED_CLIENT_HMAC_SECRET_ID"),
+        "trusted_client_parameter_name": _required_env(
+            "APP_API_TRUSTED_CLIENT_HMAC_PARAMETER_NAME"
+        ),
         "processing_status_path_template": os.getenv(
             "APP_API_UPLOAD_PROCESSING_STATUS_PATH_TEMPLATE",
             "/v1/uploads/{upload_id}/processing-status",
