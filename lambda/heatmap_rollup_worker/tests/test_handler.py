@@ -194,6 +194,7 @@ def _settings(
         region_capability=handler.REGION_STATS_CAPABILITY,
         region_stats_enabled=True,
         region_max_membership_checks=5_000_000,
+        detailed_metrics_enabled=False,
         claim_path="/claim",
         input_path_template="/{scope_id}/inputs",
         complete_path_template="/{scope_id}/complete",
@@ -247,6 +248,7 @@ class SigningCredentialTests(unittest.TestCase):
             settings = handler._settings()
 
         self.assertEqual(settings.trusted_client_parameter_name, "/test/hmac")
+        self.assertFalse(settings.detailed_metrics_enabled)
 
     def test_settings_reject_missing_parameter_name(self) -> None:
         with patch.dict(
@@ -262,6 +264,82 @@ class SigningCredentialTests(unittest.TestCase):
                 handler._settings()
 
         self.assertEqual(raised.exception.error_code, "worker_configuration_invalid")
+
+
+class MetricEmissionTests(unittest.TestCase):
+    METRIC_NAMES = {
+        "ScopesCompleted",
+        "ScopesStale",
+        "ScopesFailed",
+        "InputGames",
+        "InputBytes",
+        "InputDecodedBytes",
+        "OutputBytes",
+        "OutputDecodedBytes",
+        "OutputCells",
+        "RegionOutputBytes",
+        "RegionOutputDecodedBytes",
+        "RegionMembershipChecks",
+        "RegionSourceCells",
+        "RegionMissingGames",
+        "RegionIncompatibleGames",
+        "RegionArtifactsWritten",
+        "S3Gets",
+        "ApiRequests",
+        "ApiDuration",
+        "InvocationDuration",
+        "ProcessPeakRssKiB",
+    }
+
+    @staticmethod
+    def _event(*, detailed_metrics_enabled: bool) -> dict[str, object]:
+        totals = {
+            "completed": 1,
+            "stale": 2,
+            "failed": 3,
+            "input_games": 4,
+            "input_bytes": 5,
+            "input_decoded_bytes": 6,
+            "output_bytes": 7,
+            "output_decoded_bytes": 8,
+            "output_cells": 9,
+            "region_output_bytes": 10,
+            "region_output_decoded_bytes": 11,
+            "region_membership_checks": 12,
+            "region_source_cells": 13,
+            "region_missing_games": 14,
+            "region_incompatible_games": 15,
+            "region_artifacts_written": 16,
+            "s3_gets": 17,
+            "api_requests": 18,
+            "api_duration_ms": 19,
+        }
+        with (
+            patch.object(handler, "_process_peak_rss_kib", return_value=20),
+            patch("builtins.print") as print_event,
+        ):
+            handler._emit_metrics(
+                totals,
+                duration_ms=21,
+                detailed_metrics_enabled=detailed_metrics_enabled,
+            )
+        return json.loads(print_event.call_args.args[0])
+
+    def test_default_emf_publishes_only_scope_failures(self) -> None:
+        event = self._event(detailed_metrics_enabled=False)
+        definitions = event["_aws"]["CloudWatchMetrics"][0]["Metrics"]
+
+        self.assertEqual(definitions, [{"Name": "ScopesFailed", "Unit": "Count"}])
+        self.assertEqual(event["ScopesFailed"], 3)
+        self.assertEqual(event["ApiDuration"], 19)
+        self.assertEqual(self.METRIC_NAMES, set(event) - {"_aws", "Worker"})
+
+    def test_detailed_emf_publishes_every_metric(self) -> None:
+        event = self._event(detailed_metrics_enabled=True)
+        definitions = event["_aws"]["CloudWatchMetrics"][0]["Metrics"]
+
+        self.assertEqual(self.METRIC_NAMES, {definition["Name"] for definition in definitions})
+        self.assertEqual(len(definitions), len(self.METRIC_NAMES))
 
 
 class RollupAggregationTests(unittest.TestCase):

@@ -94,6 +94,7 @@ class Settings:
     region_capability: str
     region_stats_enabled: bool
     region_max_membership_checks: int
+    detailed_metrics_enabled: bool
     claim_path: str
     input_path_template: str
     complete_path_template: str
@@ -467,7 +468,11 @@ def lambda_handler(event: object, context: object) -> dict[str, object]:
     totals["api_requests"] = runtime_metrics.api_requests
     totals["api_duration_ms"] = runtime_metrics.api_duration_ms
     duration_ms = round((time.monotonic() - started) * 1000)
-    _emit_metrics(totals, duration_ms=duration_ms)
+    _emit_metrics(
+        totals,
+        duration_ms=duration_ms,
+        detailed_metrics_enabled=settings.detailed_metrics_enabled,
+    )
     LOGGER.info(
         "Heatmap rollup invocation completed: %s",
         json.dumps({**totals, "duration_ms": duration_ms}, separators=(",", ":"), sort_keys=True),
@@ -1524,6 +1529,10 @@ def _settings() -> Settings:
             1,
             100_000_000,
         ),
+        detailed_metrics_enabled=_bool_env(
+            "HEATMAP_ROLLUP_DETAILED_METRICS_ENABLED",
+            False,
+        ),
         claim_path=os.getenv("APP_API_HEATMAP_ROLLUP_CLAIM_PATH", "/v1/ingest/heatmap-rollups/claim"),
         input_path_template=os.getenv("APP_API_HEATMAP_ROLLUP_INPUTS_PATH_TEMPLATE", "/v1/ingest/heatmap-rollups/{scope_id}/inputs"),
         complete_path_template=os.getenv("APP_API_HEATMAP_ROLLUP_COMPLETE_PATH_TEMPLATE", "/v1/ingest/heatmap-rollups/{scope_id}/complete"),
@@ -1763,7 +1772,12 @@ def _process_peak_rss_kib() -> int | None:
         return None
 
 
-def _emit_metrics(totals: Mapping[str, int], *, duration_ms: int) -> None:
+def _emit_metrics(
+    totals: Mapping[str, int],
+    *,
+    duration_ms: int,
+    detailed_metrics_enabled: bool,
+) -> None:
     metric_values = {
         "ScopesCompleted": totals["completed"],
         "ScopesStale": totals["stale"],
@@ -1787,6 +1801,7 @@ def _emit_metrics(totals: Mapping[str, int], *, duration_ms: int) -> None:
         "InvocationDuration": duration_ms,
         "ProcessPeakRssKiB": _process_peak_rss_kib() or 0,
     }
+    metric_names = tuple(metric_values) if detailed_metrics_enabled else ("ScopesFailed",)
     print(
         json.dumps(
             {
@@ -1816,7 +1831,7 @@ def _emit_metrics(totals: Mapping[str, int], *, duration_ms: int) -> None:
                                         else "Count"
                                     ),
                                 }
-                                for name in metric_values
+                                for name in metric_names
                             ],
                         }
                     ],

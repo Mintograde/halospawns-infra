@@ -134,7 +134,7 @@ variable "replay_parser" {
 }
 
 variable "heatmap_rollup_worker" {
-  description = "Scheduled heatmap rollup Lambda, retry, and alarm configuration."
+  description = "Scheduled heatmap rollup Lambda, metric, retry, and alarm configuration."
   type = object({
     enabled       = optional(bool, true)
     function_name = optional(string)
@@ -161,6 +161,9 @@ variable "heatmap_rollup_worker" {
     region_stats = optional(object({
       enabled               = optional(bool, true)
       max_membership_checks = optional(number, 5000000)
+    }), {})
+    metrics = optional(object({
+      detailed_enabled = optional(bool, false)
     }), {})
     dlq = optional(object({
       message_retention_seconds = optional(number, 1209600)

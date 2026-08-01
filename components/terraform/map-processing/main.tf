@@ -238,6 +238,7 @@ module "heatmap_rollup_worker" {
       HEATMAP_ROLLUP_INPUT_PAGE_LIMIT               = tostring(var.heatmap_rollup_worker.processing.input_page_limit)
       HEATMAP_ROLLUP_MAX_SCOPES_PER_INVOCATION      = tostring(var.heatmap_rollup_worker.processing.max_scopes_per_invocation)
       HEATMAP_ROLLUP_RETRY_AFTER_SECONDS            = tostring(var.heatmap_rollup_worker.processing.retry_after_seconds)
+      HEATMAP_ROLLUP_DETAILED_METRICS_ENABLED       = tostring(var.heatmap_rollup_worker.metrics.detailed_enabled)
     },
     var.heatmap_rollup_worker.lambda.environment_variables,
   )
