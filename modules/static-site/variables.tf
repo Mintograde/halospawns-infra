@@ -14,6 +14,23 @@ variable "bucket_prefix" {
   type        = string
 }
 
+variable "retention" {
+  description = "Retention for noncurrent site objects and incomplete multipart uploads."
+  type = object({
+    noncurrent_version_expiration_days = optional(number, 30)
+    abort_incomplete_multipart_days    = optional(number, 7)
+  })
+  default = {}
+
+  validation {
+    condition = (
+      var.retention.noncurrent_version_expiration_days > 0 &&
+      var.retention.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Static-site lifecycle values must use positive day counts."
+  }
+}
+
 variable "domain_name" {
   description = "Primary custom domain name for the site. Leave null to use the CloudFront default domain."
   type        = string

@@ -10,6 +10,31 @@ locals {
   replay_spatial_artifact_prefix     = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
   heatmap_rollup_artifact_prefix     = "${trim(var.storage.heatmap_rollup_artifacts.prefix, "/")}/"
   region_stat_rollup_artifact_prefix = "${trim(var.storage.region_stat_rollup_artifacts.prefix, "/")}/"
+  map_support_resource_prefix        = "${trim(var.storage.map_support_resources.prefix, "/")}/"
+
+  pipeline_lifecycle_rules = merge(
+    {
+      for name, pipeline in local.pipelines : "${name}-unprocessed" => {
+        prefix                             = pipeline.unprocessed_prefix
+        expiration_days                    = null
+        noncurrent_version_expiration_days = var.storage.pipeline_lifecycle.temporary_noncurrent_version_expiration_days
+      }
+    },
+    {
+      for name, pipeline in local.pipelines : "${name}-processed" => {
+        prefix                             = pipeline.processed_prefix
+        expiration_days                    = null
+        noncurrent_version_expiration_days = var.storage.pipeline_lifecycle.processed_noncurrent_version_expiration_days
+      } if pipeline.processed_prefix != null
+    },
+    {
+      for name, pipeline in local.pipelines : "${name}-failed" => {
+        prefix                             = pipeline.failed_prefix
+        expiration_days                    = var.storage.pipeline_lifecycle.failed_expiration_days
+        noncurrent_version_expiration_days = var.storage.pipeline_lifecycle.failed_noncurrent_version_expiration_days
+      } if pipeline.failed_prefix != null
+    },
+  )
 
   full_domain_name = coalesce(var.cdn.domain_name, "api-${var.environment}.halospawns.com")
 

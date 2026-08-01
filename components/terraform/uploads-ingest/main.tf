@@ -10,6 +10,87 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
   bucket = module.uploads_bucket.s3_bucket_id
 
   rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.storage.pipeline_lifecycle.abort_incomplete_multipart_days
+    }
+  }
+
+  dynamic "rule" {
+    for_each = local.pipeline_lifecycle_rules
+
+    content {
+      id     = "${rule.key}-retention"
+      status = "Enabled"
+
+      filter {
+        prefix = rule.value.prefix
+      }
+
+      dynamic "expiration" {
+        for_each = rule.value.expiration_days == null ? [] : [rule.value.expiration_days]
+
+        content {
+          days = expiration.value
+        }
+      }
+
+      noncurrent_version_expiration {
+        noncurrent_days = rule.value.noncurrent_version_expiration_days
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = local.pipeline_lifecycle_rules
+
+    content {
+      id     = "${rule.key}-expired-delete-markers"
+      status = "Enabled"
+
+      filter {
+        prefix = rule.value.prefix
+      }
+
+      expiration {
+        expired_object_delete_marker = true
+      }
+    }
+  }
+
+  rule {
+    id     = "map-support-resource-versions"
+    status = "Enabled"
+
+    filter {
+      prefix = local.map_support_resource_prefix
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.storage.map_support_resources.noncurrent_version_expiration_days
+    }
+  }
+
+  rule {
+    id     = "map-support-resource-expired-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = local.map_support_resource_prefix
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  rule {
     id     = "replay-spatial-artifact-versions"
     status = "Enabled"
 
@@ -19,10 +100,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
 
     noncurrent_version_expiration {
       noncurrent_days = var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = var.storage.replay_spatial_artifacts.abort_incomplete_multipart_days
     }
   }
 
@@ -36,10 +113,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
 
     noncurrent_version_expiration {
       noncurrent_days = var.storage.heatmap_rollup_artifacts.noncurrent_version_expiration_days
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = var.storage.heatmap_rollup_artifacts.abort_incomplete_multipart_days
     }
   }
 
@@ -74,10 +147,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
     noncurrent_version_expiration {
       noncurrent_days = var.storage.region_stat_rollup_artifacts.noncurrent_version_expiration_days
     }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = var.storage.region_stat_rollup_artifacts.abort_incomplete_multipart_days
-    }
   }
 
   rule {
@@ -97,6 +166,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {
 
     expiration {
       days = var.storage.region_stat_rollup_artifacts.superseded_expiration_days
+    }
+  }
+
+  dynamic "rule" {
+    for_each = {
+      replay-spatial     = local.replay_spatial_artifact_prefix
+      heatmap-rollup     = local.heatmap_rollup_artifact_prefix
+      region-stat-rollup = local.region_stat_rollup_artifact_prefix
+    }
+
+    content {
+      id     = "${rule.key}-expired-delete-markers"
+      status = "Enabled"
+
+      filter {
+        prefix = rule.value
+      }
+
+      expiration {
+        expired_object_delete_marker = true
+      }
     }
   }
 

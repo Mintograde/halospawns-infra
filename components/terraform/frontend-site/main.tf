@@ -50,6 +50,7 @@ module "site" {
   project       = var.project
   environment   = var.environment
   bucket_prefix = "${var.project}-frontend"
+  retention     = var.storage
 
   domain_name          = var.dns.domain_name
   aliases              = var.dns.domain_name == null ? [] : [var.dns.domain_name]

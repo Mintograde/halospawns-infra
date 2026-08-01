@@ -41,6 +41,69 @@ resource "aws_s3_bucket_versioning" "maps_artifacts" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "maps_artifacts" {
+  bucket = aws_s3_bucket.maps_artifacts.id
+
+  dynamic "rule" {
+    for_each = {
+      maps     = local.normalized_maps_artifact_release_prefix
+      renderer = local.normalized_map_renderer_release_prefix
+    }
+
+    content {
+      id     = "${rule.key}-release-artifact-retention"
+      status = "Enabled"
+
+      filter {
+        prefix = rule.value
+      }
+
+      expiration {
+        days = var.release.retention.expiration_days
+      }
+
+      noncurrent_version_expiration {
+        noncurrent_days = var.release.retention.noncurrent_version_expiration_days
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = {
+      maps     = local.normalized_maps_artifact_release_prefix
+      renderer = local.normalized_map_renderer_release_prefix
+    }
+
+    content {
+      id     = "${rule.key}-release-artifact-expired-delete-markers"
+      status = "Enabled"
+
+      filter {
+        prefix = rule.value
+      }
+
+      expiration {
+        expired_object_delete_marker = true
+      }
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.release.retention.abort_incomplete_multipart_days
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.maps_artifacts]
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "maps_artifacts" {
   bucket = aws_s3_bucket.maps_artifacts.id
 

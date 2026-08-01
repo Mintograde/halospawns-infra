@@ -31,6 +31,10 @@ components:
             version: 1
         release:
           artifact_prefix: releases/
+          retention:
+            expiration_days: 90
+            noncurrent_version_expiration_days: 30
+            abort_incomplete_multipart_days: 7
           lambda:
             runtime: python3.12
             handler: halospawns_api.lambda_handler.handler

@@ -311,6 +311,57 @@ resource "aws_s3_bucket_versioning" "artifacts" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
+  count = var.enabled ? 1 : 0
+
+  bucket = aws_s3_bucket.artifacts[0].id
+
+  rule {
+    id     = "release-artifact-retention"
+    status = "Enabled"
+
+    filter {
+      prefix = local.normalized_artifact_release_prefix
+    }
+
+    expiration {
+      days = var.release.retention.expiration_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.release.retention.noncurrent_version_expiration_days
+    }
+  }
+
+  rule {
+    id     = "release-artifact-expired-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = local.normalized_artifact_release_prefix
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = var.release.retention.abort_incomplete_multipart_days
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.artifacts]
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
   count = var.enabled ? 1 : 0
 

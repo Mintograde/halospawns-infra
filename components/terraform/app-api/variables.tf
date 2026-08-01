@@ -196,6 +196,11 @@ variable "release" {
   description = "App Lambda runtime, artifact publishing, updater, and GitHub OIDC configuration."
   type = object({
     artifact_prefix = optional(string, "releases/")
+    retention = optional(object({
+      expiration_days                    = optional(number, 90)
+      noncurrent_version_expiration_days = optional(number, 30)
+      abort_incomplete_multipart_days    = optional(number, 7)
+    }), {})
     lambda = optional(object({
       runtime         = optional(string, "python3.12")
       handler         = optional(string, "halospawns_api.lambda_handler.handler")
@@ -220,6 +225,15 @@ variable "release" {
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.release.github.repository))
     error_message = "release.github.repository must be in owner/name form."
+  }
+
+  validation {
+    condition = (
+      var.release.retention.expiration_days > 0 &&
+      var.release.retention.noncurrent_version_expiration_days > 0 &&
+      var.release.retention.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Release artifact lifecycle values must use positive day counts."
   }
 }
 

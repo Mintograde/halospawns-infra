@@ -6,16 +6,23 @@ components:
       vars:
         storage:
           bucket_prefix: uploads
+          pipeline_lifecycle:
+            temporary_noncurrent_version_expiration_days: 7
+            processed_noncurrent_version_expiration_days: 30
+            failed_expiration_days: 90
+            failed_noncurrent_version_expiration_days: 7
+            abort_incomplete_multipart_days: 7
+          map_support_resources:
+            prefix: maps/support-resources
+            noncurrent_version_expiration_days: 30
           heatmap_rollup_artifacts:
             prefix: replays/derived/heatmap-rollups
             superseded_expiration_days: 30
             noncurrent_version_expiration_days: 30
-            abort_incomplete_multipart_days: 7
           region_stat_rollup_artifacts:
             prefix: replays/derived/region-stat-rollups
             superseded_expiration_days: 30
             noncurrent_version_expiration_days: 30
-            abort_incomplete_multipart_days: 7
         pipelines:
           maps:
             unprocessed_prefix: maps/unprocessed/

@@ -38,22 +38,30 @@ variable "storage" {
   type = object({
     bucket_prefix        = optional(string, "uploads")
     allowed_cors_origins = optional(set(string), [])
+    pipeline_lifecycle = optional(object({
+      temporary_noncurrent_version_expiration_days = optional(number, 7)
+      processed_noncurrent_version_expiration_days = optional(number, 30)
+      failed_expiration_days                       = optional(number, 90)
+      failed_noncurrent_version_expiration_days    = optional(number, 7)
+      abort_incomplete_multipart_days              = optional(number, 7)
+    }), {})
+    map_support_resources = optional(object({
+      prefix                             = optional(string, "maps/support-resources")
+      noncurrent_version_expiration_days = optional(number, 30)
+    }), {})
     replay_spatial_artifacts = optional(object({
       prefix                             = optional(string, "replays/derived/spatial")
       noncurrent_version_expiration_days = optional(number, 30)
-      abort_incomplete_multipart_days    = optional(number, 7)
     }), {})
     heatmap_rollup_artifacts = optional(object({
       prefix                             = optional(string, "replays/derived/heatmap-rollups")
       superseded_expiration_days         = optional(number, 30)
       noncurrent_version_expiration_days = optional(number, 30)
-      abort_incomplete_multipart_days    = optional(number, 7)
     }), {})
     region_stat_rollup_artifacts = optional(object({
       prefix                             = optional(string, "replays/derived/region-stat-rollups")
       superseded_expiration_days         = optional(number, 30)
       noncurrent_version_expiration_days = optional(number, 30)
-      abort_incomplete_multipart_days    = optional(number, 7)
     }), {})
   })
   default = {}
@@ -65,19 +73,36 @@ variable "storage" {
 
   validation {
     condition = (
-      trim(var.storage.replay_spatial_artifacts.prefix, "/") != "" &&
-      var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days > 0 &&
-      var.storage.replay_spatial_artifacts.abort_incomplete_multipart_days > 0
+      var.storage.pipeline_lifecycle.temporary_noncurrent_version_expiration_days > 0 &&
+      var.storage.pipeline_lifecycle.processed_noncurrent_version_expiration_days > 0 &&
+      var.storage.pipeline_lifecycle.failed_expiration_days > 0 &&
+      var.storage.pipeline_lifecycle.failed_noncurrent_version_expiration_days > 0 &&
+      var.storage.pipeline_lifecycle.abort_incomplete_multipart_days > 0
     )
-    error_message = "Replay spatial artifact lifecycle values must use a non-empty prefix and positive day counts."
+    error_message = "Upload pipeline lifecycle values must use positive day counts."
+  }
+
+  validation {
+    condition = (
+      trim(var.storage.map_support_resources.prefix, "/") != "" &&
+      var.storage.map_support_resources.noncurrent_version_expiration_days > 0
+    )
+    error_message = "Map support-resource lifecycle values must use a non-empty prefix and a positive day count."
+  }
+
+  validation {
+    condition = (
+      trim(var.storage.replay_spatial_artifacts.prefix, "/") != "" &&
+      var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days > 0
+    )
+    error_message = "Replay spatial artifact lifecycle values must use a non-empty prefix and a positive day count."
   }
 
   validation {
     condition = (
       trim(var.storage.heatmap_rollup_artifacts.prefix, "/") != "" &&
       var.storage.heatmap_rollup_artifacts.superseded_expiration_days > 0 &&
-      var.storage.heatmap_rollup_artifacts.noncurrent_version_expiration_days > 0 &&
-      var.storage.heatmap_rollup_artifacts.abort_incomplete_multipart_days > 0
+      var.storage.heatmap_rollup_artifacts.noncurrent_version_expiration_days > 0
     )
     error_message = "Heatmap rollup artifact lifecycle values must use a non-empty prefix and positive day counts."
   }
@@ -86,8 +111,7 @@ variable "storage" {
     condition = (
       trim(var.storage.region_stat_rollup_artifacts.prefix, "/") != "" &&
       var.storage.region_stat_rollup_artifacts.superseded_expiration_days > 0 &&
-      var.storage.region_stat_rollup_artifacts.noncurrent_version_expiration_days > 0 &&
-      var.storage.region_stat_rollup_artifacts.abort_incomplete_multipart_days > 0
+      var.storage.region_stat_rollup_artifacts.noncurrent_version_expiration_days > 0
     )
     error_message = "Region-stat rollup artifact lifecycle values must use a non-empty prefix and positive day counts."
   }

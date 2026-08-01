@@ -4,6 +4,9 @@ components:
       metadata:
         component: frontend-site
       vars:
+        storage:
+          noncurrent_version_expiration_days: 30
+          abort_incomplete_multipart_days: 7
         dns:
           certificate:
             create: false

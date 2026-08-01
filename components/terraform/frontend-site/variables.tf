@@ -119,6 +119,23 @@ variable "deployment" {
   }
 }
 
+variable "storage" {
+  description = "Frontend bucket lifecycle configuration."
+  type = object({
+    noncurrent_version_expiration_days = optional(number, 30)
+    abort_incomplete_multipart_days    = optional(number, 7)
+  })
+  default = {}
+
+  validation {
+    condition = (
+      var.storage.noncurrent_version_expiration_days > 0 &&
+      var.storage.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Frontend storage lifecycle values must use positive day counts."
+  }
+}
+
 variable "cloudfront" {
   description = "Frontend CloudFront distribution configuration."
   type = object({

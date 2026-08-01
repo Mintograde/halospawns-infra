@@ -247,6 +247,11 @@ variable "renderer" {
 variable "release" {
   description = "Artifact publishing, code updater, and GitHub OIDC configuration."
   type = object({
+    retention = optional(object({
+      expiration_days                    = optional(number, 90)
+      noncurrent_version_expiration_days = optional(number, 30)
+      abort_incomplete_multipart_days    = optional(number, 7)
+    }), {})
     oidc = optional(object({
       provider_arn    = optional(string)
       create_provider = optional(bool, false)
@@ -281,5 +286,14 @@ variable "release" {
       can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", repository))
     ])
     error_message = "Release GitHub repositories must be in owner/name form."
+  }
+
+  validation {
+    condition = (
+      var.release.retention.expiration_days > 0 &&
+      var.release.retention.noncurrent_version_expiration_days > 0 &&
+      var.release.retention.abort_incomplete_multipart_days > 0
+    )
+    error_message = "Release artifact lifecycle values must use positive day counts."
   }
 }

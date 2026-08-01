@@ -4,6 +4,11 @@ components:
       metadata:
         component: map-processing
       vars:
+        release:
+          retention:
+            expiration_days: 90
+            noncurrent_version_expiration_days: 30
+            abort_incomplete_multipart_days: 7
         replay_parser:
           environment_variables:
             REPLAY_EXTRACTOR_MODE: native_with_fallback
