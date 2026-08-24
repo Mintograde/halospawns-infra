@@ -133,6 +133,20 @@ resource "aws_acm_certificate_validation" "this" {
   }
 }
 
+resource "aws_cloudfront_function" "public_spa_rewrite" {
+  count = local.public_spa_mount_enabled ? 1 : 0
+
+  name    = substr("${var.project}-${var.environment}-public-spa-rewrite", 0, 64)
+  comment = "Rewrite clean public SPA routes for ${local.public_spa_path_prefix}"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code = templatefile("${path.module}/public-spa-rewrite.js.tftpl", {
+    asset_path_prefix = jsonencode("${local.public_spa_path_prefix}/assets/")
+    index_uri         = jsonencode(local.public_spa_index_uri)
+    mount_path        = jsonencode(local.public_spa_path_prefix)
+  })
+}
+
 resource "aws_cloudfront_distribution" "this" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -162,6 +176,25 @@ resource "aws_cloudfront_distribution" "this" {
         event_type   = "viewer-request"
         lambda_arn   = lambda_function_association.value
         include_body = false
+      }
+    }
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = local.public_spa_path_patterns
+
+    content {
+      path_pattern           = ordered_cache_behavior.value
+      allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+      cached_methods         = ["GET", "HEAD"]
+      target_origin_id       = local.origin_id
+      viewer_protocol_policy = "redirect-to-https"
+      compress               = true
+      cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.public_spa_rewrite[0].arn
       }
     }
   }

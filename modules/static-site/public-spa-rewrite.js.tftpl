@@ -1,0 +1,26 @@
+function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    var mountPath = ${mount_path};
+    var indexUri = ${index_uri};
+    var assetPathPrefix = ${asset_path_prefix};
+
+    if (uri === mountPath || uri === mountPath + "/") {
+        request.uri = indexUri;
+        return request;
+    }
+
+    var descendantPrefix = mountPath + "/";
+    if (uri.indexOf(descendantPrefix) !== 0) {
+        return request;
+    }
+
+    var relativeUri = uri.substring(descendantPrefix.length);
+    var lastSegment = relativeUri.substring(relativeUri.lastIndexOf("/") + 1);
+    if (uri.indexOf(assetPathPrefix) === 0 || lastSegment.indexOf(".") !== -1) {
+        return request;
+    }
+
+    request.uri = indexUri;
+    return request;
+}

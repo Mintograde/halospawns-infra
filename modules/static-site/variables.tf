@@ -82,6 +82,38 @@ variable "spa_fallback_enabled" {
   default     = true
 }
 
+variable "public_spa_mount" {
+  description = "Optional public SPA mount served by ordered CloudFront behaviors outside the default access control."
+  type = object({
+    path_prefix    = string
+    index_document = optional(string, "index.html")
+  })
+  default  = null
+  nullable = true
+
+  validation {
+    condition = var.public_spa_mount == null ? true : (
+      can(regex("^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$", var.public_spa_mount.path_prefix)) &&
+      alltrue([
+        for segment in split("/", trimprefix(var.public_spa_mount.path_prefix, "/")) :
+        !contains([".", ".."], segment)
+      ])
+    )
+    error_message = "public_spa_mount.path_prefix must be a non-root absolute path without wildcards, a trailing slash, or dot segments."
+  }
+
+  validation {
+    condition = var.public_spa_mount == null ? true : (
+      can(regex("^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$", var.public_spa_mount.index_document)) &&
+      alltrue([
+        for segment in split("/", var.public_spa_mount.index_document) :
+        !contains([".", ".."], segment)
+      ])
+    )
+    error_message = "public_spa_mount.index_document must be a relative object path without wildcards or dot segments."
+  }
+}
+
 variable "access_control_mode" {
   description = "Viewer access control mode."
   type        = string

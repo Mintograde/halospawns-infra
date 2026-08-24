@@ -140,8 +140,23 @@ variable "cloudfront" {
   description = "Frontend CloudFront distribution configuration."
   type = object({
     price_class = optional(string, "PriceClass_100")
+    public_spa_mount = optional(object({
+      path_prefix    = string
+      index_document = optional(string, "index.html")
+    }))
   })
   default = {}
+
+  validation {
+    condition = var.cloudfront.public_spa_mount == null ? true : (
+      can(regex("^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$", var.cloudfront.public_spa_mount.path_prefix)) &&
+      alltrue([
+        for segment in split("/", trimprefix(var.cloudfront.public_spa_mount.path_prefix, "/")) :
+        !contains([".", ".."], segment)
+      ])
+    )
+    error_message = "cloudfront.public_spa_mount.path_prefix must be a non-root absolute path without wildcards, a trailing slash, or dot segments."
+  }
 }
 
 variable "tags" {

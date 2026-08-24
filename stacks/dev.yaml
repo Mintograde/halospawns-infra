@@ -38,6 +38,10 @@ components:
             environment: dev
             oidc:
               create_provider: true
+        cloudfront:
+          public_spa_mount:
+            path_prefix: /overlays
+            index_document: index.html
     app-api:
       vars:
         enabled: true

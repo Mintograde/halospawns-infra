@@ -62,6 +62,7 @@ module "site" {
   spa_fallback_enabled = true
   access_control_mode  = var.access.mode
   price_class          = var.cloudfront.price_class
+  public_spa_mount     = var.cloudfront.public_spa_mount
   tags                 = var.tags
 
   viewer_request_lambda_qualified_arn = local.basic_auth_enabled ? local.basic_auth_lambda_qualified_arn : null
