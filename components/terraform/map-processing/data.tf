@@ -176,6 +176,45 @@ data "aws_iam_policy_document" "native_maps_processor_s3" {
   }
 }
 
+data "aws_iam_policy_document" "replay_parser_s3" {
+  statement {
+    sid = "ReadVersionPinnedReplaySources"
+    actions = [
+      "s3:GetObject",
+      "s3:GetObjectVersion",
+    ]
+    resources = [
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.upload_pipelines.replays.unprocessed_prefix}*",
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.upload_pipelines.replays.processed_prefix}*",
+    ]
+  }
+
+  statement {
+    sid     = "ReadReplayViewerCompletions"
+    actions = ["s3:GetObject"]
+    resources = [
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/*",
+    ]
+  }
+
+  statement {
+    sid     = "WriteImmutableReplayOutputs"
+    actions = ["s3:PutObject"]
+    resources = [
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.upload_pipelines.replays.processed_prefix}*",
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.upload_pipelines.replays.failed_prefix}*",
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.replay_spatial_artifact_prefix}/*",
+      "${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/*",
+    ]
+  }
+
+  statement {
+    sid       = "DeleteFinalizedUnprocessedReplays"
+    actions   = ["s3:DeleteObject"]
+    resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/${local.upload_pipelines.replays.unprocessed_prefix}*"]
+  }
+}
+
 data "aws_iam_policy_document" "native_maps_processor_map_rendering" {
   statement {
     sid       = "SendMapRenderingJobs"

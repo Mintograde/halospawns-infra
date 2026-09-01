@@ -139,12 +139,22 @@ data "aws_iam_policy_document" "app_runtime" {
   }
 
   dynamic "statement" {
-    for_each = local.uploads_bucket_arn == null ? [] : [1]
+    for_each = length(local.replay_asset_get_object_resource_arns) == 0 ? [] : [1]
 
     content {
       sid       = "PresignProcessedReplayGetObjects"
-      actions   = ["s3:GetObject"]
+      actions   = ["s3:GetObject", "s3:GetObjectVersion"]
       resources = local.replay_asset_get_object_resource_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+
+    content {
+      sid       = "ReadReplayViewerArtifacts"
+      actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+      resources = local.replay_viewer_artifact_get_object_resource_arns
     }
   }
 

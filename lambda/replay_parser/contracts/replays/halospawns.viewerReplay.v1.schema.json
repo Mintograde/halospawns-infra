@@ -1,0 +1,1068 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.halospawns.com/replays/halospawns.viewerReplay.v1.schema.json",
+  "title": "Halospawns Viewer Replay V1",
+  "description": "Closed, bounded JSON shape for frontend-default replay viewer artifacts.",
+  "type": "object",
+  "required": [
+    "artifact",
+    "ticks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "artifact": {
+      "$ref": "#/$defs/artifact"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "game_meta": {
+      "$ref": "#/$defs/game_meta"
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "game_engine_has_teams": {
+      "$ref": "#/$defs/boolean_like"
+    },
+    "has_teams": {
+      "$ref": "#/$defs/boolean_like"
+    },
+    "network_game_client": {
+      "$ref": "#/$defs/network_container"
+    },
+    "network_game_object": {
+      "$ref": "#/$defs/network_container"
+    },
+    "ticks": {
+      "type": "array",
+      "maxItems": 432000,
+      "items": {
+        "$ref": "#/$defs/tick"
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": [
+        "schema",
+        "profile",
+        "profile_revision",
+        "projection_sha256",
+        "tick_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "halospawns.viewerReplay.v1"
+        },
+        "profile": {
+          "const": "frontend-default"
+        },
+        "profile_revision": {
+          "const": 1
+        },
+        "projection_sha256": {
+          "const": "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec"
+        },
+        "tick_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 432000
+        }
+      }
+    },
+    "safe_number": {
+      "type": "number",
+      "minimum": -1000000000,
+      "maximum": 1000000000
+    },
+    "safe_integer": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 4294967295
+    },
+    "boolean_like": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        }
+      ]
+    },
+    "reload_state": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      ]
+    },
+    "identifier": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "$ref": "#/$defs/safe_integer"
+        }
+      ]
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "path": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "time_text": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "duration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/safe_number"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+:[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?$",
+          "maxLength": 32
+        }
+      ]
+    },
+    "local_player_index": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 3
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "game_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "is_full_game": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "recording_started": {
+          "$ref": "#/$defs/time_text"
+        },
+        "recording_ended": {
+          "$ref": "#/$defs/time_text"
+        },
+        "game_duration_ingame": {
+          "$ref": "#/$defs/duration"
+        },
+        "recording_duration": {
+          "$ref": "#/$defs/duration"
+        },
+        "ticks_elapsed": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "ticks_recorded": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "ticks_dropped": {
+          "$ref": "#/$defs/safe_integer"
+        }
+      }
+    },
+    "sparse_tick_map": {
+      "type": "object",
+      "maxProperties": 432000,
+      "propertyNames": {
+        "pattern": "^(0|[1-9][0-9]{0,8})$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/safe_number"
+      }
+    },
+    "nullable_position_axis": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/safe_number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metric_position": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "$ref": "#/$defs/nullable_position_axis"
+      }
+    },
+    "metric_positions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/metric_position"
+      }
+    },
+    "position_tick_map": {
+      "type": "object",
+      "maxProperties": 432000,
+      "propertyNames": {
+        "pattern": "^(0|[1-9][0-9]{0,8})$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/metric_positions"
+      }
+    },
+    "derived_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "is_host": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "is_hostman": {
+          "$ref": "#/$defs/boolean_like"
+        }
+      }
+    },
+    "game_meta_derived_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "is_hostman": {
+          "$ref": "#/$defs/boolean_like"
+        }
+      }
+    },
+    "game_meta_player": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "player_name": {
+          "$ref": "#/$defs/text"
+        },
+        "display_name": {
+          "$ref": "#/$defs/text"
+        },
+        "team": {
+          "$ref": "#/$defs/identifier"
+        },
+        "team_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "is_hostman": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "derived_stats": {
+          "$ref": "#/$defs/game_meta_derived_stats"
+        },
+        "damage_dealt": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "damage_received": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "camo_count": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "overshield_count": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "damage_dealt_by_tick": {
+          "$ref": "#/$defs/sparse_tick_map"
+        },
+        "damage_received_by_tick": {
+          "$ref": "#/$defs/sparse_tick_map"
+        },
+        "shots_by_tick": {
+          "$ref": "#/$defs/sparse_tick_map"
+        },
+        "kills_by_tick": {
+          "$ref": "#/$defs/position_tick_map"
+        },
+        "deaths_by_tick": {
+          "$ref": "#/$defs/position_tick_map"
+        },
+        "assists_by_tick": {
+          "$ref": "#/$defs/sparse_tick_map"
+        }
+      }
+    },
+    "game_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "map_name": {
+          "$ref": "#/$defs/text"
+        },
+        "game_type": {
+          "$ref": "#/$defs/identifier"
+        },
+        "game_engine_has_teams": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "has_teams": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "game_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "match_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "live_game_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "start_time": {
+          "$ref": "#/$defs/time_text"
+        },
+        "players": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/game_meta_player"
+          }
+        }
+      }
+    },
+    "game_time_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "game_time": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "real_time_elapsed": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "player_control_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "player_aim_assist_target": {
+          "$ref": "#/$defs/identifier"
+        },
+        "player_aim_assist_near": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "player_aim_assist_far": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "global_friction": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "global_adhesion": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "friction_coeff": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "adhesion_coeff": {
+          "$ref": "#/$defs/safe_number"
+        }
+      }
+    },
+    "input_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "player_control_state": {
+          "$ref": "#/$defs/player_control_state"
+        }
+      }
+    },
+    "weapon": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tag_name": {
+          "$ref": "#/$defs/path"
+        },
+        "object_tag_path": {
+          "$ref": "#/$defs/path"
+        },
+        "tag_path": {
+          "$ref": "#/$defs/path"
+        },
+        "reloading": {
+          "$ref": "#/$defs/reload_state"
+        },
+        "magazine_ammo_count": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "backpack_ammo_count": {
+          "$ref": "#/$defs/safe_number"
+        }
+      }
+    },
+    "first_person_weapon": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "weapon_object": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "observer_camera_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fov": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "player_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "player_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "player_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "x_aim": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "y_aim": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "z_aim": {
+          "$ref": "#/$defs/safe_number"
+        }
+      }
+    },
+    "player_object_debug": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "player_object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "player_object_handle": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "player_object_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "object_type": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "object_type_string": {
+          "$ref": "#/$defs/text"
+        },
+        "tag_name": {
+          "$ref": "#/$defs/path"
+        },
+        "x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "yaw": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "pitch": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "roll": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "camera_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "camera_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "camera_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "xaim1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "yaim1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "zaim1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "aiming_vector_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "aiming_vector_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "aiming_vector_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "looking_vector_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "looking_vector_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "looking_vector_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "pitch1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "yaw1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "roll1": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "legs_pitch": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "legs_yaw": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "health": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "max_health": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "shields": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "max_shields": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "primary_nades": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "secondary_nades": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "selected_weapon_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "next_object_2": {
+          "$ref": "#/$defs/identifier"
+        },
+        "weapon_owner_team": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "weapons": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/weapon"
+          }
+        }
+      }
+    },
+    "player": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "player_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "player_name": {
+          "$ref": "#/$defs/text"
+        },
+        "display_name": {
+          "$ref": "#/$defs/text"
+        },
+        "is_hostman": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "team": {
+          "$ref": "#/$defs/identifier"
+        },
+        "team_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "score": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "ctf_score": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "kills": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "deaths": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "assists": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "team_kills": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "suicides": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "shots_fired": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "shots_hit": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "respawn_timer": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "player_object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "biped_object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "unit_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "local_player": {
+          "$ref": "#/$defs/local_player_index"
+        },
+        "derived_stats": {
+          "$ref": "#/$defs/derived_stats"
+        },
+        "model_nodes": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "array",
+            "maxItems": 13,
+            "items": {
+              "$ref": "#/$defs/safe_number"
+            }
+          }
+        },
+        "input_data": {
+          "$ref": "#/$defs/input_data"
+        },
+        "first_person_weapon": {
+          "$ref": "#/$defs/first_person_weapon"
+        },
+        "observer_camera_info": {
+          "$ref": "#/$defs/observer_camera_info"
+        },
+        "player_object_debug": {
+          "$ref": "#/$defs/player_object_debug"
+        },
+        "player_object_data": {
+          "$ref": "#/$defs/player_object_data"
+        }
+      }
+    },
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "object_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "object_type": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "object_type_string": {
+          "$ref": "#/$defs/text"
+        },
+        "tag_name": {
+          "$ref": "#/$defs/path"
+        },
+        "object_tag_path": {
+          "$ref": "#/$defs/path"
+        },
+        "tag_path": {
+          "$ref": "#/$defs/path"
+        },
+        "filepath": {
+          "$ref": "#/$defs/path"
+        },
+        "fileName": {
+          "$ref": "#/$defs/path"
+        },
+        "item_collection_path": {
+          "$ref": "#/$defs/path"
+        },
+        "item_collection": {
+          "$ref": "#/$defs/path"
+        },
+        "object_model_path": {
+          "$ref": "#/$defs/path"
+        },
+        "model_tag_path": {
+          "$ref": "#/$defs/path"
+        },
+        "x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "forward": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "forward_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "forward_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "forward_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "up_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_forward": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_forward_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_forward_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_forward_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "object_up_z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "owner_unit_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "owner_object_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "parent_ref": {
+          "$ref": "#/$defs/identifier"
+        },
+        "ultimate_parent": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "network_player": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "player_list_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "machine_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "controller_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "team": {
+          "$ref": "#/$defs/identifier"
+        },
+        "team_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "color": {
+          "$ref": "#/$defs/identifier"
+        },
+        "armor_color": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "network_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "network_players": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/network_player"
+          }
+        }
+      }
+    },
+    "network_container": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "network_game_data": {
+          "$ref": "#/$defs/network_data"
+        }
+      }
+    },
+    "spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "spawn_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "spawn_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "x": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "y": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "z": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "facing": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "team": {
+          "$ref": "#/$defs/identifier"
+        },
+        "team_index": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "type_0": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "type_1": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "type_2": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "type_3": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "gametypes": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/safe_integer"
+          }
+        },
+        "game_types": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/safe_integer"
+          }
+        }
+      }
+    },
+    "map_resolution_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parameter_hash": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "spawn_parameters_hash": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "map_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "map_key": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_map_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_map_key": {
+          "$ref": "#/$defs/identifier"
+        },
+        "spawn_points": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/spawn"
+          }
+        }
+      }
+    },
+    "tick": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "game_time_info": {
+          "$ref": "#/$defs/game_time_info"
+        },
+        "multiplayer_map_name": {
+          "$ref": "#/$defs/text"
+        },
+        "game_type": {
+          "$ref": "#/$defs/identifier"
+        },
+        "game_engine_has_teams": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "has_teams": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "game_ended_this_tick": {
+          "$ref": "#/$defs/boolean_like"
+        },
+        "current_time": {
+          "$ref": "#/$defs/time_text"
+        },
+        "start_time": {
+          "$ref": "#/$defs/time_text"
+        },
+        "game_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "match_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "live_game_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "current_game_time_seconds": {
+          "$ref": "#/$defs/safe_number"
+        },
+        "current_tick": {
+          "$ref": "#/$defs/safe_integer"
+        },
+        "players": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/player"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "maxItems": 16384,
+          "items": {
+            "$ref": "#/$defs/object"
+          }
+        },
+        "game_meta": {
+          "$ref": "#/$defs/game_meta"
+        },
+        "network_game_client": {
+          "$ref": "#/$defs/network_container"
+        },
+        "network_game_object": {
+          "$ref": "#/$defs/network_container"
+        },
+        "spawns": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/spawn"
+          }
+        },
+        "spawn_points": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/spawn"
+          }
+        },
+        "map_resolution_inputs": {
+          "$ref": "#/$defs/map_resolution_inputs"
+        }
+      }
+    }
+  }
+}

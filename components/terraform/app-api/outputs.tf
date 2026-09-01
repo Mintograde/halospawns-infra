@@ -106,18 +106,19 @@ output "supabase_service_role_parameter_arn" {
 output "api_contract" {
   description = "Stable public and trusted callback paths exposed by the app API."
   value = {
-    base_url                        = local.app_api_base_url
-    upload_processing_status        = "/v1/uploads/{upload_id}/processing-status"
-    replay_finalization             = "/v1/ingest/replay-uploads"
-    replay_reprocess_attempt_status = "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
-    map_finalization                = "/v1/ingest/map-uploads"
-    map_support_resource_ingest     = "/v1/ingest/map-support-resources"
-    map_support_resource_resolve    = "/v1/ingest/map-support-resources/resolve"
-    map_screenshot_ingest           = var.rendering.screenshot_ingest_path
-    heatmap_rollup_claim            = "/v1/ingest/heatmap-rollups/claim"
-    heatmap_rollup_inputs           = "/v1/ingest/heatmap-rollups/{scope_id}/inputs"
-    heatmap_rollup_complete         = "/v1/ingest/heatmap-rollups/{scope_id}/complete"
-    heatmap_rollup_failed           = "/v1/ingest/heatmap-rollups/{scope_id}/failed"
+    base_url                          = local.app_api_base_url
+    upload_processing_status          = "/v1/uploads/{upload_id}/processing-status"
+    replay_finalization               = "/v1/ingest/replay-uploads"
+    replay_viewer_artifact_completion = "/v1/ingest/replay-viewer-artifacts"
+    replay_reprocess_attempt_status   = "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+    map_finalization                  = "/v1/ingest/map-uploads"
+    map_support_resource_ingest       = "/v1/ingest/map-support-resources"
+    map_support_resource_resolve      = "/v1/ingest/map-support-resources/resolve"
+    map_screenshot_ingest             = var.rendering.screenshot_ingest_path
+    heatmap_rollup_claim              = "/v1/ingest/heatmap-rollups/claim"
+    heatmap_rollup_inputs             = "/v1/ingest/heatmap-rollups/{scope_id}/inputs"
+    heatmap_rollup_complete           = "/v1/ingest/heatmap-rollups/{scope_id}/complete"
+    heatmap_rollup_failed             = "/v1/ingest/heatmap-rollups/{scope_id}/failed"
   }
 }
 

@@ -8,6 +8,7 @@ locals {
   }
 
   replay_spatial_artifact_prefix     = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
+  replay_viewer_artifact_prefix      = "${trim(var.storage.replay_viewer_artifacts.prefix, "/")}/"
   heatmap_rollup_artifact_prefix     = "${trim(var.storage.heatmap_rollup_artifacts.prefix, "/")}/"
   region_stat_rollup_artifact_prefix = "${trim(var.storage.region_stat_rollup_artifacts.prefix, "/")}/"
   map_support_resource_prefix        = "${trim(var.storage.map_support_resources.prefix, "/")}/"

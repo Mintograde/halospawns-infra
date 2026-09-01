@@ -70,6 +70,7 @@ variable "storage" {
     }), {})
     replays = optional(object({
       spatial_artifacts   = optional(string, "replays/derived/spatial")
+      viewer_artifacts    = optional(string, "replays/derived/viewer")
       heatmap_rollups     = optional(string, "replays/derived/heatmap-rollups")
       region_stat_rollups = optional(string, "replays/derived/region-stat-rollups")
     }), {})
@@ -80,6 +81,7 @@ variable "storage" {
     condition = (
       trim(var.storage.maps.support_resources, "/") != "" &&
       trim(var.storage.replays.spatial_artifacts, "/") != "" &&
+      trim(var.storage.replays.viewer_artifacts, "/") != "" &&
       trim(var.storage.replays.heatmap_rollups, "/") != "" &&
       trim(var.storage.replays.region_stat_rollups, "/") != ""
     )

@@ -5,6 +5,7 @@ locals {
   map_asset_read_prefix              = trim(var.uploads.maps.asset_read_prefix, "/")
   replay_asset_read_prefix           = trim(var.uploads.replays.asset_read_prefix, "/")
   replay_spatial_artifact_prefix     = trim(var.uploads.replays.spatial_artifact_prefix, "/")
+  replay_viewer_artifact_prefix      = trim(var.uploads.replays.viewer_artifact_prefix, "/")
   heatmap_rollup_artifact_prefix     = trim(var.uploads.replays.heatmap_rollup_artifact_prefix, "/")
   region_stat_rollup_artifact_prefix = trim(var.uploads.replays.region_stat_rollup_artifact_prefix, "/")
   map_support_resource_prefix        = trim(var.uploads.maps.support_resource_prefix, "/")
@@ -63,12 +64,16 @@ locals {
     "${local.uploads_bucket_arn}/${local.map_asset_read_prefix}/*",
   ]
 
-  replay_asset_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+  replay_asset_get_object_resource_arns = local.uploads_bucket_arn == null || var.uploads.replays.viewer_artifact_serving_mode == "require_viewer" ? [] : [
     "${local.uploads_bucket_arn}/${local.replay_asset_read_prefix}/*",
   ]
 
   replay_spatial_artifact_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
     "${local.uploads_bucket_arn}/${local.replay_spatial_artifact_prefix}/*",
+  ]
+
+  replay_viewer_artifact_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
+    "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/*",
   ]
 
   heatmap_rollup_artifact_get_object_resource_arns = local.uploads_bucket_arn == null ? [] : [
@@ -92,6 +97,8 @@ locals {
       UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
       MAP_UPLOAD_PREFIX                         = local.map_upload_prefix
       REPLAY_UPLOAD_PREFIX                      = local.replay_upload_prefix
+      REPLAY_VIEWER_ARTIFACT_PREFIX             = local.replay_viewer_artifact_prefix
+      REPLAY_VIEWER_ARTIFACT_SERVING_MODE       = var.uploads.replays.viewer_artifact_serving_mode
       UPLOAD_URL_TTL_SECONDS                    = tostring(var.uploads.url_ttl_seconds)
       MAP_SUPPORT_RESOURCE_AUTO_APPROVE_UPLOADS = tostring(var.uploads.maps.support_resource_auto_approve)
     },
@@ -148,6 +155,10 @@ locals {
     },
     {
       route_key          = "POST /v1/ingest/replay-uploads"
+      authorization_type = "NONE"
+    },
+    {
+      route_key          = "POST /v1/ingest/replay-viewer-artifacts"
       authorization_type = "NONE"
     },
     {
@@ -284,8 +295,8 @@ resource "terraform_data" "required_inputs" {
     }
 
     precondition {
-      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != "" && local.map_asset_read_prefix != "" && local.replay_asset_read_prefix != "" && local.replay_spatial_artifact_prefix != "" && local.heatmap_rollup_artifact_prefix != "" && local.region_stat_rollup_artifact_prefix != "" && local.map_support_resource_prefix != ""
-      error_message = "Upload, asset-read, spatial-artifact, heatmap-rollup, region-stat-rollup, and support-resource prefixes must be non-empty stable root prefixes."
+      condition     = local.map_upload_prefix != "" && local.replay_upload_prefix != "" && local.map_asset_read_prefix != "" && local.replay_asset_read_prefix != "" && local.replay_spatial_artifact_prefix != "" && local.replay_viewer_artifact_prefix != "" && local.heatmap_rollup_artifact_prefix != "" && local.region_stat_rollup_artifact_prefix != "" && local.map_support_resource_prefix != ""
+      error_message = "Upload, asset-read, replay artifact, rollup, and support-resource prefixes must be non-empty stable root prefixes."
     }
   }
 }

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
 import math
 import os
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +21,7 @@ if str(REPLAY_PARSER_DIR) not in sys.path:
     sys.path.insert(0, str(REPLAY_PARSER_DIR))
 
 import handler  # noqa: E402
+import viewer_delta  # noqa: E402
 
 
 class SigningCredentialTests(unittest.TestCase):
@@ -74,6 +77,376 @@ class SigningCredentialTests(unittest.TestCase):
         ):
             with self.assertRaises(handler.ReplayProcessingError):
                 handler._settings()
+
+
+class ReplayStorageAndCallbackTests(unittest.TestCase):
+    def test_canonical_source_key_matches_api_content_addressed_layout(self) -> None:
+        upload_id = "66666666-6666-4666-8666-666666666666"
+        source_sha256 = "a" * 64
+        with patch.object(
+            handler,
+            "_settings",
+            return_value={"processed_prefix": "replays/processed/"},
+        ):
+            key = handler._canonical_source_key(
+                upload_id,
+                source_sha256,
+                "My Replay+.JSON.ZST",
+            )
+
+        self.assertEqual(
+            key,
+            f"replays/processed/{upload_id}/sources/{source_sha256}/"
+            "My_Replay_.JSON.ZST",
+        )
+
+    def test_download_uses_the_queued_s3_version_and_verifies_source_facts(self) -> None:
+        body = b"version-pinned-replay"
+        replay_object = handler.S3ReplayObject(
+            bucket="uploads-bucket",
+            key="replays/processed/upload/source.json.zst",
+            event_name="manual_reprocess",
+            sqs_message_id="message-1",
+            version_id="source-version-1",
+            expected_size_bytes=len(body),
+            expected_sha256=hashlib.sha256(body).hexdigest(),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            destination = Path(temporary_directory) / "source.json.zst"
+            with patch.object(
+                handler.S3,
+                "get_object",
+                return_value={
+                    "Body": io.BytesIO(body),
+                    "ContentType": "application/zstd",
+                    "Metadata": {},
+                    "VersionId": "source-version-1",
+                },
+            ) as get_object:
+                downloaded = handler._download_replay(replay_object, destination)
+
+        get_object.assert_called_once_with(
+            Bucket="uploads-bucket",
+            Key="replays/processed/upload/source.json.zst",
+            VersionId="source-version-1",
+        )
+        self.assertEqual(downloaded.sha256, hashlib.sha256(body).hexdigest())
+        self.assertEqual(downloaded.version_id, "source-version-1")
+
+    def test_download_rejects_source_hash_and_version_mismatches(self) -> None:
+        body = b"version-pinned-replay"
+        cases = (
+            ("0" * 64, "source-version-1", "source-version-1", "hash"),
+            (hashlib.sha256(body).hexdigest(), "source-version-1", "wrong-version", "version"),
+        )
+        for expected_hash, requested_version, response_version, label in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary_directory:
+                replay_object = handler.S3ReplayObject(
+                    bucket="uploads-bucket",
+                    key="replays/processed/upload/source.json.zst",
+                    event_name="manual_reprocess",
+                    sqs_message_id="message-1",
+                    version_id=requested_version,
+                    expected_size_bytes=len(body),
+                    expected_sha256=expected_hash,
+                )
+                with patch.object(
+                    handler.S3,
+                    "get_object",
+                    return_value={
+                        "Body": io.BytesIO(body),
+                        "ContentType": "application/zstd",
+                        "Metadata": {},
+                        "VersionId": response_version,
+                    },
+                ):
+                    with self.assertRaises(handler.NonRetryableReplayError):
+                        handler._download_replay(
+                            replay_object,
+                            Path(temporary_directory) / "source.json.zst",
+                        )
+
+    def test_download_verifies_initial_upload_integrity_metadata(self) -> None:
+        body = b"initial-upload"
+        replay_object = handler.S3ReplayObject(
+            bucket="uploads-bucket",
+            key="replays/unprocessed/upload-source.json.zst",
+            event_name="ObjectCreated:Put",
+            sqs_message_id="message-1",
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory, patch.object(
+            handler.S3,
+            "get_object",
+            return_value={
+                "Body": io.BytesIO(body),
+                "ContentType": "application/zstd",
+                "Metadata": {
+                    "expected-size-bytes": str(len(body)),
+                    "expected-sha256": "0" * 64,
+                },
+            },
+        ):
+            with self.assertRaises(handler.NonRetryableReplayError):
+                handler._download_replay(
+                    replay_object,
+                    Path(temporary_directory) / "source.json.zst",
+                )
+
+    def test_decompresses_every_supported_replay_wrapper(self) -> None:
+        body = b'{"ticks":[{"current_tick":1}]}'
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            sources = {
+                "raw.json": body,
+                "replay.json.gz": gzip.compress(body, mtime=0),
+                "replay.json.zst": handler.zstandard.ZstdCompressor().compress(body),
+            }
+            for filename, encoded in sources.items():
+                (directory / filename).write_bytes(encoded)
+            zip_path = directory / "replay.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("replay.json", body)
+
+            for index, source in enumerate((*sources, "replay.zip")):
+                with self.subTest(source=source):
+                    destination = directory / f"decoded-{index}.json"
+                    handler._decompress_replay(directory / source, destination)
+                    self.assertEqual(destination.read_bytes(), body)
+
+    def test_rejects_replay_json_over_the_decompressed_size_limit(self) -> None:
+        source = io.BytesIO(b"four")
+        destination = io.BytesIO()
+
+        with self.assertRaisesRegex(
+            handler.NonRetryableReplayError,
+            "pinned decompressed size limit",
+        ):
+            handler._copy_bounded_replay_json(source, destination, max_bytes=3)
+
+        self.assertEqual(destination.getvalue(), b"")
+
+    def test_rejects_malformed_deep_and_oversized_projection_input(self) -> None:
+        cases = {
+            "malformed": b'{"ticks":[',
+            "deep": (
+                '{"unknown":'
+                + "[" * viewer_delta.VIEWER_MAX_JSON_DEPTH
+                + "0"
+                + "]" * viewer_delta.VIEWER_MAX_JSON_DEPTH
+                + ',"ticks":[{}]}'
+            ).encode("utf-8"),
+            "oversized": json.dumps(
+                {"ticks": [{"players": [{} for _ in range(65)]}]},
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            for name, body in cases.items():
+                with self.subTest(case=name):
+                    source = directory / f"{name}.json"
+                    source.write_bytes(body)
+                    with self.assertRaises(viewer_delta.ViewerDeltaError):
+                        viewer_delta.build_python_viewer_parts(
+                            source,
+                            directory / f"{name}-parts",
+                        )
+
+    def test_rejects_projection_strings_over_the_global_safety_ceiling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            source = directory / "string.json"
+            source.write_text(
+                '{"ticks":[{"game_id":"four"}]}',
+                encoding="utf-8",
+            )
+            with (
+                patch.object(viewer_delta, "VIEWER_MAX_STRING_CHARACTERS", 3),
+                self.assertRaises(viewer_delta.ViewerDeltaError),
+            ):
+                viewer_delta.build_python_viewer_parts(source, directory / "parts")
+
+    def test_canonical_source_manifest_rejects_oversized_input(self) -> None:
+        with self.assertRaises(handler.NonRetryableReplayError):
+            handler._write_canonical_replay_source(
+                bucket="uploads-bucket",
+                upload_id="66666666-6666-4666-8666-666666666666",
+                original_key="replay.json.zst",
+                downloaded=handler.DownloadedReplay(
+                    path=Path("not-opened.json.zst"),
+                    content_type="application/zstd",
+                    size_bytes=(512 * 1024 * 1024) + 1,
+                    sha256="a" * 64,
+                    metadata={},
+                ),
+            )
+
+    def test_immutable_write_reuses_exact_object_and_rejects_collision(self) -> None:
+        body = b"immutable"
+        sha256 = hashlib.sha256(body).hexdigest()
+        precondition = handler.ClientError(
+            {
+                "Error": {"Code": "PreconditionFailed", "Message": "exists"},
+                "ResponseMetadata": {"HTTPStatusCode": 412},
+            },
+            "PutObject",
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source = Path(temporary_directory) / "artifact.bin"
+            source.write_bytes(body)
+            with (
+                patch.object(handler.S3, "put_object", side_effect=precondition),
+                patch.object(
+                    handler.S3,
+                    "head_object",
+                    return_value={
+                        "ContentLength": len(body),
+                        "ContentType": "application/octet-stream",
+                        "Metadata": {"sha256": sha256},
+                        "VersionId": "existing-version",
+                    },
+                ),
+            ):
+                self.assertEqual(
+                    handler._put_immutable_file(
+                        bucket="uploads-bucket",
+                        key="immutable.bin",
+                        path=source,
+                        content_type="application/octet-stream",
+                        sha256=sha256,
+                        metadata={"artifact-kind": "test"},
+                    ),
+                    "existing-version",
+                )
+
+            with (
+                patch.object(handler.S3, "put_object", side_effect=precondition),
+                patch.object(
+                    handler.S3,
+                    "head_object",
+                    return_value={
+                        "ContentLength": len(body),
+                        "ContentType": "text/plain",
+                        "Metadata": {"sha256": sha256},
+                        "VersionId": "existing-version",
+                    },
+                ),
+                self.assertRaises(handler.ReplayProcessingError),
+            ):
+                handler._put_immutable_file(
+                    bucket="uploads-bucket",
+                    key="immutable.bin",
+                    path=source,
+                    content_type="application/octet-stream",
+                    sha256=sha256,
+                    metadata={"artifact-kind": "test"},
+                )
+
+    def test_persisted_completion_replays_callback_before_parse_and_then_cleans_up(self) -> None:
+        upload_id = "66666666-6666-4666-8666-666666666666"
+        manifest = handler._completion_manifest(
+            upload_id=upload_id,
+            generation_token=upload_id,
+            mode="initial",
+            source_replay_sha256="a" * 64,
+            callback_path="/v1/ingest/replay-uploads",
+            callback_payload={
+                "upload_id": upload_id,
+                "viewer_artifact": {
+                    "generation_token": upload_id,
+                    "source_replay_sha256": "a" * 64,
+                    "format": handler.VIEWER_DELTA_FORMAT,
+                    "encoding_sha256": handler.VIEWER_ENCODING_SHA256,
+                    "projection_sha256": handler.VIEWER_PROJECTION_SHA256,
+                },
+            },
+            cleanup_object={
+                "bucket": "uploads-bucket",
+                "key": f"replays/unprocessed/{upload_id}/source.json.zst",
+            },
+        )
+        callbacks: list[tuple[str, str, dict[str, object]]] = []
+        with (
+            patch.object(
+                handler,
+                "_settings",
+                return_value={"viewer_artifact_prefix": "replays/derived/viewer/"},
+            ),
+            patch.object(
+                handler.S3,
+                "get_object",
+                return_value={"Body": io.BytesIO(json.dumps(manifest).encode("utf-8"))},
+            ),
+            patch.object(
+                handler,
+                "_call_app_api",
+                side_effect=lambda method, path, payload: callbacks.append(
+                    (method, path, payload)
+                ),
+            ),
+            patch.object(handler, "_delete_object") as delete_object,
+        ):
+            replayed = handler._replay_persisted_completion(
+                bucket="uploads-bucket",
+                upload_id=upload_id,
+                generation_token=upload_id,
+                expected_mode="initial",
+            )
+
+        self.assertTrue(replayed)
+        self.assertEqual(
+            callbacks,
+            [
+                (
+                    "POST",
+                    "/v1/ingest/replay-uploads",
+                    manifest["callback"]["payload"],
+                )
+            ],
+        )
+        delete_object.assert_called_once_with(
+            "uploads-bucket",
+            f"replays/unprocessed/{upload_id}/source.json.zst",
+        )
+
+    def test_app_api_callback_retries_transient_transport_failure(self) -> None:
+        class Response:
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b'{"ok":true}'
+
+        settings = {
+            "app_api_base_url": "https://api.example",
+            "trusted_client_name": "replay-processing",
+            "trusted_client_parameter_name": "/test/hmac",
+        }
+        with (
+            patch.object(handler, "_settings", return_value=settings),
+            patch.object(handler, "_signing_secret", return_value="secret"),
+            patch.object(
+                handler.urllib.request,
+                "urlopen",
+                side_effect=[handler.urllib.error.URLError("temporary"), Response()],
+            ) as urlopen,
+            patch.object(handler.time, "sleep") as sleep,
+            patch.dict(
+                os.environ,
+                {
+                    "APP_API_CALLBACK_MAX_ATTEMPTS": "3",
+                    "APP_API_CALLBACK_RETRY_BASE_SECONDS": "0.01",
+                },
+            ),
+        ):
+            response = handler._call_app_api("POST", "/callback", {"ok": True})
+
+        self.assertEqual(response, {"ok": True})
+        self.assertEqual(urlopen.call_count, 2)
+        sleep.assert_called_once_with(0.01)
 
 
 def _write_replay_json(
@@ -188,19 +561,23 @@ def _finalization_payload(
     return calls[0][2]
 
 
-def _reprocess_job_payload() -> dict[str, object]:
+def _reprocess_job_payload(
+    *,
+    mode: str = "full_reparse",
+    include_viewer: bool = True,
+) -> dict[str, object]:
     upload_id = "66666666-6666-4666-8666-666666666666"
     replay_id = "44444444-4444-4444-8444-444444444444"
     attempt_id = "77777777-7777-4777-8777-777777777777"
     operation_id = "99999999-9999-4999-8999-999999999999"
-    return {
+    payload: dict[str, object] = {
         "schema": "halospawns.replay_reprocess_job.v1",
         "job_id": f"replay:{replay_id}:attempt:{attempt_id}",
         "trigger": "manual_reprocess",
         "environment": "dev",
         "operation_id": operation_id,
         "attempt_id": attempt_id,
-        "mode": "full_reparse",
+        "mode": mode,
         "replay": {
             "id": replay_id,
             "game_id": "33333333-3333-4333-8333-333333333333",
@@ -213,18 +590,56 @@ def _reprocess_job_payload() -> dict[str, object]:
             "content_type": "application/octet-stream",
             "size_bytes": 123,
             "sha256": "a" * 64,
+            "s3_version_id": "source-version-1",
         },
         "current_replay_file": {
             "file_role": "processed",
             "s3_bucket": "uploads-bucket",
-            "s3_key": f"replays/processed/{upload_id}/game.json.zst",
-            "content_type": "application/zstd",
-            "size_bytes": 456,
-            "sha256": "b" * 64,
+            "s3_key": f"replays/processed/{upload_id}/original+replay.json.zst",
+            "content_type": "application/octet-stream",
+            "size_bytes": 123,
+            "sha256": "a" * 64,
+            "s3_version_id": "source-version-1",
         },
-        "requested_outputs": ["game", "participants", "stats", "spawn_points", "game_meta"],
+        "requested_outputs": (
+            ["viewer_artifact"]
+            if mode == "viewer_rebuild"
+            else [
+                "game",
+                "participants",
+                "stats",
+                "spawn_points",
+                "game_meta",
+                "graph_context",
+                "viewer_artifact",
+            ]
+        ),
+        "viewer_artifact_target": {
+            "artifact_kind": handler.VIEWER_ARTIFACT_KIND,
+            "format": handler.VIEWER_DELTA_FORMAT,
+            "container_version": handler.VIEWER_CONTAINER_VERSION,
+            "manifest_schema_sha256": handler.VIEWER_MANIFEST_SCHEMA_SHA256,
+            "encoding_sha256": handler.VIEWER_ENCODING_SHA256,
+            "schema_name": handler.VIEWER_SCHEMA,
+            "profile": handler.VIEWER_PROFILE,
+            "profile_revision": handler.VIEWER_PROFILE_REVISION,
+            "projection_sha256": handler.VIEWER_PROJECTION_SHA256,
+            "generation_token": attempt_id,
+            "request_epoch": 3,
+            "request_sequence": 7,
+        },
         "created_at": "2026-07-02T00:00:00Z",
     }
+    if mode == "full_reparse" and not include_viewer:
+        payload["requested_outputs"] = list(handler.FULL_REPARSE_OUTPUTS)
+        payload.pop("viewer_artifact_target")
+        source_replay = payload["source_replay"]
+        current_replay_file = payload["current_replay_file"]
+        assert isinstance(source_replay, dict)
+        assert isinstance(current_replay_file, dict)
+        source_replay.pop("s3_version_id")
+        current_replay_file.pop("s3_version_id")
+    return payload
 
 
 def _minimal_parsed_replay() -> handler.ParsedReplay:
@@ -1536,6 +1951,50 @@ class ReplayParserNativeExtractorTests(unittest.TestCase):
 
 
 class ReplayParserReprocessJobTests(unittest.TestCase):
+    def test_rejects_reprocess_job_with_unsupported_viewer_contract(self) -> None:
+        payload = _reprocess_job_payload()
+        target = payload["viewer_artifact_target"]
+        assert isinstance(target, dict)
+        target["encoding_sha256"] = "0" * 64
+
+        with self.assertRaises(handler.NonRetryableReplayError):
+            handler._reprocess_job_from_payload(payload, "message-1")
+
+    def test_reports_unsupported_viewer_contract_as_terminal_attempt_failure(self) -> None:
+        payload = _reprocess_job_payload()
+        target = payload["viewer_artifact_target"]
+        assert isinstance(target, dict)
+        target["projection_sha256"] = "0" * 64
+        calls: list[tuple[str, str, dict[str, object]]] = []
+        with (
+            patch.object(
+                handler,
+                "_settings",
+                return_value={
+                    "reprocess_status_path_template": (
+                        "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+                    ),
+                },
+            ),
+            patch.object(
+                handler,
+                "_call_app_api",
+                side_effect=lambda method, path, body: calls.append(
+                    (method, path, body)
+                ),
+            ),
+        ):
+            response = handler.handler(
+                {"Records": [{"messageId": "message-1", "body": json.dumps(payload)}]},
+                None,
+            )
+
+        self.assertEqual(response, {"batchItemFailures": []})
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "PATCH")
+        self.assertTrue(calls[0][1].endswith(f"/{payload['attempt_id']}/status"))
+        self.assertEqual(calls[0][2]["status"], "failed")
+
     def test_iter_replay_work_items_accepts_reprocess_job(self) -> None:
         payload = _reprocess_job_payload()
 
@@ -1556,9 +2015,78 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
         )
         self.assertEqual(
             job.current_replay_file.key,
-            "replays/processed/66666666-6666-4666-8666-666666666666/game.json.zst",
+            "replays/processed/66666666-6666-4666-8666-666666666666/original+replay.json.zst",
         )
-        self.assertEqual(job.current_replay_file.sha256, "b" * 64)
+        self.assertEqual(job.current_replay_file.sha256, "a" * 64)
+        self.assertEqual(job.source_object.version_id, "source-version-1")
+        assert job.viewer_request is not None
+        self.assertEqual(job.viewer_request.request_epoch, 3)
+
+    def test_accepts_api_legacy_full_reparse_without_viewer_target(self) -> None:
+        job = handler._reprocess_job_from_payload(
+            _reprocess_job_payload(include_viewer=False),
+            "message-1",
+        )
+
+        self.assertEqual(job.requested_outputs, handler.FULL_REPARSE_OUTPUTS)
+        self.assertIsNone(job.source_object.version_id)
+        self.assertIsNone(job.viewer_request)
+
+    def test_legacy_full_reparse_keeps_facts_path_without_viewer_output(self) -> None:
+        job = handler._reprocess_job_from_payload(
+            _reprocess_job_payload(include_viewer=False),
+            "message-1",
+        )
+        parsed = _minimal_parsed_replay()
+        downloaded = handler.DownloadedReplay(
+            path=Path("source-replay.json.zst"),
+            content_type="application/octet-stream",
+            size_bytes=123,
+            sha256="a" * 64,
+            metadata={},
+        )
+        api_calls: list[tuple[str, str, dict[str, object]]] = []
+
+        with (
+            patch.object(handler, "_download_replay", return_value=downloaded),
+            patch.object(handler, "_parse_downloaded_replay", return_value=parsed),
+            patch.object(
+                handler,
+                "_parse_downloaded_replay_with_viewer",
+                side_effect=AssertionError("legacy full_reparse must not build viewer parts"),
+            ),
+            patch.object(handler, "assemble_viewer_container", side_effect=AssertionError()),
+            patch.object(handler, "_write_viewer_artifact", side_effect=AssertionError()),
+            patch.object(handler, "_write_spatial_artifact", return_value={"spatial": True}),
+            patch.object(
+                handler,
+                "_replay_finalization_payload",
+                return_value={"facts": True},
+            ),
+            patch.object(
+                handler,
+                "_persist_and_dispatch_completion",
+                side_effect=AssertionError("facts-only work has no viewer generation"),
+            ),
+            patch.object(
+                handler,
+                "_settings",
+                return_value={"replay_finalization_path": "/v1/ingest/replay-uploads"},
+            ),
+            patch.object(
+                handler,
+                "_call_app_api",
+                side_effect=lambda method, path, payload: api_calls.append(
+                    (method, path, payload)
+                ),
+            ),
+        ):
+            handler._process_reprocess_job(job)
+
+        self.assertEqual(
+            api_calls,
+            [("POST", "/v1/ingest/replay-uploads", {"facts": True})],
+        )
 
     def test_process_reprocess_job_downloads_source_without_source_mutation(self) -> None:
         job = handler._reprocess_job_from_payload(_reprocess_job_payload(), "message-1")
@@ -1569,10 +2097,31 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             size_bytes=123,
             sha256="a" * 64,
             metadata={},
+            version_id="source-version-1",
+        )
+        viewer_parts = handler.ViewerParts(
+            directory=Path("viewer-parts"),
+            tick_count=1,
+            replay={},
+            chunks=(),
+            producer="test",
+            projection_duration_ms=1,
+            encode_duration_ms=1,
+        )
+        viewer_container = handler.ViewerContainer(
+            path=Path("viewer.hsrv"),
+            sha256="c" * 64,
+            size_bytes=100,
+            uncompressed_size_bytes=200,
+            tick_count=1,
+            chunk_count=1,
+            manifest={},
+            metrics={},
         )
         download_calls: list[handler.S3ReplayObject] = []
-        finalize_calls: list[dict[str, object]] = []
+        completion_calls: list[dict[str, object]] = []
         spatial_manifest = {"schema": "halospawns.spatialFacts.v1", "generation": 2}
+        viewer_manifest = {"sha256": "c" * 64}
 
         def capture_download(
             replay_object: handler.S3ReplayObject,
@@ -1581,19 +2130,36 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             download_calls.append(replay_object)
             return downloaded
 
-        def capture_finalize(**kwargs: object) -> None:
-            finalize_calls.append(kwargs)
-
         with (
+            patch.object(handler, "_replay_persisted_completion", return_value=False),
             patch.object(handler, "_download_replay", side_effect=capture_download),
-            patch.object(handler, "_decompress_replay"),
-            patch.object(handler, "_parse_replay", return_value=parsed),
+            patch.object(
+                handler,
+                "_parse_downloaded_replay_with_viewer",
+                return_value=(parsed, viewer_parts),
+            ),
+            patch.object(handler, "assemble_viewer_container", return_value=viewer_container),
+            patch.object(handler, "_write_viewer_artifact", return_value=viewer_manifest),
             patch.object(
                 handler,
                 "_write_spatial_artifact",
                 return_value=spatial_manifest,
             ) as write_spatial,
-            patch.object(handler, "_finalize_replay_upload", side_effect=capture_finalize),
+            patch.object(
+                handler,
+                "_replay_finalization_payload",
+                return_value={"callback": True},
+            ) as finalization_payload,
+            patch.object(
+                handler,
+                "_persist_and_dispatch_completion",
+                side_effect=lambda **kwargs: completion_calls.append(kwargs),
+            ),
+            patch.object(
+                handler,
+                "_settings",
+                return_value={"replay_finalization_path": "/v1/ingest/replay-uploads"},
+            ),
             patch.object(handler, "_copy_object", side_effect=AssertionError("no copy")),
             patch.object(handler, "_delete_object", side_effect=AssertionError("no delete")),
             patch.object(
@@ -1605,19 +2171,107 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             handler._process_reprocess_job(job)
 
         self.assertEqual(download_calls, [job.source_object])
-        self.assertEqual(len(finalize_calls), 1)
-        self.assertEqual(finalize_calls[0]["upload_id"], job.upload_id)
-        self.assertEqual(finalize_calls[0]["source_external_id"], job.upload_id)
-        self.assertEqual(finalize_calls[0]["processed_key"], job.current_replay_file.key)
-        self.assertEqual(finalize_calls[0]["replay_file"], job.current_replay_file)
-        self.assertEqual(finalize_calls[0]["reprocess_attempt_id"], job.attempt_id)
-        self.assertEqual(finalize_calls[0]["spatial_artifact"], spatial_manifest)
+        self.assertEqual(len(completion_calls), 1)
+        self.assertEqual(completion_calls[0]["mode"], "full_reparse")
+        self.assertEqual(completion_calls[0]["callback_payload"], {"callback": True})
+        self.assertEqual(completion_calls[0]["generation_token"], job.attempt_id)
+        self.assertEqual(finalization_payload.call_args.kwargs["viewer_artifact"], viewer_manifest)
+        self.assertEqual(finalization_payload.call_args.kwargs["replay_file"], job.current_replay_file)
         write_spatial.assert_called_once_with(
             parsed=parsed,
             bucket=job.current_replay_file.bucket,
             upload_id=job.upload_id,
             generation=handler._reprocess_spatial_generation(job.attempt_id),
-            source_replay_sha256=job.current_replay_file.sha256,
+            source_replay_sha256=downloaded.sha256,
+        )
+
+    def test_viewer_rebuild_uses_only_the_artifact_completion_callback(self) -> None:
+        job = handler._reprocess_job_from_payload(
+            _reprocess_job_payload(mode="viewer_rebuild"),
+            "message-1",
+        )
+        parsed = _minimal_parsed_replay()
+        downloaded = handler.DownloadedReplay(
+            path=Path("source-replay.json.zst"),
+            content_type="application/octet-stream",
+            size_bytes=123,
+            sha256="a" * 64,
+            metadata={},
+            version_id="source-version-1",
+        )
+        viewer_parts = handler.ViewerParts(
+            directory=Path("viewer-parts"),
+            tick_count=1,
+            replay={},
+            chunks=(),
+            producer="test",
+            projection_duration_ms=1,
+            encode_duration_ms=1,
+        )
+        viewer_container = handler.ViewerContainer(
+            path=Path("viewer.hsrv"),
+            sha256="c" * 64,
+            size_bytes=100,
+            uncompressed_size_bytes=200,
+            tick_count=1,
+            chunk_count=1,
+            manifest={},
+            metrics={},
+        )
+        viewer_manifest = {"sha256": "c" * 64}
+        completion_calls: list[dict[str, object]] = []
+
+        with (
+            patch.object(handler, "_replay_persisted_completion", return_value=False),
+            patch.object(handler, "_download_replay", return_value=downloaded),
+            patch.object(
+                handler,
+                "_parse_downloaded_replay_with_viewer",
+                return_value=(parsed, viewer_parts),
+            ),
+            patch.object(handler, "assemble_viewer_container", return_value=viewer_container),
+            patch.object(handler, "_write_viewer_artifact", return_value=viewer_manifest),
+            patch.object(
+                handler,
+                "_write_spatial_artifact",
+                side_effect=AssertionError("viewer_rebuild must not write facts"),
+            ),
+            patch.object(
+                handler,
+                "_replay_finalization_payload",
+                side_effect=AssertionError("viewer_rebuild must not finalize facts"),
+            ),
+            patch.object(
+                handler,
+                "_persist_and_dispatch_completion",
+                side_effect=lambda **kwargs: completion_calls.append(kwargs),
+            ),
+            patch.object(
+                handler,
+                "_settings",
+                return_value={
+                    "viewer_artifact_completion_path": "/v1/ingest/replay-viewer-artifacts"
+                },
+            ),
+        ):
+            handler._process_reprocess_job(job)
+
+        self.assertEqual(len(completion_calls), 1)
+        completion = completion_calls[0]
+        self.assertEqual(completion["mode"], "viewer_rebuild")
+        self.assertEqual(
+            completion["callback_path"],
+            "/v1/ingest/replay-viewer-artifacts",
+        )
+        self.assertEqual(
+            completion["callback_payload"],
+            {
+                "replay_file_id": job.replay_id,
+                "upload_id": job.upload_id,
+                "reprocess_attempt_id": job.attempt_id,
+                "source_replay_sha256": downloaded.sha256,
+                "viewer_artifact": viewer_manifest,
+            },
         )
 
     def test_process_reprocess_job_marks_missing_source_failed(self) -> None:
@@ -1642,6 +2296,7 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             return {}
 
         with (
+            patch.object(handler, "_replay_persisted_completion", return_value=False),
             patch.object(handler, "_download_replay", side_effect=missing_source_error),
             patch.object(
                 handler,

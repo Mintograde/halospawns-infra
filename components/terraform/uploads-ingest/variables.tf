@@ -53,6 +53,9 @@ variable "storage" {
       prefix                             = optional(string, "replays/derived/spatial")
       noncurrent_version_expiration_days = optional(number, 30)
     }), {})
+    replay_viewer_artifacts = optional(object({
+      prefix = optional(string, "replays/derived/viewer")
+    }), {})
     heatmap_rollup_artifacts = optional(object({
       prefix                             = optional(string, "replays/derived/heatmap-rollups")
       superseded_expiration_days         = optional(number, 30)
@@ -96,6 +99,11 @@ variable "storage" {
       var.storage.replay_spatial_artifacts.noncurrent_version_expiration_days > 0
     )
     error_message = "Replay spatial artifact lifecycle values must use a non-empty prefix and a positive day count."
+  }
+
+  validation {
+    condition     = trim(var.storage.replay_viewer_artifacts.prefix, "/") != ""
+    error_message = "Replay viewer artifact prefix must not be empty."
   }
 
   validation {

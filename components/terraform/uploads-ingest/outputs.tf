@@ -26,6 +26,11 @@ output "region_stat_rollup_artifact_prefix" {
   value       = local.region_stat_rollup_artifact_prefix
 }
 
+output "replay_viewer_artifact_prefix" {
+  description = "Stable S3 prefix for immutable content-addressed replay viewer generations."
+  value       = local.replay_viewer_artifact_prefix
+}
+
 output "pipelines" {
   description = "Upload processing contracts keyed by upload type."
   value = {

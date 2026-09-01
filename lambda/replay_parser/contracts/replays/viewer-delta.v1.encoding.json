@@ -1,0 +1,137 @@
+{
+  "$schema": "halospawns.viewerReplayDelta.encoding.v1",
+  "format": "halospawns.viewerReplayDelta.v1",
+  "artifact_kind": "viewer_replay_delta",
+  "media_type": "application/vnd.halospawns.replay-delta",
+  "outer_compression": "identity",
+  "range_requests_required": true,
+  "initial_range_bytes": 65536,
+  "fetch_concurrency": 4,
+  "keyframe_interval": 2048,
+  "container": {
+    "magic_ascii": "HSRDC001",
+    "header_bytes": 32,
+    "version": 1,
+    "byte_order": "little_endian",
+    "manifest_compression": {
+      "code": 1,
+      "name": "zstd",
+      "level": 19,
+      "checksum": true
+    },
+    "fields": [
+      {
+        "offset": 0,
+        "bytes": 8,
+        "name": "magic"
+      },
+      {
+        "offset": 8,
+        "bytes": 2,
+        "name": "header_bytes",
+        "type": "uint16"
+      },
+      {
+        "offset": 10,
+        "bytes": 2,
+        "name": "version",
+        "type": "uint16"
+      },
+      {
+        "offset": 12,
+        "bytes": 4,
+        "name": "manifest_compression",
+        "type": "uint32"
+      },
+      {
+        "offset": 16,
+        "bytes": 4,
+        "name": "manifest_compressed_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 20,
+        "bytes": 4,
+        "name": "manifest_raw_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 24,
+        "bytes": 4,
+        "name": "container_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 28,
+        "bytes": 4,
+        "name": "reserved_zero",
+        "type": "uint32"
+      }
+    ],
+    "layout": [
+      "header",
+      "zstd_manifest",
+      "concatenated_zstd_chunks"
+    ]
+  },
+  "chunk": {
+    "magic_ascii": "HSRD",
+    "version": 1,
+    "byte_order": "little_endian",
+    "compression": {
+      "name": "zstd",
+      "level": 19,
+      "checksum": true,
+      "independent_frames": true
+    },
+    "unsigned_integer": "base128_varuint",
+    "signed_integer": "zigzag_base128_varuint",
+    "strings": "adaptive_chunk_dictionary",
+    "number_policy": "finite_exact_ieee754",
+    "value_tags": {
+      "null": 0,
+      "false": 1,
+      "true": 2,
+      "integer": 3,
+      "float32": 4,
+      "float64": 5,
+      "string": 6,
+      "array": 7,
+      "object": 8
+    },
+    "delta_tags": {
+      "same": 0,
+      "replace": 1,
+      "object": 2,
+      "array": 3,
+      "number_xor": 4,
+      "float32_xor": 5,
+      "integer_difference": 6,
+      "dense_array": 7,
+      "dense_float32_difference_array": 8,
+      "float32_difference": 9,
+      "dense_float32_xor_array": 10,
+      "dense_float32_bit_prediction_array": 11,
+      "dense_float32_value_prediction_array": 12,
+      "float32_bit_prediction": 13,
+      "float32_value_prediction": 14,
+      "dense_float32_bitpacked_array": 15
+    },
+    "float32_modes": {
+      "xor": 0,
+      "difference": 1,
+      "bit_prediction": 2,
+      "value_prediction": 3
+    },
+    "exactness": {
+      "tick_count_and_order": "preserve",
+      "object_key_order": "preserve_input",
+      "array_order": "preserve",
+      "integers": "exact_safe_integer",
+      "float32": "exact_bits",
+      "other_numbers": "exact_float64_bits",
+      "negative_zero": "exact"
+    }
+  }
+}
+

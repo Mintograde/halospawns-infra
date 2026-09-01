@@ -1,5 +1,7 @@
+mod viewer;
+
 use flate2::read::GzDecoder;
-use serde::de::{SeqAccess, Visitor};
+use serde::de::{Error as DeError, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -7,7 +9,7 @@ use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -20,8 +22,46 @@ const MAX_COUNTER: u64 = 2_147_483_647;
 const MAX_EVENT_SAMPLE: usize = 10;
 const MAX_SPAWN_POINTS: usize = 512;
 const BUFFER_SIZE: usize = 1024 * 1024;
+const MAX_DECOMPRESSED_REPLAY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 static CELL_SIZE: OnceLock<f64> = OnceLock::new();
+
+struct BoundedReader<R> {
+    inner: R,
+    bytes_read: u64,
+    max_bytes: u64,
+}
+
+impl<R> BoundedReader<R> {
+    fn new(inner: R, max_bytes: u64) -> Self {
+        Self {
+            inner,
+            bytes_read: 0,
+            max_bytes,
+        }
+    }
+}
+
+impl<R: Read> Read for BoundedReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.bytes_read >= self.max_bytes {
+            let mut probe = [0_u8; 1];
+            return match self.inner.read(&mut probe)? {
+                0 => Ok(0),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "replay JSON exceeds the decompressed size limit",
+                )),
+            };
+        }
+        let remaining = self.max_bytes - self.bytes_read;
+        let bounded_length = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| io::Error::other("replay size limit is unsupported"))?;
+        let bytes_read = self.inner.read(&mut buffer[..bounded_length])?;
+        self.bytes_read += bytes_read as u64;
+        Ok(bytes_read)
+    }
+}
 
 #[derive(Debug, Default)]
 struct CapturedValue {
@@ -63,6 +103,12 @@ struct Replay {
     gametype_settings: Value,
     #[serde(default)]
     network_game_client: Value,
+    #[serde(default)]
+    network_game_object: Value,
+    #[serde(default)]
+    game_engine_has_teams: CapturedValue,
+    #[serde(default)]
+    has_teams: CapturedValue,
     #[serde(default)]
     participant_context: Value,
     #[serde(default)]
@@ -227,6 +273,7 @@ struct PlayerObjectData {
 struct Events {
     count: u64,
     sample: Vec<Value>,
+    viewer_values: Vec<Value>,
 }
 
 #[derive(Debug, Default)]
@@ -341,7 +388,9 @@ impl<'de> Visitor<'de> for TicksVisitor {
         A: SeqAccess<'de>,
     {
         let mut output = Ticks::default();
-        while let Some(tick) = sequence.next_element::<Tick>()? {
+        while let Some(raw_tick) = sequence.next_element::<Value>()? {
+            viewer::add_tick(&raw_tick).map_err(A::Error::custom)?;
+            let tick = serde_json::from_value::<Tick>(raw_tick).map_err(A::Error::custom)?;
             let tick_index = output.count;
             output.count = output.count.saturating_add(1);
             if output.first_network_game_client.is_none()
@@ -394,7 +443,20 @@ impl<'de> Visitor<'de> for EventsVisitor {
         while let Some(event) = sequence.next_element::<Value>()? {
             output.count = output.count.saturating_add(1);
             if output.sample.len() < MAX_EVENT_SAMPLE {
-                output.sample.push(event);
+                output.sample.push(event.clone());
+            }
+            if viewer::enabled() {
+                if output.viewer_values.len() >= 200_000 {
+                    return Err(A::Error::custom(
+                        "viewer replay events exceed the pinned contract limit",
+                    ));
+                }
+                if event.is_array() || event.is_object() || event.is_null() {
+                    return Err(A::Error::custom(
+                        "viewer replay events must contain non-null scalars",
+                    ));
+                }
+                output.viewer_values.push(event);
             }
         }
         Ok(output)
@@ -470,6 +532,32 @@ struct ExtractorOutput {
 fn extract_replay(reader: impl Read) -> Result<ExtractorOutput, Box<dyn Error>> {
     let started = Instant::now();
     let replay: Replay = serde_json::from_reader(BufReader::with_capacity(BUFFER_SIZE, reader))?;
+    let mut viewer_source = Map::new();
+    for (key, value) in [
+        ("summary", &replay.summary),
+        ("game_meta", &replay.game_meta),
+        ("network_game_client", &replay.network_game_client),
+        ("network_game_object", &replay.network_game_object),
+    ] {
+        if !value.is_null() {
+            viewer_source.insert(key.to_owned(), value.clone());
+        }
+    }
+    for (key, captured) in [
+        ("game_engine_has_teams", &replay.game_engine_has_teams),
+        ("has_teams", &replay.has_teams),
+    ] {
+        if captured.present && !captured.value.is_null() {
+            viewer_source.insert(key.to_owned(), captured.value.clone());
+        }
+    }
+    if viewer::enabled() {
+        viewer_source.insert(
+            "events".to_owned(),
+            Value::Array(replay.events.viewer_values.clone()),
+        );
+    }
+    viewer::finish(&viewer_source)?;
     let mut ticks = replay.ticks;
 
     let top_level_spawn_points = spawn_points_from_records(&replay.spawns);
@@ -656,10 +744,11 @@ fn bounded_add(current: u64, amount: u64) -> u64 {
     current.saturating_add(amount).min(MAX_COUNTER)
 }
 
-fn parse_args() -> Result<(PathBuf, PathBuf, f64), Box<dyn Error>> {
+fn parse_args() -> Result<(PathBuf, PathBuf, f64, Option<PathBuf>), Box<dyn Error>> {
     let mut input = None;
     let mut output = None;
     let mut cell_size = 0.5;
+    let mut viewer_parts = None;
     let mut args = env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -668,6 +757,7 @@ fn parse_args() -> Result<(PathBuf, PathBuf, f64), Box<dyn Error>> {
             "--cell-size" => {
                 cell_size = args.next().ok_or("--cell-size requires a value")?.parse()?;
             }
+            "--viewer-parts" => viewer_parts = args.next().map(PathBuf::from),
             _ => return Err(format!("unknown argument: {argument}").into()),
         }
     }
@@ -678,15 +768,22 @@ fn parse_args() -> Result<(PathBuf, PathBuf, f64), Box<dyn Error>> {
         input.ok_or("--input is required")?,
         output.ok_or("--output is required")?,
         cell_size,
+        viewer_parts,
     ))
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let (input, output, cell_size) = parse_args()?;
+    let (input, output, cell_size, viewer_parts) = parse_args()?;
     CELL_SIZE
         .set(cell_size)
         .map_err(|_| "cell size was already initialized")?;
-    let extracted = extract_replay(input_reader(&input)?)?;
+    if let Some(directory) = viewer_parts {
+        viewer::configure(&directory)?;
+    }
+    let extracted = extract_replay(BoundedReader::new(
+        input_reader(&input)?,
+        MAX_DECOMPRESSED_REPLAY_BYTES,
+    ))?;
     let file = File::create(output)?;
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
     serde_json::to_writer(&mut writer, &extracted)?;
@@ -743,6 +840,14 @@ mod tests {
             output.spatial_occupancy.discarded["missing_player_object"],
             1
         );
+    }
+
+    #[test]
+    fn bounded_reader_rejects_decompressed_input_over_its_limit() {
+        let mut reader = BoundedReader::new(Cursor::new(b"four"), 3);
+        let mut output = Vec::new();
+        assert!(reader.read_to_end(&mut output).is_err());
+        assert_eq!(output, b"fou");
     }
 
     #[test]

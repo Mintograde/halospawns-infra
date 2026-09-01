@@ -1,0 +1,604 @@
+{
+  "$schema": "halospawns.viewerReplay.projectionProfile.v1",
+  "schema": "halospawns.viewerReplay.v1",
+  "profile": "frontend-default",
+  "profile_revision": 1,
+  "semantics": {
+    "missing_optional_fields": "omit",
+    "null_optional_fields": "omit",
+    "unknown_fields": "exclude",
+    "wrong_types": "reject",
+    "non_finite_numbers": "reject",
+    "array_order": "preserve",
+    "bounded_positional_arrays": "retain_declared_prefix",
+    "tick_cardinality": "preserve",
+    "dynamic_object_keys": "preserve",
+    "opaque_paths": []
+  },
+  "limits": {
+    "ticks": 432000,
+    "events": 200000,
+    "players_per_game": 64,
+    "players_per_tick": 64,
+    "objects_per_tick": 16384,
+    "model_nodes_per_player": 256,
+    "model_node_values": 13,
+    "weapons_per_player": 8,
+    "network_players": 64,
+    "spawn_points": 4096,
+    "sparse_tick_values": 432000,
+    "metric_positions_per_tick": 64
+  },
+  "generated_fields": {
+    "artifact": {
+      "schema": "halospawns.viewerReplay.v1",
+      "profile": "frontend-default",
+      "profile_revision": 1,
+      "projection_sha256": "$contract_projection_sha256",
+      "tick_count": "$length:ticks"
+    }
+  },
+  "definitions": {
+    "summary": {
+      "kind": "object",
+      "fields": {
+        "game_id": "scalar",
+        "is_full_game": "scalar",
+        "recording_started": "scalar",
+        "recording_ended": "scalar",
+        "game_duration_ingame": "scalar",
+        "recording_duration": "scalar",
+        "ticks_elapsed": "scalar",
+        "ticks_recorded": "scalar",
+        "ticks_dropped": "scalar"
+      }
+    },
+    "sparse_tick_map": {
+      "kind": "map",
+      "limit": "sparse_tick_values",
+      "values": "scalar"
+    },
+    "metric_position": {
+      "kind": "array",
+      "max_items": 3,
+      "items": "nullable_scalar"
+    },
+    "metric_positions": {
+      "kind": "array",
+      "limit": "metric_positions_per_tick",
+      "items": {
+        "kind": "ref",
+        "name": "metric_position"
+      }
+    },
+    "position_tick_map": {
+      "kind": "map",
+      "limit": "sparse_tick_values",
+      "values": {
+        "kind": "ref",
+        "name": "metric_positions"
+      }
+    },
+    "derived_stats": {
+      "kind": "object",
+      "fields": {
+        "is_host": "scalar",
+        "is_hostman": "scalar"
+      }
+    },
+    "game_meta_derived_stats": {
+      "kind": "object",
+      "fields": {
+        "is_hostman": "scalar"
+      }
+    },
+    "game_meta_player": {
+      "kind": "object",
+      "fields": {
+        "name": "scalar",
+        "player_name": "scalar",
+        "display_name": "scalar",
+        "team": "scalar",
+        "team_index": "scalar",
+        "is_hostman": "scalar",
+        "derived_stats": {
+          "kind": "ref",
+          "name": "game_meta_derived_stats"
+        },
+        "damage_dealt": "scalar",
+        "damage_received": "scalar",
+        "camo_count": "scalar",
+        "overshield_count": "scalar",
+        "damage_dealt_by_tick": {
+          "kind": "ref",
+          "name": "sparse_tick_map"
+        },
+        "damage_received_by_tick": {
+          "kind": "ref",
+          "name": "sparse_tick_map"
+        },
+        "shots_by_tick": {
+          "kind": "ref",
+          "name": "sparse_tick_map"
+        },
+        "kills_by_tick": {
+          "kind": "ref",
+          "name": "position_tick_map"
+        },
+        "deaths_by_tick": {
+          "kind": "ref",
+          "name": "position_tick_map"
+        },
+        "assists_by_tick": {
+          "kind": "ref",
+          "name": "sparse_tick_map"
+        }
+      }
+    },
+    "game_meta": {
+      "kind": "object",
+      "fields": {
+        "map_name": "scalar",
+        "game_type": "scalar",
+        "game_engine_has_teams": "scalar",
+        "has_teams": "scalar",
+        "game_id": "scalar",
+        "match_id": "scalar",
+        "live_game_id": "scalar",
+        "start_time": "scalar",
+        "players": {
+          "kind": "map",
+          "limit": "players_per_game",
+          "values": {
+            "kind": "ref",
+            "name": "game_meta_player"
+          }
+        }
+      }
+    },
+    "game_time_info": {
+      "kind": "object",
+      "fields": {
+        "game_time": "scalar",
+        "real_time_elapsed": "scalar"
+      }
+    },
+    "player_control_state": {
+      "kind": "object",
+      "fields": {
+        "player_aim_assist_target": "scalar",
+        "player_aim_assist_near": "scalar",
+        "player_aim_assist_far": "scalar",
+        "global_friction": "scalar",
+        "global_adhesion": "scalar",
+        "friction_coeff": "scalar",
+        "adhesion_coeff": "scalar"
+      }
+    },
+    "input_data": {
+      "kind": "object",
+      "fields": {
+        "player_control_state": {
+          "kind": "ref",
+          "name": "player_control_state"
+        }
+      }
+    },
+    "weapon": {
+      "kind": "object",
+      "fields": {
+        "object_id": "scalar",
+        "tag_name": "scalar",
+        "object_tag_path": "scalar",
+        "tag_path": "scalar",
+        "reloading": "scalar",
+        "magazine_ammo_count": "scalar",
+        "backpack_ammo_count": "scalar"
+      }
+    },
+    "first_person_weapon": {
+      "kind": "object",
+      "fields": {
+        "weapon_object": "scalar"
+      }
+    },
+    "observer_camera_info": {
+      "kind": "object",
+      "fields": {
+        "fov": "scalar",
+        "player_x": "scalar",
+        "player_y": "scalar",
+        "player_z": "scalar",
+        "x": "scalar",
+        "y": "scalar",
+        "z": "scalar",
+        "x_aim": "scalar",
+        "y_aim": "scalar",
+        "z_aim": "scalar"
+      }
+    },
+    "player_object_debug": {
+      "kind": "object",
+      "fields": {
+        "player_object_id": "scalar",
+        "player_object_handle": "scalar"
+      }
+    },
+    "player_object_data": {
+      "kind": "object",
+      "fields": {
+        "object_id": "scalar",
+        "object_type": "scalar",
+        "object_type_string": "scalar",
+        "tag_name": "scalar",
+        "x": "scalar",
+        "y": "scalar",
+        "z": "scalar",
+        "yaw": "scalar",
+        "pitch": "scalar",
+        "roll": "scalar",
+        "camera_x": "scalar",
+        "camera_y": "scalar",
+        "camera_z": "scalar",
+        "xaim1": "scalar",
+        "yaim1": "scalar",
+        "zaim1": "scalar",
+        "aiming_vector_x": "scalar",
+        "aiming_vector_y": "scalar",
+        "aiming_vector_z": "scalar",
+        "looking_vector_x": "scalar",
+        "looking_vector_y": "scalar",
+        "looking_vector_z": "scalar",
+        "up_x": "scalar",
+        "up_y": "scalar",
+        "up_z": "scalar",
+        "object_up_x": "scalar",
+        "object_up_y": "scalar",
+        "object_up_z": "scalar",
+        "pitch1": "scalar",
+        "yaw1": "scalar",
+        "roll1": "scalar",
+        "legs_pitch": "scalar",
+        "legs_yaw": "scalar",
+        "health": "scalar",
+        "max_health": "scalar",
+        "shields": "scalar",
+        "max_shields": "scalar",
+        "primary_nades": "scalar",
+        "secondary_nades": "scalar",
+        "selected_weapon_index": "scalar",
+        "next_object_2": "scalar",
+        "weapon_owner_team": "scalar",
+        "weapons": {
+          "kind": "array",
+          "limit": "weapons_per_player",
+          "items": {
+            "kind": "ref",
+            "name": "weapon"
+          }
+        }
+      }
+    },
+    "player": {
+      "kind": "object",
+      "fields": {
+        "id": "scalar",
+        "player_index": "scalar",
+        "name": "scalar",
+        "player_name": "scalar",
+        "display_name": "scalar",
+        "is_hostman": "scalar",
+        "team": "scalar",
+        "team_index": "scalar",
+        "score": "scalar",
+        "ctf_score": "scalar",
+        "kills": "scalar",
+        "deaths": "scalar",
+        "assists": "scalar",
+        "team_kills": "scalar",
+        "suicides": "scalar",
+        "shots_fired": "scalar",
+        "shots_hit": "scalar",
+        "respawn_timer": "scalar",
+        "object_ref": "scalar",
+        "player_object_id": "scalar",
+        "biped_object_id": "scalar",
+        "unit_ref": "scalar",
+        "local_player": "scalar",
+        "derived_stats": {
+          "kind": "ref",
+          "name": "derived_stats"
+        },
+        "model_nodes": {
+          "kind": "array",
+          "limit": "model_nodes_per_player",
+          "items": {
+            "kind": "array",
+            "take_first": "model_node_values",
+            "items": "scalar"
+          }
+        },
+        "input_data": {
+          "kind": "ref",
+          "name": "input_data"
+        },
+        "first_person_weapon": {
+          "kind": "ref",
+          "name": "first_person_weapon"
+        },
+        "observer_camera_info": {
+          "kind": "ref",
+          "name": "observer_camera_info"
+        },
+        "player_object_debug": {
+          "kind": "ref",
+          "name": "player_object_debug"
+        },
+        "player_object_data": {
+          "kind": "ref",
+          "name": "player_object_data"
+        }
+      }
+    },
+    "object": {
+      "kind": "object",
+      "fields": {
+        "object_id": "scalar",
+        "object_index": "scalar",
+        "object_type": "scalar",
+        "object_type_string": "scalar",
+        "tag_name": "scalar",
+        "object_tag_path": "scalar",
+        "tag_path": "scalar",
+        "filepath": "scalar",
+        "fileName": "scalar",
+        "item_collection_path": "scalar",
+        "item_collection": "scalar",
+        "object_model_path": "scalar",
+        "model_tag_path": "scalar",
+        "x": "scalar",
+        "y": "scalar",
+        "z": "scalar",
+        "forward": "scalar",
+        "up": "scalar",
+        "forward_x": "scalar",
+        "forward_y": "scalar",
+        "forward_z": "scalar",
+        "up_x": "scalar",
+        "up_y": "scalar",
+        "up_z": "scalar",
+        "object_forward": "scalar",
+        "object_up": "scalar",
+        "object_forward_x": "scalar",
+        "object_forward_y": "scalar",
+        "object_forward_z": "scalar",
+        "object_up_x": "scalar",
+        "object_up_y": "scalar",
+        "object_up_z": "scalar",
+        "owner_unit_ref": "scalar",
+        "owner_object_ref": "scalar",
+        "parent_ref": "scalar",
+        "ultimate_parent": "scalar"
+      }
+    },
+    "network_player": {
+      "kind": "object",
+      "fields": {
+        "player_list_index": "scalar",
+        "machine_index": "scalar",
+        "controller_index": "scalar",
+        "team": "scalar",
+        "team_index": "scalar",
+        "color": "scalar",
+        "armor_color": "scalar"
+      }
+    },
+    "network_data": {
+      "kind": "object",
+      "fields": {
+        "network_players": {
+          "kind": "array",
+          "limit": "network_players",
+          "items": {
+            "kind": "ref",
+            "name": "network_player"
+          }
+        }
+      }
+    },
+    "network_container": {
+      "kind": "object",
+      "fields": {
+        "network_game_data": {
+          "kind": "ref",
+          "name": "network_data"
+        }
+      }
+    },
+    "spawn": {
+      "kind": "object",
+      "fields": {
+        "id": "scalar",
+        "spawn_index": "scalar",
+        "spawn_id": "scalar",
+        "x": "scalar",
+        "y": "scalar",
+        "z": "scalar",
+        "facing": "scalar",
+        "team": "scalar",
+        "team_index": "scalar",
+        "type_0": "scalar",
+        "type_1": "scalar",
+        "type_2": "scalar",
+        "type_3": "scalar",
+        "gametypes": {
+          "kind": "array",
+          "max_items": 4,
+          "items": "scalar"
+        },
+        "game_types": {
+          "kind": "array",
+          "max_items": 4,
+          "items": "scalar"
+        }
+      }
+    },
+    "map_resolution_inputs": {
+      "kind": "object",
+      "fields": {
+        "parameter_hash": "scalar",
+        "spawn_parameters_hash": "scalar",
+        "map_id": "scalar",
+        "map_key": "scalar",
+        "effective_map_id": "scalar",
+        "effective_map_key": "scalar",
+        "spawn_points": {
+          "kind": "array",
+          "limit": "spawn_points",
+          "items": {
+            "kind": "ref",
+            "name": "spawn"
+          }
+        }
+      }
+    },
+    "tick": {
+      "kind": "object",
+      "fields": {
+        "game_time_info": {
+          "kind": "ref",
+          "name": "game_time_info"
+        },
+        "multiplayer_map_name": "scalar",
+        "game_type": "scalar",
+        "game_engine_has_teams": "scalar",
+        "has_teams": "scalar",
+        "game_ended_this_tick": "scalar",
+        "current_time": "scalar",
+        "start_time": "scalar",
+        "game_id": "scalar",
+        "match_id": "scalar",
+        "live_game_id": "scalar",
+        "current_game_time_seconds": "scalar",
+        "current_tick": "scalar",
+        "players": {
+          "kind": "array",
+          "limit": "players_per_tick",
+          "items": {
+            "kind": "ref",
+            "name": "player"
+          }
+        },
+        "objects": {
+          "kind": "array",
+          "limit": "objects_per_tick",
+          "items": {
+            "kind": "ref",
+            "name": "object"
+          }
+        },
+        "game_meta": {
+          "kind": "ref",
+          "name": "game_meta"
+        },
+        "network_game_client": {
+          "kind": "ref",
+          "name": "network_container"
+        },
+        "network_game_object": {
+          "kind": "ref",
+          "name": "network_container"
+        },
+        "spawns": {
+          "kind": "array",
+          "limit": "spawn_points",
+          "items": {
+            "kind": "ref",
+            "name": "spawn"
+          }
+        },
+        "spawn_points": {
+          "kind": "array",
+          "limit": "spawn_points",
+          "items": {
+            "kind": "ref",
+            "name": "spawn"
+          }
+        },
+        "map_resolution_inputs": {
+          "kind": "ref",
+          "name": "map_resolution_inputs"
+        }
+      }
+    }
+  },
+  "root": {
+    "kind": "object",
+    "required": [
+      "ticks"
+    ],
+    "fields": {
+      "artifact": {
+        "kind": "generated",
+        "name": "artifact"
+      },
+      "summary": {
+        "kind": "ref",
+        "name": "summary"
+      },
+      "game_meta": {
+        "kind": "ref",
+        "name": "game_meta"
+      },
+      "events": {
+        "kind": "array",
+        "limit": "events",
+        "items": "scalar"
+      },
+      "game_engine_has_teams": "scalar",
+      "has_teams": "scalar",
+      "network_game_client": {
+        "kind": "ref",
+        "name": "network_container"
+      },
+      "network_game_object": {
+        "kind": "ref",
+        "name": "network_container"
+      },
+      "ticks": {
+        "kind": "array",
+        "limit": "ticks",
+        "items": {
+          "kind": "ref",
+          "name": "tick"
+        }
+      }
+    }
+  },
+  "explicit_exclusions": [
+    "$.coverage",
+    "$.graph",
+    "$.game_graph",
+    "$.gameGraph",
+    "$.ticks[*].events",
+    "$.game_meta.players.*.shots_by_weapon",
+    "$.game_meta.players.*.damage_to_player",
+    "$.game_meta.players.*.damage_from_player",
+    "$.game_meta.players.*.kills_by_player",
+    "$.game_meta.players.*.deaths_by_player",
+    "$.ticks[*].players[*].metadata",
+    "$.ticks[*].players[*].facts",
+    "$.ticks[*].players[*].derived_stats.*",
+    "$.ticks[*].objects[*].metadata",
+    "$.**.address",
+    "$.**.debug"
+  ],
+  "compatibility_decisions": [
+    "Canonical output retains inventoried snake_case paths and the explicitly inventoried source key fileName.",
+    "Unproven replay/tick map, mode, and variant display aliases are excluded; map_name, multiplayer_map_name, and game_type remain the supported fallbacks.",
+    "Artifact provenance is generated by the projection and is not copied from canonical source bytes.",
+    "Root string events are retained; tick-local live-normalization events are excluded.",
+    "Current kill and death tick maps retain bounded position arrays; null position axes represent unavailable producer coordinates and are preserved inside positional arrays.",
+    "Graph and coverage parents are fixture-only in the current viewer and are excluded from revision 1."
+  ]
+}

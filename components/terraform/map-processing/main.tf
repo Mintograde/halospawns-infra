@@ -573,14 +573,15 @@ module "sqs_lambda_consumers" {
   for_each = local.lambda_configurations
   source   = "../../../modules/lambda-container"
 
-  function_name  = "${each.key}-${var.environment}"
-  image_uri      = "${data.terraform_remote_state.ecr.outputs.repository_urls[each.key]}:${each.value.image_tag}"
-  sqs_queue_arn  = each.value.sqs_queue_arn
-  s3_bucket_arn  = each.value.s3_bucket_arn
-  s3_bucket_path = each.value.s3_bucket_path
-  timeout        = each.value.timeout
-  memory_size    = each.value.memory_size
-  batch_size     = each.value.batch_size
+  function_name           = "${each.key}-${var.environment}"
+  image_uri               = "${data.terraform_remote_state.ecr.outputs.repository_urls[each.key]}:${each.value.image_tag}"
+  sqs_queue_arn           = each.value.sqs_queue_arn
+  s3_bucket_arn           = each.value.s3_bucket_arn
+  s3_bucket_path          = each.value.s3_bucket_path
+  create_s3_access_policy = each.value.create_s3_access_policy
+  timeout                 = each.value.timeout
+  memory_size             = each.value.memory_size
+  batch_size              = each.value.batch_size
 
   ephemeral_storage_size     = each.value.ephemeral_storage_size
   report_batch_item_failures = each.value.report_batch_item_failures
@@ -602,7 +603,12 @@ module "sqs_lambda_consumers" {
     each.value.environment_variables,
   )
 
-  additional_iam_policies = contains(keys(local.trusted_service_hmac_parameter_arns_by_client), each.value.trusted_service_hmac_client_name) ? {
-    TrustedServiceHmacParameterRead = data.aws_iam_policy_document.trusted_service_hmac_parameter[each.value.trusted_service_hmac_client_name].json
-  } : {}
+  additional_iam_policies = merge(
+    {
+      S3AccessPolicy = data.aws_iam_policy_document.replay_parser_s3.json
+    },
+    contains(keys(local.trusted_service_hmac_parameter_arns_by_client), each.value.trusted_service_hmac_client_name) ? {
+      TrustedServiceHmacParameterRead = data.aws_iam_policy_document.trusted_service_hmac_parameter[each.value.trusted_service_hmac_client_name].json
+    } : {},
+  )
 }

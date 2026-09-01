@@ -1,0 +1,393 @@
+{
+  "artifact": {
+    "schema": "halospawns.viewerReplay.v1",
+    "profile": "frontend-default",
+    "profile_revision": 1,
+    "projection_sha256": "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec",
+    "tick_count": 2
+  },
+  "summary": {
+    "game_id": "fixture-game",
+    "is_full_game": true,
+    "recording_started": "2026-08-30T12:00:00Z",
+    "recording_ended": "2026-08-30T12:01:00Z",
+    "game_duration_ingame": "0:00:01",
+    "recording_duration": "0:00:01.2",
+    "ticks_elapsed": 2,
+    "ticks_recorded": 2,
+    "ticks_dropped": 0
+  },
+  "game_meta": {
+    "map_name": "Fixture Gulch",
+    "game_type": 1,
+    "game_engine_has_teams": false,
+    "has_teams": false,
+    "game_id": "fixture-game",
+    "match_id": "fixture-match",
+    "live_game_id": "fixture-live",
+    "start_time": "2026-08-30T12:00:00Z",
+    "players": {
+      "0": {
+        "name": "Player One",
+        "player_name": "Player One",
+        "display_name": "Player One",
+        "team": 0,
+        "team_index": 0,
+        "is_hostman": 0,
+        "derived_stats": {
+          "is_hostman": 0
+        },
+        "damage_dealt": 25.5,
+        "damage_received": 10,
+        "camo_count": 1,
+        "overshield_count": 0,
+        "damage_dealt_by_tick": {
+          "0": 5.5,
+          "30": 20
+        },
+        "damage_received_by_tick": {
+          "30": 10
+        },
+        "shots_by_tick": {
+          "0": 1,
+          "30": 3
+        },
+        "kills_by_tick": {
+          "30": [
+            [
+              1,
+              2,
+              3
+            ]
+          ]
+        },
+        "deaths_by_tick": {
+          "0": [
+            [
+              null,
+              null,
+              null
+            ]
+          ]
+        },
+        "assists_by_tick": {
+          "30": 1
+        }
+      }
+    }
+  },
+  "events": [
+    "0: fixture started",
+    "30: Player One killed Player Two"
+  ],
+  "game_engine_has_teams": false,
+  "has_teams": false,
+  "network_game_client": {
+    "network_game_data": {
+      "network_players": [
+        {
+          "player_list_index": 0,
+          "machine_index": 0,
+          "controller_index": 0,
+          "team": 0,
+          "team_index": 0,
+          "color": 2,
+          "armor_color": 2
+        }
+      ]
+    }
+  },
+  "network_game_object": {
+    "network_game_data": {
+      "network_players": [
+        {
+          "player_list_index": 1,
+          "machine_index": 0,
+          "controller_index": 1,
+          "team": 1,
+          "team_index": 1,
+          "color": "red",
+          "armor_color": "red"
+        }
+      ]
+    }
+  },
+  "ticks": [
+    {
+      "game_time_info": {
+        "game_time": 0,
+        "real_time_elapsed": "0:00:00"
+      },
+      "multiplayer_map_name": "Fixture Gulch",
+      "game_type": 1,
+      "game_engine_has_teams": false,
+      "has_teams": false,
+      "game_ended_this_tick": false,
+      "current_time": "2026-08-30T12:00:00Z",
+      "start_time": "2026-08-30T12:00:00Z",
+      "game_id": "fixture-game",
+      "live_game_id": "fixture-live",
+      "current_game_time_seconds": 0,
+      "current_tick": 0,
+      "players": [
+        {
+          "id": "fixture-player-1",
+          "player_index": 0,
+          "name": "Player One",
+          "player_name": "Player One",
+          "display_name": "Player One",
+          "is_hostman": 0,
+          "team": 0,
+          "team_index": 0,
+          "score": 1,
+          "ctf_score": 0,
+          "kills": 1,
+          "deaths": 0,
+          "assists": 1,
+          "team_kills": 0,
+          "suicides": 0,
+          "shots_fired": 4,
+          "shots_hit": 2,
+          "respawn_timer": 0,
+          "object_ref": "0x1001",
+          "player_object_id": 1001,
+          "biped_object_id": 1001,
+          "unit_ref": "0x1001",
+          "local_player": -1,
+          "derived_stats": {
+            "is_host": 1,
+            "is_hostman": 0
+          },
+          "model_nodes": [
+            [
+              1,
+              2,
+              3,
+              1,
+              1,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ]
+          ],
+          "input_data": {
+            "player_control_state": {
+              "player_aim_assist_target": "0x2001",
+              "player_aim_assist_near": 0.25,
+              "player_aim_assist_far": 0.5,
+              "global_friction": 0.1,
+              "global_adhesion": 0.2,
+              "friction_coeff": 0.3,
+              "adhesion_coeff": 0.4
+            }
+          },
+          "first_person_weapon": {
+            "weapon_object": "0x3001"
+          },
+          "observer_camera_info": {
+            "fov": 70,
+            "player_x": 1,
+            "player_y": 2,
+            "player_z": 3,
+            "x": 1.5,
+            "y": 2.5,
+            "z": 3.5,
+            "x_aim": 1,
+            "y_aim": 0,
+            "z_aim": 0
+          },
+          "player_object_debug": {
+            "player_object_id": 1001,
+            "player_object_handle": "0x1001"
+          },
+          "player_object_data": {
+            "object_id": 1001,
+            "object_type": 0,
+            "object_type_string": "biped",
+            "tag_name": "characters\\fixture\\fixture",
+            "x": 1,
+            "y": 2,
+            "z": 3,
+            "yaw": 0.1,
+            "pitch": 0.2,
+            "roll": 0.3,
+            "camera_x": 1.1,
+            "camera_y": 2.1,
+            "camera_z": 3.1,
+            "xaim1": 1,
+            "yaim1": 0,
+            "zaim1": 0,
+            "aiming_vector_x": 1,
+            "aiming_vector_y": 0,
+            "aiming_vector_z": 0,
+            "looking_vector_x": 1,
+            "looking_vector_y": 0,
+            "looking_vector_z": 0,
+            "up_x": 0,
+            "up_y": 0,
+            "up_z": 1,
+            "object_up_x": 0,
+            "object_up_y": 0,
+            "object_up_z": 1,
+            "pitch1": 0.2,
+            "yaw1": 0.1,
+            "roll1": 0.3,
+            "legs_pitch": 0,
+            "legs_yaw": 0.1,
+            "health": 1,
+            "max_health": 1,
+            "shields": 0.75,
+            "max_shields": 1,
+            "primary_nades": 2,
+            "secondary_nades": 1,
+            "selected_weapon_index": 0,
+            "next_object_2": "0x3001",
+            "weapon_owner_team": 0,
+            "weapons": [
+              {
+                "object_id": 3001,
+                "tag_name": "weapons\\fixture_pistol",
+                "object_tag_path": "weapons\\fixture_pistol",
+                "tag_path": "weapons\\fixture_pistol",
+                "reloading": 3,
+                "magazine_ammo_count": 11,
+                "backpack_ammo_count": 48
+              }
+            ]
+          }
+        }
+      ],
+      "objects": [
+        {
+          "object_id": 2001,
+          "object_index": 7,
+          "object_type": 2,
+          "object_type_string": "weapon",
+          "tag_name": "weapons\\fixture_pistol",
+          "object_tag_path": "weapons\\fixture_pistol",
+          "tag_path": "weapons\\fixture_pistol",
+          "filepath": "weapons/fixture_pistol.model",
+          "fileName": "fixture_pistol.model",
+          "item_collection_path": "item_collections\\fixture",
+          "item_collection": "fixture",
+          "object_model_path": "weapons\\fixture_pistol",
+          "model_tag_path": "weapons\\fixture_pistol",
+          "x": 4,
+          "y": 5,
+          "z": 6,
+          "forward": 1,
+          "up": 1,
+          "forward_x": 1,
+          "forward_y": 0,
+          "forward_z": 0,
+          "up_x": 0,
+          "up_y": 0,
+          "up_z": 1,
+          "object_forward": 1,
+          "object_up": 1,
+          "object_forward_x": 1,
+          "object_forward_y": 0,
+          "object_forward_z": 0,
+          "object_up_x": 0,
+          "object_up_y": 0,
+          "object_up_z": 1,
+          "owner_unit_ref": "0x1001",
+          "owner_object_ref": "0x1001",
+          "parent_ref": "0x1001",
+          "ultimate_parent": "0x1001"
+        }
+      ],
+      "game_meta": {
+        "map_name": "Fixture Gulch",
+        "game_type": 1,
+        "players": {}
+      },
+      "network_game_client": {
+        "network_game_data": {
+          "network_players": [
+            {
+              "player_list_index": 0,
+              "machine_index": 0,
+              "controller_index": 0,
+              "team": 0,
+              "team_index": 0,
+              "color": 2,
+              "armor_color": 2
+            }
+          ]
+        }
+      },
+      "spawns": [
+        {
+          "id": "spawn-0",
+          "spawn_index": 0,
+          "spawn_id": 0,
+          "x": 10,
+          "y": 20,
+          "z": 30,
+          "facing": 0.5,
+          "team": 0,
+          "team_index": 0,
+          "type_0": 12,
+          "type_1": 0,
+          "type_2": 0,
+          "type_3": 0,
+          "gametypes": [
+            12,
+            0
+          ]
+        }
+      ],
+      "spawn_points": [
+        {
+          "spawn_index": 1,
+          "spawn_id": 1,
+          "x": 11,
+          "y": 21,
+          "z": 31,
+          "game_types": [
+            12
+          ]
+        }
+      ],
+      "map_resolution_inputs": {
+        "parameter_hash": "fixture-parameters",
+        "spawn_parameters_hash": "fixture-spawns",
+        "map_id": "fixture-map",
+        "map_key": "fixture-map-key",
+        "effective_map_id": "fixture-map",
+        "effective_map_key": "fixture-map-key",
+        "spawn_points": [
+          {
+            "spawn_index": 2,
+            "spawn_id": 2,
+            "x": 12,
+            "y": 22,
+            "z": 32,
+            "facing": 1,
+            "team_index": -1,
+            "type_0": 12,
+            "type_1": 0,
+            "type_2": 0,
+            "type_3": 0
+          }
+        ]
+      }
+    },
+    {
+      "game_time_info": {
+        "game_time": 30,
+        "real_time_elapsed": "0:00:01"
+      },
+      "game_ended_this_tick": true,
+      "current_tick": 30,
+      "players": [],
+      "objects": []
+    }
+  ]
+}

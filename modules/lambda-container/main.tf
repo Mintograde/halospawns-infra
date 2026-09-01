@@ -38,9 +38,9 @@ resource "aws_iam_role_policy_attachment" "lambda_sqs_policy" {
 resource "aws_iam_policy" "policies" {
   for_each = merge(
     var.additional_iam_policies,
-    {
+    var.create_s3_access_policy ? {
       "S3AccessPolicy" = data.aws_iam_policy_document.s3_policy.json
-    }
+    } : {}
   )
   name   = "${var.function_name}-${each.key}"
   policy = each.value

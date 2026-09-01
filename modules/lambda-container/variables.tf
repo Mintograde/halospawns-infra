@@ -79,3 +79,9 @@ variable "s3_bucket_path" {
   type        = string
   default     = ""
 }
+
+variable "create_s3_access_policy" {
+  description = "Whether to attach the module's broad path-scoped S3 read/write/delete policy."
+  type        = bool
+  default     = true
+}

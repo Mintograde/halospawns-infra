@@ -20,6 +20,8 @@ components:
           replays:
             upload_prefix: replays/unprocessed
             asset_read_prefix: replays/processed
+            viewer_artifact_prefix: replays/derived/viewer
+            viewer_artifact_serving_mode: legacy
             heatmap_rollup_artifact_prefix: replays/derived/heatmap-rollups
             region_stat_rollup_artifact_prefix: replays/derived/region-stat-rollups
           url_ttl_seconds: 900

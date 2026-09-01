@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -28,6 +28,27 @@ import boto3
 import ijson
 import zstandard
 from botocore.exceptions import BotoCoreError, ClientError
+from viewer_delta import (
+    VIEWER_ARTIFACT_KIND,
+    VIEWER_CONTAINER_VERSION,
+    VIEWER_DELTA_FORMAT,
+    VIEWER_ENCODING_SHA256,
+    VIEWER_MANIFEST_SCHEMA_SHA256,
+    VIEWER_MAX_UNCOMPRESSED_BYTES,
+    VIEWER_MEDIA_TYPE,
+    VIEWER_OUTER_COMPRESSION,
+    VIEWER_PROFILE,
+    VIEWER_PROFILE_REVISION,
+    VIEWER_PROJECTION_SHA256,
+    VIEWER_SCHEMA,
+    ViewerContainer,
+    ViewerDeltaError,
+    ViewerParts,
+    assemble_viewer_container,
+    build_python_viewer_parts,
+    load_native_viewer_parts,
+    write_viewer_parts_descriptor,
+)
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
@@ -40,6 +61,7 @@ UUID_PATTERN = re.compile(
     r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})"
 )
 PARAMETER_CACHE: dict[str, str] = {}
+PROCESS_TREE_PEAK_RSS_KIB = 0
 MAX_SPAWN_POINTS = 512
 MAX_GAMETYPE_SETTINGS_ITEMS = 128
 MAX_GAMETYPE_SETTINGS_ARRAY_ITEMS = 32
@@ -47,6 +69,14 @@ MAX_GAMETYPE_SETTINGS_DEPTH = 4
 MAX_GAMETYPE_SETTINGS_STRING_LENGTH = 256
 PROCESSOR_NAME = "halospawns-replay-parser"
 REPLAY_REPROCESS_JOB_SCHEMA = "halospawns.replay_reprocess_job.v1"
+FULL_REPARSE_OUTPUTS = (
+    "game",
+    "participants",
+    "stats",
+    "spawn_points",
+    "game_meta",
+    "graph_context",
+)
 FACT_SCHEMA_VERSION = "halospawns.replayFacts.v1"
 GRAPH_CONTEXT_SCHEMA_VERSION = "halospawns.graphContext.v1"
 SPATIAL_FACTS_SCHEMA_VERSION = "halospawns.spatialFacts.v1"
@@ -61,6 +91,7 @@ MAX_SPATIAL_CELLS_TOTAL = 200_000
 MAX_SPATIAL_ARTIFACT_BYTES = 10 * 1024 * 1024
 MAX_SPATIAL_ARTIFACT_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 MAX_NATIVE_EXTRACTOR_OUTPUT_BYTES = 64 * 1024 * 1024
+MAX_COMPLETION_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_SPATIAL_COUNTER = 2_147_483_647
 SUPPORTED_SPATIAL_CELL_SIZES = frozenset({0.5, 1.0})
 NONRETRYABLE_S3_DOWNLOAD_ERROR_CODES = {"NoSuchBucket", "NoSuchKey", "NotFound", "404"}
@@ -179,6 +210,9 @@ class S3ReplayObject:
     key: str
     event_name: str | None
     sqs_message_id: str
+    version_id: str | None = None
+    expected_size_bytes: int | None = None
+    expected_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -189,6 +223,14 @@ class ReplayOutputFile:
     content_type: str | None
     size_bytes: int | None
     sha256: str | None
+    s3_version_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ViewerBuildRequest:
+    generation_token: str
+    request_epoch: int
+    request_sequence: int
 
 
 @dataclass(frozen=True)
@@ -202,6 +244,9 @@ class ReplayReprocessJob:
     replay_id: str
     source_object: S3ReplayObject
     current_replay_file: ReplayOutputFile
+    requested_outputs: tuple[str, ...]
+    viewer_request: ViewerBuildRequest | None
+    created_at: str
 
 
 ReplayWorkItem = S3ReplayObject | ReplayReprocessJob
@@ -214,6 +259,8 @@ class DownloadedReplay:
     size_bytes: int
     sha256: str
     metadata: dict[str, str]
+    version_id: str | None = None
+    last_modified: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -396,8 +443,17 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
     upload_id = _upload_id_from_key(replay_object.key)
     compressed_path = Path("/tmp") / f"{upload_id}-{posixpath.basename(replay_object.key)}"
     json_path = Path("/tmp") / f"{upload_id}.json"
+    viewer_parts_directory = Path("/tmp") / f"{upload_id}.viewer-parts"
+    viewer_container_path = Path("/tmp") / f"{upload_id}.viewer-delta.v1.hsrv"
 
     try:
+        if _replay_persisted_completion(
+            bucket=replay_object.bucket,
+            upload_id=upload_id,
+            generation_token=upload_id,
+            expected_mode="initial",
+        ):
+            return
         _send_upload_status(
             upload_id,
             "processing",
@@ -412,13 +468,51 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
 
         downloaded = _download_replay(replay_object, compressed_path)
         upload_id = downloaded.metadata.get("upload-id") or upload_id
-        parsed = _parse_downloaded_replay(downloaded.path, json_path)
-        processed_key = _processed_key(
-            replay_object.key,
-            unprocessed_prefix=settings["unprocessed_prefix"],
-            processed_prefix=settings["processed_prefix"],
+        canonical_source = _write_canonical_replay_source(
+            bucket=replay_object.bucket,
+            upload_id=upload_id,
+            original_key=replay_object.key,
+            downloaded=downloaded,
         )
-        _copy_object(replay_object.bucket, replay_object.key, processed_key)
+        _send_upload_status(
+            upload_id,
+            "processing",
+            actual_size_bytes=downloaded.size_bytes,
+            actual_sha256=downloaded.sha256,
+            canonical_source=canonical_source,
+            metadata={
+                "s3": {
+                    "bucket": replay_object.bucket,
+                    "key": replay_object.key,
+                    "event_name": replay_object.event_name,
+                },
+            },
+        )
+        parsed, viewer_parts = _parse_downloaded_replay_with_viewer(
+            downloaded.path,
+            json_path,
+            viewer_parts_directory,
+        )
+        viewer_container = assemble_viewer_container(
+            viewer_parts,
+            viewer_container_path,
+            replay_id=upload_id,
+            recorded_at=_viewer_recorded_at(viewer_parts, downloaded.last_modified),
+        )
+        viewer_artifact = _write_viewer_artifact(
+            bucket=replay_object.bucket,
+            upload_id=upload_id,
+            source_replay_sha256=downloaded.sha256,
+            source_size_bytes=downloaded.size_bytes,
+            request=ViewerBuildRequest(
+                generation_token=upload_id,
+                request_epoch=0,
+                request_sequence=0,
+            ),
+            mode="initial",
+            parts=viewer_parts,
+            container=viewer_container,
+        )
         spatial_artifact = _write_spatial_artifact(
             parsed=parsed,
             bucket=replay_object.bucket,
@@ -426,31 +520,45 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
             generation=1,
             source_replay_sha256=downloaded.sha256,
         )
-
-        try:
-            _finalize_replay_upload(
-                upload_id=upload_id,
-                source_external_id=upload_id,
-                original_object=replay_object,
-                processed_key=processed_key,
-                downloaded=downloaded,
-                parsed=parsed,
-                spatial_artifact=spatial_artifact,
-            )
-        except Exception:
-            LOGGER.exception("Replay finalization API call failed; keeping source object for retry")
-            raise
-
-        _delete_object(replay_object.bucket, replay_object.key)
+        replay_file = ReplayOutputFile(
+            bucket=canonical_source["s3_bucket"],
+            key=canonical_source["s3_key"],
+            file_role="processed",
+            content_type=canonical_source["content_type"],
+            size_bytes=canonical_source["size_bytes"],
+            sha256=canonical_source["sha256"],
+            s3_version_id=canonical_source["s3_version_id"],
+        )
+        finalization_payload = _replay_finalization_payload(
+            upload_id=upload_id,
+            source_external_id=upload_id,
+            original_object=replay_object,
+            processed_key=replay_file.key,
+            downloaded=downloaded,
+            parsed=parsed,
+            replay_file=replay_file,
+            spatial_artifact=spatial_artifact,
+            viewer_artifact=viewer_artifact,
+        )
+        _persist_and_dispatch_completion(
+            bucket=replay_object.bucket,
+            upload_id=upload_id,
+            generation_token=upload_id,
+            mode="initial",
+            source_replay_sha256=downloaded.sha256,
+            callback_path=settings["replay_finalization_path"],
+            callback_payload=finalization_payload,
+            cleanup_object={"bucket": replay_object.bucket, "key": replay_object.key},
+        )
         LOGGER.info(
             "Processed replay upload %s from s3://%s/%s to s3://%s/%s",
             upload_id,
             replay_object.bucket,
             replay_object.key,
             replay_object.bucket,
-            processed_key,
+            replay_file.key,
         )
-    except NonRetryableReplayError as error:
+    except (NonRetryableReplayError, ViewerDeltaError) as error:
         error_details = _exception_details(error)
         LOGGER.warning(
             "Replay upload %s is not processable: %s",
@@ -481,21 +589,65 @@ def _process_replay_object(replay_object: S3ReplayObject) -> None:
     finally:
         _unlink_if_exists(compressed_path)
         _unlink_if_exists(json_path)
+        _unlink_if_exists(viewer_container_path)
+        if viewer_parts_directory.exists():
+            shutil.rmtree(viewer_parts_directory)
 
 
 def _process_reprocess_job(job: ReplayReprocessJob) -> None:
-    if job.mode != "full_reparse":
+    if job.mode not in {"full_reparse", "viewer_rebuild"}:
         raise NonRetryableReplayError(f"Unsupported replay reprocess mode: {job.mode}")
 
     work_stem = _safe_tmp_stem(job.attempt_id)
     source_object = job.source_object
     compressed_path = Path("/tmp") / f"{work_stem}-{posixpath.basename(source_object.key)}"
     json_path = Path("/tmp") / f"{work_stem}.json"
+    viewer_parts_directory = Path("/tmp") / f"{work_stem}.viewer-parts"
+    viewer_container_path = Path("/tmp") / f"{work_stem}.viewer-delta.v1.hsrv"
+    viewer_request = job.viewer_request
 
     try:
+        if viewer_request is not None and _replay_persisted_completion(
+            bucket=job.current_replay_file.bucket,
+            upload_id=job.upload_id,
+            generation_token=viewer_request.generation_token,
+            expected_mode=job.mode,
+            expected_source_replay_sha256=source_object.expected_sha256,
+        ):
+            return
         try:
+            if viewer_request is not None and (
+                source_object.version_id is None
+                or source_object.expected_sha256 is None
+            ):
+                raise NonRetryableReplayError(
+                    "Replay reprocess source is legacy and lacks a version-pinned hash manifest"
+                )
+            if viewer_request is not None and (
+                job.current_replay_file.bucket != source_object.bucket
+                or job.current_replay_file.key != source_object.key
+                or job.current_replay_file.sha256 != source_object.expected_sha256
+                or job.current_replay_file.s3_version_id != source_object.version_id
+                or (
+                    job.current_replay_file.size_bytes is not None
+                    and source_object.expected_size_bytes is not None
+                    and job.current_replay_file.size_bytes
+                    != source_object.expected_size_bytes
+                )
+            ):
+                raise NonRetryableReplayError(
+                    "Replay reprocess source and current replay file manifests disagree"
+                )
             downloaded = _download_replay(source_object, compressed_path)
-            parsed = _parse_downloaded_replay(downloaded.path, json_path)
+            if viewer_request is None:
+                parsed = _parse_downloaded_replay(downloaded.path, json_path)
+                viewer_parts = None
+            else:
+                parsed, viewer_parts = _parse_downloaded_replay_with_viewer(
+                    downloaded.path,
+                    json_path,
+                    viewer_parts_directory,
+                )
         except ClientError as error:
             if not _is_nonretryable_s3_download_error(error):
                 raise
@@ -507,7 +659,7 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             )
             _send_reprocess_attempt_status(job, "failed", error)
             return
-        except NonRetryableReplayError as error:
+        except (NonRetryableReplayError, ViewerDeltaError) as error:
             LOGGER.warning(
                 "Replay reprocess attempt %s is not processable: %s",
                 job.attempt_id,
@@ -517,24 +669,85 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             _send_reprocess_attempt_status(job, "failed", error)
             return
 
-        spatial_artifact = _write_spatial_artifact(
-            parsed=parsed,
-            bucket=job.current_replay_file.bucket,
-            upload_id=job.upload_id,
-            generation=_reprocess_spatial_generation(job.attempt_id),
-            source_replay_sha256=job.current_replay_file.sha256 or downloaded.sha256,
-        )
-        _finalize_replay_upload(
-            upload_id=job.upload_id,
-            source_external_id=job.upload_id,
-            original_object=source_object,
-            processed_key=job.current_replay_file.key,
-            downloaded=downloaded,
-            parsed=parsed,
-            replay_file=job.current_replay_file,
-            reprocess_attempt_id=job.attempt_id,
-            spatial_artifact=spatial_artifact,
-        )
+        viewer_artifact = None
+        if viewer_request is not None:
+            assert viewer_parts is not None
+            try:
+                viewer_container = assemble_viewer_container(
+                    viewer_parts,
+                    viewer_container_path,
+                    replay_id=job.replay_id,
+                    recorded_at=_viewer_recorded_at(
+                        viewer_parts,
+                        downloaded.last_modified,
+                        fallback=job.created_at,
+                    ),
+                )
+            except ViewerDeltaError as error:
+                LOGGER.warning(
+                    "Replay reprocess attempt %s viewer artifact is invalid: %s",
+                    job.attempt_id,
+                    error,
+                    exc_info=True,
+                )
+                _send_reprocess_attempt_status(job, "failed", error)
+                return
+            viewer_artifact = _write_viewer_artifact(
+                bucket=job.current_replay_file.bucket,
+                upload_id=job.upload_id,
+                source_replay_sha256=downloaded.sha256,
+                source_size_bytes=downloaded.size_bytes,
+                request=viewer_request,
+                mode=job.mode,
+                parts=viewer_parts,
+                container=viewer_container,
+            )
+        if job.mode == "viewer_rebuild":
+            if viewer_artifact is None:
+                raise NonRetryableReplayError(
+                    "viewer_rebuild job did not produce its required viewer artifact"
+                )
+            callback_path = _settings()["viewer_artifact_completion_path"]
+            callback_payload = {
+                "replay_file_id": job.replay_id,
+                "upload_id": job.upload_id,
+                "reprocess_attempt_id": job.attempt_id,
+                "source_replay_sha256": downloaded.sha256,
+                "viewer_artifact": viewer_artifact,
+            }
+        else:
+            spatial_artifact = _write_spatial_artifact(
+                parsed=parsed,
+                bucket=job.current_replay_file.bucket,
+                upload_id=job.upload_id,
+                generation=_reprocess_spatial_generation(job.attempt_id),
+                source_replay_sha256=downloaded.sha256,
+            )
+            callback_path = _settings()["replay_finalization_path"]
+            callback_payload = _replay_finalization_payload(
+                upload_id=job.upload_id,
+                source_external_id=job.upload_id,
+                original_object=source_object,
+                processed_key=job.current_replay_file.key,
+                downloaded=downloaded,
+                parsed=parsed,
+                replay_file=job.current_replay_file,
+                reprocess_attempt_id=job.attempt_id,
+                spatial_artifact=spatial_artifact,
+                viewer_artifact=viewer_artifact,
+            )
+        if viewer_request is None:
+            _call_app_api("POST", callback_path, callback_payload)
+        else:
+            _persist_and_dispatch_completion(
+                bucket=job.current_replay_file.bucket,
+                upload_id=job.upload_id,
+                generation_token=viewer_request.generation_token,
+                mode=job.mode,
+                source_replay_sha256=downloaded.sha256,
+                callback_path=callback_path,
+                callback_payload=callback_payload,
+            )
         LOGGER.info(
             "Reprocessed replay upload %s from s3://%s/%s for attempt %s",
             job.upload_id,
@@ -545,6 +758,9 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
     finally:
         _unlink_if_exists(compressed_path)
         _unlink_if_exists(json_path)
+        _unlink_if_exists(viewer_container_path)
+        if viewer_parts_directory.exists():
+            shutil.rmtree(viewer_parts_directory)
 
 
 def _iter_replay_work_items(event: dict[str, Any]) -> list[ReplayWorkItem]:
@@ -556,7 +772,10 @@ def _iter_replay_work_items(event: dict[str, Any]) -> list[ReplayWorkItem]:
         item_identifier = sqs_message_id or str(len(work_items))
 
         if payload.get("schema") == REPLAY_REPROCESS_JOB_SCHEMA:
-            work_items.append(_reprocess_job_from_payload(payload, item_identifier))
+            try:
+                work_items.append(_reprocess_job_from_payload(payload, item_identifier))
+            except NonRetryableReplayError as error:
+                _report_reprocess_job_contract_failure(payload, error)
             continue
 
         if "schema" in payload:
@@ -565,6 +784,43 @@ def _iter_replay_work_items(event: dict[str, Any]) -> list[ReplayWorkItem]:
         work_items.extend(_s3_replay_objects_from_payload(payload, item_identifier))
 
     return work_items
+
+
+def _report_reprocess_job_contract_failure(
+    payload: dict[str, Any],
+    error: NonRetryableReplayError,
+) -> None:
+    attempt_id = _optional_payload_text(payload, "attempt_id")
+    try:
+        parsed_attempt_id = uuid.UUID(attempt_id or "")
+    except ValueError:
+        raise error
+    if str(parsed_attempt_id) != (attempt_id or "").lower():
+        raise error
+    _call_app_api(
+        "PATCH",
+        _settings()["reprocess_status_path_template"].format(
+            attempt_id=attempt_id,
+        ),
+        {
+            "status": "failed",
+            "error_message": str(error)[:4096],
+            "metadata": {
+                "processor_runtime": {"name": PROCESSOR_NAME},
+                "job": {
+                    "job_id": str(payload.get("job_id") or "")[:512],
+                    "operation_id": str(payload.get("operation_id") or "")[:64],
+                    "attempt_id": attempt_id,
+                    "mode": str(payload.get("mode") or "")[:64],
+                    "schema": REPLAY_REPROCESS_JOB_SCHEMA,
+                },
+                "processor_error": {
+                    "type": type(error).__name__,
+                    "message": str(error)[:4096],
+                },
+            },
+        },
+    )
 
 
 def _iter_s3_replay_objects(event: dict[str, Any]) -> list[S3ReplayObject]:
@@ -604,7 +860,7 @@ def _reprocess_job_from_payload(
     sqs_message_id: str,
 ) -> ReplayReprocessJob:
     mode = _required_payload_text(payload, "mode")
-    if mode != "full_reparse":
+    if mode not in {"full_reparse", "viewer_rebuild"}:
         raise NonRetryableReplayError(f"Unsupported replay reprocess mode: {mode}")
 
     replay = _required_payload_mapping(payload, "replay")
@@ -613,6 +869,37 @@ def _reprocess_job_from_payload(
     attempt_id = _required_payload_text(payload, "attempt_id")
     source_bucket = _required_payload_text(source_replay, "s3_bucket")
     source_key = _required_payload_text(source_replay, "s3_key")
+    requested_outputs_raw = payload.get("requested_outputs")
+    if not isinstance(requested_outputs_raw, list) or not all(
+        isinstance(item, str) and item.strip() for item in requested_outputs_raw
+    ):
+        raise NonRetryableReplayError("Replay reprocess job requested_outputs is invalid")
+    requested_outputs = tuple(item.strip() for item in requested_outputs_raw)
+    target = payload.get("viewer_artifact_target")
+    if mode == "viewer_rebuild":
+        if requested_outputs != ("viewer_artifact",):
+            raise NonRetryableReplayError(
+                "viewer_rebuild jobs may request only the viewer artifact"
+            )
+        viewer_request = _viewer_request_from_payload(
+            _required_payload_mapping(payload, "viewer_artifact_target"),
+            attempt_id=attempt_id,
+        )
+    elif requested_outputs == FULL_REPARSE_OUTPUTS:
+        if target is not None:
+            raise NonRetryableReplayError(
+                "Facts-only full_reparse job included an unexpected viewer target"
+            )
+        viewer_request = None
+    elif requested_outputs == (*FULL_REPARSE_OUTPUTS, "viewer_artifact"):
+        viewer_request = _viewer_request_from_payload(
+            _required_payload_mapping(payload, "viewer_artifact_target"),
+            attempt_id=attempt_id,
+        )
+    else:
+        raise NonRetryableReplayError(
+            "full_reparse job requested_outputs does not match the API contract"
+        )
 
     return ReplayReprocessJob(
         sqs_message_id=sqs_message_id,
@@ -627,6 +914,9 @@ def _reprocess_job_from_payload(
             key=source_key,
             event_name=str(payload.get("trigger") or "manual_reprocess"),
             sqs_message_id=sqs_message_id,
+            version_id=_optional_payload_text(source_replay, "s3_version_id"),
+            expected_size_bytes=_optional_payload_int(source_replay, "size_bytes"),
+            expected_sha256=_optional_payload_sha256(source_replay, "sha256"),
         ),
         current_replay_file=ReplayOutputFile(
             bucket=_required_payload_text(current_replay_file, "s3_bucket"),
@@ -634,8 +924,55 @@ def _reprocess_job_from_payload(
             file_role=_optional_payload_text(current_replay_file, "file_role") or "processed",
             content_type=_optional_payload_text(current_replay_file, "content_type"),
             size_bytes=_optional_payload_int(current_replay_file, "size_bytes"),
-            sha256=_optional_payload_text(current_replay_file, "sha256"),
+            sha256=_optional_payload_sha256(current_replay_file, "sha256"),
+            s3_version_id=_optional_payload_text(current_replay_file, "s3_version_id"),
         ),
+        requested_outputs=requested_outputs,
+        viewer_request=viewer_request,
+        created_at=_required_payload_text(payload, "created_at"),
+    )
+
+
+def _viewer_request_from_payload(
+    target: dict[str, Any],
+    *,
+    attempt_id: str,
+) -> ViewerBuildRequest:
+    expected = {
+        "artifact_kind": VIEWER_ARTIFACT_KIND,
+        "format": VIEWER_DELTA_FORMAT,
+        "container_version": VIEWER_CONTAINER_VERSION,
+        "manifest_schema_sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+        "encoding_sha256": VIEWER_ENCODING_SHA256,
+        "schema_name": VIEWER_SCHEMA,
+        "profile": VIEWER_PROFILE,
+        "profile_revision": VIEWER_PROFILE_REVISION,
+        "projection_sha256": VIEWER_PROJECTION_SHA256,
+    }
+    actual = {key: target.get(key) for key in expected}
+    if actual != expected:
+        raise NonRetryableReplayError(
+            "Replay reprocess job viewer target does not match the pinned contract"
+        )
+    generation_token = _required_payload_text(target, "generation_token")
+    if generation_token != attempt_id:
+        raise NonRetryableReplayError(
+            "Replay viewer generation token must match the reprocess attempt"
+        )
+    request_epoch = _optional_payload_int(target, "request_epoch")
+    request_sequence = _optional_payload_int(target, "request_sequence")
+    if request_epoch is None or request_epoch < 0:
+        raise NonRetryableReplayError("Replay viewer request_epoch is invalid")
+    if request_sequence is None or request_sequence < 0:
+        raise NonRetryableReplayError("Replay viewer request_sequence is invalid")
+    try:
+        uuid.UUID(generation_token)
+    except ValueError as error:
+        raise NonRetryableReplayError("Replay viewer generation token is not a UUID") from error
+    return ViewerBuildRequest(
+        generation_token=generation_token,
+        request_epoch=request_epoch,
+        request_sequence=request_sequence,
     )
 
 
@@ -671,6 +1008,18 @@ def _optional_payload_int(payload: dict[str, Any], key: str) -> int | None:
         raise NonRetryableReplayError(f"Replay reprocess job field must be an integer: {key}") from error
 
 
+def _optional_payload_sha256(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    sha256 = _sha256_text(value)
+    if sha256 is None:
+        raise NonRetryableReplayError(
+            f"Replay reprocess job field must be a SHA-256 hash: {key}"
+        )
+    return sha256
+
+
 def _record_payload(record: dict[str, Any]) -> dict[str, Any]:
     body = record.get("body")
     if body is None and "s3" in record:
@@ -696,7 +1045,13 @@ def _record_payload(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _download_replay(replay_object: S3ReplayObject, destination: Path) -> DownloadedReplay:
-    response = S3.get_object(Bucket=replay_object.bucket, Key=replay_object.key)
+    request: dict[str, Any] = {
+        "Bucket": replay_object.bucket,
+        "Key": replay_object.key,
+    }
+    if replay_object.version_id is not None:
+        request["VersionId"] = replay_object.version_id
+    response = S3.get_object(**request)
     body = response["Body"]
     hasher = hashlib.sha256()
     size_bytes = 0
@@ -713,12 +1068,65 @@ def _download_replay(replay_object: S3ReplayObject, destination: Path) -> Downlo
         str(key).lower(): str(value)
         for key, value in (response.get("Metadata") or {}).items()
     }
+    sha256 = hasher.hexdigest()
+    expected_size_bytes = replay_object.expected_size_bytes
+    metadata_size = metadata.get("expected-size-bytes")
+    if metadata_size is not None:
+        try:
+            parsed_metadata_size = int(metadata_size)
+        except ValueError as error:
+            raise NonRetryableReplayError(
+                "Replay source expected-size metadata is invalid"
+            ) from error
+        if parsed_metadata_size < 1 or (
+            expected_size_bytes is not None
+            and parsed_metadata_size != expected_size_bytes
+        ):
+            raise NonRetryableReplayError(
+                "Replay source size manifests disagree"
+            )
+        expected_size_bytes = parsed_metadata_size
+
+    expected_sha256 = replay_object.expected_sha256
+    metadata_hash = metadata.get("expected-sha256")
+    if metadata_hash is not None:
+        parsed_metadata_hash = _sha256_text(metadata_hash)
+        if parsed_metadata_hash is None or (
+            expected_sha256 is not None
+            and parsed_metadata_hash != expected_sha256
+        ):
+            raise NonRetryableReplayError(
+                "Replay source hash manifests disagree"
+            )
+        expected_sha256 = parsed_metadata_hash
+
+    version_id = response.get("VersionId")
+    if replay_object.version_id is not None and version_id != replay_object.version_id:
+        raise NonRetryableReplayError(
+            "Version-pinned replay source response does not match the requested version"
+        )
+    if (
+        expected_size_bytes is not None
+        and size_bytes != expected_size_bytes
+    ):
+        raise NonRetryableReplayError(
+            "Version-pinned replay source size does not match the queued manifest"
+        )
+    if (
+        expected_sha256 is not None
+        and sha256 != expected_sha256
+    ):
+        raise NonRetryableReplayError(
+            "Version-pinned replay source hash does not match the queued manifest"
+        )
     return DownloadedReplay(
         path=destination,
         content_type=response.get("ContentType"),
         size_bytes=size_bytes,
-        sha256=hasher.hexdigest(),
+        sha256=sha256,
         metadata=metadata,
+        version_id=version_id,
+        last_modified=response.get("LastModified"),
     )
 
 
@@ -729,12 +1137,12 @@ def _decompress_replay(source: Path, destination: Path) -> None:
             with source.open("rb") as compressed, destination.open("wb") as output:
                 reader = zstandard.ZstdDecompressor().stream_reader(compressed)
                 with reader:
-                    shutil.copyfileobj(reader, output, length=1024 * 1024)
+                    _copy_bounded_replay_json(reader, output)
             return
 
         if source_name.endswith(".gz"):
             with gzip.open(source, "rb") as compressed, destination.open("wb") as output:
-                shutil.copyfileobj(compressed, output, length=1024 * 1024)
+                _copy_bounded_replay_json(compressed, output)
             return
 
         if source_name.endswith(".zip"):
@@ -742,7 +1150,8 @@ def _decompress_replay(source: Path, destination: Path) -> None:
             return
 
         if source_name.endswith(".json"):
-            shutil.copyfile(source, destination)
+            with source.open("rb") as replay, destination.open("wb") as output:
+                _copy_bounded_replay_json(replay, output)
             return
     except (OSError, zstandard.ZstdError, zipfile.BadZipFile) as error:
         raise NonRetryableReplayError(f"Replay decompression failed: {error}") from error
@@ -760,16 +1169,73 @@ def _extract_json_from_zip(source: Path, destination: Path) -> None:
         if len(candidates) != 1:
             raise NonRetryableReplayError("Replay zip must contain exactly one JSON file")
         with archive.open(candidates[0]) as compressed, destination.open("wb") as output:
-            shutil.copyfileobj(compressed, output, length=1024 * 1024)
+            _copy_bounded_replay_json(compressed, output)
+
+
+def _copy_bounded_replay_json(
+    source: Any,
+    destination: Any,
+    *,
+    max_bytes: int = VIEWER_MAX_UNCOMPRESSED_BYTES,
+) -> int:
+    total = 0
+    while chunk := source.read(1024 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise NonRetryableReplayError(
+                "Replay JSON exceeds the pinned decompressed size limit"
+            )
+        destination.write(chunk)
+    return total
 
 
 def _parse_downloaded_replay(source_path: Path, json_path: Path) -> ParsedReplay:
+    parsed, _ = _parse_downloaded_replay_products(source_path, json_path)
+    return parsed
+
+
+def _parse_downloaded_replay_with_viewer(
+    source_path: Path,
+    json_path: Path,
+    viewer_parts_directory: Path,
+) -> tuple[ParsedReplay, ViewerParts]:
+    parsed, viewer_parts = _parse_downloaded_replay_products(
+        source_path,
+        json_path,
+        viewer_parts_directory=viewer_parts_directory,
+    )
+    if viewer_parts is None:
+        raise ReplayProcessingError("Replay viewer parts were not produced")
+    return parsed, viewer_parts
+
+
+def _parse_downloaded_replay_products(
+    source_path: Path,
+    json_path: Path,
+    *,
+    viewer_parts_directory: Path | None = None,
+) -> tuple[ParsedReplay, ViewerParts | None]:
     mode = _native_extractor_mode()
     binary_path = _native_extractor_path()
     native_available = binary_path.is_file()
     if mode != "python" and native_available:
         try:
-            return _parse_replay_native(source_path, binary_path=binary_path)
+            if viewer_parts_directory is not None:
+                _reset_viewer_parts_directory(viewer_parts_directory)
+            if viewer_parts_directory is None:
+                parsed = _parse_replay_native(source_path, binary_path=binary_path)
+            else:
+                parsed = _parse_replay_native(
+                    source_path,
+                    binary_path=binary_path,
+                    viewer_parts_directory=viewer_parts_directory,
+                )
+            viewer_parts = (
+                load_native_viewer_parts(viewer_parts_directory)
+                if viewer_parts_directory is not None
+                else None
+            )
+            return parsed, viewer_parts
         except Exception as error:
             if mode == "native":
                 raise
@@ -781,21 +1247,33 @@ def _parse_downloaded_replay(source_path: Path, json_path: Path) -> ParsedReplay
     elif mode == "native":
         raise ReplayProcessingError(f"Native replay extractor was not found: {binary_path}")
 
+    if viewer_parts_directory is not None:
+        _reset_viewer_parts_directory(viewer_parts_directory)
     _decompress_replay(source_path, json_path)
-    return _parse_replay(json_path)
+    parsed = _parse_replay(json_path)
+    viewer_parts = (
+        build_python_viewer_parts(json_path, viewer_parts_directory)
+        if viewer_parts_directory is not None
+        else None
+    )
+    if viewer_parts is not None:
+        write_viewer_parts_descriptor(viewer_parts)
+    return parsed, viewer_parts
 
 
 def _parse_replay_native(
     source_path: Path,
     *,
     binary_path: Path | None = None,
+    viewer_parts_directory: Path | None = None,
 ) -> ParsedReplay:
+    global PROCESS_TREE_PEAK_RSS_KIB
+    PROCESS_TREE_PEAK_RSS_KIB = 0
     parse_started = time.perf_counter()
     extractor_path = binary_path or _native_extractor_path()
     output_path = source_path.with_name(f"{source_path.name}.extractor.json")
     try:
-        result = subprocess.run(
-            [
+        arguments = [
                 str(extractor_path),
                 "--input",
                 str(source_path),
@@ -803,15 +1281,24 @@ def _parse_replay_native(
                 str(output_path),
                 "--cell-size",
                 str(_spatial_cell_size()),
-            ],
-            check=False,
-            capture_output=True,
+            ]
+        if viewer_parts_directory is not None:
+            arguments.extend(["--viewer-parts", str(viewer_parts_directory)])
+        process = subprocess.Popen(
+            arguments,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
         )
-        if result.returncode != 0:
-            diagnostic = (result.stderr or result.stdout or "unknown error").strip()[:2000]
+        while process.poll() is None:
+            _observe_process_tree_rss(process.pid)
+            time.sleep(0.05)
+        stdout, stderr = process.communicate()
+        _observe_process_tree_rss(process.pid)
+        if process.returncode != 0:
+            diagnostic = (stderr or stdout or "unknown error").strip()[:2000]
             raise ReplayProcessingError(
-                f"Native replay extractor exited with {result.returncode}: {diagnostic}"
+                f"Native replay extractor exited with {process.returncode}: {diagnostic}"
             )
         try:
             output_size = output_path.stat().st_size
@@ -830,6 +1317,12 @@ def _parse_replay_native(
         _unlink_if_exists(output_path)
 
     return _parsed_replay_from_document(replay_document, parse_started=parse_started)
+
+
+def _reset_viewer_parts_directory(directory: Path) -> None:
+    if directory.exists():
+        shutil.rmtree(directory)
+    directory.mkdir(parents=True, exist_ok=True)
 
 
 def _replay_document_from_native(value: Any) -> dict[str, Any]:
@@ -2404,6 +2897,468 @@ def _reprocess_spatial_generation(attempt_id: str) -> int:
     return (attempt_value % (2_147_483_647 - 1)) + 2
 
 
+def _viewer_recorded_at(
+    parts: ViewerParts,
+    last_modified: datetime | None,
+    *,
+    fallback: str | None = None,
+) -> str:
+    summary = parts.replay.get("summary")
+    candidate = summary.get("recording_started") if isinstance(summary, dict) else None
+    for value in (candidate, fallback):
+        if isinstance(value, str) and value.strip():
+            try:
+                datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            return value.strip()
+    if isinstance(last_modified, datetime):
+        normalized = last_modified.astimezone(UTC)
+        return normalized.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return "1970-01-01T00:00:00Z"
+
+
+def _canonical_source_key(
+    upload_id: str,
+    source_sha256: str,
+    original_filename: str,
+) -> str:
+    filename = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "_",
+        original_filename,
+    ).strip("._")
+    return (
+        f"{_settings()['processed_prefix']}{upload_id}/sources/"
+        f"{source_sha256}/{filename or 'upload'}"
+    )
+
+
+def _write_canonical_replay_source(
+    *,
+    bucket: str,
+    upload_id: str,
+    original_key: str,
+    downloaded: DownloadedReplay,
+) -> dict[str, Any]:
+    if not 1 <= downloaded.size_bytes <= 512 * 1024 * 1024:
+        raise NonRetryableReplayError(
+            "Canonical replay source exceeds the API source manifest size limit"
+        )
+    original_filename = (
+        downloaded.metadata.get("original-filename")
+        or posixpath.basename(original_key)
+    )
+    key = _canonical_source_key(upload_id, downloaded.sha256, original_filename)
+    content_type = downloaded.content_type or "application/octet-stream"
+    version_id = _put_immutable_file(
+        bucket=bucket,
+        key=key,
+        path=downloaded.path,
+        content_type=content_type,
+        sha256=downloaded.sha256,
+        metadata={
+            "artifact-kind": "canonical-replay-source",
+            "source-sha256": downloaded.sha256,
+            "upload-id": upload_id,
+        },
+    )
+    return {
+        "s3_bucket": bucket,
+        "s3_key": key,
+        "s3_version_id": version_id,
+        "content_type": content_type,
+        "size_bytes": downloaded.size_bytes,
+        "sha256": downloaded.sha256,
+    }
+
+
+def _viewer_artifact_key(
+    upload_id: str,
+    generation_token: str,
+    artifact_sha256: str,
+) -> str:
+    prefix = _settings()["viewer_artifact_prefix"]
+    filename = (
+        f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{VIEWER_PROFILE_REVISION}."
+        f"{artifact_sha256}.viewer-delta.v1.hsrv"
+    )
+    return f"{prefix}{upload_id}/generations/{generation_token}/{filename}"
+
+
+def _write_viewer_artifact(
+    *,
+    bucket: str,
+    upload_id: str,
+    source_replay_sha256: str,
+    source_size_bytes: int,
+    request: ViewerBuildRequest,
+    mode: str,
+    parts: ViewerParts,
+    container: ViewerContainer,
+) -> dict[str, Any]:
+    if source_size_bytes < 1:
+        raise ReplayProcessingError("Viewer artifact source size must be positive")
+    key = _viewer_artifact_key(
+        upload_id,
+        request.generation_token,
+        container.sha256,
+    )
+    version_id = _put_immutable_file(
+        bucket=bucket,
+        key=key,
+        path=container.path,
+        content_type=VIEWER_MEDIA_TYPE,
+        sha256=container.sha256,
+        metadata={
+            "artifact-kind": VIEWER_ARTIFACT_KIND,
+            "container-version": str(VIEWER_CONTAINER_VERSION),
+            "encoding-sha256": VIEWER_ENCODING_SHA256,
+            "format": VIEWER_DELTA_FORMAT,
+            "generation-token": request.generation_token,
+            "manifest-schema-sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+            "profile": VIEWER_PROFILE,
+            "profile-revision": str(VIEWER_PROFILE_REVISION),
+            "projection-sha256": VIEWER_PROJECTION_SHA256,
+            "schema": VIEWER_SCHEMA,
+            "source-sha256": source_replay_sha256,
+        },
+    )
+    metrics = {
+        **container.metrics,
+        "source_bytes": source_size_bytes,
+        "artifact_source_ratio": container.size_bytes / source_size_bytes,
+        "process_peak_rss_kib": _process_peak_rss_kib(),
+        "process_tree_peak_rss_kib": _process_tree_peak_rss_kib(),
+        "tmp_used_bytes": _tmp_used_bytes(),
+    }
+    artifact = {
+        "artifact_kind": VIEWER_ARTIFACT_KIND,
+        "format": VIEWER_DELTA_FORMAT,
+        "container_version": VIEWER_CONTAINER_VERSION,
+        "manifest_schema_sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+        "encoding_sha256": VIEWER_ENCODING_SHA256,
+        "schema": VIEWER_SCHEMA,
+        "profile": VIEWER_PROFILE,
+        "profile_revision": VIEWER_PROFILE_REVISION,
+        "projection_sha256": VIEWER_PROJECTION_SHA256,
+        "generation_token": request.generation_token,
+        "request_epoch": request.request_epoch,
+        "request_sequence": request.request_sequence,
+        "source_replay_sha256": source_replay_sha256,
+        "s3_bucket": bucket,
+        "s3_key": key,
+        "s3_version_id": version_id,
+        "content_type": VIEWER_MEDIA_TYPE,
+        "compression": VIEWER_OUTER_COMPRESSION,
+        "size_bytes": container.size_bytes,
+        "uncompressed_size_bytes": container.uncompressed_size_bytes,
+        "sha256": container.sha256,
+        "tick_count": container.tick_count,
+        "producer": {
+            "name": PROCESSOR_NAME,
+            "implementation": parts.producer,
+            "contract": f"{VIEWER_SCHEMA}/{VIEWER_PROFILE}-r{VIEWER_PROFILE_REVISION}",
+        },
+        "metadata": {
+            "mode": mode,
+            "immutable": True,
+            "metrics": metrics,
+        },
+    }
+    _emit_viewer_metrics(mode=mode, artifact=artifact)
+    return artifact
+
+
+def _tmp_used_bytes() -> int | None:
+    try:
+        return shutil.disk_usage("/tmp").used
+    except OSError:
+        return None
+
+
+def _emit_viewer_metrics(*, mode: str, artifact: dict[str, Any]) -> None:
+    LOGGER.info(
+        "viewer_artifact_metrics %s",
+        json.dumps(
+            {
+                "mode": mode,
+                "contract": {
+                    "schema": artifact["schema"],
+                    "profile": artifact["profile"],
+                    "profile_revision": artifact["profile_revision"],
+                    "projection_sha256": artifact["projection_sha256"],
+                    "encoding_sha256": artifact["encoding_sha256"],
+                },
+                "tick_count": artifact["tick_count"],
+                "artifact_bytes": artifact["size_bytes"],
+                "uncompressed_bytes": artifact["uncompressed_size_bytes"],
+                "metrics": artifact["metadata"]["metrics"],
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+    )
+
+
+def _put_immutable_file(
+    *,
+    bucket: str,
+    key: str,
+    path: Path,
+    content_type: str,
+    sha256: str,
+    metadata: dict[str, str],
+) -> str:
+    size_bytes = path.stat().st_size
+    try:
+        with path.open("rb") as body:
+            response = S3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+                Metadata={**metadata, "sha256": sha256},
+                IfNoneMatch="*",
+            )
+    except ClientError as error:
+        if not _is_s3_precondition_failed(error):
+            raise
+        response = S3.head_object(Bucket=bucket, Key=key)
+        existing_metadata = {
+            str(name).lower(): str(value).lower()
+            for name, value in (response.get("Metadata") or {}).items()
+        }
+        if (
+            response.get("ContentLength") != size_bytes
+            or response.get("ContentType") != content_type
+            or existing_metadata.get("sha256") != sha256
+        ):
+            raise ReplayProcessingError(
+                f"Immutable S3 object collision at s3://{bucket}/{key}"
+            ) from error
+    version_id = response.get("VersionId")
+    if not isinstance(version_id, str) or not version_id:
+        raise ReplayProcessingError(
+            f"Versioned immutable S3 write returned no version for s3://{bucket}/{key}"
+        )
+    return version_id
+
+
+def _put_immutable_json(
+    *,
+    bucket: str,
+    key: str,
+    value: dict[str, Any],
+) -> None:
+    body = json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    if len(body) > MAX_COMPLETION_MANIFEST_BYTES:
+        raise ReplayProcessingError("Replay completion manifest exceeds its bounded size")
+    sha256 = hashlib.sha256(body).hexdigest()
+    try:
+        S3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/json",
+            Metadata={
+                "artifact-kind": "replay-callback-completion",
+                "sha256": sha256,
+            },
+            IfNoneMatch="*",
+        )
+    except ClientError as error:
+        if not _is_s3_precondition_failed(error):
+            raise
+
+
+def _is_s3_precondition_failed(error: ClientError) -> bool:
+    details = _s3_client_error_details(error)
+    return details.get("code") in {"PreconditionFailed", "ConditionalRequestConflict"} or details.get(
+        "http_status_code"
+    ) in {409, 412}
+
+
+def _completion_manifest_key(upload_id: str, generation_token: str) -> str:
+    return (
+        f"{_settings()['viewer_artifact_prefix']}{upload_id}/generations/"
+        f"{generation_token}/manifest.json"
+    )
+
+
+def _completion_manifest(
+    *,
+    upload_id: str,
+    generation_token: str,
+    mode: str,
+    source_replay_sha256: str,
+    callback_path: str,
+    callback_payload: dict[str, Any],
+    cleanup_object: dict[str, str] | None,
+) -> dict[str, Any]:
+    value: dict[str, Any] = {
+        "schema": "halospawns.replayViewerArtifactCompletion.v1",
+        "upload_id": upload_id,
+        "generation_token": generation_token,
+        "mode": mode,
+        "source_replay_sha256": source_replay_sha256,
+        "callback": {
+            "method": "POST",
+            "path": callback_path,
+            "payload": callback_payload,
+        },
+    }
+    if cleanup_object is not None:
+        value["cleanup_object"] = cleanup_object
+    return value
+
+
+def _persist_and_dispatch_completion(
+    *,
+    bucket: str,
+    upload_id: str,
+    generation_token: str,
+    mode: str,
+    source_replay_sha256: str,
+    callback_path: str,
+    callback_payload: dict[str, Any],
+    cleanup_object: dict[str, str] | None = None,
+) -> None:
+    key = _completion_manifest_key(upload_id, generation_token)
+    manifest = _completion_manifest(
+        upload_id=upload_id,
+        generation_token=generation_token,
+        mode=mode,
+        source_replay_sha256=source_replay_sha256,
+        callback_path=callback_path,
+        callback_payload=callback_payload,
+        cleanup_object=cleanup_object,
+    )
+    _put_immutable_json(bucket=bucket, key=key, value=manifest)
+    persisted = _load_completion_manifest(bucket=bucket, key=key)
+    if persisted != manifest:
+        raise ReplayProcessingError(
+            f"Immutable replay completion collision at s3://{bucket}/{key}"
+        )
+    _validate_completion_manifest(
+        persisted,
+        upload_id=upload_id,
+        generation_token=generation_token,
+        expected_mode=mode,
+        expected_source_replay_sha256=source_replay_sha256,
+    )
+    _dispatch_completion(persisted)
+
+
+def _replay_persisted_completion(
+    *,
+    bucket: str,
+    upload_id: str,
+    generation_token: str,
+    expected_mode: str,
+    expected_source_replay_sha256: str | None = None,
+) -> bool:
+    key = _completion_manifest_key(upload_id, generation_token)
+    try:
+        manifest = _load_completion_manifest(bucket=bucket, key=key)
+    except ClientError as error:
+        if _is_nonretryable_s3_download_error(error):
+            return False
+        raise
+    _validate_completion_manifest(
+        manifest,
+        upload_id=upload_id,
+        generation_token=generation_token,
+        expected_mode=expected_mode,
+        expected_source_replay_sha256=expected_source_replay_sha256,
+    )
+    _dispatch_completion(manifest)
+    LOGGER.info(
+        "Replayed persisted completion manifest s3://%s/%s without reparsing",
+        bucket,
+        key,
+    )
+    return True
+
+
+def _load_completion_manifest(*, bucket: str, key: str) -> dict[str, Any]:
+    response = S3.get_object(Bucket=bucket, Key=key)
+    body = response["Body"].read(MAX_COMPLETION_MANIFEST_BYTES + 1)
+    if len(body) > MAX_COMPLETION_MANIFEST_BYTES:
+        raise ReplayProcessingError("Persisted replay completion manifest is oversized")
+    try:
+        value = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ReplayProcessingError("Persisted replay completion manifest is invalid") from error
+    if not isinstance(value, dict):
+        raise ReplayProcessingError("Persisted replay completion manifest is not an object")
+    return value
+
+
+def _validate_completion_manifest(
+    value: dict[str, Any],
+    *,
+    upload_id: str,
+    generation_token: str,
+    expected_mode: str,
+    expected_source_replay_sha256: str | None = None,
+) -> None:
+    if (
+        value.get("schema") != "halospawns.replayViewerArtifactCompletion.v1"
+        or value.get("upload_id") != upload_id
+        or value.get("generation_token") != generation_token
+        or value.get("mode") != expected_mode
+        or _sha256_text(value.get("source_replay_sha256")) is None
+        or (
+            expected_source_replay_sha256 is not None
+            and value.get("source_replay_sha256") != expected_source_replay_sha256
+        )
+    ):
+        raise ReplayProcessingError("Persisted replay completion identity is invalid")
+    callback = value.get("callback")
+    if (
+        not isinstance(callback, dict)
+        or callback.get("method") != "POST"
+        or not isinstance(callback.get("path"), str)
+        or not callback["path"].startswith("/")
+        or not isinstance(callback.get("payload"), dict)
+    ):
+        raise ReplayProcessingError("Persisted replay completion callback is invalid")
+    callback_payload = callback["payload"]
+    viewer_artifact = callback_payload.get("viewer_artifact")
+    if (
+        callback_payload.get("upload_id") != upload_id
+        or (
+            expected_mode in {"full_reparse", "viewer_rebuild"}
+            and callback_payload.get("reprocess_attempt_id") != generation_token
+        )
+        or not isinstance(viewer_artifact, dict)
+        or viewer_artifact.get("generation_token") != generation_token
+        or viewer_artifact.get("source_replay_sha256")
+        != value.get("source_replay_sha256")
+        or viewer_artifact.get("format") != VIEWER_DELTA_FORMAT
+        or viewer_artifact.get("encoding_sha256") != VIEWER_ENCODING_SHA256
+        or viewer_artifact.get("projection_sha256") != VIEWER_PROJECTION_SHA256
+    ):
+        raise ReplayProcessingError("Persisted replay completion payload is invalid")
+
+
+def _dispatch_completion(value: dict[str, Any]) -> None:
+    callback = value["callback"]
+    _call_app_api(callback["method"], callback["path"], callback["payload"])
+    cleanup = value.get("cleanup_object")
+    if cleanup is not None:
+        if (
+            not isinstance(cleanup, dict)
+            or not isinstance(cleanup.get("bucket"), str)
+            or not isinstance(cleanup.get("key"), str)
+        ):
+            raise ReplayProcessingError("Persisted replay cleanup object is invalid")
+        _delete_object(cleanup["bucket"], cleanup["key"])
+
+
 def _finalize_replay_upload(
     *,
     upload_id: str,
@@ -2415,7 +3370,36 @@ def _finalize_replay_upload(
     replay_file: ReplayOutputFile | None = None,
     reprocess_attempt_id: str | None = None,
     spatial_artifact: dict[str, Any] | None = None,
+    viewer_artifact: dict[str, Any] | None = None,
 ) -> None:
+    payload = _replay_finalization_payload(
+        upload_id=upload_id,
+        source_external_id=source_external_id,
+        original_object=original_object,
+        processed_key=processed_key,
+        downloaded=downloaded,
+        parsed=parsed,
+        replay_file=replay_file,
+        reprocess_attempt_id=reprocess_attempt_id,
+        spatial_artifact=spatial_artifact,
+        viewer_artifact=viewer_artifact,
+    )
+    _call_app_api("POST", _settings()["replay_finalization_path"], payload)
+
+
+def _replay_finalization_payload(
+    *,
+    upload_id: str,
+    source_external_id: str,
+    original_object: S3ReplayObject,
+    processed_key: str,
+    downloaded: DownloadedReplay,
+    parsed: ParsedReplay,
+    replay_file: ReplayOutputFile | None = None,
+    reprocess_attempt_id: str | None = None,
+    spatial_artifact: dict[str, Any] | None = None,
+    viewer_artifact: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     output_file = replay_file or ReplayOutputFile(
         bucket=original_object.bucket,
         key=processed_key,
@@ -2423,6 +3407,7 @@ def _finalize_replay_upload(
         content_type=downloaded.content_type,
         size_bytes=downloaded.size_bytes,
         sha256=downloaded.sha256,
+        s3_version_id=downloaded.version_id,
     )
     payload = {
         "upload_id": upload_id,
@@ -2458,10 +3443,14 @@ def _finalize_replay_upload(
             "processed_s3_key": output_file.key,
         },
     }
+    if output_file.s3_version_id is not None:
+        payload["replay_file"]["s3_version_id"] = output_file.s3_version_id
     if reprocess_attempt_id is not None:
         payload["reprocess_attempt_id"] = reprocess_attempt_id
     if spatial_artifact is not None:
         payload["spatial_artifact"] = spatial_artifact
+    if viewer_artifact is not None:
+        payload["viewer_artifact"] = viewer_artifact
     if parsed.spawn_points:
         payload["spawn_points"] = parsed.spawn_points
         payload["spawn_source"] = parsed.spawn_source or {"extractor": PROCESSOR_NAME}
@@ -2469,7 +3458,7 @@ def _finalize_replay_upload(
         payload["game_meta"] = parsed.game_meta
     if parsed.facts is not None:
         payload["facts"] = parsed.facts
-    _call_app_api("POST", _settings()["replay_finalization_path"], payload)
+    return payload
 
 
 def _send_upload_status(
@@ -2478,6 +3467,9 @@ def _send_upload_status(
     *,
     processing_error: str | None = None,
     metadata: dict[str, Any] | None = None,
+    actual_size_bytes: int | None = None,
+    actual_sha256: str | None = None,
+    canonical_source: dict[str, Any] | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "status": status,
@@ -2490,6 +3482,12 @@ def _send_upload_status(
     }
     if processing_error:
         payload["processing_error"] = processing_error[:4096]
+    if actual_size_bytes is not None:
+        payload["actual_size_bytes"] = actual_size_bytes
+    if actual_sha256 is not None:
+        payload["actual_sha256"] = actual_sha256
+    if canonical_source is not None:
+        payload["canonical_source"] = canonical_source
     _call_app_api(
         "PATCH",
         _settings()["processing_status_path_template"].format(upload_id=upload_id),
@@ -2520,6 +3518,9 @@ def _send_reprocess_attempt_status(
             "source_replay": {
                 "s3_bucket": job.source_object.bucket,
                 "s3_key": job.source_object.key,
+                "s3_version_id": job.source_object.version_id,
+                "size_bytes": job.source_object.expected_size_bytes,
+                "sha256": job.source_object.expected_sha256,
                 "event_name": job.source_object.event_name,
             },
             "current_replay_file": {
@@ -2529,6 +3530,7 @@ def _send_reprocess_attempt_status(
                 "content_type": job.current_replay_file.content_type,
                 "size_bytes": job.current_replay_file.size_bytes,
                 "sha256": job.current_replay_file.sha256,
+                "s3_version_id": job.current_replay_file.s3_version_id,
             },
             "processor_error": _exception_details(error),
         },
@@ -2578,44 +3580,97 @@ def _s3_client_error_details(error: ClientError) -> dict[str, Any]:
 def _call_app_api(method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
     settings = _settings()
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    timestamp = str(int(time.time()))
     base_url = settings["app_api_base_url"].rstrip("/")
     url = f"{base_url}{path}"
     parsed_url = urllib.parse.urlsplit(url)
-    signature = _hmac_signature(
-        client=settings["trusted_client_name"],
-        timestamp=timestamp,
-        method=method,
-        raw_path=parsed_url.path,
-        raw_query_string=parsed_url.query,
-        body=body,
-        secret=_signing_secret(settings),
+    max_attempts = _bounded_env_int("APP_API_CALLBACK_MAX_ATTEMPTS", default=4, low=1, high=8)
+    retry_base_seconds = _bounded_env_float(
+        "APP_API_CALLBACK_RETRY_BASE_SECONDS",
+        default=0.25,
+        low=0.01,
+        high=5.0,
     )
-    request = urllib.request.Request(
-        url,
-        data=body,
-        method=method,
-        headers={
-            "Content-Type": "application/json",
-            "X-Halospawns-Client": settings["trusted_client_name"],
-            "X-Halospawns-Timestamp": timestamp,
-            "X-Halospawns-Signature": f"sha256={signature}",
-        },
+    started = time.perf_counter()
+    last_error: BaseException | None = None
+    for attempt in range(1, max_attempts + 1):
+        timestamp = str(int(time.time()))
+        signature = _hmac_signature(
+            client=settings["trusted_client_name"],
+            timestamp=timestamp,
+            method=method,
+            raw_path=parsed_url.path,
+            raw_query_string=parsed_url.query,
+            body=body,
+            secret=_signing_secret(settings),
+        )
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method=method,
+            headers={
+                "Content-Type": "application/json",
+                "X-Halospawns-Client": settings["trusted_client_name"],
+                "X-Halospawns-Timestamp": timestamp,
+                "X-Halospawns-Signature": f"sha256={signature}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response_body = response.read()
+                LOGGER.info(
+                    "app_api_callback_metrics method=%s path=%s attempts=%s duration_ms=%s",
+                    method,
+                    path,
+                    attempt,
+                    round((time.perf_counter() - started) * 1000),
+                )
+                return json.loads(response_body.decode("utf-8")) if response_body else {}
+        except urllib.error.HTTPError as error:
+            last_error = error
+            error_body = error.read().decode("utf-8", errors="replace")
+            retryable = error.code in {408, 425, 429} or 500 <= error.code < 600
+            if not retryable or attempt == max_attempts:
+                raise ReplayProcessingError(
+                    f"App API returned HTTP {error.code} for {method} {path}: "
+                    f"{error_body[:1000]}"
+                ) from error
+        except urllib.error.URLError as error:
+            last_error = error
+            if attempt == max_attempts:
+                raise ReplayProcessingError(
+                    f"App API request failed for {method} {path}: {error}"
+                ) from error
+        LOGGER.warning(
+            "App API callback attempt %s/%s failed for %s %s; retrying",
+            attempt,
+            max_attempts,
+            method,
+            path,
+        )
+        time.sleep(retry_base_seconds * (2 ** (attempt - 1)))
+    raise ReplayProcessingError(
+        f"App API request failed for {method} {path}: {last_error}"
     )
 
+
+def _bounded_env_int(name: str, *, default: int, low: int, high: int) -> int:
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            response_body = response.read()
-            return json.loads(response_body.decode("utf-8")) if response_body else {}
-    except urllib.error.HTTPError as error:
-        error_body = error.read().decode("utf-8", errors="replace")
-        raise ReplayProcessingError(
-            f"App API returned HTTP {error.code} for {method} {path}: {error_body[:1000]}"
-        ) from error
-    except urllib.error.URLError as error:
-        raise ReplayProcessingError(
-            f"App API request failed for {method} {path}: {error}"
-        ) from error
+        value = int((os.getenv(name) or str(default)).strip())
+    except ValueError as error:
+        raise ReplayProcessingError(f"{name} must be an integer") from error
+    if not low <= value <= high:
+        raise ReplayProcessingError(f"{name} must be between {low} and {high}")
+    return value
+
+
+def _bounded_env_float(name: str, *, default: float, low: float, high: float) -> float:
+    try:
+        value = float((os.getenv(name) or str(default)).strip())
+    except ValueError as error:
+        raise ReplayProcessingError(f"{name} must be numeric") from error
+    if not math.isfinite(value) or not low <= value <= high:
+        raise ReplayProcessingError(f"{name} must be between {low} and {high}")
+    return value
 
 
 def _hmac_signature(
@@ -2728,12 +3783,20 @@ def _settings() -> dict[str, str]:
             "APP_API_REPLAY_REPROCESS_ATTEMPT_STATUS_PATH_TEMPLATE",
             "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status",
         ),
+        "viewer_artifact_completion_path": os.getenv(
+            "APP_API_REPLAY_VIEWER_ARTIFACT_COMPLETION_PATH",
+            "/v1/ingest/replay-viewer-artifacts",
+        ),
         "unprocessed_prefix": _prefix_env("REPLAY_UNPROCESSED_PREFIX", "replays/unprocessed/"),
         "processed_prefix": _prefix_env("REPLAY_PROCESSED_PREFIX", "replays/processed/"),
         "failed_prefix": _prefix_env("REPLAY_FAILED_PREFIX", "replays/failed/"),
         "spatial_artifact_prefix": _prefix_env(
             "SPATIAL_ARTIFACT_PREFIX",
             "replays/derived/spatial/",
+        ),
+        "viewer_artifact_prefix": _prefix_env(
+            "VIEWER_ARTIFACT_PREFIX",
+            "replays/derived/viewer/",
         ),
     }
 
@@ -2806,6 +3869,36 @@ def _process_peak_rss_kib() -> int | None:
     except (OSError, ValueError, IndexError):
         return None
     return None
+
+
+def _current_rss_kib(process_id: int) -> int | None:
+    try:
+        for line in Path(f"/proc/{process_id}/status").read_text(
+            encoding="utf-8"
+        ).splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _observe_process_tree_rss(child_process_id: int) -> None:
+    global PROCESS_TREE_PEAK_RSS_KIB
+    readings = [
+        value
+        for value in (_current_rss_kib(os.getpid()), _current_rss_kib(child_process_id))
+        if value is not None
+    ]
+    if readings:
+        PROCESS_TREE_PEAK_RSS_KIB = max(PROCESS_TREE_PEAK_RSS_KIB, sum(readings))
+
+
+def _process_tree_peak_rss_kib() -> int | None:
+    self_peak = _process_peak_rss_kib()
+    if PROCESS_TREE_PEAK_RSS_KIB < 1:
+        return self_peak
+    return max(PROCESS_TREE_PEAK_RSS_KIB, self_peak or 0)
 
 
 def _proxy_dict(value: Any) -> dict[str, Any]:

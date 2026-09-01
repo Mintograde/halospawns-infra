@@ -12,6 +12,7 @@ locals {
   map_failed_prefix                  = trim(local.upload_pipelines.maps.failed_prefix, "/")
   map_support_resource_prefix        = trim(var.storage.maps.support_resources, "/")
   replay_spatial_artifact_prefix     = trim(var.storage.replays.spatial_artifacts, "/")
+  replay_viewer_artifact_prefix      = trim(try(data.terraform_remote_state.uploads_ingest.outputs.replay_viewer_artifact_prefix, var.storage.replays.viewer_artifacts), "/")
   heatmap_rollup_artifact_prefix     = trim(var.storage.replays.heatmap_rollups, "/")
   region_stat_rollup_artifact_prefix = trim(var.storage.replays.region_stat_rollups, "/")
 
@@ -66,6 +67,7 @@ locals {
       sqs_queue_arn                    = local.upload_pipelines.replays.queue_arn
       s3_bucket_arn                    = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn
       s3_bucket_path                   = "/replays"
+      create_s3_access_policy          = false
       batch_size                       = var.replay_parser.batch_size
       timeout                          = var.replay_parser.timeout_seconds
       memory_size                      = var.replay_parser.memory_mb
@@ -74,11 +76,13 @@ locals {
       event_source_enabled             = var.replay_parser.event_source_enabled
       trusted_service_hmac_client_name = local.replay_parser_trusted_hmac_client
       environment_variables = merge({
-        APP_API_REPLAY_FINALIZATION_PATH = local.app_api_contract.replay_finalization
-        REPLAY_UNPROCESSED_PREFIX        = local.upload_pipelines.replays.unprocessed_prefix
-        REPLAY_PROCESSED_PREFIX          = local.upload_pipelines.replays.processed_prefix
-        REPLAY_FAILED_PREFIX             = local.upload_pipelines.replays.failed_prefix
-        SPATIAL_ARTIFACT_PREFIX          = local.replay_spatial_artifact_prefix
+        APP_API_REPLAY_FINALIZATION_PATH               = local.app_api_contract.replay_finalization
+        APP_API_REPLAY_VIEWER_ARTIFACT_COMPLETION_PATH = try(local.app_api_contract.replay_viewer_artifact_completion, "/v1/ingest/replay-viewer-artifacts")
+        REPLAY_UNPROCESSED_PREFIX                      = local.upload_pipelines.replays.unprocessed_prefix
+        REPLAY_PROCESSED_PREFIX                        = local.upload_pipelines.replays.processed_prefix
+        REPLAY_FAILED_PREFIX                           = local.upload_pipelines.replays.failed_prefix
+        SPATIAL_ARTIFACT_PREFIX                        = local.replay_spatial_artifact_prefix
+        VIEWER_ARTIFACT_PREFIX                         = local.replay_viewer_artifact_prefix
       }, var.replay_parser.environment_variables)
     }
   } : {}

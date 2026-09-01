@@ -137,12 +137,22 @@ variable "uploads" {
       upload_prefix                      = optional(string, "replays/unprocessed")
       asset_read_prefix                  = optional(string, "replays/processed")
       spatial_artifact_prefix            = optional(string, "replays/derived/spatial")
+      viewer_artifact_prefix             = optional(string, "replays/derived/viewer")
+      viewer_artifact_serving_mode       = optional(string, "legacy")
       heatmap_rollup_artifact_prefix     = optional(string, "replays/derived/heatmap-rollups")
       region_stat_rollup_artifact_prefix = optional(string, "replays/derived/region-stat-rollups")
     }), {})
     url_ttl_seconds = optional(number, 900)
   })
   default = {}
+
+  validation {
+    condition = contains(
+      ["legacy", "prefer_viewer", "require_viewer"],
+      var.uploads.replays.viewer_artifact_serving_mode,
+    )
+    error_message = "uploads.replays.viewer_artifact_serving_mode must be legacy, prefer_viewer, or require_viewer."
+  }
 }
 
 variable "rendering" {
