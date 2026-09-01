@@ -3,6 +3,7 @@ mod viewer;
 use flate2::read::GzDecoder;
 use serde::de::{Error as DeError, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::value::RawValue;
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::env;
@@ -11,8 +12,10 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::time::Instant;
+use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 const OUTPUT_SCHEMA: &str = "halospawns.replayExtractor.v1";
 const MAX_COORDINATE_ABS: f64 = 1_000_000.0;
@@ -23,6 +26,11 @@ const MAX_EVENT_SAMPLE: usize = 10;
 const MAX_SPAWN_POINTS: usize = 512;
 const BUFFER_SIZE: usize = 1024 * 1024;
 const MAX_DECOMPRESSED_REPLAY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const MAX_SOURCE_WORKERS: usize = 8;
+const SOURCE_WORK_WINDOW_MULTIPLIER: usize = 2;
+const DEFAULT_VIEWER_INGEST_QUEUE_TICKS: usize = 64;
+const MAX_VIEWER_INGEST_QUEUE_TICKS: usize = 512;
+const DECOMPRESSION_PIPE_CHUNKS: usize = 4;
 
 static CELL_SIZE: OnceLock<f64> = OnceLock::new();
 
@@ -60,6 +68,96 @@ impl<R: Read> Read for BoundedReader<R> {
         let bytes_read = self.inner.read(&mut buffer[..bounded_length])?;
         self.bytes_read += bytes_read as u64;
         Ok(bytes_read)
+    }
+}
+
+struct PipelinedReader {
+    chunks: Receiver<io::Result<Vec<u8>>>,
+    current: Vec<u8>,
+    offset: usize,
+    worker: Option<JoinHandle<()>>,
+    finished: bool,
+}
+
+impl PipelinedReader {
+    fn spawn<R>(mut source: R) -> Self
+    where
+        R: Read + Send + 'static,
+    {
+        let (sender, chunks) = mpsc::sync_channel(DECOMPRESSION_PIPE_CHUNKS);
+        let worker = thread::spawn(move || {
+            loop {
+                let mut chunk = vec![0_u8; BUFFER_SIZE];
+                match source.read(&mut chunk) {
+                    Ok(0) => return,
+                    Ok(bytes_read) => {
+                        chunk.truncate(bytes_read);
+                        if sender.send(Ok(chunk)).is_err() {
+                            return;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = sender.send(Err(error));
+                        return;
+                    }
+                }
+            }
+        });
+        Self {
+            chunks,
+            current: Vec::new(),
+            offset: 0,
+            worker: Some(worker),
+            finished: false,
+        }
+    }
+
+    fn finish_worker(&mut self) -> io::Result<()> {
+        self.finished = true;
+        if let Some(worker) = self.worker.take() {
+            worker
+                .join()
+                .map_err(|_| io::Error::other("decompression worker panicked"))?;
+        }
+        Ok(())
+    }
+}
+
+impl Read for PipelinedReader {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if output.is_empty() || self.finished {
+            return Ok(0);
+        }
+        while self.offset >= self.current.len() {
+            match self.chunks.recv() {
+                Ok(Ok(chunk)) => {
+                    self.current = chunk;
+                    self.offset = 0;
+                }
+                Ok(Err(error)) => {
+                    self.finish_worker()?;
+                    return Err(error);
+                }
+                Err(_) => {
+                    self.finish_worker()?;
+                    return Ok(0);
+                }
+            }
+        }
+        let bytes_read = output.len().min(self.current.len() - self.offset);
+        output[..bytes_read].copy_from_slice(&self.current[self.offset..self.offset + bytes_read]);
+        self.offset += bytes_read;
+        Ok(bytes_read)
+    }
+}
+
+impl Drop for PipelinedReader {
+    fn drop(&mut self) {
+        if !self.finished {
+            let (_, replacement) = mpsc::channel();
+            self.chunks = replacement;
+            let _ = self.finish_worker();
+        }
     }
 }
 
@@ -128,6 +226,38 @@ struct Ticks {
     spawn_points: Vec<SpawnPoint>,
     spawn_source_path: Option<String>,
     occupancy: Occupancy,
+    worker_parse_duration: Duration,
+    worker_projection_duration: Duration,
+    worker_facts_duration: Duration,
+    viewer_ingest_duration: Duration,
+}
+
+impl Ticks {
+    fn absorb(&mut self, tick: Tick) {
+        let tick_index = self.count;
+        self.count = self.count.saturating_add(1);
+        if self.first_network_game_client.is_none()
+            && let Some(mapping) = tick.network_game_client.object()
+            && !mapping.is_empty()
+        {
+            self.first_network_game_client = Some(Value::Object(mapping.clone()));
+        }
+        if self.spawn_points.is_empty() && tick.spawns.present {
+            let points = spawn_points_from_records(&tick.spawns.value);
+            if !points.is_empty() {
+                self.spawn_points = points;
+                self.spawn_source_path = Some(format!("$.ticks[{tick_index}].spawns"));
+            }
+        }
+        for player in &tick.players {
+            self.occupancy.observe(player);
+        }
+        let selected = tick.selected_value();
+        if self.first.is_none() {
+            self.first = Some(selected.clone());
+        }
+        self.last = Some(selected);
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -374,6 +504,381 @@ impl Occupancy {
     }
 }
 
+struct TickTask {
+    index: u64,
+    raw: Box<RawValue>,
+}
+
+struct ParsedTick {
+    tick: Tick,
+    projected: Option<(Value, [u8; 32])>,
+    parse_duration: Duration,
+    projection_duration: Duration,
+    facts_duration: Duration,
+}
+
+struct TickWorkMessage {
+    index: u64,
+    result: Result<ParsedTick, String>,
+}
+
+fn configured_source_worker_count() -> Result<usize, Box<dyn Error>> {
+    let Some(value) = env::var_os("REPLAY_SOURCE_WORKERS") else {
+        return Ok(1);
+    };
+    let worker_count = value
+        .to_str()
+        .ok_or("REPLAY_SOURCE_WORKERS must be UTF-8")?
+        .parse::<usize>()?;
+    if !(1..=MAX_SOURCE_WORKERS).contains(&worker_count) {
+        return Err(
+            format!("REPLAY_SOURCE_WORKERS must be between 1 and {MAX_SOURCE_WORKERS}").into(),
+        );
+    }
+    Ok(worker_count)
+}
+
+fn configured_viewer_ingest_queue_ticks() -> Result<usize, Box<dyn Error>> {
+    let Some(value) = env::var_os("VIEWER_INGEST_QUEUE_TICKS") else {
+        return Ok(DEFAULT_VIEWER_INGEST_QUEUE_TICKS);
+    };
+    let queue_ticks = value
+        .to_str()
+        .ok_or("VIEWER_INGEST_QUEUE_TICKS must be UTF-8")?
+        .parse::<usize>()?;
+    if !(1..=MAX_VIEWER_INGEST_QUEUE_TICKS).contains(&queue_ticks) {
+        return Err(format!(
+            "VIEWER_INGEST_QUEUE_TICKS must be between 1 and {MAX_VIEWER_INGEST_QUEUE_TICKS}"
+        )
+        .into());
+    }
+    Ok(queue_ticks)
+}
+
+fn pipelined_decompression_enabled() -> Result<bool, Box<dyn Error>> {
+    let Some(value) = env::var_os("REPLAY_PIPELINED_DECOMPRESSION") else {
+        return Ok(true);
+    };
+    match value
+        .to_str()
+        .ok_or("REPLAY_PIPELINED_DECOMPRESSION must be UTF-8")?
+    {
+        "1" | "true" => Ok(true),
+        "0" | "false" => Ok(false),
+        _ => Err("REPLAY_PIPELINED_DECOMPRESSION must be true, false, 1, or 0".into()),
+    }
+}
+
+fn process_tick_task(task: TickTask, viewer_enabled: bool) -> TickWorkMessage {
+    let result = (|| -> Result<ParsedTick, Box<dyn Error>> {
+        let parse_started = Instant::now();
+        let source = serde_json::from_str::<Value>(task.raw.get())?;
+        let parse_duration = parse_started.elapsed();
+        let (projected, projection_duration) = if viewer_enabled {
+            let (projected, semantic_digest, duration) = viewer::project_tick(&source)?;
+            (Some((projected, semantic_digest)), duration)
+        } else {
+            (None, Duration::ZERO)
+        };
+        let facts_started = Instant::now();
+        let tick = serde_json::from_value(source)?;
+        Ok(ParsedTick {
+            tick,
+            projected,
+            parse_duration,
+            projection_duration,
+            facts_duration: facts_started.elapsed(),
+        })
+    })()
+    .map_err(|error| error.to_string());
+    TickWorkMessage {
+        index: task.index,
+        result,
+    }
+}
+
+fn tick_worker(
+    tasks: Arc<Mutex<Receiver<TickTask>>>,
+    results: SyncSender<TickWorkMessage>,
+    viewer_enabled: bool,
+) {
+    loop {
+        let task = match tasks.lock() {
+            Ok(tasks) => tasks.recv(),
+            Err(_) => return,
+        };
+        let Ok(task) = task else {
+            return;
+        };
+        if results
+            .send(process_tick_task(task, viewer_enabled))
+            .is_err()
+        {
+            return;
+        }
+    }
+}
+
+struct TickWorkerPool {
+    task_sender: Option<SyncSender<TickTask>>,
+    result_receiver: Option<Receiver<TickWorkMessage>>,
+    worker_handles: Vec<JoinHandle<()>>,
+}
+
+struct ViewerIngestTask {
+    projected: Value,
+    semantic_digest: [u8; 32],
+    projection_duration: Duration,
+}
+
+struct ViewerIngestWorker {
+    task_sender: Option<SyncSender<ViewerIngestTask>>,
+    result_receiver: Receiver<Result<(), String>>,
+    handle: Option<JoinHandle<()>>,
+    dispatched: u64,
+    completed: u64,
+}
+
+impl ViewerIngestWorker {
+    fn new(capacity: usize) -> Self {
+        let (task_sender, task_receiver) = mpsc::sync_channel::<ViewerIngestTask>(capacity);
+        let (result_sender, result_receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            while let Ok(task) = task_receiver.recv() {
+                let result = viewer::add_projected_tick(
+                    task.projected,
+                    task.semantic_digest,
+                    task.projection_duration,
+                )
+                .map_err(|error| error.to_string());
+                let failed = result.is_err();
+                if result_sender.send(result).is_err() || failed {
+                    return;
+                }
+            }
+        });
+        Self {
+            task_sender: Some(task_sender),
+            result_receiver,
+            handle: Some(handle),
+            dispatched: 0,
+            completed: 0,
+        }
+    }
+
+    fn absorb_result(&mut self, result: Result<(), String>) -> Result<(), Box<dyn Error>> {
+        self.completed = self
+            .completed
+            .checked_add(1)
+            .ok_or("viewer ingest completion count overflow")?;
+        result.map_err(|error| format!("viewer ingest worker failed: {error}").into())
+    }
+
+    fn collect_ready(&mut self) -> Result<(), Box<dyn Error>> {
+        loop {
+            match self.result_receiver.try_recv() {
+                Ok(result) => self.absorb_result(result)?,
+                Err(TryRecvError::Empty) => return Ok(()),
+                Err(TryRecvError::Disconnected) if self.completed == self.dispatched => {
+                    return Ok(());
+                }
+                Err(TryRecvError::Disconnected) => {
+                    return Err("viewer ingest worker stopped before completing all ticks".into());
+                }
+            }
+        }
+    }
+
+    fn send(
+        &mut self,
+        projected: Value,
+        semantic_digest: [u8; 32],
+        projection_duration: Duration,
+    ) -> Result<(), Box<dyn Error>> {
+        self.collect_ready()?;
+        self.task_sender
+            .as_ref()
+            .ok_or("viewer ingest worker is already closed")?
+            .send(ViewerIngestTask {
+                projected,
+                semantic_digest,
+                projection_duration,
+            })
+            .map_err(|_| "viewer ingest worker queue closed unexpectedly")?;
+        self.dispatched = self
+            .dispatched
+            .checked_add(1)
+            .ok_or("viewer ingest dispatch count overflow")?;
+        self.collect_ready()
+    }
+
+    fn finish(&mut self) -> Result<(), Box<dyn Error>> {
+        self.task_sender.take();
+        while self.completed < self.dispatched {
+            let result = self
+                .result_receiver
+                .recv()
+                .map_err(|_| "viewer ingest worker stopped before completing all ticks")?;
+            self.absorb_result(result)?;
+        }
+        if let Some(handle) = self.handle.take() {
+            handle.join().map_err(|_| "viewer ingest worker panicked")?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for ViewerIngestWorker {
+    fn drop(&mut self) {
+        self.task_sender.take();
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl TickWorkerPool {
+    fn new(worker_count: usize, viewer_enabled: bool) -> Self {
+        let queue_capacity = worker_count * SOURCE_WORK_WINDOW_MULTIPLIER;
+        let (task_sender, task_receiver) = mpsc::sync_channel(queue_capacity);
+        let task_receiver = Arc::new(Mutex::new(task_receiver));
+        let (result_sender, result_receiver) = mpsc::sync_channel(queue_capacity);
+        let worker_handles = (0..worker_count)
+            .map(|_| {
+                let tasks = Arc::clone(&task_receiver);
+                let results = result_sender.clone();
+                thread::spawn(move || tick_worker(tasks, results, viewer_enabled))
+            })
+            .collect();
+        drop(result_sender);
+        Self {
+            task_sender: Some(task_sender),
+            result_receiver: Some(result_receiver),
+            worker_handles,
+        }
+    }
+
+    fn send(&self, task: TickTask) -> Result<(), Box<dyn Error>> {
+        self.task_sender
+            .as_ref()
+            .ok_or("replay source workers are already closed")?
+            .send(task)
+            .map_err(|_| "replay source worker queue closed unexpectedly".into())
+    }
+
+    fn take_result_receiver(&mut self) -> Result<Receiver<TickWorkMessage>, Box<dyn Error>> {
+        self.result_receiver
+            .take()
+            .ok_or_else(|| "replay source result receiver was already taken".into())
+    }
+
+    fn close(&mut self) {
+        self.task_sender.take();
+    }
+
+    fn join(&mut self) -> Result<(), Box<dyn Error>> {
+        for handle in self.worker_handles.drain(..) {
+            handle.join().map_err(|_| "replay source worker panicked")?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for TickWorkerPool {
+    fn drop(&mut self) {
+        self.task_sender.take();
+        for handle in self.worker_handles.drain(..) {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn absorb_ready_ticks(
+    output: &mut Ticks,
+    pending: &mut BTreeMap<u64, Result<ParsedTick, String>>,
+    next_index: &mut u64,
+    viewer_ingest: &mut Option<ViewerIngestWorker>,
+) -> Result<(), Box<dyn Error>> {
+    while let Some(result) = pending.remove(next_index) {
+        let parsed = result.map_err(|error| format!("replay tick {next_index}: {error}"))?;
+        output.worker_parse_duration += parsed.parse_duration;
+        output.worker_projection_duration += parsed.projection_duration;
+        output.worker_facts_duration += parsed.facts_duration;
+        if let Some((projected, semantic_digest)) = parsed.projected {
+            let ingest_started = Instant::now();
+            if let Some(viewer_ingest) = viewer_ingest {
+                viewer_ingest.send(projected, semantic_digest, parsed.projection_duration)?;
+            } else {
+                viewer::add_projected_tick(projected, semantic_digest, parsed.projection_duration)?;
+            }
+            output.viewer_ingest_duration += ingest_started.elapsed();
+        }
+        output.absorb(parsed.tick);
+        *next_index = next_index
+            .checked_add(1)
+            .ok_or("replay tick index overflow")?;
+    }
+    Ok(())
+}
+
+struct TickReduction {
+    output: Ticks,
+    reducer_duration: Duration,
+}
+
+fn reduce_tick_results(
+    results: Receiver<TickWorkMessage>,
+    viewer_enabled: bool,
+    viewer_ingest_queue_ticks: usize,
+) -> Result<TickReduction, String> {
+    let mut output = Ticks::default();
+    let mut pending = BTreeMap::new();
+    let mut next_index = 0_u64;
+    let mut viewer_ingest =
+        viewer_enabled.then(|| ViewerIngestWorker::new(viewer_ingest_queue_ticks));
+    let mut reducer_duration = Duration::ZERO;
+    let mut first_error = None;
+
+    while let Ok(message) = results.recv() {
+        if first_error.is_some() {
+            continue;
+        }
+        let started = Instant::now();
+        let result = if pending.insert(message.index, message.result).is_some() {
+            Err("replay source workers returned a duplicate tick".into())
+        } else {
+            absorb_ready_ticks(
+                &mut output,
+                &mut pending,
+                &mut next_index,
+                &mut viewer_ingest,
+            )
+            .map_err(|error| error.to_string())
+        };
+        reducer_duration += started.elapsed();
+        if let Err(error) = result {
+            first_error = Some(error);
+            pending.clear();
+        }
+    }
+
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+    if !pending.is_empty() {
+        return Err("replay source workers returned a non-contiguous tick sequence".into());
+    }
+    if let Some(viewer_ingest) = viewer_ingest.as_mut() {
+        let started = Instant::now();
+        viewer_ingest.finish().map_err(|error| error.to_string())?;
+        reducer_duration += started.elapsed();
+    }
+    Ok(TickReduction {
+        output,
+        reducer_duration,
+    })
+}
+
 struct TicksVisitor;
 
 impl<'de> Visitor<'de> for TicksVisitor {
@@ -388,34 +893,87 @@ impl<'de> Visitor<'de> for TicksVisitor {
         A: SeqAccess<'de>,
     {
         let mut output = Ticks::default();
-        while let Some(raw_tick) = sequence.next_element::<Value>()? {
-            viewer::add_tick(&raw_tick).map_err(A::Error::custom)?;
-            let tick = serde_json::from_value::<Tick>(raw_tick).map_err(A::Error::custom)?;
-            let tick_index = output.count;
-            output.count = output.count.saturating_add(1);
-            if output.first_network_game_client.is_none()
-                && let Some(mapping) = tick.network_game_client.object()
-                && !mapping.is_empty()
-            {
-                output.first_network_game_client = Some(Value::Object(mapping.clone()));
+        let worker_count = configured_source_worker_count().map_err(A::Error::custom)?;
+        if worker_count == 1 {
+            while let Some(raw_tick) = sequence.next_element::<Value>()? {
+                viewer::add_tick(&raw_tick).map_err(A::Error::custom)?;
+                output.absorb(serde_json::from_value(raw_tick).map_err(A::Error::custom)?);
             }
-            if output.spawn_points.is_empty() && tick.spawns.present {
-                let points = spawn_points_from_records(&tick.spawns.value);
-                if !points.is_empty() {
-                    output.spawn_points = points;
-                    output.spawn_source_path = Some(format!("$.ticks[{tick_index}].spawns"));
-                }
-            }
-            for player in &tick.players {
-                output.occupancy.observe(player);
-            }
-            let selected = tick.selected_value();
-            if output.first.is_none() {
-                output.first = Some(selected.clone());
-            }
-            output.last = Some(selected);
+            return Ok(output);
         }
-        Ok(output)
+
+        let viewer_enabled = viewer::enabled();
+        let viewer_ingest_queue_ticks =
+            configured_viewer_ingest_queue_ticks().map_err(A::Error::custom)?;
+        let mut pool = TickWorkerPool::new(worker_count, viewer_enabled);
+        let results = pool.take_result_receiver().map_err(A::Error::custom)?;
+        let reducer_handle = thread::spawn(move || {
+            reduce_tick_results(results, viewer_enabled, viewer_ingest_queue_ticks)
+        });
+        let pipeline_started = Instant::now();
+        let mut framing_duration = Duration::ZERO;
+        let mut submitted = 0_u64;
+        let mut source_error = None;
+        let mut pipeline_error = None;
+
+        loop {
+            let framing_started = Instant::now();
+            let raw = match sequence.next_element::<Box<RawValue>>() {
+                Ok(Some(raw)) => raw,
+                Ok(None) => {
+                    framing_duration += framing_started.elapsed();
+                    break;
+                }
+                Err(error) => {
+                    framing_duration += framing_started.elapsed();
+                    source_error = Some(error);
+                    break;
+                }
+            };
+            framing_duration += framing_started.elapsed();
+            if let Err(error) = pool.send(TickTask {
+                index: submitted,
+                raw,
+            }) {
+                pipeline_error = Some(error.to_string());
+                break;
+            }
+            submitted = submitted
+                .checked_add(1)
+                .ok_or_else(|| A::Error::custom("replay tick count overflow"))?;
+        }
+
+        pool.close();
+        let worker_result = pool.join();
+        let reduction = reducer_handle
+            .join()
+            .map_err(|_| A::Error::custom("replay tick reducer panicked"))?
+            .map_err(A::Error::custom)?;
+        worker_result.map_err(A::Error::custom)?;
+        if reduction.output.count != submitted {
+            return Err(A::Error::custom(
+                "replay source workers returned an incomplete tick sequence",
+            ));
+        }
+        if let Some(error) = pipeline_error {
+            return Err(A::Error::custom(error));
+        }
+        if let Some(error) = source_error {
+            return Err(error);
+        }
+        if env::var_os("REPLAY_PROFILE").is_some() {
+            eprintln!(
+                "replay-source-profile workers={worker_count} wall_ms={} framing_ms={} reducer_ms={} parse_cpu_ms={} projection_cpu_ms={} facts_cpu_ms={} viewer_ingest_ms={}",
+                pipeline_started.elapsed().as_millis(),
+                framing_duration.as_millis(),
+                reduction.reducer_duration.as_millis(),
+                reduction.output.worker_parse_duration.as_millis(),
+                reduction.output.worker_projection_duration.as_millis(),
+                reduction.output.worker_facts_duration.as_millis(),
+                reduction.output.viewer_ingest_duration.as_millis(),
+            );
+        }
+        Ok(reduction.output)
     }
 }
 
@@ -635,15 +1193,20 @@ fn input_reader(path: &Path) -> Result<Box<dyn Read>, Box<dyn Error>> {
     let mut probe = File::open(path)?;
     let bytes_read = probe.read(&mut magic)?;
     if bytes_read >= 4 && magic == [0x28, 0xb5, 0x2f, 0xfd] {
-        return Ok(Box::new(zstd::stream::read::Decoder::new(File::open(
-            path,
-        )?)?));
+        let decoder = zstd::stream::read::Decoder::new(File::open(path)?)?;
+        return if pipelined_decompression_enabled()? {
+            Ok(Box::new(PipelinedReader::spawn(decoder)))
+        } else {
+            Ok(Box::new(decoder))
+        };
     }
     if bytes_read >= 2 && magic[..2] == [0x1f, 0x8b] {
-        return Ok(Box::new(GzDecoder::new(BufReader::with_capacity(
-            BUFFER_SIZE,
-            File::open(path)?,
-        ))));
+        let decoder = GzDecoder::new(BufReader::with_capacity(BUFFER_SIZE, File::open(path)?));
+        return if pipelined_decompression_enabled()? {
+            Ok(Box::new(PipelinedReader::spawn(decoder)))
+        } else {
+            Ok(Box::new(decoder))
+        };
     }
     if bytes_read >= 2 && magic[..2] == [b'P', b'K'] {
         return Err("zip replay inputs require the Python fallback".into());
@@ -744,11 +1307,30 @@ fn bounded_add(current: u64, amount: u64) -> u64 {
     current.saturating_add(amount).min(MAX_COUNTER)
 }
 
-fn parse_args() -> Result<(PathBuf, PathBuf, f64, Option<PathBuf>), Box<dyn Error>> {
+enum Command {
+    Extract {
+        input: PathBuf,
+        output: PathBuf,
+        cell_size: f64,
+        viewer_parts: Option<PathBuf>,
+    },
+    FinalizeViewer {
+        viewer_parts: PathBuf,
+        viewer_manifest: PathBuf,
+        viewer_output: PathBuf,
+        viewer_result: PathBuf,
+    },
+}
+
+fn parse_args() -> Result<Command, Box<dyn Error>> {
     let mut input = None;
     let mut output = None;
     let mut cell_size = 0.5;
     let mut viewer_parts = None;
+    let mut finalize_viewer = false;
+    let mut viewer_manifest = None;
+    let mut viewer_output = None;
+    let mut viewer_result = None;
     let mut args = env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -758,37 +1340,77 @@ fn parse_args() -> Result<(PathBuf, PathBuf, f64, Option<PathBuf>), Box<dyn Erro
                 cell_size = args.next().ok_or("--cell-size requires a value")?.parse()?;
             }
             "--viewer-parts" => viewer_parts = args.next().map(PathBuf::from),
+            "--finalize-viewer" => finalize_viewer = true,
+            "--viewer-manifest" => viewer_manifest = args.next().map(PathBuf::from),
+            "--viewer-output" => viewer_output = args.next().map(PathBuf::from),
+            "--viewer-result" => viewer_result = args.next().map(PathBuf::from),
             _ => return Err(format!("unknown argument: {argument}").into()),
         }
+    }
+    if finalize_viewer {
+        if input.is_some() || output.is_some() {
+            return Err("viewer finalization does not accept --input or --output".into());
+        }
+        return Ok(Command::FinalizeViewer {
+            viewer_parts: viewer_parts.ok_or("--viewer-parts is required")?,
+            viewer_manifest: viewer_manifest.ok_or("--viewer-manifest is required")?,
+            viewer_output: viewer_output.ok_or("--viewer-output is required")?,
+            viewer_result: viewer_result.ok_or("--viewer-result is required")?,
+        });
+    }
+    if viewer_manifest.is_some() || viewer_output.is_some() || viewer_result.is_some() {
+        return Err("viewer finalization arguments require --finalize-viewer".into());
     }
     if !matches!(cell_size, 0.5 | 1.0) {
         return Err("--cell-size must be 0.5 or 1.0".into());
     }
-    Ok((
-        input.ok_or("--input is required")?,
-        output.ok_or("--output is required")?,
+    Ok(Command::Extract {
+        input: input.ok_or("--input is required")?,
+        output: output.ok_or("--output is required")?,
         cell_size,
         viewer_parts,
-    ))
+    })
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let (input, output, cell_size, viewer_parts) = parse_args()?;
-    CELL_SIZE
-        .set(cell_size)
-        .map_err(|_| "cell size was already initialized")?;
-    if let Some(directory) = viewer_parts {
-        viewer::configure(&directory)?;
+    match parse_args()? {
+        Command::Extract {
+            input,
+            output,
+            cell_size,
+            viewer_parts,
+        } => {
+            CELL_SIZE
+                .set(cell_size)
+                .map_err(|_| "cell size was already initialized")?;
+            if let Some(directory) = viewer_parts {
+                viewer::configure(&directory)?;
+            }
+            let extracted = extract_replay(BoundedReader::new(
+                input_reader(&input)?,
+                MAX_DECOMPRESSED_REPLAY_BYTES,
+            ))?;
+            let file = File::create(output)?;
+            let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
+            serde_json::to_writer(&mut writer, &extracted)?;
+            writer.write_all(b"\n")?;
+            writer.flush()?;
+        }
+        Command::FinalizeViewer {
+            viewer_parts,
+            viewer_manifest,
+            viewer_output,
+            viewer_result,
+        } => {
+            let result =
+                viewer::finalize_container(&viewer_parts, &viewer_manifest, &viewer_output)?;
+            let file = File::create(viewer_result)?;
+            let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
+            serde_json::to_writer(&mut writer, &result)?;
+            writer.write_all(b"\n")?;
+            writer.flush()?;
+        }
     }
-    let extracted = extract_replay(BoundedReader::new(
-        input_reader(&input)?,
-        MAX_DECOMPRESSED_REPLAY_BYTES,
-    ))?;
-    let file = File::create(output)?;
-    let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
-    serde_json::to_writer(&mut writer, &extracted)?;
-    writer.write_all(b"\n")?;
-    writer.flush()?;
     Ok(())
 }
 
@@ -806,6 +1428,10 @@ mod tests {
 
     fn initialize() {
         let _ = CELL_SIZE.set(0.5);
+    }
+
+    fn raw_tick(value: &str) -> Box<RawValue> {
+        RawValue::from_string(value.to_owned()).expect("valid raw tick")
     }
 
     #[test]
@@ -863,5 +1489,60 @@ mod tests {
         assert_eq!(output.spatial_occupancy.discarded["missing_coordinate"], 1);
         assert_eq!(output.spatial_occupancy.discarded["non_finite"], 1);
         assert_eq!(output.spatial_occupancy.discarded["invalid_slot"], 1);
+    }
+
+    #[test]
+    fn source_workers_reduce_ticks_in_source_order() {
+        initialize();
+        let mut pool = TickWorkerPool::new(4, false);
+        let results = pool.take_result_receiver().expect("take results");
+        let reducer = thread::spawn(move || reduce_tick_results(results, false, 1));
+        for (index, game_type) in ["first", "middle", "last"].into_iter().enumerate() {
+            pool.send(TickTask {
+                index: index as u64,
+                raw: raw_tick(&format!(
+                    r#"{{"current_tick":{index},"game_type":"{game_type}","players":[]}}"#
+                )),
+            })
+            .expect("queue tick");
+        }
+        pool.close();
+        pool.join().expect("join workers");
+        let output = reducer
+            .join()
+            .expect("join reducer")
+            .expect("reduce ticks")
+            .output;
+
+        assert_eq!(output.count, 3);
+        assert_eq!(output.first.as_ref().unwrap()["game_type"], "first");
+        assert_eq!(output.last.as_ref().unwrap()["game_type"], "last");
+    }
+
+    #[test]
+    fn ordered_reducer_reports_the_earliest_worker_error() {
+        let first = process_tick_task(
+            TickTask {
+                index: 0,
+                raw: raw_tick(r#"{"players":{}}"#),
+            },
+            true,
+        );
+        let second = process_tick_task(
+            TickTask {
+                index: 1,
+                raw: raw_tick(r#"{"players":[]}"#),
+            },
+            true,
+        );
+        let (sender, results) = mpsc::sync_channel(2);
+        sender.send(second).expect("send later result");
+        sender.send(first).expect("send earlier result");
+        drop(sender);
+        let error = match reduce_tick_results(results, false, 1) {
+            Ok(_) => panic!("first tick must fail"),
+            Err(error) => error,
+        };
+        assert!(error.starts_with("replay tick 0:"));
     }
 }

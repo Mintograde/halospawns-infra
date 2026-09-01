@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import struct
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -97,8 +98,12 @@ class ViewerChunkPart:
     index: int
     first_tick: int
     tick_count: int
-    raw_path: Path
+    raw_path: Path | None
     raw_bytes: int
+    compressed_path: Path | None = None
+    compressed_bytes: int | None = None
+    compressed_sha256: str | None = None
+    tick_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,13 @@ class ViewerParts:
     producer: str
     projection_duration_ms: int
     encode_duration_ms: int
+    tick_hash_duration_ms: int = 0
+    validation_duration_ms: int = 0
+    compression_duration_ms: int = 0
+    chunk_write_duration_ms: int = 0
+    native_viewer_duration_ms: int = 0
+    worker_count: int = 0
+    native_binary_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -1577,7 +1589,11 @@ def write_viewer_parts_descriptor(parts: ViewerParts) -> Path:
     return path
 
 
-def load_native_viewer_parts(directory: Path) -> ViewerParts:
+def load_native_viewer_parts(
+    directory: Path,
+    *,
+    native_binary_path: Path | None = None,
+) -> ViewerParts:
     descriptor_path = directory / "parts.json"
     descriptor = _load_json_object(descriptor_path)
     if descriptor.get("schema") != VIEWER_PARTS_SCHEMA:
@@ -1601,10 +1617,10 @@ def load_native_viewer_parts(directory: Path) -> ViewerParts:
         raise ViewerDeltaError("Native viewer parts descriptor is malformed")
     chunks: list[ViewerChunkPart] = []
     expected_first_tick = 0
+    uses_compressed_chunks: bool | None = None
     for expected_index, raw_chunk in enumerate(raw_chunks):
         if not isinstance(raw_chunk, dict):
             raise ViewerDeltaError("Native viewer chunk descriptor is malformed")
-        raw_file = raw_chunk.get("rawFile")
         raw_bytes = raw_chunk.get("rawBytes")
         chunk_tick_count = raw_chunk.get("tickCount")
         first_tick = raw_chunk.get("firstTick")
@@ -1615,15 +1631,51 @@ def load_native_viewer_parts(directory: Path) -> ViewerParts:
             or first_tick != expected_first_tick
             or type(chunk_tick_count) is not int
             or not 1 <= chunk_tick_count <= VIEWER_KEYFRAME_INTERVAL
-            or not isinstance(raw_file, str)
-            or Path(raw_file).name != raw_file
             or type(raw_bytes) is not int
             or raw_bytes < 1
         ):
             raise ViewerDeltaError("Native viewer chunk sequence is invalid")
-        raw_path = directory / raw_file
-        if not raw_path.is_file() or raw_path.stat().st_size != raw_bytes:
-            raise ViewerDeltaError("Native viewer chunk file is missing or has the wrong size")
+        compressed_file = raw_chunk.get("compressedFile")
+        compressed = compressed_file is not None
+        if uses_compressed_chunks is None:
+            uses_compressed_chunks = compressed
+        elif uses_compressed_chunks != compressed:
+            raise ViewerDeltaError("Native viewer chunks mix assembly formats")
+        if compressed:
+            compressed_bytes = raw_chunk.get("compressedBytes")
+            compressed_sha256 = raw_chunk.get("compressedSha256")
+            tick_sha256 = raw_chunk.get("tickSha256")
+            if (
+                not isinstance(compressed_file, str)
+                or Path(compressed_file).name != compressed_file
+                or type(compressed_bytes) is not int
+                or compressed_bytes < 1
+                or not _is_sha256(compressed_sha256)
+                or not _is_sha256(tick_sha256)
+            ):
+                raise ViewerDeltaError("Native compressed viewer chunk is invalid")
+            compressed_path = directory / compressed_file
+            if (
+                not compressed_path.is_file()
+                or compressed_path.stat().st_size != compressed_bytes
+            ):
+                raise ViewerDeltaError(
+                    "Native compressed viewer chunk is missing or has the wrong size"
+                )
+            raw_path = None
+        else:
+            raw_file = raw_chunk.get("rawFile")
+            if not isinstance(raw_file, str) or Path(raw_file).name != raw_file:
+                raise ViewerDeltaError("Native raw viewer chunk is invalid")
+            raw_path = directory / raw_file
+            if not raw_path.is_file() or raw_path.stat().st_size != raw_bytes:
+                raise ViewerDeltaError(
+                    "Native viewer chunk file is missing or has the wrong size"
+                )
+            compressed_path = None
+            compressed_bytes = None
+            compressed_sha256 = None
+            tick_sha256 = None
         chunks.append(
             ViewerChunkPart(
                 index=expected_index,
@@ -1631,6 +1683,10 @@ def load_native_viewer_parts(directory: Path) -> ViewerParts:
                 tick_count=chunk_tick_count,
                 raw_path=raw_path,
                 raw_bytes=raw_bytes,
+                compressed_path=compressed_path,
+                compressed_bytes=compressed_bytes,
+                compressed_sha256=compressed_sha256,
+                tick_sha256=tick_sha256,
             )
         )
         expected_first_tick += chunk_tick_count
@@ -1638,6 +1694,17 @@ def load_native_viewer_parts(directory: Path) -> ViewerParts:
         raise ViewerDeltaError("Native viewer chunk coverage does not match tick count")
     metrics = descriptor.get("metrics")
     metrics = metrics if isinstance(metrics, dict) else {}
+    if uses_compressed_chunks:
+        if descriptor.get("producer") != "rust-serde_json-native-container":
+            raise ViewerDeltaError("Native compressed viewer producer is invalid")
+        if native_binary_path is None or not native_binary_path.is_file():
+            raise ViewerDeltaError("Native viewer finalizer binary is unavailable")
+        if _nonnegative_metric(metrics.get("rawChunkBytes")) != sum(
+            chunk.raw_bytes for chunk in chunks
+        ) or _nonnegative_metric(metrics.get("compressedChunkBytes")) != sum(
+            chunk.compressed_bytes or 0 for chunk in chunks
+        ):
+            raise ViewerDeltaError("Native compressed viewer byte metrics are invalid")
     return ViewerParts(
         directory=directory,
         tick_count=tick_count,
@@ -1648,11 +1715,36 @@ def load_native_viewer_parts(directory: Path) -> ViewerParts:
             metrics.get("projectionDurationMs")
         ),
         encode_duration_ms=_nonnegative_metric(metrics.get("encodeDurationMs")),
+        tick_hash_duration_ms=_nonnegative_metric(
+            metrics.get("tickHashDurationMs")
+        ),
+        validation_duration_ms=_nonnegative_metric(
+            metrics.get("validationDurationMs")
+        ),
+        compression_duration_ms=_nonnegative_metric(
+            metrics.get("compressionDurationMs")
+        ),
+        chunk_write_duration_ms=_nonnegative_metric(
+            metrics.get("chunkWriteDurationMs")
+        ),
+        native_viewer_duration_ms=_nonnegative_metric(
+            metrics.get("nativeViewerDurationMs")
+        ),
+        worker_count=_nonnegative_metric(metrics.get("workerCount")),
+        native_binary_path=native_binary_path if uses_compressed_chunks else None,
     )
 
 
 def _nonnegative_metric(value: Any) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _compact_json_bytes(value: Any) -> bytes:
@@ -1736,6 +1828,177 @@ def _tick_sha256(ticks: list[Any]) -> str:
     return digest.hexdigest()
 
 
+def _native_chunk_manifests(parts: ViewerParts) -> list[dict[str, Any]] | None:
+    if not parts.chunks:
+        return None
+    compressed = [chunk.compressed_path is not None for chunk in parts.chunks]
+    if not any(compressed):
+        return None
+    if not all(compressed):
+        raise ViewerDeltaError("Viewer parts mix raw and native-compressed chunks")
+    manifests: list[dict[str, Any]] = []
+    offset = 0
+    for chunk in parts.chunks:
+        if (
+            chunk.compressed_path is None
+            or chunk.compressed_bytes is None
+            or chunk.compressed_sha256 is None
+            or chunk.tick_sha256 is None
+        ):
+            raise ViewerDeltaError("Native viewer chunk metadata is incomplete")
+        manifests.append(
+            {
+                "index": chunk.index,
+                "offset": offset,
+                "firstTick": chunk.first_tick,
+                "tickCount": chunk.tick_count,
+                "rawBytes": chunk.raw_bytes,
+                "compressedBytes": chunk.compressed_bytes,
+                "compressedSha256": chunk.compressed_sha256,
+                "tickSha256": chunk.tick_sha256,
+            }
+        )
+        offset += chunk.compressed_bytes
+    return manifests
+
+
+def _viewer_manifest(
+    parts: ViewerParts,
+    chunk_manifests: list[dict[str, Any]],
+    *,
+    replay_id: str,
+    recorded_at: str,
+) -> dict[str, Any]:
+    return {
+        "format": VIEWER_DELTA_FORMAT,
+        "sourceContract": {
+            "schema": VIEWER_SCHEMA,
+            "profile": VIEWER_PROFILE,
+            "profile_revision": VIEWER_PROFILE_REVISION,
+            "projection_sha256": VIEWER_PROJECTION_SHA256,
+            "tick_count": parts.tick_count,
+        },
+        "replayId": replay_id,
+        "recordedAt": recorded_at,
+        "keyframeInterval": VIEWER_KEYFRAME_INTERVAL,
+        "tickCount": parts.tick_count,
+        "chunks": chunk_manifests,
+        "replay": parts.replay,
+    }
+
+
+def _assemble_native_viewer_container(
+    parts: ViewerParts,
+    output_path: Path,
+    chunk_manifests: list[dict[str, Any]],
+    *,
+    replay_id: str,
+    recorded_at: str,
+) -> ViewerContainer:
+    binary_path = parts.native_binary_path
+    if binary_path is None or not binary_path.is_file():
+        raise ViewerDeltaError("Native viewer finalizer is unavailable")
+    manifest = _viewer_manifest(
+        parts,
+        chunk_manifests,
+        replay_id=replay_id,
+        recorded_at=recorded_at,
+    )
+    manifest_raw = _compact_json_bytes(manifest)
+    manifest_path = parts.directory / "container-manifest.json"
+    result_path = parts.directory / "container-result.json"
+    manifest_path.write_bytes(manifest_raw)
+    result_path.unlink(missing_ok=True)
+    completed = subprocess.run(
+        [
+            str(binary_path),
+            "--finalize-viewer",
+            "--viewer-parts",
+            str(parts.directory),
+            "--viewer-manifest",
+            str(manifest_path),
+            "--viewer-output",
+            str(output_path),
+            "--viewer-result",
+            str(result_path),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        diagnostic = (completed.stderr or completed.stdout or "unknown error").strip()[:2000]
+        raise ViewerDeltaError(
+            f"Native viewer finalizer exited with {completed.returncode}: {diagnostic}"
+        )
+    result = _load_json_object(result_path)
+    expected_uncompressed_bytes = (
+        VIEWER_CONTAINER_HEADER_BYTES
+        + len(manifest_raw)
+        + sum(chunk.raw_bytes for chunk in parts.chunks)
+    )
+    result_size = result.get("sizeBytes")
+    manifest_compressed_bytes = result.get("manifestCompressedBytes")
+    if (
+        result.get("schema") != "halospawns.viewerReplayDeltaContainer.v1"
+        or not _is_sha256(result.get("sha256"))
+        or type(result_size) is not int
+        or result_size < 1
+        or result_size > VIEWER_MAX_ARTIFACT_BYTES
+        or type(result.get("uncompressedSizeBytes")) is not int
+        or result.get("uncompressedSizeBytes") != expected_uncompressed_bytes
+        or result.get("tickCount") != parts.tick_count
+        or result.get("chunkCount") != len(parts.chunks)
+        or result.get("manifestRawBytes") != len(manifest_raw)
+        or type(manifest_compressed_bytes) is not int
+        or manifest_compressed_bytes < 1
+        or not output_path.is_file()
+        or output_path.stat().st_size != result_size
+        or result_size
+        != VIEWER_CONTAINER_HEADER_BYTES
+        + manifest_compressed_bytes
+        + sum(chunk.compressed_bytes or 0 for chunk in parts.chunks)
+    ):
+        raise ViewerDeltaError("Native viewer finalizer returned an invalid result")
+    assembly_duration_ms = _nonnegative_metric(result.get("assemblyDurationMs"))
+    compression_duration_ms = _nonnegative_metric(result.get("compressionDurationMs"))
+    metrics: dict[str, int | float] = {
+        "source_projection_duration_ms": parts.projection_duration_ms,
+        "chunk_encode_duration_ms": parts.encode_duration_ms,
+        "tick_hash_duration_ms": parts.tick_hash_duration_ms,
+        "compression_and_assembly_duration_ms": (
+            parts.compression_duration_ms + assembly_duration_ms
+        ),
+        "compression_duration_ms": compression_duration_ms,
+        "validation_duration_ms": parts.validation_duration_ms,
+        "chunk_write_duration_ms": parts.chunk_write_duration_ms,
+        "native_viewer_duration_ms": parts.native_viewer_duration_ms,
+        "worker_count": parts.worker_count,
+        "native_finalization_duration_ms": assembly_duration_ms,
+        "chunk_count": len(parts.chunks),
+        "tick_count": parts.tick_count,
+        "manifest_raw_bytes": len(manifest_raw),
+        "manifest_compressed_bytes": manifest_compressed_bytes,
+        "chunk_raw_bytes": sum(chunk.raw_bytes for chunk in parts.chunks),
+        "chunk_compressed_bytes": sum(
+            chunk.compressed_bytes or 0 for chunk in parts.chunks
+        ),
+        "artifact_bytes": result_size,
+        "artifact_uncompressed_bytes": expected_uncompressed_bytes,
+        "compression_ratio": result_size / expected_uncompressed_bytes,
+    }
+    return ViewerContainer(
+        path=output_path,
+        sha256=result["sha256"],
+        size_bytes=result_size,
+        uncompressed_size_bytes=expected_uncompressed_bytes,
+        tick_count=parts.tick_count,
+        chunk_count=len(parts.chunks),
+        manifest=manifest,
+        metrics=metrics,
+    )
+
+
 def assemble_viewer_container(
     parts: ViewerParts,
     output_path: Path,
@@ -1747,6 +2010,15 @@ def assemble_viewer_container(
     if not replay_id or not recorded_at:
         raise ViewerDeltaError("Viewer manifest replay_id and recorded_at are required")
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    native_chunk_manifests = _native_chunk_manifests(parts)
+    if native_chunk_manifests is not None:
+        return _assemble_native_viewer_container(
+            parts,
+            output_path,
+            native_chunk_manifests,
+            replay_id=replay_id,
+            recorded_at=recorded_at,
+        )
     compression_started = time.perf_counter()
     compressor = zstandard.ZstdCompressor(
         level=19,
@@ -1762,6 +2034,8 @@ def assemble_viewer_container(
     validation_ms = 0
 
     for chunk in parts.chunks:
+        if chunk.raw_path is None:
+            raise ViewerDeltaError("Viewer raw chunk path is missing")
         raw = chunk.raw_path.read_bytes()
         if len(raw) != chunk.raw_bytes:
             raise ViewerDeltaError("Viewer raw chunk size changed before assembly")
@@ -1804,23 +2078,12 @@ def assemble_viewer_container(
         raw_chunk_bytes += len(raw)
         compressed_chunk_bytes += len(compressed)
 
-    source_contract = {
-        "schema": VIEWER_SCHEMA,
-        "profile": VIEWER_PROFILE,
-        "profile_revision": VIEWER_PROFILE_REVISION,
-        "projection_sha256": VIEWER_PROJECTION_SHA256,
-        "tick_count": parts.tick_count,
-    }
-    manifest = {
-        "format": VIEWER_DELTA_FORMAT,
-        "sourceContract": source_contract,
-        "replayId": replay_id,
-        "recordedAt": recorded_at,
-        "keyframeInterval": VIEWER_KEYFRAME_INTERVAL,
-        "tickCount": parts.tick_count,
-        "chunks": chunk_manifests,
-        "replay": parts.replay,
-    }
+    manifest = _viewer_manifest(
+        parts,
+        chunk_manifests,
+        replay_id=replay_id,
+        recorded_at=recorded_at,
+    )
     manifest_raw = _compact_json_bytes(manifest)
     manifest_compressed = compressor.compress(manifest_raw)
     try:

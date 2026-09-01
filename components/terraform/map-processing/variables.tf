@@ -133,6 +133,20 @@ variable "replay_parser" {
     condition     = trimspace(var.replay_parser.image_tag) != ""
     error_message = "replay_parser.image_tag must not be empty."
   }
+
+  validation {
+    condition = (
+      var.replay_parser.timeout_seconds >= 1 &&
+      var.replay_parser.timeout_seconds <= 900 &&
+      var.replay_parser.memory_mb >= 128 &&
+      var.replay_parser.memory_mb <= 10240 &&
+      var.replay_parser.ephemeral_storage_mb >= 512 &&
+      var.replay_parser.ephemeral_storage_mb <= 10240 &&
+      var.replay_parser.batch_size >= 1 &&
+      var.replay_parser.batch_size <= 10000
+    )
+    error_message = "replay_parser runtime settings must stay within Lambda and SQS bounds."
+  }
 }
 
 variable "heatmap_rollup_worker" {

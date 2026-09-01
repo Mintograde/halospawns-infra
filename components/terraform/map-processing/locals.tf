@@ -83,6 +83,10 @@ locals {
         REPLAY_FAILED_PREFIX                           = local.upload_pipelines.replays.failed_prefix
         SPATIAL_ARTIFACT_PREFIX                        = local.replay_spatial_artifact_prefix
         VIEWER_ARTIFACT_PREFIX                         = local.replay_viewer_artifact_prefix
+        REPLAY_SOURCE_WORKERS                          = "3"
+        VIEWER_ARTIFACT_WORKERS                        = "2"
+        VIEWER_INGEST_QUEUE_TICKS                      = "128"
+        REPLAY_PIPELINED_DECOMPRESSION                 = "1"
       }, var.replay_parser.environment_variables)
     }
   } : {}

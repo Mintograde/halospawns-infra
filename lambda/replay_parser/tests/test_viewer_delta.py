@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -78,6 +79,84 @@ class ViewerDeltaCodecTests(unittest.TestCase):
 
 
 class ViewerArtifactBuilderTests(unittest.TestCase):
+    def test_native_finalizer_matches_python_container_bytes(self) -> None:
+        binary_value = os.getenv("REPLAY_EXTRACTOR_TEST_BINARY")
+        if not binary_value:
+            self.skipTest("REPLAY_EXTRACTOR_TEST_BINARY is not configured")
+        binary_path = Path(binary_value)
+        if not binary_path.is_file():
+            self.fail(f"Native replay extractor does not exist: {binary_path}")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            python_parts = viewer_delta.build_python_viewer_parts(
+                FIXTURE_DIR / "viewer_v1_canonical.json",
+                root / "python-parts",
+            )
+            python_container = viewer_delta.assemble_viewer_container(
+                python_parts,
+                root / "python.hsrv",
+                replay_id="fixture-replay",
+                recorded_at="2026-08-31T12:00:00Z",
+            )
+
+            native_parts_directory = root / "native-parts"
+            native_parts_directory.mkdir()
+            native_extract_output = root / "native-extract.json"
+            completed = subprocess.run(
+                [
+                    str(binary_path),
+                    "--input",
+                    str(FIXTURE_DIR / "viewer_v1_canonical.json"),
+                    "--output",
+                    str(native_extract_output),
+                    "--cell-size",
+                    "0.5",
+                    "--viewer-parts",
+                    str(native_parts_directory),
+                ],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+            native_parts = viewer_delta.load_native_viewer_parts(
+                native_parts_directory,
+                native_binary_path=binary_path,
+            )
+            native_container = viewer_delta.assemble_viewer_container(
+                native_parts,
+                root / "native.hsrv",
+                replay_id="fixture-replay",
+                recorded_at="2026-08-31T12:00:00Z",
+            )
+
+            validated = viewer_delta.validate_viewer_container(native_container.path)
+
+            self.assertEqual(native_container.path.read_bytes(), python_container.path.read_bytes())
+            self.assertEqual(native_container.sha256, python_container.sha256)
+            self.assertEqual(validated, native_container.manifest)
+            self.assertTrue(all(chunk.raw_path is None for chunk in native_parts.chunks))
+            self.assertTrue(
+                all(chunk.compressed_path is not None for chunk in native_parts.chunks)
+            )
+
+            compressed_path = native_parts.chunks[0].compressed_path
+            self.assertIsNotNone(compressed_path)
+            compressed = bytearray(compressed_path.read_bytes())
+            compressed[-1] ^= 0x01
+            compressed_path.write_bytes(compressed)
+            with self.assertRaisesRegex(
+                viewer_delta.ViewerDeltaError,
+                "Native viewer finalizer exited",
+            ):
+                viewer_delta.assemble_viewer_container(
+                    native_parts,
+                    root / "corrupt.hsrv",
+                    replay_id="fixture-replay",
+                    recorded_at="2026-08-31T12:00:00Z",
+                )
+
     def test_api_golden_fixture_matches_projection_and_frontend_bytes(self) -> None:
         expected = json.loads(
             (FIXTURE_DIR / "viewer_v1_projected.json").read_text(encoding="utf-8")

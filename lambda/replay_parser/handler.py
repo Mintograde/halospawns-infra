@@ -1231,7 +1231,10 @@ def _parse_downloaded_replay_products(
                     viewer_parts_directory=viewer_parts_directory,
                 )
             viewer_parts = (
-                load_native_viewer_parts(viewer_parts_directory)
+                load_native_viewer_parts(
+                    viewer_parts_directory,
+                    native_binary_path=binary_path,
+                )
                 if viewer_parts_directory is not None
                 else None
             )
