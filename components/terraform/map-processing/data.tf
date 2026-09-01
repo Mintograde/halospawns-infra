@@ -178,6 +178,18 @@ data "aws_iam_policy_document" "native_maps_processor_s3" {
 
 data "aws_iam_policy_document" "replay_parser_s3" {
   statement {
+    sid       = "ListReplayViewerCompletions"
+    actions   = ["s3:ListBucket"]
+    resources = [data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${local.replay_viewer_artifact_prefix}/*"]
+    }
+  }
+
+  statement {
     sid = "ReadVersionPinnedReplaySources"
     actions = [
       "s3:GetObject",

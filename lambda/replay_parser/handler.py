@@ -3264,6 +3264,9 @@ def _replay_persisted_completion(
     expected_source_replay_sha256: str | None = None,
 ) -> bool:
     key = _completion_manifest_key(upload_id, generation_token)
+    listing = S3.list_objects_v2(Bucket=bucket, Prefix=key, MaxKeys=1)
+    if not any(item.get("Key") == key for item in listing.get("Contents", [])):
+        return False
     try:
         manifest = _load_completion_manifest(bucket=bucket, key=key)
     except ClientError as error:

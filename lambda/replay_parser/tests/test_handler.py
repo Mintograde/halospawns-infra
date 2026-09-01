@@ -366,11 +366,19 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
             },
         )
         callbacks: list[tuple[str, str, dict[str, object]]] = []
+        manifest_key = (
+            f"replays/derived/viewer/{upload_id}/generations/{upload_id}/manifest.json"
+        )
         with (
             patch.object(
                 handler,
                 "_settings",
                 return_value={"viewer_artifact_prefix": "replays/derived/viewer/"},
+            ),
+            patch.object(
+                handler.S3,
+                "list_objects_v2",
+                return_value={"Contents": [{"Key": manifest_key}]},
             ),
             patch.object(
                 handler.S3,
@@ -407,6 +415,42 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
         delete_object.assert_called_once_with(
             "uploads-bucket",
             f"replays/unprocessed/{upload_id}/source.json.zst",
+        )
+
+    def test_persisted_completion_skips_missing_exact_manifest(self) -> None:
+        upload_id = "77777777-7777-4777-8777-777777777777"
+        manifest_key = (
+            f"replays/derived/viewer/{upload_id}/generations/{upload_id}/manifest.json"
+        )
+        with (
+            patch.object(
+                handler,
+                "_settings",
+                return_value={"viewer_artifact_prefix": "replays/derived/viewer/"},
+            ),
+            patch.object(
+                handler.S3,
+                "list_objects_v2",
+                return_value={"Contents": [{"Key": f"{manifest_key}.partial"}]},
+            ) as list_objects,
+            patch.object(
+                handler.S3,
+                "get_object",
+                side_effect=AssertionError("missing manifest must not be read"),
+            ),
+        ):
+            replayed = handler._replay_persisted_completion(
+                bucket="uploads-bucket",
+                upload_id=upload_id,
+                generation_token=upload_id,
+                expected_mode="initial",
+            )
+
+        self.assertFalse(replayed)
+        list_objects.assert_called_once_with(
+            Bucket="uploads-bucket",
+            Prefix=manifest_key,
+            MaxKeys=1,
         )
 
     def test_app_api_callback_retries_transient_transport_failure(self) -> None:
