@@ -131,7 +131,7 @@ components:
             uploads_ingest: dev/uploads-ingest/terraform.tfstate
             app_api: dev/app-api/terraform.tfstate
         replay_parser:
-          memory_mb: 10240
+          memory_mb: 3008
           timeout_seconds: 600
         native_maps:
           event_source:
