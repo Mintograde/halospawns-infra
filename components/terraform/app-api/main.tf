@@ -97,7 +97,7 @@ locals {
       UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
       MAP_UPLOAD_PREFIX                         = local.map_upload_prefix
       REPLAY_UPLOAD_PREFIX                      = local.replay_upload_prefix
-      REPLAY_VIEWER_ARTIFACT_PREFIX             = local.replay_viewer_artifact_prefix
+      REPLAY_VIEWER_ARTIFACT_PREFIX             = "${local.replay_viewer_artifact_prefix}/"
       REPLAY_VIEWER_ARTIFACT_SERVING_MODE       = var.uploads.replays.viewer_artifact_serving_mode
       UPLOAD_URL_TTL_SECONDS                    = tostring(var.uploads.url_ttl_seconds)
       MAP_SUPPORT_RESOURCE_AUTO_APPROVE_UPLOADS = tostring(var.uploads.maps.support_resource_auto_approve)
