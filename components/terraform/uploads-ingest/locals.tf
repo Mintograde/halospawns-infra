@@ -9,9 +9,18 @@ locals {
 
   replay_spatial_artifact_prefix     = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
   replay_viewer_artifact_prefix      = "${trim(var.storage.replay_viewer_artifacts.prefix, "/")}/"
+  replay_processed_prefix            = try(local.pipelines.replays.processed_prefix, null)
   heatmap_rollup_artifact_prefix     = "${trim(var.storage.heatmap_rollup_artifacts.prefix, "/")}/"
   region_stat_rollup_artifact_prefix = "${trim(var.storage.region_stat_rollup_artifacts.prefix, "/")}/"
   map_support_resource_prefix        = "${trim(var.storage.map_support_resources.prefix, "/")}/"
+  uploads_bucket_arn                 = "arn:${data.aws_partition.current.partition}:s3:::${var.storage.bucket_prefix}-${var.environment}-${data.aws_caller_identity.current.account_id}"
+
+  immutable_replay_object_arns = concat(
+    local.replay_processed_prefix == null ? [] : [
+      "${local.uploads_bucket_arn}/${local.replay_processed_prefix}*/sources/*",
+    ],
+    ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*"],
+  )
 
   pipeline_lifecycle_rules = merge(
     {

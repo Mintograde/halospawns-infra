@@ -1,9 +1,12 @@
 module "uploads_bucket" {
-  source                  = "../../../modules/s3-bucket"
-  bucket_prefix           = var.storage.bucket_prefix
-  environment             = var.environment
-  allowed_cors_origins    = var.storage.allowed_cors_origins
-  source_policy_documents = var.cdn.enabled ? [data.aws_iam_policy_document.cloudfront_to_s3_policy[0].json] : []
+  source               = "../../../modules/s3-bucket"
+  bucket_prefix        = var.storage.bucket_prefix
+  environment          = var.environment
+  allowed_cors_origins = var.storage.allowed_cors_origins
+  source_policy_documents = concat(
+    [data.aws_iam_policy_document.immutable_replay_writes.json],
+    var.cdn.enabled ? [data.aws_iam_policy_document.cloudfront_to_s3_policy[0].json] : [],
+  )
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "replay_spatial_artifacts" {

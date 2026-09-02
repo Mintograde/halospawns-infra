@@ -617,11 +617,12 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             return
         try:
             if viewer_request is not None and (
-                source_object.version_id is None
-                or source_object.expected_sha256 is None
+                source_object.expected_sha256 is None
+                or source_object.expected_size_bytes is None
+                or source_object.expected_size_bytes < 1
             ):
                 raise NonRetryableReplayError(
-                    "Replay reprocess source is legacy and lacks a version-pinned hash manifest"
+                    "Replay reprocess source lacks a hash and byte-size integrity manifest"
                 )
             if viewer_request is not None and (
                 job.current_replay_file.bucket != source_object.bucket
@@ -914,7 +915,9 @@ def _reprocess_job_from_payload(
             key=source_key,
             event_name=str(payload.get("trigger") or "manual_reprocess"),
             sqs_message_id=sqs_message_id,
-            version_id=_optional_payload_text(source_replay, "s3_version_id"),
+            version_id=_usable_s3_version_id(
+                _optional_payload_text(source_replay, "s3_version_id")
+            ),
             expected_size_bytes=_optional_payload_int(source_replay, "size_bytes"),
             expected_sha256=_optional_payload_sha256(source_replay, "sha256"),
         ),
@@ -925,7 +928,9 @@ def _reprocess_job_from_payload(
             content_type=_optional_payload_text(current_replay_file, "content_type"),
             size_bytes=_optional_payload_int(current_replay_file, "size_bytes"),
             sha256=_optional_payload_sha256(current_replay_file, "sha256"),
-            s3_version_id=_optional_payload_text(current_replay_file, "s3_version_id"),
+            s3_version_id=_usable_s3_version_id(
+                _optional_payload_text(current_replay_file, "s3_version_id")
+            ),
         ),
         requested_outputs=requested_outputs,
         viewer_request=viewer_request,
@@ -996,6 +1001,15 @@ def _optional_payload_text(payload: dict[str, Any], key: str) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _usable_s3_version_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    version_id = str(value).strip()
+    if not version_id or version_id.lower() == "null":
+        return None
+    return version_id
 
 
 def _optional_payload_int(payload: dict[str, Any], key: str) -> int | None:
@@ -1100,7 +1114,7 @@ def _download_replay(replay_object: S3ReplayObject, destination: Path) -> Downlo
             )
         expected_sha256 = parsed_metadata_hash
 
-    version_id = response.get("VersionId")
+    version_id = _usable_s3_version_id(response.get("VersionId"))
     if replay_object.version_id is not None and version_id != replay_object.version_id:
         raise NonRetryableReplayError(
             "Version-pinned replay source response does not match the requested version"
@@ -1110,14 +1124,14 @@ def _download_replay(replay_object: S3ReplayObject, destination: Path) -> Downlo
         and size_bytes != expected_size_bytes
     ):
         raise NonRetryableReplayError(
-            "Version-pinned replay source size does not match the queued manifest"
+            "Replay source size does not match the queued manifest"
         )
     if (
         expected_sha256 is not None
         and sha256 != expected_sha256
     ):
         raise NonRetryableReplayError(
-            "Version-pinned replay source hash does not match the queued manifest"
+            "Replay source hash does not match the queued manifest"
         )
     return DownloadedReplay(
         path=destination,
@@ -3112,7 +3126,7 @@ def _put_immutable_file(
     content_type: str,
     sha256: str,
     metadata: dict[str, str],
-) -> str:
+) -> str | None:
     size_bytes = path.stat().st_size
     try:
         with path.open("rb") as body:
@@ -3140,12 +3154,7 @@ def _put_immutable_file(
             raise ReplayProcessingError(
                 f"Immutable S3 object collision at s3://{bucket}/{key}"
             ) from error
-    version_id = response.get("VersionId")
-    if not isinstance(version_id, str) or not version_id:
-        raise ReplayProcessingError(
-            f"Versioned immutable S3 write returned no version for s3://{bucket}/{key}"
-        )
-    return version_id
+    return _usable_s3_version_id(response.get("VersionId"))
 
 
 def _put_immutable_json(

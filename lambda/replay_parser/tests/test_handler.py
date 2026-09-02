@@ -342,6 +342,23 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
                     metadata={"artifact-kind": "test"},
                 )
 
+            with patch.object(
+                handler.S3,
+                "put_object",
+                return_value={"VersionId": "null"},
+            ) as put_object:
+                self.assertIsNone(
+                    handler._put_immutable_file(
+                        bucket="uploads-bucket",
+                        key="new-immutable.bin",
+                        path=source,
+                        content_type="application/octet-stream",
+                        sha256=sha256,
+                        metadata={"artifact-kind": "test"},
+                    )
+                )
+            self.assertEqual(put_object.call_args.kwargs["IfNoneMatch"], "*")
+
     def test_persisted_completion_replays_callback_before_parse_and_then_cleans_up(self) -> None:
         upload_id = "66666666-6666-4666-8666-666666666666"
         manifest = handler._completion_manifest(
@@ -681,8 +698,8 @@ def _reprocess_job_payload(
         current_replay_file = payload["current_replay_file"]
         assert isinstance(source_replay, dict)
         assert isinstance(current_replay_file, dict)
-        source_replay.pop("s3_version_id")
-        current_replay_file.pop("s3_version_id")
+        source_replay["s3_version_id"] = "null"
+        current_replay_file["s3_version_id"] = "null"
     return payload
 
 
@@ -2229,9 +2246,16 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             source_replay_sha256=downloaded.sha256,
         )
 
-    def test_viewer_rebuild_uses_only_the_artifact_completion_callback(self) -> None:
+    def test_unversioned_viewer_rebuild_uses_only_artifact_completion_callback(self) -> None:
+        payload = _reprocess_job_payload(mode="viewer_rebuild")
+        source_replay = payload["source_replay"]
+        current_replay_file = payload["current_replay_file"]
+        assert isinstance(source_replay, dict)
+        assert isinstance(current_replay_file, dict)
+        source_replay.pop("s3_version_id")
+        current_replay_file.pop("s3_version_id")
         job = handler._reprocess_job_from_payload(
-            _reprocess_job_payload(mode="viewer_rebuild"),
+            payload,
             "message-1",
         )
         parsed = _minimal_parsed_replay()
@@ -2241,7 +2265,6 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             size_bytes=123,
             sha256="a" * 64,
             metadata={},
-            version_id="source-version-1",
         )
         viewer_parts = handler.ViewerParts(
             directory=Path("viewer-parts"),
@@ -2301,6 +2324,7 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
             handler._process_reprocess_job(job)
 
         self.assertEqual(len(completion_calls), 1)
+        self.assertIsNone(job.source_object.version_id)
         completion = completion_calls[0]
         self.assertEqual(completion["mode"], "viewer_rebuild")
         self.assertEqual(
@@ -2317,6 +2341,35 @@ class ReplayParserReprocessJobTests(unittest.TestCase):
                 "viewer_artifact": viewer_manifest,
             },
         )
+
+    def test_viewer_rebuild_rejects_source_without_byte_size_manifest(self) -> None:
+        payload = _reprocess_job_payload(mode="viewer_rebuild")
+        source_replay = payload["source_replay"]
+        assert isinstance(source_replay, dict)
+        source_replay.pop("size_bytes")
+        job = handler._reprocess_job_from_payload(payload, "message-1")
+        failures: list[tuple[str, str]] = []
+
+        with (
+            patch.object(handler, "_replay_persisted_completion", return_value=False),
+            patch.object(
+                handler,
+                "_download_replay",
+                side_effect=AssertionError("invalid source manifest must fail before download"),
+            ),
+            patch.object(
+                handler,
+                "_send_reprocess_attempt_status",
+                side_effect=lambda _job, status, error: failures.append(
+                    (status, str(error))
+                ),
+            ),
+        ):
+            handler._process_reprocess_job(job)
+
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][0], "failed")
+        self.assertIn("hash and byte-size integrity manifest", failures[0][1])
 
     def test_process_reprocess_job_marks_missing_source_failed(self) -> None:
         job = handler._reprocess_job_from_payload(_reprocess_job_payload(), "message-1")
