@@ -79,6 +79,8 @@ components:
             service_role_name: /halospawns/dev/app-api/supabase/service-role-key
             create_service_role_parameter: false
         uploads:
+          replays:
+            viewer_artifact_serving_mode: prefer_viewer
           maps:
             support_resource_auto_approve: true
         release:
