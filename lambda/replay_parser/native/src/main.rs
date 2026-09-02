@@ -571,23 +571,20 @@ fn pipelined_decompression_enabled() -> Result<bool, Box<dyn Error>> {
 
 fn process_tick_task(task: TickTask, viewer_enabled: bool) -> TickWorkMessage {
     let result = (|| -> Result<ParsedTick, Box<dyn Error>> {
-        let parse_started = Instant::now();
-        let source = serde_json::from_str::<Value>(task.raw.get())?;
-        let parse_duration = parse_started.elapsed();
         let (projected, projection_duration) = if viewer_enabled {
-            let (projected, semantic_digest, duration) = viewer::project_tick(&source)?;
+            let (projected, semantic_digest, duration) = viewer::project_tick_raw(task.raw.get())?;
             (Some((projected, semantic_digest)), duration)
         } else {
             (None, Duration::ZERO)
         };
-        let facts_started = Instant::now();
-        let tick = serde_json::from_value(source)?;
+        let parse_started = Instant::now();
+        let tick = serde_json::from_str(task.raw.get())?;
         Ok(ParsedTick {
             tick,
             projected,
-            parse_duration,
+            parse_duration: parse_started.elapsed(),
             projection_duration,
-            facts_duration: facts_started.elapsed(),
+            facts_duration: Duration::ZERO,
         })
     })()
     .map_err(|error| error.to_string());

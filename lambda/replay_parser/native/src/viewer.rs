@@ -1,9 +1,13 @@
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use ahash::AHashMap as HashMap;
+use indexmap::IndexMap;
+use serde::de::{DeserializeSeed, Error as DeError, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Number, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::borrow::Cow;
 use std::env;
 use std::error::Error;
+use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -94,6 +98,7 @@ enum CompiledProjection {
     Object {
         fields: Vec<CompiledObjectField>,
         required: Vec<String>,
+        source_indexes: HashMap<String, usize>,
     },
     Map {
         limit: usize,
@@ -378,7 +383,20 @@ fn compile_projection(
                 })
                 .transpose()?
                 .unwrap_or_default();
-            Ok(CompiledProjection::Object { fields, required })
+            let mut source_indexes = HashMap::with_capacity(fields.len());
+            for (index, field) in fields.iter().enumerate() {
+                if source_indexes
+                    .insert(field.source_key.clone(), index)
+                    .is_some()
+                {
+                    return Err("viewer projection maps one source field more than once".into());
+                }
+            }
+            Ok(CompiledProjection::Object {
+                fields,
+                required,
+                source_indexes,
+            })
         }
         Some("map") => Ok(CompiledProjection::Map {
             limit: compiled_limit(limits, specification)?,
@@ -469,6 +487,416 @@ impl CompiledProjection {
     }
 }
 
+struct JsonKey<'de>(Cow<'de, str>);
+
+struct JsonKeyVisitor;
+
+impl<'de> Deserialize<'de> for JsonKey<'de> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(JsonKeyVisitor)
+    }
+}
+
+impl<'de> Visitor<'de> for JsonKeyVisitor {
+    type Value = JsonKey<'de>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON object key")
+    }
+
+    fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E> {
+        Ok(JsonKey(Cow::Borrowed(value)))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+        Ok(JsonKey(Cow::Owned(value.to_owned())))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+        Ok(JsonKey(Cow::Owned(value)))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SafetySeed {
+    depth: usize,
+}
+
+struct SafetyVisitor {
+    depth: usize,
+}
+
+impl<'de> DeserializeSeed<'de> for SafetySeed {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if self.depth > MAX_JSON_DEPTH {
+            return Err(D::Error::custom(
+                "viewer source exceeds the pinned maximum JSON depth",
+            ));
+        }
+        deserializer.deserialize_any(SafetyVisitor { depth: self.depth })
+    }
+}
+
+impl<'de> Visitor<'de> for SafetyVisitor {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON value within the viewer safety limits")
+    }
+
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
+        Ok(())
+    }
+
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
+        Ok(())
+    }
+
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
+        Ok(())
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        if value.is_finite() {
+            Ok(())
+        } else {
+            Err(E::custom("viewer source contains a non-finite number"))
+        }
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        validate_source_string::<E>(value)
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.visit_str(&value)
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E> {
+        Ok(())
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E> {
+        Ok(())
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while sequence
+            .next_element_seed(SafetySeed {
+                depth: self.depth + 1,
+            })?
+            .is_some()
+        {}
+        Ok(())
+    }
+
+    fn visit_map<A>(self, mut mapping: A) -> Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        while mapping.next_key::<IgnoredAny>()?.is_some() {
+            mapping.next_value_seed(SafetySeed {
+                depth: self.depth + 1,
+            })?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ProjectedSeed<'a> {
+    node: &'a CompiledProjection,
+    depth: usize,
+    omit_null: bool,
+}
+
+struct ProjectedVisitor<'a> {
+    node: &'a CompiledProjection,
+    depth: usize,
+    omit_null: bool,
+}
+
+impl<'de, 'a> DeserializeSeed<'de> for ProjectedSeed<'a> {
+    type Value = Option<Value>;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if self.depth > MAX_JSON_DEPTH {
+            return Err(D::Error::custom(
+                "viewer source exceeds the pinned maximum JSON depth",
+            ));
+        }
+        deserializer.deserialize_any(ProjectedVisitor {
+            node: self.node,
+            depth: self.depth,
+            omit_null: self.omit_null,
+        })
+    }
+}
+
+impl ProjectedVisitor<'_> {
+    fn scalar<E>(self, value: Value) -> Result<Option<Value>, E>
+    where
+        E: DeError,
+    {
+        if matches!(self.node, CompiledProjection::Scalar { .. }) {
+            Ok(Some(value))
+        } else {
+            Err(E::custom("viewer projection expected a collection"))
+        }
+    }
+
+    fn null<E>(self) -> Result<Option<Value>, E>
+    where
+        E: DeError,
+    {
+        if self.omit_null {
+            return Ok(None);
+        }
+        match self.node {
+            CompiledProjection::Scalar { nullable: true } => Ok(Some(Value::Null)),
+            CompiledProjection::Scalar { nullable: false } => {
+                Err(E::custom("viewer projection expected a non-null scalar"))
+            }
+            _ => Err(E::custom("viewer projection expected a collection")),
+        }
+    }
+}
+
+impl<'de> Visitor<'de> for ProjectedVisitor<'_> {
+    type Value = Option<Value>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a value matching the compiled viewer projection")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.scalar(Value::Bool(value))
+    }
+
+    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.scalar(Value::Number(value.into()))
+    }
+
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.scalar(Value::Number(value.into()))
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        let number = Number::from_f64(value)
+            .ok_or_else(|| E::custom("viewer projection rejects non-finite numbers"))?;
+        self.scalar(Value::Number(number))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        validate_source_string::<E>(value)?;
+        self.scalar(Value::String(value.to_owned()))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        validate_source_string::<E>(&value)?;
+        self.scalar(Value::String(value))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.null()
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: DeError,
+    {
+        self.null()
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let CompiledProjection::Array {
+            limit,
+            take_first,
+            items,
+        } = self.node
+        else {
+            return Err(A::Error::custom(
+                "viewer projection expected a scalar or object",
+            ));
+        };
+
+        let mut output = Vec::with_capacity(sequence.size_hint().unwrap_or(0).min(*limit));
+        let mut count = 0_usize;
+        loop {
+            if count < *limit {
+                let Some(value) = sequence.next_element_seed(ProjectedSeed {
+                    node: items,
+                    depth: self.depth + 1,
+                    omit_null: false,
+                })?
+                else {
+                    break;
+                };
+                output.push(value.ok_or_else(|| {
+                    A::Error::custom("viewer projection array item was unexpectedly omitted")
+                })?);
+            } else {
+                let Some(()) = sequence.next_element_seed(SafetySeed {
+                    depth: self.depth + 1,
+                })?
+                else {
+                    break;
+                };
+            }
+            count += 1;
+        }
+        if !take_first && count > *limit {
+            return Err(A::Error::custom(
+                "viewer projection array exceeds its pinned limit",
+            ));
+        }
+        Ok(Some(Value::Array(output)))
+    }
+
+    fn visit_map<A>(self, mut mapping: A) -> Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        match self.node {
+            CompiledProjection::Object {
+                fields,
+                required,
+                source_indexes,
+            } => {
+                let mut values = (0..fields.len()).map(|_| None).collect::<Vec<_>>();
+                while let Some(JsonKey(key)) = mapping.next_key::<JsonKey<'de>>()? {
+                    if let Some(index) = source_indexes.get(key.as_ref()).copied() {
+                        values[index] = mapping.next_value_seed(ProjectedSeed {
+                            node: &fields[index].node,
+                            depth: self.depth + 1,
+                            omit_null: true,
+                        })?;
+                    } else {
+                        mapping.next_value_seed(SafetySeed {
+                            depth: self.depth + 1,
+                        })?;
+                    }
+                }
+                for required_key in required {
+                    let Some(index) = source_indexes.get(required_key.as_str()) else {
+                        return Err(A::Error::custom(
+                            "viewer projection required field is not compiled",
+                        ));
+                    };
+                    if values[*index].is_none() {
+                        return Err(A::Error::custom(
+                            "viewer projection is missing a required object field",
+                        ));
+                    }
+                }
+                let mut output = Map::with_capacity(fields.len());
+                for (field, value) in fields.iter().zip(values) {
+                    if let Some(value) = value {
+                        output.insert(field.output_key.clone(), value);
+                    }
+                }
+                Ok(Some(Value::Object(output)))
+            }
+            CompiledProjection::Map { limit, values } => {
+                let mut output = Map::new();
+                while let Some(JsonKey(key)) = mapping.next_key::<JsonKey<'de>>()? {
+                    let value = mapping.next_value_seed(ProjectedSeed {
+                        node: values,
+                        depth: self.depth + 1,
+                        omit_null: true,
+                    })?;
+                    output.insert(key.into_owned(), value.unwrap_or(Value::Null));
+                    if output.len() > *limit {
+                        return Err(A::Error::custom(
+                            "viewer projection map exceeds its pinned limit",
+                        ));
+                    }
+                }
+                output.retain(|_, value| !value.is_null());
+                Ok(Some(Value::Object(output)))
+            }
+            _ => Err(A::Error::custom(
+                "viewer projection expected a scalar or array",
+            )),
+        }
+    }
+}
+
+fn validate_source_string<E>(value: &str) -> Result<(), E>
+where
+    E: DeError,
+{
+    if value.len() > MAX_STRING_CHARACTERS && value.chars().count() > MAX_STRING_CHARACTERS {
+        Err(E::custom(
+            "viewer source string exceeds the pinned character limit",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+pub fn project_tick_raw(source: &str) -> Result<(Value, [u8; 32], Duration), Box<dyn Error>> {
+    let started = Instant::now();
+    let mut deserializer = serde_json::Deserializer::from_str(source);
+    let projected = ProjectedSeed {
+        node: &projection()?.tick,
+        depth: 3,
+        omit_null: false,
+    }
+    .deserialize(&mut deserializer)?
+    .ok_or("viewer tick projection unexpectedly omitted its root")?;
+    deserializer.end()?;
+    let semantic_digest = semantic_value_digest(&projected)?;
+    Ok((projected, semantic_digest, started.elapsed()))
+}
+
 fn projection() -> Result<&'static Projection, Box<dyn Error>> {
     match PROJECTION.get_or_init(|| Projection::load().map_err(|error| error.to_string())) {
         Ok(projection) => Ok(projection),
@@ -551,7 +979,7 @@ impl BinaryWriter {
 struct BinaryReader<'a> {
     bytes: &'a [u8],
     offset: usize,
-    strings: Vec<String>,
+    strings: Vec<Arc<str>>,
 }
 
 impl<'a> BinaryReader<'a> {
@@ -607,7 +1035,7 @@ impl<'a> BinaryReader<'a> {
         Err("viewer delta integer is malformed".into())
     }
 
-    fn string(&mut self) -> Result<String, Box<dyn Error>> {
+    fn string(&mut self) -> Result<Arc<str>, Box<dyn Error>> {
         let token = self.varuint()?;
         if token % 2 == 0 {
             let index = usize::try_from(token / 2)?;
@@ -618,26 +1046,88 @@ impl<'a> BinaryReader<'a> {
                 .ok_or_else(|| "viewer delta string reference is malformed".into());
         }
         let length = usize::try_from((token - 1) / 2)?;
-        let value = std::str::from_utf8(self.bytes(length)?)?.to_owned();
-        self.strings.push(value.clone());
+        let value = Arc::<str>::from(std::str::from_utf8(self.bytes(length)?)?);
+        self.strings.push(Arc::clone(&value));
         Ok(value)
     }
 }
 
+#[derive(Clone, Debug)]
+enum DecodedValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(Arc<str>),
+    Array(Arc<Vec<DecodedValue>>),
+    Object(Arc<IndexMap<Arc<str>, DecodedValue>>),
+}
+
+impl DecodedValue {
+    fn number(&self) -> Option<f64> {
+        match self {
+            Self::Number(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn as_array(&self) -> Option<&[Self]> {
+        match self {
+            Self::Array(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    fn as_object(&self) -> Option<&IndexMap<Arc<str>, Self>> {
+        match self {
+            Self::Object(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    fn to_json(&self) -> Result<Value, Box<dyn Error>> {
+        match self {
+            Self::Null => Ok(Value::Null),
+            Self::Bool(value) => Ok(Value::Bool(*value)),
+            Self::Number(value) => number_value(*value),
+            Self::String(value) => Ok(Value::String(value.to_string())),
+            Self::Array(values) => values
+                .iter()
+                .map(Self::to_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array),
+            Self::Object(values) => values
+                .iter()
+                .map(|(key, value)| Ok((key.to_string(), value.to_json()?)))
+                .collect::<Result<Map<_, _>, Box<dyn Error>>>()
+                .map(Value::Object),
+        }
+    }
+}
+
+fn decoded_number(value: f64) -> Result<DecodedValue, Box<dyn Error>> {
+    if value.is_finite() {
+        Ok(DecodedValue::Number(value))
+    } else {
+        Err("viewer delta decoded a non-finite number".into())
+    }
+}
+
+#[cfg(test)]
 fn number_value(value: f64) -> Result<Value, Box<dyn Error>> {
     serde_json::Number::from_f64(value)
         .map(Value::Number)
         .ok_or_else(|| "viewer delta decoded a non-finite number".into())
 }
 
-fn read_value(reader: &mut BinaryReader<'_>, depth: usize) -> Result<Value, Box<dyn Error>> {
+fn read_value(reader: &mut BinaryReader<'_>, depth: usize) -> Result<DecodedValue, Box<dyn Error>> {
     if depth > MAX_JSON_DEPTH {
         return Err("viewer delta decoded value exceeds the maximum depth".into());
     }
     match reader.byte()? {
-        VALUE_NULL => Ok(Value::Null),
-        VALUE_FALSE => Ok(Value::Bool(false)),
-        VALUE_TRUE => Ok(Value::Bool(true)),
+        VALUE_NULL => Ok(DecodedValue::Null),
+        VALUE_FALSE => Ok(DecodedValue::Bool(false)),
+        VALUE_TRUE => Ok(DecodedValue::Bool(true)),
         VALUE_INTEGER => {
             let sign = reader.byte()?;
             if sign > 1 {
@@ -645,34 +1135,32 @@ fn read_value(reader: &mut BinaryReader<'_>, depth: usize) -> Result<Value, Box<
             }
             let magnitude = reader.varuint()?;
             let integer = i64::try_from(magnitude)?;
-            Ok(Value::Number(
-                (if sign == 1 { -integer } else { integer }).into(),
-            ))
+            decoded_number((if sign == 1 { -integer } else { integer }) as f64)
         }
         VALUE_FLOAT32 => {
             let bytes: [u8; 4] = reader.bytes(4)?.try_into()?;
-            number_value(f64::from(f32::from_le_bytes(bytes)))
+            decoded_number(f64::from(f32::from_le_bytes(bytes)))
         }
         VALUE_FLOAT64 => {
             let bytes: [u8; 8] = reader.bytes(8)?.try_into()?;
-            number_value(f64::from_le_bytes(bytes))
+            decoded_number(f64::from_le_bytes(bytes))
         }
-        VALUE_STRING => Ok(Value::String(reader.string()?)),
+        VALUE_STRING => Ok(DecodedValue::String(reader.string()?)),
         VALUE_ARRAY => {
             let length = usize::try_from(reader.varuint()?)?;
             let mut values = Vec::with_capacity(length);
             for _ in 0..length {
                 values.push(read_value(reader, depth + 1)?);
             }
-            Ok(Value::Array(values))
+            Ok(DecodedValue::Array(Arc::new(values)))
         }
         VALUE_OBJECT => {
             let length = usize::try_from(reader.varuint()?)?;
-            let mut values = Map::with_capacity(length);
+            let mut values = IndexMap::with_capacity(length);
             for _ in 0..length {
                 values.insert(reader.string()?, read_value(reader, depth + 1)?);
             }
-            Ok(Value::Object(values))
+            Ok(DecodedValue::Object(Arc::new(values)))
         }
         tag => Err(format!("unknown viewer delta value tag {tag}").into()),
     }
@@ -713,15 +1201,16 @@ fn read_packed_unsigned(
     Ok(values)
 }
 
-fn float32_bits(value: &Value) -> Result<u32, Box<dyn Error>> {
-    let value = number(value)
+fn float32_bits(value: &DecodedValue) -> Result<u32, Box<dyn Error>> {
+    let value = value
+        .number()
         .filter(|value| exact_f32(*value))
         .ok_or("viewer delta float32 base is malformed")?;
     Ok((value as f32).to_bits())
 }
 
-fn float32_value(bits: u32) -> Result<Value, Box<dyn Error>> {
-    number_value(f64::from(f32::from_bits(bits)))
+fn float32_value(bits: u32) -> Result<DecodedValue, Box<dyn Error>> {
+    decoded_number(f64::from(f32::from_bits(bits)))
 }
 
 fn patched_float32_bits(base: u32, encoded: u64, xor: bool) -> Result<u32, Box<dyn Error>> {
@@ -739,10 +1228,10 @@ fn patched_float32_bits(base: u32, encoded: u64, xor: bool) -> Result<u32, Box<d
 
 fn read_patched_value(
     reader: &mut BinaryReader<'_>,
-    previous: Option<&Value>,
-    before_previous: Option<&Value>,
+    previous: Option<&DecodedValue>,
+    before_previous: Option<&DecodedValue>,
     depth: usize,
-) -> Result<Value, Box<dyn Error>> {
+) -> Result<DecodedValue, Box<dyn Error>> {
     if depth > MAX_JSON_DEPTH {
         return Err("viewer delta patch exceeds the maximum depth".into());
     }
@@ -753,7 +1242,9 @@ fn read_patched_value(
             .ok_or_else(|| "viewer delta same-value base is missing".into()),
         DELTA_REPLACE => read_value(reader, depth),
         DELTA_NUMBER_XOR => {
-            let previous = number(previous.ok_or("viewer number XOR base is missing")?)
+            let previous = previous
+                .ok_or("viewer number XOR base is missing")?
+                .number()
                 .ok_or("viewer number XOR base is malformed")?;
             let descriptor = reader.byte()?;
             let trailing_bytes = usize::from(descriptor >> 4);
@@ -765,7 +1256,7 @@ fn read_patched_value(
             for (index, byte) in reader.bytes(significant_bytes)?.iter().enumerate() {
                 significant |= u64::from(*byte) << (index * 8);
             }
-            number_value(f64::from_bits(
+            decoded_number(f64::from_bits(
                 previous.to_bits() ^ (significant << (trailing_bytes * 8)),
             ))
         }
@@ -778,23 +1269,28 @@ fn read_patched_value(
             )?)
         }
         DELTA_INTEGER_DIFFERENCE => {
-            let previous = number(previous.ok_or("viewer integer delta base is missing")?)
+            let previous = previous
+                .ok_or("viewer integer delta base is missing")?
+                .number()
                 .filter(|value| value.fract() == 0.0 && value.abs() <= SAFE_INTEGER_MAX)
                 .ok_or("viewer integer delta base is malformed")?;
             let value = previous as i64 + decode_signed_difference(reader.varuint()?)?;
             if (value as f64).abs() > SAFE_INTEGER_MAX {
                 return Err("viewer integer delta exceeds the safe range".into());
             }
-            Ok(Value::Number(value.into()))
+            decoded_number(value as f64)
         }
         DELTA_FLOAT32_BIT_PREDICTION | DELTA_FLOAT32_VALUE_PREDICTION => {
-            let previous = number(previous.ok_or("viewer prediction base is missing")?)
+            let previous = previous
+                .ok_or("viewer prediction base is missing")?
+                .number()
                 .filter(|value| exact_f32(*value))
                 .ok_or("viewer prediction base is malformed")?;
-            let before_previous =
-                number(before_previous.ok_or("viewer prediction history is missing")?)
-                    .filter(|value| exact_f32(*value))
-                    .ok_or("viewer prediction history is malformed")?;
+            let before_previous = before_previous
+                .ok_or("viewer prediction history is missing")?
+                .number()
+                .filter(|value| exact_f32(*value))
+                .ok_or("viewer prediction history is malformed")?;
             let prediction = if tag == DELTA_FLOAT32_BIT_PREDICTION {
                 predict_bits(before_previous, previous)
             } else {
@@ -804,30 +1300,31 @@ fn read_patched_value(
         }
         DELTA_OBJECT => {
             let previous = previous
-                .and_then(Value::as_object)
+                .and_then(DecodedValue::as_object)
                 .ok_or("viewer object delta base is malformed")?;
-            let before_previous = before_previous.and_then(Value::as_object);
+            let before_previous = before_previous.and_then(DecodedValue::as_object);
             let mut output = previous.clone();
             for _ in 0..reader.varuint()? {
-                output.shift_remove(&reader.string()?);
+                let key = reader.string()?;
+                output.shift_remove(key.as_ref());
             }
             for _ in 0..reader.varuint()? {
                 let key = reader.string()?;
                 let value = read_patched_value(
                     reader,
-                    previous.get(&key),
-                    before_previous.and_then(|values| values.get(&key)),
+                    previous.get(key.as_ref()),
+                    before_previous.and_then(|values| values.get(key.as_ref())),
                     depth + 1,
                 )?;
                 output.insert(key, value);
             }
-            Ok(Value::Object(output))
+            Ok(DecodedValue::Object(Arc::new(output)))
         }
         DELTA_ARRAY => {
             let previous = previous
-                .and_then(Value::as_array)
+                .and_then(DecodedValue::as_array)
                 .ok_or("viewer array delta base is malformed")?;
-            let before_previous = before_previous.and_then(Value::as_array);
+            let before_previous = before_previous.and_then(DecodedValue::as_array);
             let length = usize::try_from(reader.varuint()?)?;
             let mut output = previous
                 .iter()
@@ -851,14 +1348,14 @@ fn read_patched_value(
             output
                 .into_iter()
                 .collect::<Option<Vec<_>>>()
-                .map(Value::Array)
+                .map(|values| DecodedValue::Array(Arc::new(values)))
                 .ok_or_else(|| "viewer array delta left an undefined item".into())
         }
         DELTA_DENSE_ARRAY => {
             let previous = previous
-                .and_then(Value::as_array)
+                .and_then(DecodedValue::as_array)
                 .ok_or("viewer dense array delta base is malformed")?;
-            let before_previous = before_previous.and_then(Value::as_array);
+            let before_previous = before_previous.and_then(DecodedValue::as_array);
             previous
                 .iter()
                 .enumerate()
@@ -871,7 +1368,7 @@ fn read_patched_value(
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()
-                .map(Value::Array)
+                .map(|values| DecodedValue::Array(Arc::new(values)))
         }
         DELTA_DENSE_FLOAT32_DIFFERENCE_ARRAY
         | DELTA_DENSE_FLOAT32_XOR_ARRAY
@@ -879,13 +1376,13 @@ fn read_patched_value(
         | DELTA_DENSE_FLOAT32_VALUE_PREDICTION_ARRAY
         | DELTA_DENSE_FLOAT32_BITPACKED_ARRAY => {
             let previous = previous
-                .and_then(Value::as_array)
+                .and_then(DecodedValue::as_array)
                 .ok_or("viewer dense float32 array base is malformed")?;
             let previous_bits = previous
                 .iter()
                 .map(float32_bits)
                 .collect::<Result<Vec<_>, _>>()?;
-            let before_previous_values = before_previous.and_then(Value::as_array);
+            let before_previous_values = before_previous.and_then(DecodedValue::as_array);
             let before_previous_bits = before_previous_values
                 .map(|values| {
                     if values.len() != previous.len() {
@@ -907,7 +1404,7 @@ fn read_patched_value(
                         tag == DELTA_DENSE_FLOAT32_XOR_ARRAY,
                     )?)?);
                 }
-                return Ok(Value::Array(output));
+                return Ok(DecodedValue::Array(Arc::new(output)));
             }
 
             if tag == DELTA_DENSE_FLOAT32_BIT_PREDICTION_ARRAY
@@ -930,7 +1427,7 @@ fn read_patched_value(
                         false,
                     )?)?);
                 }
-                return Ok(Value::Array(output));
+                return Ok(DecodedValue::Array(Arc::new(output)));
             }
 
             let mode = reader.byte()?;
@@ -965,7 +1462,7 @@ fn read_patched_value(
                     mode == FLOAT32_MODE_XOR,
                 )?)?);
             }
-            Ok(Value::Array(output))
+            Ok(DecodedValue::Array(Arc::new(output)))
         }
         _ => Err(format!("unknown viewer delta tag {tag}").into()),
     }
@@ -998,7 +1495,13 @@ fn decode_chunk(bytes: &[u8]) -> Result<(usize, Vec<Value>), Box<dyn Error>> {
     if reader.offset != bytes.len() {
         return Err("viewer delta chunk contains trailing bytes".into());
     }
-    Ok((first_tick, ticks))
+    Ok((
+        first_tick,
+        ticks
+            .iter()
+            .map(DecodedValue::to_json)
+            .collect::<Result<Vec<_>, _>>()?,
+    ))
 }
 
 fn deep_exact_equal(left: &Value, right: &Value) -> bool {
@@ -1238,6 +1741,45 @@ fn semantic_tick_hash(digests: &[[u8; 32]]) -> String {
     digest_hex(digest.finalize())
 }
 
+fn update_decoded_semantic_hash(digest: &mut Sha256, value: &DecodedValue) {
+    match value {
+        DecodedValue::Null => digest.update([VALUE_NULL]),
+        DecodedValue::Bool(false) => digest.update([VALUE_FALSE]),
+        DecodedValue::Bool(true) => digest.update([VALUE_TRUE]),
+        DecodedValue::Number(value) => {
+            digest.update([VALUE_FLOAT64]);
+            digest.update(value.to_bits().to_le_bytes());
+        }
+        DecodedValue::String(value) => {
+            digest.update([VALUE_STRING]);
+            digest.update((value.len() as u64).to_le_bytes());
+            digest.update(value.as_bytes());
+        }
+        DecodedValue::Array(values) => {
+            digest.update([VALUE_ARRAY]);
+            digest.update((values.len() as u64).to_le_bytes());
+            for value in values.iter() {
+                update_decoded_semantic_hash(digest, value);
+            }
+        }
+        DecodedValue::Object(values) => {
+            digest.update([VALUE_OBJECT]);
+            digest.update((values.len() as u64).to_le_bytes());
+            for (key, value) in values.iter() {
+                digest.update((key.len() as u64).to_le_bytes());
+                digest.update(key.as_bytes());
+                update_decoded_semantic_hash(digest, value);
+            }
+        }
+    }
+}
+
+fn decoded_semantic_value_digest(value: &DecodedValue) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    update_decoded_semantic_hash(&mut digest, value);
+    digest.finalize().into()
+}
+
 fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<(usize, usize, String), Box<dyn Error>> {
     let mut reader = BinaryReader::new(bytes);
     if reader.bytes(4)? != CHUNK_MAGIC || reader.byte()? != CHUNK_VERSION {
@@ -1252,11 +1794,11 @@ fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<(usize, usize, String), Bo
     let mut digest = Sha256::new();
     digest.update((tick_count as u64).to_le_bytes());
     let mut previous = read_value(&mut reader, 1)?;
-    digest.update(semantic_value_digest(&previous)?);
+    digest.update(decoded_semantic_value_digest(&previous));
     let mut before_previous = None;
     for _ in 1..tick_count {
         let next = read_patched_value(&mut reader, Some(&previous), before_previous.as_ref(), 1)?;
-        digest.update(semantic_value_digest(&next)?);
+        digest.update(decoded_semantic_value_digest(&next));
         before_previous = Some(previous);
         previous = next;
     }
@@ -1266,25 +1808,19 @@ fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<(usize, usize, String), Bo
     Ok((first_tick, tick_count, digest_hex(digest.finalize())))
 }
 
-fn validate_zstd_round_trip(compressed: &[u8], raw: &[u8]) -> Result<(), Box<dyn Error>> {
-    let mut decoder = zstd::stream::read::Decoder::new(compressed)?;
-    let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
-    let mut offset = 0_usize;
-    loop {
-        let read = decoder.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        let end = offset
-            .checked_add(read)
-            .ok_or("viewer zstd validation byte count overflow")?;
-        if raw.get(offset..end) != Some(&buffer[..read]) {
-            return Err("viewer chunk compression changed encoded bytes".into());
-        }
-        offset = end;
+fn validate_zstd_round_trip(
+    decompressor: &mut zstd::bulk::Decompressor<'static>,
+    compressed: &[u8],
+    raw: &[u8],
+    buffer: &mut Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
+    buffer.clear();
+    if buffer.capacity() < raw.len() {
+        buffer.reserve(raw.len());
     }
-    if offset != raw.len() {
-        return Err("viewer chunk compression truncated encoded bytes".into());
+    let decompressed_bytes = decompressor.decompress_to_buffer(compressed, buffer)?;
+    if decompressed_bytes != raw.len() || buffer != raw {
+        return Err("viewer chunk compression changed encoded bytes".into());
     }
     Ok(())
 }
@@ -1479,33 +2015,34 @@ fn write_number_delta(
     if exact_f32(previous) && exact_f32(next) {
         let previous_bits = (previous as f32).to_bits();
         let next_bits = (next as f32).to_bits();
-        let mut candidates = vec![
-            (DELTA_FLOAT32_XOR, u64::from(previous_bits ^ next_bits)),
-            (
-                DELTA_FLOAT32_DIFFERENCE,
-                signed_difference(signed_uint32_difference(previous_bits, next_bits)),
-            ),
-        ];
+        let mut selected = (DELTA_FLOAT32_XOR, u64::from(previous_bits ^ next_bits));
+        let difference = (
+            DELTA_FLOAT32_DIFFERENCE,
+            signed_difference(signed_uint32_difference(previous_bits, next_bits)),
+        );
+        if varuint_length(difference.1) < varuint_length(selected.1) {
+            selected = difference;
+        }
         if let Some(before_previous) = before_previous.filter(|value| exact_f32(*value)) {
-            candidates.push((
+            let bit_prediction = (
                 DELTA_FLOAT32_BIT_PREDICTION,
                 signed_difference(signed_uint32_difference(
                     predict_bits(before_previous, previous),
                     next_bits,
                 )),
-            ));
-            candidates.push((
+            );
+            if varuint_length(bit_prediction.1) < varuint_length(selected.1) {
+                selected = bit_prediction;
+            }
+            let value_prediction = (
                 DELTA_FLOAT32_VALUE_PREDICTION,
                 signed_difference(signed_uint32_difference(
                     predict_value_bits(before_previous, previous),
                     next_bits,
                 )),
-            ));
-        }
-        let mut selected = candidates[0];
-        for candidate in candidates.into_iter().skip(1) {
-            if varuint_length(candidate.1) < varuint_length(selected.1) {
-                selected = candidate;
+            );
+            if varuint_length(value_prediction.1) < varuint_length(selected.1) {
+                selected = value_prediction;
             }
         }
         writer.byte(selected.0);
@@ -1516,32 +2053,65 @@ fn write_number_delta(
     write_number_xor(writer, previous, next)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 struct FloatCandidate {
     kind: u8,
     mode: u8,
     bit_width: u8,
-    residuals: Vec<u64>,
     bytes: usize,
 }
 
-fn float_candidate(kind: u8, mode: u8, residuals: Vec<u64>) -> FloatCandidate {
-    let varint_bytes = residuals
-        .iter()
-        .map(|value| varuint_length(*value))
-        .sum::<usize>();
-    let bit_width = residuals
-        .iter()
-        .map(|value| 64 - value.leading_zeros() as usize)
-        .max()
-        .unwrap_or(0) as u8;
-    let bitpacked_bytes = 2 + (usize::from(bit_width) * residuals.len()).div_ceil(8);
+fn float_residual(mode: u8, before_previous: Option<f64>, previous: f64, next: f64) -> u64 {
+    let previous_bits = (previous as f32).to_bits();
+    let next_bits = (next as f32).to_bits();
+    match mode {
+        FLOAT32_MODE_XOR => u64::from(previous_bits ^ next_bits),
+        FLOAT32_MODE_DIFFERENCE => {
+            signed_difference(signed_uint32_difference(previous_bits, next_bits))
+        }
+        FLOAT32_MODE_BIT_PREDICTION => signed_difference(signed_uint32_difference(
+            predict_bits(before_previous.expect("validated float history"), previous),
+            next_bits,
+        )),
+        FLOAT32_MODE_VALUE_PREDICTION => signed_difference(signed_uint32_difference(
+            predict_value_bits(before_previous.expect("validated float history"), previous),
+            next_bits,
+        )),
+        _ => unreachable!(),
+    }
+}
+
+fn float_candidate(
+    mode: u8,
+    previous: &[Value],
+    next: &[Value],
+    before_previous: Option<&[Value]>,
+) -> FloatCandidate {
+    let mut varint_bytes = 0_usize;
+    let mut bit_width = 0_u8;
+    for index in 0..next.len() {
+        let residual = float_residual(
+            mode,
+            before_previous.map(|values| number(&values[index]).expect("validated float history")),
+            number(&previous[index]).expect("validated previous float"),
+            number(&next[index]).expect("validated next float"),
+        );
+        varint_bytes += varuint_length(residual);
+        bit_width = bit_width.max((64 - residual.leading_zeros()) as u8);
+    }
+    let bitpacked_bytes = 2 + (usize::from(bit_width) * next.len()).div_ceil(8);
+    let kind = match mode {
+        FLOAT32_MODE_XOR => DELTA_DENSE_FLOAT32_XOR_ARRAY,
+        FLOAT32_MODE_DIFFERENCE => DELTA_DENSE_FLOAT32_DIFFERENCE_ARRAY,
+        FLOAT32_MODE_BIT_PREDICTION => DELTA_DENSE_FLOAT32_BIT_PREDICTION_ARRAY,
+        FLOAT32_MODE_VALUE_PREDICTION => DELTA_DENSE_FLOAT32_VALUE_PREDICTION_ARRAY,
+        _ => unreachable!(),
+    };
     if bitpacked_bytes as f64 <= varint_bytes as f64 * 0.75 {
         FloatCandidate {
             kind: DELTA_DENSE_FLOAT32_BITPACKED_ARRAY,
             mode,
             bit_width,
-            residuals,
             bytes: bitpacked_bytes,
         }
     } else {
@@ -1549,28 +2119,30 @@ fn float_candidate(kind: u8, mode: u8, residuals: Vec<u64>) -> FloatCandidate {
             kind,
             mode,
             bit_width,
-            residuals,
             bytes: varint_bytes,
         }
     }
 }
 
-fn float_array(values: &[Value]) -> Option<Vec<f64>> {
+fn exact_float32_array(values: &[Value]) -> bool {
     values
         .iter()
-        .map(number)
-        .collect::<Option<Vec<_>>>()
-        .filter(|values| values.iter().all(|value| exact_f32(*value)))
+        .all(|value| number(value).is_some_and(exact_f32))
 }
 
-fn write_packed(writer: &mut BinaryWriter, values: &[u64], bit_width: u8) {
+fn write_packed(
+    writer: &mut BinaryWriter,
+    count: usize,
+    bit_width: u8,
+    value: impl Fn(usize) -> u64,
+) {
     if bit_width == 0 {
         return;
     }
     let mut accumulator: u128 = 0;
     let mut accumulator_bits = 0_u8;
-    for value in values {
-        accumulator |= u128::from(*value) << accumulator_bits;
+    for index in 0..count {
+        accumulator |= u128::from(value(index)) << accumulator_bits;
         accumulator_bits += bit_width;
         while accumulator_bits >= 8 {
             writer.byte((accumulator & 0xff) as u8);
@@ -1608,74 +2180,21 @@ fn write_delta(
     if let (Some(Value::Array(previous)), Value::Array(next)) = (previous, next) {
         if previous.len() == next.len()
             && !next.is_empty()
-            && let (Some(previous_float), Some(next_float)) =
-                (float_array(previous), float_array(next))
+            && exact_float32_array(previous)
+            && exact_float32_array(next)
         {
-            let mut candidates = vec![
-                float_candidate(
-                    DELTA_DENSE_FLOAT32_XOR_ARRAY,
-                    FLOAT32_MODE_XOR,
-                    previous_float
-                        .iter()
-                        .zip(&next_float)
-                        .map(|(left, right)| {
-                            u64::from((*left as f32).to_bits() ^ (*right as f32).to_bits())
-                        })
-                        .collect(),
-                ),
-                float_candidate(
-                    DELTA_DENSE_FLOAT32_DIFFERENCE_ARRAY,
-                    FLOAT32_MODE_DIFFERENCE,
-                    previous_float
-                        .iter()
-                        .zip(&next_float)
-                        .map(|(left, right)| {
-                            signed_difference(signed_uint32_difference(
-                                (*left as f32).to_bits(),
-                                (*right as f32).to_bits(),
-                            ))
-                        })
-                        .collect(),
-                ),
-            ];
-            if let Some(before_float) = before_previous
+            let history = before_previous
                 .and_then(Value::as_array)
                 .filter(|values| values.len() == previous.len())
-                .and_then(|values| float_array(values))
+                .filter(|values| exact_float32_array(values))
+                .map(Vec::as_slice);
+            let mut selected = float_candidate(FLOAT32_MODE_XOR, previous, next, None);
+            for mode in [FLOAT32_MODE_DIFFERENCE]
+                .into_iter()
+                .chain(history.is_some().then_some(FLOAT32_MODE_BIT_PREDICTION))
+                .chain(history.is_some().then_some(FLOAT32_MODE_VALUE_PREDICTION))
             {
-                candidates.push(float_candidate(
-                    DELTA_DENSE_FLOAT32_BIT_PREDICTION_ARRAY,
-                    FLOAT32_MODE_BIT_PREDICTION,
-                    before_float
-                        .iter()
-                        .zip(&previous_float)
-                        .zip(&next_float)
-                        .map(|((before, previous), next)| {
-                            signed_difference(signed_uint32_difference(
-                                predict_bits(*before, *previous),
-                                (*next as f32).to_bits(),
-                            ))
-                        })
-                        .collect(),
-                ));
-                candidates.push(float_candidate(
-                    DELTA_DENSE_FLOAT32_VALUE_PREDICTION_ARRAY,
-                    FLOAT32_MODE_VALUE_PREDICTION,
-                    before_float
-                        .iter()
-                        .zip(&previous_float)
-                        .zip(&next_float)
-                        .map(|((before, previous), next)| {
-                            signed_difference(signed_uint32_difference(
-                                predict_value_bits(*before, *previous),
-                                (*next as f32).to_bits(),
-                            ))
-                        })
-                        .collect(),
-                ));
-            }
-            let mut selected = &candidates[0];
-            for candidate in candidates.iter().skip(1) {
+                let candidate = float_candidate(mode, previous, next, history);
                 if candidate.bytes < selected.bytes {
                     selected = candidate;
                 }
@@ -1684,10 +2203,24 @@ fn write_delta(
             if selected.kind == DELTA_DENSE_FLOAT32_BITPACKED_ARRAY {
                 writer.byte(selected.mode);
                 writer.byte(selected.bit_width);
-                write_packed(writer, &selected.residuals, selected.bit_width);
+                write_packed(writer, next.len(), selected.bit_width, |index| {
+                    float_residual(
+                        selected.mode,
+                        history
+                            .map(|values| number(&values[index]).expect("validated float history")),
+                        number(&previous[index]).expect("validated previous float"),
+                        number(&next[index]).expect("validated next float"),
+                    )
+                });
             } else {
-                for residual in &selected.residuals {
-                    writer.varuint(*residual)?;
+                for index in 0..next.len() {
+                    writer.varuint(float_residual(
+                        selected.mode,
+                        history
+                            .map(|values| number(&values[index]).expect("validated float history")),
+                        number(&previous[index]).expect("validated previous float"),
+                        number(&next[index]).expect("validated next float"),
+                    ))?;
                 }
             }
             return Ok(());
@@ -1830,6 +2363,9 @@ fn configured_worker_count() -> Result<usize, Box<dyn Error>> {
 fn process_chunk(
     task: ChunkTask,
     compressor: &mut zstd::bulk::Compressor<'static>,
+    decompressor: &mut zstd::bulk::Decompressor<'static>,
+    compressed: &mut Vec<u8>,
+    validation_buffer: &mut Vec<u8>,
 ) -> Result<ChunkWorkResult, Box<dyn Error>> {
     let validation_started = Instant::now();
     let (decoded_first_tick, decoded_tick_count, decoded_semantic_sha256) =
@@ -1843,11 +2379,16 @@ fn process_chunk(
     let mut validation_duration_ms = validation_started.elapsed().as_millis();
 
     let compression_started = Instant::now();
-    let compressed = compressor.compress(&task.raw)?;
+    compressed.clear();
+    let required_capacity = zstd::zstd_safe::compress_bound(task.raw.len());
+    if compressed.capacity() < required_capacity {
+        compressed.reserve(required_capacity);
+    }
+    compressor.compress_to_buffer(&task.raw, compressed)?;
     let compression_duration_ms = compression_started.elapsed().as_millis();
 
     let validation_started = Instant::now();
-    validate_zstd_round_trip(&compressed, &task.raw)?;
+    validate_zstd_round_trip(decompressor, compressed, &task.raw, validation_buffer)?;
     validation_duration_ms += validation_started.elapsed().as_millis();
 
     let compressed_file = format!("chunk-{:05}.hsrd.zst", task.index);
@@ -1862,7 +2403,7 @@ fn process_chunk(
             raw_bytes: task.raw.len(),
             compressed_file,
             compressed_bytes: compressed.len(),
-            compressed_sha256: sha256_hex(&compressed),
+            compressed_sha256: sha256_hex(compressed),
             tick_sha256: task.expected_tick_sha256,
         },
         validation_duration_ms,
@@ -1886,6 +2427,17 @@ fn chunk_worker(tasks: Arc<Mutex<Receiver<ChunkTask>>>, results: mpsc::Sender<Ch
             return;
         }
     };
+    let mut decompressor = match zstd::bulk::Decompressor::new() {
+        Ok(decompressor) => decompressor,
+        Err(error) => {
+            let _ = results.send(Err(format!(
+                "viewer zstd validation worker initialization failed: {error}"
+            )));
+            return;
+        }
+    };
+    let mut compressed = Vec::new();
+    let mut validation_buffer = Vec::new();
     loop {
         let task = match tasks.lock() {
             Ok(tasks) => tasks.recv(),
@@ -1898,7 +2450,14 @@ fn chunk_worker(tasks: Arc<Mutex<Receiver<ChunkTask>>>, results: mpsc::Sender<Ch
             Ok(task) => task,
             Err(_) => return,
         };
-        let result = process_chunk(task, &mut compressor).map_err(|error| error.to_string());
+        let result = process_chunk(
+            task,
+            &mut compressor,
+            &mut decompressor,
+            &mut compressed,
+            &mut validation_buffer,
+        )
+        .map_err(|error| error.to_string());
         if results.send(result).is_err() {
             return;
         }
@@ -2594,6 +3153,26 @@ mod tests {
     }
 
     #[test]
+    fn zstd_round_trip_validation_requires_exact_bytes() {
+        let raw = b"viewer delta bytes";
+        let compressed = zstd::bulk::compress(raw, ZSTD_LEVEL).expect("compress fixture");
+        let mut decompressor = zstd::bulk::Decompressor::new().expect("create decompressor");
+        let mut buffer = Vec::new();
+
+        validate_zstd_round_trip(&mut decompressor, &compressed, raw, &mut buffer)
+            .expect("validate exact round trip");
+        assert!(
+            validate_zstd_round_trip(
+                &mut decompressor,
+                &compressed,
+                b"viewer delta bytex",
+                &mut buffer,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn matches_the_frontend_v1_reference_bytes() {
         let ticks = vec![
             serde_json::json!({
@@ -2683,6 +3262,20 @@ mod tests {
             .map(|tick| projection.project(&projection.definitions["tick"], tick))
             .collect::<Result<Vec<_>, _>>()
             .expect("project ticks");
+        let raw_projected_ticks = source_ticks
+            .iter()
+            .map(|tick| {
+                let raw = serde_json::to_string(tick).expect("serialize source tick");
+                let (projected, semantic_digest, _) =
+                    project_tick_raw(&raw).expect("project raw tick");
+                assert_eq!(
+                    semantic_digest,
+                    semantic_value_digest(&projected).expect("hash projected tick")
+                );
+                projected
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(raw_projected_ticks, projected_ticks);
         assert_eq!(
             serde_json::to_vec(&projected_ticks).expect("serialize projected ticks"),
             serde_json::to_vec(expected_ticks).expect("serialize expected ticks")
@@ -2706,5 +3299,26 @@ mod tests {
                 "root projection mismatch for {key}"
             );
         }
+    }
+
+    #[test]
+    fn raw_projection_validates_unknown_source_depth() {
+        let mut unknown = Value::Null;
+        for _ in 0..31 {
+            unknown = Value::Array(vec![unknown]);
+        }
+        let raw = serde_json::to_string(&serde_json::json!({
+            "current_tick": 1,
+            "unknown": unknown,
+        }))
+        .expect("serialize deep source tick");
+        assert!(project_tick_raw(&raw).is_err());
+    }
+
+    #[test]
+    fn raw_projection_accepts_escaped_contract_keys() {
+        let (projected, _, _) =
+            project_tick_raw(r#"{"current\u005ftick":1}"#).expect("project escaped key");
+        assert_eq!(projected, serde_json::json!({"current_tick": 1}));
     }
 }
