@@ -10,7 +10,7 @@ import:
 vars:
   environment: dev
   profile: halospawns-dev
-  asset_delivery_mode: s3
+  asset_delivery_mode: cloudfront
 
 terraform:
   backend:
