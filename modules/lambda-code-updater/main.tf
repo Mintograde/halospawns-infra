@@ -6,7 +6,7 @@ data "archive_file" "this" {
   type        = "zip"
   source_dir  = var.source_dir
   output_path = var.output_path
-  excludes    = ["**/__pycache__/**", "**/*.pyc"]
+  excludes    = ["**/__pycache__/**", "**/*.pyc", "tests", "tests/**"]
 }
 
 data "aws_iam_policy_document" "assume_role" {
@@ -39,6 +39,21 @@ data "aws_iam_policy_document" "this" {
       "lambda:PublishVersion",
     ]
     resources = [var.target_function_arn]
+  }
+
+  statement {
+    sid       = "ReadPublishedVersions"
+    actions   = ["lambda:GetFunction", "lambda:GetFunctionConfiguration"]
+    resources = ["${var.target_function_arn}:*"]
+  }
+
+  dynamic "statement" {
+    for_each = var.configuration_promotion_enabled ? [1] : []
+    content {
+      sid       = "FindConfiguredVersion"
+      actions   = ["lambda:ListVersionsByFunction"]
+      resources = [var.target_function_arn]
+    }
   }
 
   statement {
@@ -90,12 +105,21 @@ resource "aws_lambda_function" "this" {
   tags                           = var.tags
 
   environment {
-    variables = {
+    variables = merge({
       TARGET_FUNCTION_NAME    = var.target_function_name
       TARGET_ALIAS_NAME       = var.target_alias_name
       ARTIFACT_RELEASE_PREFIX = var.artifact_release_prefix
       ARTIFACT_SUFFIX         = ".zip"
       WAIT_TIMEOUT_SECONDS    = "300"
+      }, var.configuration_promotion_enabled ? {
+      EXPECTED_CONFIGURATION_HASH = var.configuration_hash
+    } : {})
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.configuration_promotion_enabled || (var.reserved_concurrent_executions == 1 && var.configuration_hash != null)
+      error_message = "Configuration promotion requires an expected configuration hash and reserved concurrency of 1 to serialize updater invocations."
     }
   }
 

@@ -17,10 +17,18 @@ locals {
     local.environment_dns_hosted_zone_id != null ? local.environment_dns_hosted_zone_id :
     local.frontend_hosted_zone_id
   )
-  api_domain_name              = var.domain.name == null ? null : trimspace(var.domain.name)
-  app_api_base_url             = var.domain.base_url != null && trimspace(var.domain.base_url) != "" ? trimsuffix(trimspace(var.domain.base_url), "/") : (local.api_domain_name == null || local.api_domain_name == "" ? null : "https://${local.api_domain_name}")
-  uploads_bucket_name          = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
-  uploads_bucket_arn           = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
+  api_domain_name     = var.domain.name == null ? null : trimspace(var.domain.name)
+  app_api_base_url    = var.domain.base_url != null && trimspace(var.domain.base_url) != "" ? trimsuffix(trimspace(var.domain.base_url), "/") : (local.api_domain_name == null || local.api_domain_name == "" ? null : "https://${local.api_domain_name}")
+  uploads_bucket_name = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_name, null)
+  uploads_bucket_arn  = try(data.terraform_remote_state.uploads_ingest[0].outputs.uploads_bucket_arn, null)
+  # Existing outputs allow S3-mode preparation before the CDN contract is first applied.
+  asset_delivery = try(data.terraform_remote_state.uploads_ingest[0].outputs.asset_delivery, {
+    mode                       = "s3"
+    base_url                   = try("https://${data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_distribution_domain_name}", null)
+    key_pair_id                = try(data.terraform_remote_state.uploads_ingest[0].outputs.cloudfront_key_id, null)
+    private_key_parameter_name = try(data.terraform_remote_state.uploads_ingest[0].outputs.upload_signing_private_key_parameter_name, null)
+    private_key_parameter_arn  = try(data.terraform_remote_state.uploads_ingest[0].outputs.upload_signing_private_key_parameter_arn, null)
+  })
   map_rendering_queue_name     = var.dependencies.queues.map_rendering == null || trimspace(var.dependencies.queues.map_rendering) == "" ? null : trimspace(var.dependencies.queues.map_rendering)
   map_rendering_dlq_name       = var.dependencies.queues.map_rendering_dlq == null || trimspace(var.dependencies.queues.map_rendering_dlq) == "" ? null : trimspace(var.dependencies.queues.map_rendering_dlq)
   map_rendering_queue_url      = try(data.aws_sqs_queue.map_rendering[0].url, null)
@@ -51,6 +59,7 @@ locals {
     compact([
       var.enabled ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_database_url_parameter_name}" : null,
       var.enabled && var.supabase.parameters.create_service_role_parameter ? "arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.supabase_service_role_parameter_name}" : null,
+      try(local.asset_delivery.private_key_parameter_arn, null),
     ]),
     values(local.trusted_service_hmac_parameter_arns),
   )
@@ -95,12 +104,18 @@ locals {
       SUPABASE_PROJECT_REF                      = var.supabase.project_ref == null ? "" : var.supabase.project_ref
       SUPABASE_URL                              = var.supabase.url == null ? "" : var.supabase.url
       UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
+      ASSET_DELIVERY_MODE                       = var.asset_delivery_mode
       MAP_UPLOAD_PREFIX                         = local.map_upload_prefix
       REPLAY_UPLOAD_PREFIX                      = local.replay_upload_prefix
       REPLAY_VIEWER_ARTIFACT_PREFIX             = "${local.replay_viewer_artifact_prefix}/"
       REPLAY_VIEWER_ARTIFACT_SERVING_MODE       = var.uploads.replays.viewer_artifact_serving_mode
       UPLOAD_URL_TTL_SECONDS                    = tostring(var.uploads.url_ttl_seconds)
       MAP_SUPPORT_RESOURCE_AUTO_APPROVE_UPLOADS = tostring(var.uploads.maps.support_resource_auto_approve)
+    },
+    try(local.asset_delivery.base_url, null) == null ? {} : {
+      ASSET_CLOUDFRONT_BASE_URL                   = local.asset_delivery.base_url
+      ASSET_CLOUDFRONT_KEY_PAIR_ID                = local.asset_delivery.key_pair_id
+      ASSET_CLOUDFRONT_PRIVATE_KEY_PARAMETER_NAME = local.asset_delivery.private_key_parameter_name
     },
     var.supabase.parameters.create_service_role_parameter ? {
       SUPABASE_SERVICE_ROLE_PARAMETER_NAME = local.supabase_service_role_parameter_name
@@ -244,6 +259,18 @@ resource "terraform_data" "required_inputs" {
   }
 
   lifecycle {
+    precondition {
+      condition = var.asset_delivery_mode == "s3" || try(
+        local.asset_delivery.mode == var.asset_delivery_mode &&
+        startswith(local.asset_delivery.base_url, "https://") &&
+        local.asset_delivery.key_pair_id != null &&
+        local.asset_delivery.private_key_parameter_name != null &&
+        local.asset_delivery.private_key_parameter_arn != null,
+        false,
+      )
+      error_message = "Apply uploads-ingest with the shared asset_delivery_mode first so the CDN policy and signing references are ready."
+    }
+
     precondition {
       condition = (
         var.supabase.project_ref != null &&
@@ -446,8 +473,10 @@ module "code_updater" {
   target_alias_arn          = module.app_lambda[0].alias_arn
   update_code_statement_sid = "UpdateAppLambdaCode"
 
-  reserved_concurrent_executions = var.release.updater_reserved_concurrent_executions
-  tags                           = var.tags
+  reserved_concurrent_executions  = var.release.updater_reserved_concurrent_executions
+  configuration_promotion_enabled = var.release.promote_configuration
+  configuration_hash              = var.release.promote_configuration ? local.app_configuration_hash : null
+  tags                            = var.tags
 }
 
 resource "aws_s3_bucket_notification" "release_artifacts" {

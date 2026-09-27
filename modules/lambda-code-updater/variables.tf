@@ -71,6 +71,18 @@ variable "reserved_concurrent_executions" {
   nullable    = true
 }
 
+variable "configuration_promotion_enabled" {
+  description = "Allow Terraform to request configuration-only promotion through this updater."
+  type        = bool
+  default     = false
+}
+
+variable "configuration_hash" {
+  description = "Expected configuration fingerprint for rejecting stale promotion requests."
+  type        = string
+  default     = null
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention in days."
   type        = number

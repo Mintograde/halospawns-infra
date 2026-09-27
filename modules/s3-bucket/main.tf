@@ -49,7 +49,7 @@ resource "aws_s3_bucket_cors_configuration" "this" {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "HEAD", "PUT", "POST"]
     allowed_origins = var.allowed_cors_origins
-    expose_headers  = []
+    expose_headers  = var.cors_expose_headers
     max_age_seconds = 3000
   }
 }

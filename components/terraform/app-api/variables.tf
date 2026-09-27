@@ -1,3 +1,14 @@
+variable "asset_delivery_mode" {
+  description = "Shared stack download mode, also consumed by uploads-ingest."
+  type        = string
+  default     = "s3"
+
+  validation {
+    condition     = contains(["s3", "cloudfront", "cloudfront_signed"], var.asset_delivery_mode)
+    error_message = "asset_delivery_mode must be s3, cloudfront, or cloudfront_signed."
+  }
+}
+
 variable "enabled" {
   description = "Whether to create app API resources."
   type        = bool
@@ -219,6 +230,7 @@ variable "release" {
       alias_name      = optional(string, "live")
     }), {})
     updater_reserved_concurrent_executions = optional(number)
+    promote_configuration                  = optional(bool, false)
     github = object({
       repository  = string
       environment = optional(string)
@@ -231,6 +243,11 @@ variable "release" {
       }), {})
     })
   })
+
+  validation {
+    condition     = !var.release.promote_configuration || var.release.updater_reserved_concurrent_executions == 1
+    error_message = "Configuration promotion requires updater_reserved_concurrent_executions = 1."
+  }
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.release.github.repository))

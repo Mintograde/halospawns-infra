@@ -23,3 +23,9 @@ variable "source_policy_documents" {
   type        = list(string)
   default     = []
 }
+
+variable "cors_expose_headers" {
+  description = "Response headers available to browser clients."
+  type        = list(string)
+  default     = []
+}

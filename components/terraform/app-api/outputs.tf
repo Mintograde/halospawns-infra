@@ -33,6 +33,21 @@ output "app_lambda_function_name" {
   value       = var.enabled ? module.app_lambda[0].function_name : null
 }
 
+output "asset_delivery_mode" {
+  description = "Configured API asset mode; configuration promotion makes it live when enabled."
+  value       = var.asset_delivery_mode
+}
+
+output "app_lambda_function_version" {
+  description = "Most recently published API version observed by Terraform; the updater owns live promotion."
+  value       = var.enabled ? module.app_lambda[0].function_version : null
+}
+
+output "configuration_promotion" {
+  description = "Last configuration-promotion result, not the current alias version after later application releases."
+  value       = var.enabled && var.release.promote_configuration ? jsondecode(aws_lambda_invocation.configuration[0].result) : null
+}
+
 output "app_lambda_alias_name" {
   description = "App Lambda live alias name."
   value       = var.enabled ? module.app_lambda[0].alias_name : null

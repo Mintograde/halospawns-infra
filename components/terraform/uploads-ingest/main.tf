@@ -3,6 +3,7 @@ module "uploads_bucket" {
   bucket_prefix        = var.storage.bucket_prefix
   environment          = var.environment
   allowed_cors_origins = var.storage.allowed_cors_origins
+  cors_expose_headers  = local.asset_cors_expose_headers
   source_policy_documents = concat(
     [data.aws_iam_policy_document.immutable_replay_writes.json],
     var.cdn.enabled ? [data.aws_iam_policy_document.cloudfront_to_s3_policy[0].json] : [],
@@ -318,8 +319,8 @@ data "aws_iam_policy_document" "cloudfront_to_s3_policy" {
   count = var.cdn.enabled ? 1 : 0
 
   statement {
-    actions   = ["s3:PutObject", "s3:GetObject"]
-    resources = ["${module.uploads_bucket.s3_bucket_arn}/*"]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = local.asset_download_object_arns
 
     principals {
       type        = "Service"
@@ -416,31 +417,44 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     origin_access_control_id = aws_cloudfront_origin_access_control.uploads_oac[0].id
   }
 
-  enabled             = true
-  is_ipv6_enabled     = true
-  comment             = "CDN for ${local.full_domain_name}"
-  default_root_object = "index.html"
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "CDN for ${local.full_domain_name}"
 
   aliases = [local.full_domain_name]
 
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "S3-${module.uploads_bucket.s3_bucket_id}"
 
-    trusted_key_groups = [aws_cloudfront_key_group.main[0].id]
+    trusted_key_groups         = local.asset_trusted_key_groups
+    cache_policy_id            = aws_cloudfront_cache_policy.assets["mutable"].id
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.asset_cors[0].id
+    response_headers_policy_id = try(aws_cloudfront_response_headers_policy.asset_cors[0].id, null)
 
     viewer_protocol_policy = "redirect-to-https"
-    compress               = true
-    min_ttl                = 0
-    default_ttl            = 3600
-    max_ttl                = 86400
+    compress               = false
+  }
 
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
+  ordered_cache_behavior {
+    path_pattern               = "${local.replay_viewer_artifact_prefix}*"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "S3-${module.uploads_bucket.s3_bucket_id}"
+    trusted_key_groups         = local.asset_trusted_key_groups
+    cache_policy_id            = aws_cloudfront_cache_policy.assets["immutable"].id
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.asset_cors[0].id
+    response_headers_policy_id = try(aws_cloudfront_response_headers_policy.asset_cors[0].id, null)
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = false
+  }
+
+  dynamic "custom_error_response" {
+    for_each = [403, 404]
+    content {
+      error_code            = custom_error_response.value
+      error_caching_min_ttl = 1
     }
   }
 

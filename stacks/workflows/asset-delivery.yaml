@@ -1,0 +1,6 @@
+workflows:
+  switch-dev:
+    description: Apply dev asset delivery in dependency order; the API updater promotes configuration changes.
+    steps:
+      - command: terraform apply uploads-ingest -s dev
+      - command: terraform apply app-api -s dev

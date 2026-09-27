@@ -15,6 +15,20 @@ locals {
   map_support_resource_prefix        = "${trim(var.storage.map_support_resources.prefix, "/")}/"
   uploads_bucket_arn                 = "arn:${data.aws_partition.current.partition}:s3:::${var.storage.bucket_prefix}-${var.environment}-${data.aws_caller_identity.current.account_id}"
 
+  asset_cors_expose_headers = ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range", "ETag"]
+  asset_download_object_arns = concat(
+    try([for suffix in ["*.glb", "*.json", "*.png", "*.jpg", "*.jpeg", "*.webp"] :
+      "${local.uploads_bucket_arn}/${local.pipelines.maps.processed_prefix}${suffix}"
+    ], []),
+    local.replay_processed_prefix == null ? [] : ["${local.uploads_bucket_arn}/${local.replay_processed_prefix}*.zst"],
+    ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*.hsrv"],
+  )
+  asset_trusted_key_groups = var.cdn.enabled && var.asset_delivery_mode != "cloudfront" ? [aws_cloudfront_key_group.main[0].id] : []
+  asset_cache_ttls = {
+    mutable   = { default = 300, max = 300 }
+    immutable = { default = 86400, max = 31536000 }
+  }
+
   immutable_replay_object_arns = concat(
     local.replay_processed_prefix == null ? [] : [
       "${local.uploads_bucket_arn}/${local.replay_processed_prefix}*/sources/*",

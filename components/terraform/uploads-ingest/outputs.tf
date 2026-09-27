@@ -21,6 +21,18 @@ output "file_processing_queue_arns" {
   }
 }
 
+output "asset_delivery" {
+  description = "Non-secret download contract, retained in S3 mode for future switching."
+  value = {
+    mode                       = var.asset_delivery_mode
+    base_url                   = var.cdn.enabled ? "https://${aws_cloudfront_distribution.s3_distribution[0].domain_name}" : null
+    distribution_id            = var.cdn.enabled ? aws_cloudfront_distribution.s3_distribution[0].id : null
+    key_pair_id                = var.cdn.enabled ? aws_cloudfront_public_key.main[0].id : null
+    private_key_parameter_name = var.cdn.enabled ? local.upload_signing_private_key_parameter_name : null
+    private_key_parameter_arn  = var.cdn.enabled ? local.upload_signing_private_key_parameter_arn : null
+  }
+}
+
 output "region_stat_rollup_artifact_prefix" {
   description = "Stable S3 prefix for immutable region-stat rollup generations."
   value       = local.region_stat_rollup_artifact_prefix

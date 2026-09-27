@@ -1,3 +1,19 @@
+variable "asset_delivery_mode" {
+  description = "Shared stack download mode. Only cloudfront permits unsigned CDN reads; s3 retains the signed CDN for rollback."
+  type        = string
+  default     = "s3"
+
+  validation {
+    condition     = contains(["s3", "cloudfront", "cloudfront_signed"], var.asset_delivery_mode)
+    error_message = "asset_delivery_mode must be s3, cloudfront, or cloudfront_signed."
+  }
+
+  validation {
+    condition     = var.asset_delivery_mode == "s3" || var.cdn.enabled
+    error_message = "Provision the CDN once before selecting a CloudFront delivery mode."
+  }
+}
+
 variable "region" {
   description = "Region to deploy resources."
   type        = string
@@ -188,7 +204,7 @@ variable "observability" {
 }
 
 variable "cdn" {
-  description = "Signed-upload CloudFront configuration. Private key values are externally managed in Parameter Store."
+  description = "Asset CDN provisioning configuration. Keep enabled after setup; use asset_delivery_mode for switching. Private keys are externally managed in Parameter Store."
   type = object({
     enabled                    = optional(bool, true)
     domain_name                = optional(string)

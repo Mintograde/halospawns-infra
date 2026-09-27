@@ -10,6 +10,7 @@ import:
 vars:
   environment: dev
   profile: halospawns-dev
+  asset_delivery_mode: s3
 
 terraform:
   backend:
@@ -84,6 +85,8 @@ components:
           maps:
             support_resource_auto_approve: true
         release:
+          promote_configuration: true
+          updater_reserved_concurrent_executions: 1
           github:
             environment: dev
         observability:
