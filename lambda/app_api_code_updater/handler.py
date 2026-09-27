@@ -211,7 +211,14 @@ def _deploy_artifact(bucket, key, version_id):
     version_response = LAMBDA.publish_version(**publish_args)
     lambda_version = version_response["Version"]
 
-    _promote_version(alias, configuration, lambda_version, deployment_description)
+    # Publishing rotates LATEST's revision even when its code and settings match.
+    # Refresh that token only after publication completes and the snapshot matches.
+    _wait_for_function_update(TARGET_FUNCTION_NAME, lambda_version)
+    latest_after_publish = _wait_for_function_update(TARGET_FUNCTION_NAME)
+    if _configuration_snapshot(latest_after_publish) != _configuration_snapshot(configuration):
+        raise RuntimeError("Code or configuration changed while publishing the release")
+
+    _promote_version(alias, latest_after_publish, lambda_version, deployment_description)
 
     deployment = {
         "bucket": bucket,

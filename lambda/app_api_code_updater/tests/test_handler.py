@@ -104,7 +104,10 @@ class LambdaState:
         assert kwargs["RevisionId"] == self.latest["RevisionId"]
         self.publishes.append(kwargs)
         version = str(max(map(int, self.versions)) + 1)
-        self.versions[version] = {**deepcopy(self.latest), "Version": version}
+        self.versions[version] = {
+            **deepcopy(self.latest), "Version": version, "RevisionId": f"version-{version}-revision",
+        }
+        self.latest["RevisionId"] = f"post-publish-{version}-revision"
         self.on_publish()
         return deepcopy(self.versions[version])
 
@@ -243,6 +246,7 @@ class ArtifactReleaseTests(unittest.TestCase):
         self.assertEqual(self.aws.publishes[0]["RevisionId"], "new-code-revision")
         self.assertEqual(self.aws.promotions[0]["RevisionId"], "alias-revision")
         self.assertEqual(self.aws.alias["FunctionVersion"], "159")
+        self.assertEqual(self.aws.latest["RevisionId"], "post-publish-159-revision")
 
     def test_changed_code_is_not_published(self):
         self.aws.on_update = lambda: self.aws.latest.update(CodeSha256="competing-code")
@@ -253,9 +257,48 @@ class ArtifactReleaseTests(unittest.TestCase):
 
     def test_concurrent_configuration_apply_prevents_promotion(self):
         self.aws.on_publish = lambda: self.aws.latest.update(RevisionId="terraform-update", MemorySize=1024)
+        with self.assertRaisesRegex(RuntimeError, "changed while publishing"):
+            handler.handler(release_event(), None)
+        self.assertEqual(self.aws.promotions, [])
+
+    def test_concurrent_code_update_after_publication_prevents_promotion(self):
+        self.aws.on_publish = lambda: self.aws.latest.update(RevisionId="other-release", CodeSha256="other-code")
+        with self.assertRaisesRegex(RuntimeError, "changed while publishing"):
+            handler.handler(release_event(), None)
+        self.assertEqual(self.aws.promotions, [])
+
+    def test_concurrent_environment_update_after_publication_prevents_promotion(self):
+        self.aws.on_publish = lambda: self.aws.latest.update(
+            RevisionId="other-environment", Environment={"Variables": {"REFERENCE": "other-reference"}}
+        )
+        with self.assertRaisesRegex(RuntimeError, "changed while publishing"):
+            handler.handler(release_event(), None)
+        self.assertEqual(self.aws.promotions, [])
+
+    def test_alias_change_during_publication_prevents_promotion(self):
+        self.aws.on_publish = lambda: self.aws.alias.update(RevisionId="other-alias-revision")
         with self.assertRaisesRegex(RuntimeError, "changed during promotion"):
             handler.handler(release_event(), None)
         self.assertEqual(self.aws.promotions, [])
+
+    def test_configuration_revision_stays_guarded_after_publication_refresh(self):
+        with patch.object(
+            handler, "_assert_asset_package_support",
+            side_effect=lambda _: self.aws.latest.update(RevisionId="late-configuration-update"),
+        ), self.assertRaisesRegex(RuntimeError, "changed during promotion"):
+            handler.handler(release_event(), None)
+        self.assertEqual(self.aws.promotions, [])
+
+    def test_waits_for_published_version_before_refreshing_latest_revision(self):
+        self.aws.on_publish = lambda: self.aws.versions["159"].update(State="Pending")
+
+        def finish_publish(_):
+            self.aws.versions["159"]["State"] = "Active"
+            self.aws.latest["RevisionId"] = "publication-finished-revision"
+
+        with patch.object(handler.time, "sleep", side_effect=finish_publish):
+            handler.handler(release_event(), None)
+        self.assertEqual(self.aws.alias["FunctionVersion"], "159")
 
     def test_filtered_events_do_not_deploy(self):
         event = release_event()
