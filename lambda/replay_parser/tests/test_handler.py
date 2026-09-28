@@ -359,8 +359,9 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
                 )
             self.assertEqual(put_object.call_args.kwargs["IfNoneMatch"], "*")
 
-    def test_persisted_completion_replays_callback_before_parse_and_then_cleans_up(self) -> None:
+    def test_revision_one_completion_replays_after_default_promotion(self) -> None:
         upload_id = "66666666-6666-4666-8666-666666666666"
+        contract = handler.load_pinned_contract(1)
         manifest = handler._completion_manifest(
             upload_id=upload_id,
             generation_token=upload_id,
@@ -370,11 +371,14 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
             callback_payload={
                 "upload_id": upload_id,
                 "viewer_artifact": {
+                    **contract.source_contract,
+                    "artifact_kind": handler.VIEWER_ARTIFACT_KIND,
+                    "container_version": handler.VIEWER_CONTAINER_VERSION,
+                    "manifest_schema_sha256": contract.manifest_sha256,
                     "generation_token": upload_id,
                     "source_replay_sha256": "a" * 64,
                     "format": handler.VIEWER_DELTA_FORMAT,
                     "encoding_sha256": handler.VIEWER_ENCODING_SHA256,
-                    "projection_sha256": handler.VIEWER_PROJECTION_SHA256,
                 },
             },
             cleanup_object={
@@ -469,6 +473,52 @@ class ReplayStorageAndCallbackTests(unittest.TestCase):
             Prefix=manifest_key,
             MaxKeys=1,
         )
+
+    def test_completion_dispatch_uses_artifact_revision_not_current_default(self) -> None:
+        upload_id = "66666666-6666-4666-8666-666666666666"
+        generation = "77777777-7777-4777-8777-777777777777"
+        for revision in (1, 2):
+            contract = handler.load_pinned_contract(revision)
+            payload = {
+                "upload_id": upload_id,
+                "reprocess_attempt_id": generation,
+                "viewer_artifact": {
+                    **contract.source_contract,
+                    "artifact_kind": handler.VIEWER_ARTIFACT_KIND,
+                    "container_version": handler.VIEWER_CONTAINER_VERSION,
+                    "manifest_schema_sha256": contract.manifest_sha256,
+                    "generation_token": generation,
+                    "source_replay_sha256": "a" * 64,
+                    "format": handler.VIEWER_DELTA_FORMAT,
+                    "encoding_sha256": handler.VIEWER_ENCODING_SHA256,
+                },
+            }
+            arguments = {
+                "upload_id": upload_id,
+                "generation_token": generation,
+                "mode": "viewer_rebuild",
+                "source_replay_sha256": "a" * 64,
+                "callback_path": "/v1/ingest/replay-viewer-artifacts",
+                "callback_payload": payload,
+                "cleanup_object": None,
+            }
+            manifest = handler._completion_manifest(**arguments)
+            with (
+                self.subTest(revision=revision),
+                patch.object(
+                    handler,
+                    "_settings",
+                    return_value={"viewer_artifact_prefix": "replays/derived/viewer/"},
+                ),
+                patch.object(handler, "_put_immutable_json") as put,
+                patch.object(handler, "_load_completion_manifest", return_value=manifest),
+                patch.object(handler, "_call_app_api") as callback,
+            ):
+                handler._persist_and_dispatch_completion(
+                    bucket="uploads-bucket", **arguments
+                )
+            self.assertEqual(put.call_args.kwargs["value"], manifest)
+            callback.assert_called_once_with("POST", arguments["callback_path"], payload)
 
     def test_app_api_callback_retries_transient_transport_failure(self) -> None:
         class Response:
@@ -679,12 +729,12 @@ def _reprocess_job_payload(
             "artifact_kind": handler.VIEWER_ARTIFACT_KIND,
             "format": handler.VIEWER_DELTA_FORMAT,
             "container_version": handler.VIEWER_CONTAINER_VERSION,
-            "manifest_schema_sha256": handler.VIEWER_MANIFEST_SCHEMA_SHA256,
+            "manifest_schema_sha256": viewer_delta.VIEWER_MANIFEST_SCHEMA_SHA256,
             "encoding_sha256": handler.VIEWER_ENCODING_SHA256,
             "schema_name": handler.VIEWER_SCHEMA,
             "profile": handler.VIEWER_PROFILE,
             "profile_revision": handler.VIEWER_PROFILE_REVISION,
-            "projection_sha256": handler.VIEWER_PROJECTION_SHA256,
+            "projection_sha256": viewer_delta.VIEWER_PROJECTION_SHA256,
             "generation_token": attempt_id,
             "request_epoch": 3,
             "request_sequence": 7,
@@ -725,6 +775,120 @@ def _minimal_parsed_replay() -> handler.ParsedReplay:
 
 
 class ReplayParserStatusTests(unittest.TestCase):
+    def test_default_request_is_revision_two_but_legacy_jobs_remain_revision_one(
+        self,
+    ) -> None:
+        self.assertEqual(handler.ViewerBuildRequest("generation", 0, 0).profile_revision, 2)
+        legacy = handler.load_pinned_contract(1)
+        payload = _reprocess_job_payload(mode="viewer_rebuild")
+        payload["viewer_artifact_target"].update(
+            profile_revision=1,
+            projection_sha256=legacy.source_contract["projection_sha256"],
+            manifest_schema_sha256=legacy.manifest_sha256,
+        )
+        job = handler._reprocess_job_from_payload(payload, "legacy-message")
+        self.assertEqual(job.viewer_request.profile_revision, 1)
+
+    def test_revision_two_jobs_require_matching_projection_and_manifest(self) -> None:
+        contract = handler.load_pinned_contract(2)
+        legacy = handler.load_pinned_contract(1)
+        payload = _reprocess_job_payload(mode="viewer_rebuild")
+        target = payload["viewer_artifact_target"]
+        target.update(
+            profile_revision=2,
+            projection_sha256=contract.source_contract["projection_sha256"],
+            manifest_schema_sha256=contract.manifest_sha256,
+        )
+        job = handler._reprocess_job_from_payload(payload, "message-2")
+        self.assertEqual(job.viewer_request.profile_revision, 2)
+        for key, value in (
+            ("profile_revision", 3),
+            ("projection_sha256", legacy.source_contract["projection_sha256"]),
+            ("manifest_schema_sha256", legacy.manifest_sha256),
+        ):
+            with (
+                self.subTest(key=key),
+                self.assertRaises(handler.NonRetryableReplayError),
+            ):
+                handler._viewer_request_from_payload(
+                    {**target, key: value}, attempt_id=job.attempt_id
+                )
+
+    def test_revision_two_artifact_metadata_and_completion_keep_the_job_contract(
+        self,
+    ) -> None:
+        contract = handler.load_pinned_contract(2)
+        request = handler.ViewerBuildRequest(
+            "77777777-7777-4777-8777-777777777777", 3, 7, 2
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            parts = handler.build_python_viewer_parts(
+                Path(__file__).parent
+                / "fixtures/replays/viewer_v2_first_person_canonical.json",
+                root / "parts",
+                revision=2,
+            )
+            container = handler.assemble_viewer_container(
+                parts,
+                root / "viewer.hsrv",
+                replay_id="fixture",
+                recorded_at="2026-09-27T00:00:00Z",
+            )
+            with (
+                patch.object(
+                    handler,
+                    "_settings",
+                    return_value={"viewer_artifact_prefix": "replays/derived/viewer/"},
+                ),
+                patch.object(
+                    handler, "_put_immutable_file", return_value="version-2"
+                ) as put,
+            ):
+                artifact = handler._write_viewer_artifact(
+                    bucket="uploads-bucket",
+                    upload_id="upload",
+                    source_replay_sha256="a" * 64,
+                    source_size_bytes=1000,
+                    request=request,
+                    mode="viewer_rebuild",
+                    parts=parts,
+                    container=container,
+                )
+        self.assertIn("frontend-default-r2", artifact["s3_key"])
+        self.assertEqual(artifact["manifest_schema_sha256"], contract.manifest_sha256)
+        self.assertEqual(put.call_args.kwargs["metadata"]["profile-revision"], "2")
+        manifest = handler._completion_manifest(
+            upload_id="upload",
+            generation_token=request.generation_token,
+            mode="viewer_rebuild",
+            source_replay_sha256="a" * 64,
+            callback_path="/v1/ingest/replay-viewer-artifacts",
+            callback_payload={
+                "upload_id": "upload",
+                "reprocess_attempt_id": request.generation_token,
+                "viewer_artifact": artifact,
+            },
+            cleanup_object=None,
+        )
+        arguments = {
+            "upload_id": "upload",
+            "generation_token": request.generation_token,
+            "expected_mode": "viewer_rebuild",
+        }
+        handler._validate_completion_manifest(
+            manifest, **arguments, expected_profile_revision=2
+        )
+        with self.assertRaises(handler.ReplayProcessingError):
+            handler._validate_completion_manifest(
+                manifest, **arguments, expected_profile_revision=1
+            )
+        artifact["manifest_schema_sha256"] = handler.load_pinned_contract(1).manifest_sha256
+        with self.assertRaises(handler.ReplayProcessingError):
+            handler._validate_completion_manifest(
+                manifest, **arguments, expected_profile_revision=2
+            )
+
     def test_parse_replay_marks_partial_game_completed_when_last_tick_ended(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = _write_replay_json(

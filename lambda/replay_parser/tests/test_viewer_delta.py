@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -25,6 +27,126 @@ class ViewerDeltaCodecTests(unittest.TestCase):
 
         self.assertEqual(contract.projection["schema"], viewer_delta.VIEWER_SCHEMA)
         self.assertEqual(contract.encoding["format"], viewer_delta.VIEWER_DELTA_FORMAT)
+        self.assertEqual(contract.revision, 2)
+        self.assertEqual(
+            contract.source_contract["projection_sha256"],
+            viewer_delta.VIEWER_PROJECTION_SHA256,
+        )
+        self.assertEqual(
+            contract.manifest_sha256, viewer_delta.VIEWER_MANIFEST_SCHEMA_SHA256
+        )
+
+    def test_both_revisions_are_pinned_and_unknown_tuples_are_rejected(self) -> None:
+        for revision in (1, 2):
+            contract = viewer_delta.load_pinned_contract(revision)
+            self.assertEqual(
+                viewer_delta.resolve_source_contract(contract.source_contract), contract
+            )
+            with self.assertRaises(viewer_delta.ViewerDeltaError):
+                viewer_delta.resolve_source_contract(
+                    {**contract.source_contract, "projection_sha256": "0" * 64}
+                )
+        for revision in (0, 3, True, "2", None, [], {}):
+            with (
+                self.subTest(revision=revision),
+                self.assertRaises(viewer_delta.ViewerDeltaError),
+            ):
+                viewer_delta.load_pinned_contract(revision)
+
+    def test_revision_two_golden_preserves_field_order_nulls_and_exact_values(
+        self,
+    ) -> None:
+        contract = viewer_delta.load_pinned_contract(2)
+        source = json.loads(
+            (FIXTURE_DIR / "viewer_v2_first_person_canonical.json").read_text()
+        )
+        expected = json.loads(
+            (FIXTURE_DIR / "viewer_v2_first_person_projected.json").read_text()
+        )
+        golden = json.loads(
+            (FIXTURE_DIR / "viewer_v2_first_person_delta.json").read_text()
+        )
+        context = viewer_delta._ProjectionContext(
+            contract.projection["definitions"], contract.projection["limits"]
+        )
+        projected = [
+            viewer_delta.project_value(
+                context.definitions["tick"], tick, context=context
+            )
+            for tick in source["ticks"]
+        ]
+        self.assertEqual(json.dumps(projected), json.dumps(expected["ticks"]))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parts = viewer_delta.build_python_viewer_parts(
+                FIXTURE_DIR / "viewer_v2_first_person_canonical.json",
+                Path(temporary_directory),
+            )
+            self.assertEqual(parts.profile_revision, 2)
+            raw = parts.chunks[0].raw_path.read_bytes()
+        self.assertEqual(raw, base64.b64decode(golden["base64"]))
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), golden["sha256"])
+        self.assertEqual(viewer_delta.decode_replay_delta_chunk(raw)[1], projected)
+
+    def test_revision_two_closed_schema_rejects_invalid_retained_fields(self) -> None:
+        invalid_players = [
+            {"first_person_weapon": {"animation_tick": 32768}},
+            {"first_person_weapon": {"state": -32769}},
+            {"first_person_weapon": {"weapon_object": 4294967296}},
+            {"first_person_weapon": {"animation_id": True}},
+            {"first_person_weapon": {"firing_push_back": float("inf")}},
+            {"time_of_last_shot": -1},
+            {"time_of_last_shot": 4294967296},
+            {"player_speed": 3.5e38},
+            {"player_object_data": {"airborne": 256}},
+            {"player_object_data": {"airborne_ticks": -1}},
+            {"player_object_data": {"zoom_level": 128}},
+            {"player_object_data": {"melee_animation_remaining": 256}},
+            {"player_object_data": {"weapons": [{"reload_time": -32769}]}},
+            {"player_object_data": {"move_left": "0"}},
+            {"player_object_data": {"unknown": 1}},
+            {"first_person_weapon": {"node_matrices": []}},
+        ]
+        for player in invalid_players:
+            with (
+                self.subTest(player=player),
+                self.assertRaises(viewer_delta.ViewerDeltaError),
+            ):
+                viewer_delta.validate_projected({"players": [player]}, 2, "tick")
+
+    def test_nullable_fields_do_not_change_revision_one_or_sparse_maps(self) -> None:
+        source = {
+            "players": [
+                {
+                    "first_person_weapon": None,
+                    "shots_fired": None,
+                    "player_object_data": {"weapons": None, "move_forward": 0},
+                }
+            ]
+        }
+        for revision in (1, 2):
+            contract = viewer_delta.load_pinned_contract(revision)
+            context = viewer_delta._ProjectionContext(
+                contract.projection["definitions"], contract.projection["limits"]
+            )
+            tick = viewer_delta.project_value(
+                context.definitions["tick"], source, context=context
+            )
+            player = tick["players"][0]
+            if revision == 1:
+                self.assertNotIn("first_person_weapon", player)
+                self.assertNotIn("shots_fired", player)
+                self.assertEqual(player["player_object_data"], {})
+            else:
+                self.assertIsNone(player["first_person_weapon"])
+                self.assertIsNone(player["shots_fired"])
+                self.assertEqual(
+                    player["player_object_data"], {"weapons": None, "move_forward": 0}
+                )
+            node = {"kind": "map", "limit": 2, "values": "nullable_scalar"}
+            self.assertEqual(
+                viewer_delta.project_value(node, {"0": None, "1": 0}, context=context),
+                {"1": 0},
+            )
 
     def test_python_encoder_matches_the_frontend_v1_reference_bytes(self) -> None:
         ticks = [
@@ -79,6 +201,109 @@ class ViewerDeltaCodecTests(unittest.TestCase):
 
 
 class ViewerArtifactBuilderTests(unittest.TestCase):
+    def test_native_default_and_revision_one_override_match_python(self) -> None:
+        binary_value = os.getenv("REPLAY_EXTRACTOR_TEST_BINARY")
+        if not binary_value:
+            self.skipTest("REPLAY_EXTRACTOR_TEST_BINARY is not configured")
+        binary = Path(binary_value)
+        source = FIXTURE_DIR / "viewer_v2_first_person_canonical.json"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            for revision, flags in ((2, []), (1, ["--viewer-profile-revision", "1"])):
+                with self.subTest(revision=revision):
+                    directory = root / f"native-{revision}"
+                    completed = subprocess.run(
+                        [
+                            str(binary),
+                            "--input",
+                            str(source),
+                            "--output",
+                            str(root / "facts.json"),
+                            "--viewer-parts",
+                            str(directory),
+                            *flags,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    native = viewer_delta.load_native_viewer_parts(
+                        directory, native_binary_path=binary, revision=revision
+                    )
+                    python = viewer_delta.build_python_viewer_parts(
+                        source, root / f"python-{revision}", revision=revision
+                    )
+                    raw = viewer_delta.zstandard.ZstdDecompressor().decompress(
+                        native.chunks[0].compressed_path.read_bytes()
+                    )
+                    self.assertEqual(raw, python.chunks[0].raw_path.read_bytes())
+                    self.assertEqual(native.profile_revision, revision)
+
+    def test_revision_two_full_containers_and_reverse_cold_chunks_match(self) -> None:
+        binary_value = os.getenv("REPLAY_EXTRACTOR_TEST_BINARY")
+        if not binary_value:
+            self.skipTest("REPLAY_EXTRACTOR_TEST_BINARY is not configured")
+        binary = Path(binary_value)
+        source = json.loads(
+            (FIXTURE_DIR / "viewer_v2_first_person_canonical.json").read_text()
+        )
+        expected = json.loads(
+            (FIXTURE_DIR / "viewer_v2_first_person_projected.json").read_text()
+        )
+        source["ticks"] = (source["ticks"] * 316)[:4099]
+        expected_ticks = (expected["ticks"] * 316)[:4099]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source_path = root / "source.json"
+            source_path.write_text(json.dumps(source), encoding="utf-8")
+            python_parts = viewer_delta.build_python_viewer_parts(
+                source_path, root / "python", revision=2
+            )
+            completed = subprocess.run(
+                [
+                    str(binary),
+                    "--input",
+                    str(source_path),
+                    "--output",
+                    str(root / "facts.json"),
+                    "--viewer-parts",
+                    str(root / "native"),
+                    "--viewer-profile-revision",
+                    "2",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            native_parts = viewer_delta.load_native_viewer_parts(
+                root / "native", native_binary_path=binary, revision=2
+            )
+            containers = [
+                viewer_delta.assemble_viewer_container(
+                    parts,
+                    root / f"{name}.hsrv",
+                    replay_id="fixture",
+                    recorded_at="2026-09-27T00:00:00Z",
+                )
+                for name, parts in (("python", python_parts), ("native", native_parts))
+            ]
+            self.assertEqual(
+                containers[0].path.read_bytes(), containers[1].path.read_bytes()
+            )
+            for container in containers:
+                manifest = viewer_delta.validate_viewer_container(container.path)
+                self.assertEqual(manifest["sourceContract"]["profile_revision"], 2)
+            for chunk in reversed(native_parts.chunks):
+                raw = viewer_delta.zstandard.ZstdDecompressor().decompress(
+                    chunk.compressed_path.read_bytes()
+                )
+                first, ticks = viewer_delta.decode_replay_delta_chunk(raw)
+                self.assertEqual(
+                    ticks, expected_ticks[first : first + chunk.tick_count]
+                )
+
     def test_native_finalizer_matches_python_container_bytes(self) -> None:
         binary_value = os.getenv("REPLAY_EXTRACTOR_TEST_BINARY")
         if not binary_value:
@@ -158,6 +383,7 @@ class ViewerArtifactBuilderTests(unittest.TestCase):
                 )
 
     def test_api_golden_fixture_matches_projection_and_frontend_bytes(self) -> None:
+        contract = viewer_delta.load_pinned_contract(1)
         expected = json.loads(
             (FIXTURE_DIR / "viewer_v1_projected.json").read_text(encoding="utf-8")
         )
@@ -166,16 +392,14 @@ class ViewerArtifactBuilderTests(unittest.TestCase):
             parts = viewer_delta.build_python_viewer_parts(
                 FIXTURE_DIR / "viewer_v1_canonical.json",
                 root / "parts",
+                revision=1,
             )
             raw = parts.chunks[0].raw_path.read_bytes()
             _, ticks = viewer_delta.decode_replay_delta_chunk(raw)
 
         projected = {
             "artifact": {
-                "schema": viewer_delta.VIEWER_SCHEMA,
-                "profile": viewer_delta.VIEWER_PROFILE,
-                "profile_revision": viewer_delta.VIEWER_PROFILE_REVISION,
-                "projection_sha256": viewer_delta.VIEWER_PROJECTION_SHA256,
+                **contract.source_contract,
                 "tick_count": parts.tick_count,
             },
             **parts.replay,

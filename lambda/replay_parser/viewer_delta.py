@@ -6,22 +6,36 @@ import math
 import struct
 import subprocess
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import ijson
 import zstandard
-
+from jsonschema import Draft202012Validator
+from jsonschema.validators import extend
 
 VIEWER_SCHEMA = "halospawns.viewerReplay.v1"
 VIEWER_PROFILE = "frontend-default"
-VIEWER_PROFILE_REVISION = 1
-VIEWER_PROJECTION_SHA256 = "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec"
+VIEWER_PROFILE_REVISION = 2
 VIEWER_ARTIFACT_KIND = "viewer_replay_delta"
 VIEWER_DELTA_FORMAT = "halospawns.viewerReplayDelta.v1"
 VIEWER_CONTAINER_VERSION = 1
-VIEWER_MANIFEST_SCHEMA_SHA256 = "bdb2d119b7a44f59aad813d53de244acb504c811858d0b44f63e2e81242af5d1"
+VIEWER_CONTRACT_PINS = {
+    1: (
+        "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec",
+        "bdb2d119b7a44f59aad813d53de244acb504c811858d0b44f63e2e81242af5d1",
+    ),
+    2: (
+        "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530",
+        "40b8250eab05112c7ee9f2f4d5ac8b776d9bcb35fbf7ce1bdbb7c4e247c3397b",
+    ),
+}
+VIEWER_PROJECTION_SHA256, VIEWER_MANIFEST_SCHEMA_SHA256 = VIEWER_CONTRACT_PINS[
+    VIEWER_PROFILE_REVISION
+]
 VIEWER_ENCODING_SHA256 = "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb"
 VIEWER_MEDIA_TYPE = "application/vnd.halospawns.replay-delta"
 VIEWER_OUTER_COMPRESSION = "identity"
@@ -70,6 +84,15 @@ FLOAT32_MODE_BIT_PREDICTION = 2
 FLOAT32_MODE_VALUE_PREDICTION = 3
 
 _SKIP = object()
+ClosedValidator = extend(
+    Draft202012Validator,
+    type_checker=Draft202012Validator.TYPE_CHECKER.redefine(
+        "number",
+        lambda _checker, value: isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value),
+    ),
+)
 
 
 class ViewerDeltaError(ValueError):
@@ -84,12 +107,20 @@ class PinnedViewerContract:
     manifest_schema: dict[str, Any]
 
     @property
+    def revision(self) -> int:
+        return self.projection["profile_revision"]
+
+    @property
+    def manifest_sha256(self) -> str:
+        return VIEWER_CONTRACT_PINS[self.revision][1]
+
+    @property
     def source_contract(self) -> dict[str, Any]:
         return {
             "schema": VIEWER_SCHEMA,
             "profile": VIEWER_PROFILE,
-            "profile_revision": VIEWER_PROFILE_REVISION,
-            "projection_sha256": VIEWER_PROJECTION_SHA256,
+            "profile_revision": self.revision,
+            "projection_sha256": VIEWER_CONTRACT_PINS[self.revision][0],
         }
 
 
@@ -122,6 +153,7 @@ class ViewerParts:
     native_viewer_duration_ms: int = 0
     worker_count: int = 0
     native_binary_path: Path | None = None
+    profile_revision: int = VIEWER_PROFILE_REVISION
 
 
 @dataclass(frozen=True)
@@ -159,14 +191,44 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     return value
 
 
-def load_pinned_contract() -> PinnedViewerContract:
+def load_pinned_contract(
+    revision: int = VIEWER_PROFILE_REVISION,
+) -> PinnedViewerContract:
+    if type(revision) is not int or revision not in VIEWER_CONTRACT_PINS:
+        raise ViewerDeltaError("Unsupported viewer replay profile revision")
+    return _load_pinned_contract(revision)
+
+
+@lru_cache(maxsize=2)
+def _load_pinned_contract(revision: int) -> PinnedViewerContract:
     directory = Path(__file__).resolve().parent / "contracts" / "replays"
     registry = _load_json_object(directory / "supported-contracts.json")
-    projection = _load_json_object(directory / "frontend-default.v1.projection.json")
-    schema = _load_json_object(directory / "halospawns.viewerReplay.v1.schema.json")
+    projection_pin, manifest_pin = VIEWER_CONTRACT_PINS[revision]
+    entry = next(
+        (
+            entry
+            for entry in registry["supported_contracts"]
+            if entry.get("profile_revision") == revision
+        ),
+        None,
+    )
+    if entry is None or entry.get("manifest_schema_sha256") != manifest_pin:
+        raise ViewerDeltaError("Viewer contract registry manifest binding is invalid")
+    encoding_entry = next(
+        (
+            entry
+            for entry in registry["supported_encodings"]
+            if entry.get("manifest_schema_sha256") == manifest_pin
+        ),
+        None,
+    )
+    if encoding_entry is None:
+        raise ViewerDeltaError("Viewer manifest encoding is unsupported")
+    projection = _load_json_object(directory / entry["projection_file"])
+    schema = _load_json_object(directory / entry["schema_file"])
     encoding = _load_json_object(directory / "viewer-delta.v1.encoding.json")
     manifest_schema = _load_json_object(
-        directory / "halospawns.viewerReplayDelta.v1.manifest.schema.json"
+        directory / encoding_entry["manifest_schema_file"]
     )
 
     projection_hash = hashlib.sha256(canonical_json_bytes(projection)).hexdigest()
@@ -188,14 +250,35 @@ def load_pinned_contract() -> PinnedViewerContract:
         "encoding_sha256": VIEWER_ENCODING_SHA256,
     }
     if selected_contract != expected_contract:
-        raise ViewerDeltaError("Selected viewer replay contract is not the pinned v1 contract")
+        raise ViewerDeltaError(
+            "Selected viewer replay contract does not match the pinned default"
+        )
     if selected_encoding != expected_encoding:
-        raise ViewerDeltaError("Selected viewer delta encoding is not the pinned v1 encoding")
-    if projection_hash != VIEWER_PROJECTION_SHA256:
+        raise ViewerDeltaError(
+            "Selected viewer delta encoding does not match the pinned default"
+        )
+    expected_source = {
+        **expected_contract,
+        "profile_revision": revision,
+        "projection_sha256": projection_pin,
+    }
+    if {key: entry.get(key) for key in expected_source} != expected_source:
+        raise ViewerDeltaError("Viewer contract registry identity is invalid")
+    expected_supported_encoding = {
+        **expected_encoding,
+        "manifest_schema_sha256": manifest_pin,
+        "media_type": VIEWER_MEDIA_TYPE,
+        "outer_compression": VIEWER_OUTER_COMPRESSION,
+    }
+    if {
+        key: encoding_entry.get(key) for key in expected_supported_encoding
+    } != expected_supported_encoding:
+        raise ViewerDeltaError("Viewer encoding registry identity is invalid")
+    if projection_hash != projection_pin:
         raise ViewerDeltaError("Pinned viewer projection hash mismatch")
     if encoding_hash != VIEWER_ENCODING_SHA256:
         raise ViewerDeltaError("Pinned viewer delta encoding hash mismatch")
-    if manifest_hash != VIEWER_MANIFEST_SCHEMA_SHA256:
+    if manifest_hash != manifest_pin:
         raise ViewerDeltaError("Pinned viewer manifest schema hash mismatch")
     runtime_encoding = {
         "media_type": encoding.get("media_type"),
@@ -291,6 +374,42 @@ def load_pinned_contract() -> PinnedViewerContract:
         encoding=encoding,
         manifest_schema=manifest_schema,
     )
+
+
+def resolve_source_contract(source: Any) -> PinnedViewerContract:
+    if not isinstance(source, dict):
+        raise ViewerDeltaError("Viewer source contract is missing")
+    contract = load_pinned_contract(source.get("profile_revision"))
+    if any(source.get(key) != value for key, value in contract.source_contract.items()):
+        raise ViewerDeltaError("Viewer source contract does not match a supported tuple")
+    return contract
+
+
+@lru_cache(maxsize=6)
+def _schema_validator(revision: int, kind: str) -> Draft202012Validator:
+    contract = load_pinned_contract(revision)
+    if kind == "manifest":
+        schema = contract.manifest_schema
+    elif kind == "tick":
+        schema = {"$defs": contract.schema["$defs"], "$ref": "#/$defs/tick"}
+    else:
+        schema = {
+            **contract.schema,
+            "required": [],
+            "properties": {
+                key: value
+                for key, value in contract.schema["properties"].items()
+                if key not in ("artifact", "ticks")
+            },
+        }
+    return ClosedValidator(schema)
+
+
+def validate_projected(value: Any, revision: int, kind: str) -> None:
+    error = next(_schema_validator(revision, kind).iter_errors(value), None)
+    if error is not None:
+        path = "/".join(str(part) for part in error.absolute_path)
+        raise ViewerDeltaError(f"Viewer {kind} violates its closed schema at {path}: {error.validator}")
 
 
 def _is_number(value: Any) -> bool:
@@ -1191,6 +1310,8 @@ def _normalize_scalar(value: Any, *, nullable: bool = False) -> Any:
 
 
 def project_value(node: Any, value: Any, *, context: _ProjectionContext) -> Any:
+    if value is None and _nullable_node(node):
+        return None
     node = _resolve_node(node, context)
     if node == "scalar":
         return _normalize_scalar(value)
@@ -1214,7 +1335,7 @@ def project_value(node: Any, value: Any, *, context: _ProjectionContext) -> Any:
                 continue
             source_key = child.get("source", output_key) if isinstance(child, dict) else output_key
             item = value.get(source_key, _SKIP)
-            if item is _SKIP or item is None:
+            if item is _SKIP or (item is None and not _nullable_node(child)):
                 continue
             output[output_key] = project_value(child, item, context=context)
         return output
@@ -1243,6 +1364,10 @@ def project_value(node: Any, value: Any, *, context: _ProjectionContext) -> Any:
             for item in source_items
         ]
     raise ViewerDeltaError(f"Unsupported projection node kind: {kind}")
+
+
+def _nullable_node(node: Any) -> bool:
+    return node == "nullable_scalar" or (isinstance(node, dict) and node.get("nullable") is True)
 
 
 @dataclass
@@ -1321,9 +1446,13 @@ class ProjectedEventBuilder:
             self.frames.append(_ProjectionFrame(node=resolved, container=container))
             return
         if event in ("null", "boolean", "integer", "double", "number", "string"):
-            if value is None and attach[0] == "object":
+            if value is None and (
+                attach[0] == "map" or (attach[0] == "object" and not _nullable_node(node))
+            ):
                 return
-            if resolved == "scalar":
+            if value is None and _nullable_node(node):
+                projected = None
+            elif resolved == "scalar":
                 projected = _normalize_scalar(value)
             elif resolved == "nullable_scalar":
                 projected = _normalize_scalar(value, nullable=True)
@@ -1366,7 +1495,7 @@ class ProjectedEventBuilder:
             frame.source_items += 1
             if frame.source_items > _collection_limit(frame.node, self.context):
                 raise ViewerDeltaError("Projection map exceeds its pinned limit")
-            return frame.node.get("values"), ("object", key)
+            return frame.node.get("values"), ("map", key)
         if kind == "array":
             frame.source_items += 1
             limit = _collection_limit(frame.node, self.context)
@@ -1382,7 +1511,7 @@ class ProjectedEventBuilder:
         if kind == "root":
             return
         parent = self.frames[-1].container
-        if kind == "object":
+        if kind in ("object", "map"):
             if not isinstance(parent, dict) or key is None:
                 raise ViewerDeltaError("Projection object attachment is malformed")
             parent[key] = value
@@ -1393,16 +1522,20 @@ class ProjectedEventBuilder:
 
 
 class ViewerPartsWriter:
-    def __init__(self, directory: Path, *, producer: str) -> None:
+    def __init__(
+        self, directory: Path, *, producer: str, revision: int = VIEWER_PROFILE_REVISION
+    ) -> None:
         self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
         self.producer = producer
+        self.revision = revision
         self.pending_ticks: list[Any] = []
         self.tick_count = 0
         self.chunks: list[ViewerChunkPart] = []
         self.encode_duration_ms = 0
 
     def add_tick(self, tick: Any) -> None:
+        validate_projected(tick, self.revision, "tick")
         if self.tick_count >= VIEWER_MAX_TICKS:
             raise ViewerDeltaError("Replay tick count exceeds the pinned contract limit")
         self.pending_ticks.append(tick)
@@ -1416,6 +1549,7 @@ class ViewerPartsWriter:
         self._flush_chunk()
         if self.tick_count < 1:
             raise ViewerDeltaError("Viewer artifacts require at least one replay tick")
+        validate_projected(replay, self.revision, "replay")
         return ViewerParts(
             directory=self.directory,
             tick_count=self.tick_count,
@@ -1424,6 +1558,7 @@ class ViewerPartsWriter:
             producer=self.producer,
             projection_duration_ms=projection_duration_ms,
             encode_duration_ms=self.encode_duration_ms,
+            profile_revision=self.revision,
         )
 
     def _flush_chunk(self) -> None:
@@ -1461,14 +1596,17 @@ def _deep_exact_equal(left: Any, right: Any) -> bool:
             _deep_exact_equal(left[index], right[index]) for index in range(len(left))
         )
     if isinstance(left, dict) and isinstance(right, dict):
-        return list(left) == list(right) and all(
+        # Object deltas append newly present keys; JSON member order is not a value.
+        return left.keys() == right.keys() and all(
             _deep_exact_equal(left[key], right[key]) for key in left
         )
     return type(left) is type(right) and left == right
 
 
-def build_python_viewer_parts(json_path: Path, directory: Path) -> ViewerParts:
-    contract = load_pinned_contract()
+def build_python_viewer_parts(
+    json_path: Path, directory: Path, *, revision: int = VIEWER_PROFILE_REVISION
+) -> ViewerParts:
+    contract = load_pinned_contract(revision)
     projection = contract.projection
     definitions = projection.get("definitions")
     limits = projection.get("limits")
@@ -1479,7 +1617,7 @@ def build_python_viewer_parts(json_path: Path, directory: Path) -> ViewerParts:
     if not isinstance(root_fields, dict):
         raise ViewerDeltaError("Pinned projection root fields are malformed")
     context = _ProjectionContext(definitions=definitions, limits=limits)
-    writer = ViewerPartsWriter(directory, producer="python-ijson")
+    writer = ViewerPartsWriter(directory, producer="python-ijson", revision=revision)
     top_level: dict[str, Any] = {}
     active_key: str | None = None
     active_builder: ProjectedEventBuilder | None = None
@@ -1522,8 +1660,14 @@ def build_python_viewer_parts(json_path: Path, directory: Path) -> ViewerParts:
                     )
                     active_builder.feed(event, value)
                     continue
+                if prefix == "ticks.item" or (
+                    prefix == "ticks" and event not in ("start_array", "end_array")
+                ):
+                    raise ViewerDeltaError("Replay ticks must be an array of objects")
                 if prefix in root_fields and prefix not in ("artifact", "ticks"):
                     node = root_fields[prefix]
+                    if event == "null" and not _nullable_node(node):
+                        continue
                     if event in ("start_map", "start_array") or event in (
                         "null",
                         "boolean",
@@ -1560,10 +1704,7 @@ def write_viewer_parts_descriptor(parts: ViewerParts) -> Path:
     descriptor = {
         "schema": VIEWER_PARTS_SCHEMA,
         "sourceContract": {
-            "schema": VIEWER_SCHEMA,
-            "profile": VIEWER_PROFILE,
-            "profile_revision": VIEWER_PROFILE_REVISION,
-            "projection_sha256": VIEWER_PROJECTION_SHA256,
+            **load_pinned_contract(parts.profile_revision).source_contract,
             "tick_count": parts.tick_count,
         },
         "tickCount": parts.tick_count,
@@ -1593,6 +1734,7 @@ def load_native_viewer_parts(
     directory: Path,
     *,
     native_binary_path: Path | None = None,
+    revision: int = VIEWER_PROFILE_REVISION,
 ) -> ViewerParts:
     descriptor_path = directory / "parts.json"
     descriptor = _load_json_object(descriptor_path)
@@ -1601,10 +1743,7 @@ def load_native_viewer_parts(
     source_contract = descriptor.get("sourceContract")
     tick_count = descriptor.get("tickCount")
     expected_contract = {
-        "schema": VIEWER_SCHEMA,
-        "profile": VIEWER_PROFILE,
-        "profile_revision": VIEWER_PROFILE_REVISION,
-        "projection_sha256": VIEWER_PROJECTION_SHA256,
+        **load_pinned_contract(revision).source_contract,
         "tick_count": tick_count,
     }
     if source_contract != expected_contract:
@@ -1732,6 +1871,7 @@ def load_native_viewer_parts(
         ),
         worker_count=_nonnegative_metric(metrics.get("workerCount")),
         native_binary_path=native_binary_path if uses_compressed_chunks else None,
+        profile_revision=revision,
     )
 
 
@@ -1872,10 +2012,7 @@ def _viewer_manifest(
     return {
         "format": VIEWER_DELTA_FORMAT,
         "sourceContract": {
-            "schema": VIEWER_SCHEMA,
-            "profile": VIEWER_PROFILE,
-            "profile_revision": VIEWER_PROFILE_REVISION,
-            "projection_sha256": VIEWER_PROJECTION_SHA256,
+            **load_pinned_contract(parts.profile_revision).source_contract,
             "tick_count": parts.tick_count,
         },
         "replayId": replay_id,
@@ -1904,6 +2041,7 @@ def _assemble_native_viewer_container(
         replay_id=replay_id,
         recorded_at=recorded_at,
     )
+    validate_projected(manifest, parts.profile_revision, "manifest")
     manifest_raw = _compact_json_bytes(manifest)
     manifest_path = parts.directory / "container-manifest.json"
     result_path = parts.directory / "container-result.json"
@@ -2006,7 +2144,7 @@ def assemble_viewer_container(
     replay_id: str,
     recorded_at: str,
 ) -> ViewerContainer:
-    load_pinned_contract()
+    load_pinned_contract(parts.profile_revision)
     if not replay_id or not recorded_at:
         raise ViewerDeltaError("Viewer manifest replay_id and recorded_at are required")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2084,6 +2222,7 @@ def assemble_viewer_container(
         replay_id=replay_id,
         recorded_at=recorded_at,
     )
+    validate_projected(manifest, parts.profile_revision, "manifest")
     manifest_raw = _compact_json_bytes(manifest)
     manifest_compressed = compressor.compress(manifest_raw)
     try:
@@ -2202,8 +2341,21 @@ def validate_viewer_container(path: Path) -> dict[str, Any]:
         raise ViewerDeltaError("Viewer manifest JSON is invalid") from error
     if not isinstance(manifest, dict) or manifest.get("format") != VIEWER_DELTA_FORMAT:
         raise ViewerDeltaError("Viewer manifest format is invalid")
+    contract = resolve_source_contract(manifest.get("sourceContract"))
+    validate_projected(manifest, contract.revision, "manifest")
+    validate_projected(manifest["replay"], contract.revision, "replay")
+    if manifest["sourceContract"]["tick_count"] != manifest["tickCount"]:
+        raise ViewerDeltaError("Viewer source contract tick count is invalid")
     decoded_ticks = 0
-    for chunk in manifest.get("chunks", []):
+    chunk_offset = 0
+    uncompressed_bytes = VIEWER_CONTAINER_HEADER_BYTES + manifest_raw_bytes
+    for index, chunk in enumerate(manifest["chunks"]):
+        if (
+            chunk["index"] != index
+            or chunk["offset"] != chunk_offset
+            or chunk["firstTick"] != decoded_ticks
+        ):
+            raise ViewerDeltaError("Viewer chunk sequence is invalid")
         start = manifest_end + chunk["offset"]
         end = start + chunk["compressedBytes"]
         compressed = value[start:end]
@@ -2217,12 +2369,23 @@ def validate_viewer_container(path: Path) -> dict[str, Any]:
             raise ViewerDeltaError("Viewer chunk decompression failed") from error
         first_tick, ticks = decode_replay_delta_chunk(raw)
         if (
-            first_tick != chunk["firstTick"]
+            len(raw) != chunk["rawBytes"]
+            or first_tick != chunk["firstTick"]
             or len(ticks) != chunk["tickCount"]
             or _tick_sha256(ticks) != chunk["tickSha256"]
         ):
             raise ViewerDeltaError("Viewer chunk semantic validation failed")
+        for tick in ticks:
+            validate_projected(tick, contract.revision, "tick")
         decoded_ticks += len(ticks)
+        chunk_offset += chunk["compressedBytes"]
+        uncompressed_bytes += len(raw)
     if decoded_ticks != manifest.get("tickCount"):
         raise ViewerDeltaError("Viewer manifest tick coverage is invalid")
+    if (
+        manifest_end + chunk_offset != len(value)
+        or len(value) > VIEWER_MAX_ARTIFACT_BYTES
+        or uncompressed_bytes > VIEWER_MAX_UNCOMPRESSED_BYTES
+    ):
+        raise ViewerDeltaError("Viewer container byte coverage or size is invalid")
     return manifest

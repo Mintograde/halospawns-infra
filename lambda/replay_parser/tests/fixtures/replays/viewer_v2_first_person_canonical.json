@@ -1,0 +1,1383 @@
+{
+  "artifact": {
+    "schema": "untrusted.source",
+    "profile_revision": 999
+  },
+  "events": [],
+  "ticks": [
+    {
+      "game_time_info": {
+        "game_time": 600
+      },
+      "current_tick": 0,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 601
+      },
+      "current_tick": 1,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": null,
+                "reloading": null,
+                "reload_time": null,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "melee_animation_remaining": null,
+            "move_forward": null,
+            "move_left": null,
+            "x_vel": null,
+            "y_vel": null,
+            "z_vel": null,
+            "airborne": null,
+            "airborne_ticks": null,
+            "zoom_level": null,
+            "address": "excluded"
+          },
+          "first_person_weapon": null,
+          "time_of_last_shot": null,
+          "shots_fired": null,
+          "player_speed": null,
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "weapon_object": null,
+            "player_object": null,
+            "state": null,
+            "animation_id": null,
+            "animation_tick": null,
+            "firing_push_back": null,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 602
+      },
+      "current_tick": 2,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "reload_time": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "melee_animation_remaining": 0,
+            "move_forward": 0,
+            "move_left": 0,
+            "x_vel": 0,
+            "y_vel": 0,
+            "z_vel": 0,
+            "airborne": 0,
+            "airborne_ticks": 0,
+            "zoom_level": -1,
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x12340002",
+            "state": 0,
+            "animation_id": 1,
+            "animation_tick": 0,
+            "firing_push_back": 0,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "time_of_last_shot": 0,
+          "shots_fired": 0,
+          "player_speed": 0,
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 603
+      },
+      "current_tick": 3,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 7,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "move_forward": 1,
+            "move_left": -0.5,
+            "x_vel": -0.0037296628579497337,
+            "y_vel": 0.03178190439939499,
+            "z_vel": 0,
+            "airborne": false,
+            "airborne_ticks": 0,
+            "zoom_level": -1,
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x12340002",
+            "state": 6,
+            "animation_id": 2,
+            "animation_tick": 1,
+            "firing_push_back": 0.05000000074505806,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "time_of_last_shot": 603,
+          "shots_fired": 1,
+          "player_speed": 1,
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x12340002",
+            "state": 6,
+            "animation_id": 2,
+            "animation_tick": 1,
+            "firing_push_back": 0.05000000074505806,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 604
+      },
+      "current_tick": 4,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 4,
+                "reloading": 1,
+                "reload_time": 66,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "reload_time": -1,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": 2882338817,
+            "weapon_object": 305397762,
+            "state": 14,
+            "animation_id": 8,
+            "animation_tick": 2,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 605
+      },
+      "current_tick": 5,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 1,
+                "reloading": 1,
+                "reload_time": 3,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 606
+      },
+      "current_tick": 6,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 2,
+                "reloading": 1,
+                "reload_time": 2,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 607
+      },
+      "current_tick": 7,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "melee_animation_remaining": 9,
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x12340002",
+            "state": 10,
+            "animation_id": 13,
+            "animation_tick": 2,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 608
+      },
+      "current_tick": 8,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "melee_animation_remaining": 8,
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 609
+      },
+      "current_tick": 9,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 2,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x12340002",
+            "state": 20,
+            "animation_id": 16,
+            "animation_tick": 2,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 610
+      },
+      "current_tick": 10,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 305397762,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "reload_time": -32768,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "melee_animation_remaining": 255,
+            "airborne": 255,
+            "airborne_ticks": 255,
+            "zoom_level": 127,
+            "move_left": 0.12345678901234566,
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": -1,
+            "weapon_object": "0xffffffff",
+            "state": -1,
+            "animation_id": -32768,
+            "animation_tick": -1,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "time_of_last_shot": 4294967295,
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 611
+      },
+      "current_tick": 11,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabcd0001",
+          "local_player": 0,
+          "respawn_timer": 30,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": null,
+          "first_person_weapon": null,
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    },
+    {
+      "game_time_info": {
+        "game_time": 612
+      },
+      "current_tick": 12,
+      "players": [
+        {
+          "player_index": 0,
+          "object_ref": "0xabce0001",
+          "local_player": 0,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 0,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": null,
+            "address": "excluded"
+          },
+          "first_person_weapon": {
+            "player_object": "0xabcd0001",
+            "weapon_object": "0x56780002",
+            "state": 0,
+            "animation_id": 1,
+            "animation_tick": 0,
+            "address": "excluded",
+            "nodes": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          },
+          "metadata": {
+            "excluded": true
+          }
+        },
+        {
+          "player_index": 1,
+          "object_ref": "0xbeef0003",
+          "local_player": -1,
+          "respawn_timer": 0,
+          "observer_camera_info": {
+            "fov": 90,
+            "player_x": 1,
+            "player_y": 0,
+            "player_z": 1
+          },
+          "player_object_data": {
+            "health": 1,
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "yaw": 0,
+            "pitch": 0,
+            "selected_weapon_index": 0,
+            "primary_nades": 3,
+            "secondary_nades": 1,
+            "weapons": [
+              {
+                "object_id": 1450704900,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 8,
+                "reloading": 0,
+                "address": "excluded"
+              },
+              {
+                "object_id": 305397765,
+                "tag_name": "weapons\\shotgun\\shotgun",
+                "magazine_ammo_count": 12,
+                "reloading": 0,
+                "address": "excluded"
+              }
+            ],
+            "address": "excluded"
+          },
+          "metadata": {
+            "excluded": true
+          }
+        }
+      ]
+    }
+  ],
+  "debug": {
+    "memory": "excluded"
+  }
+}

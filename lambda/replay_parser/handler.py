@@ -33,13 +33,11 @@ from viewer_delta import (
     VIEWER_CONTAINER_VERSION,
     VIEWER_DELTA_FORMAT,
     VIEWER_ENCODING_SHA256,
-    VIEWER_MANIFEST_SCHEMA_SHA256,
     VIEWER_MAX_UNCOMPRESSED_BYTES,
     VIEWER_MEDIA_TYPE,
     VIEWER_OUTER_COMPRESSION,
     VIEWER_PROFILE,
     VIEWER_PROFILE_REVISION,
-    VIEWER_PROJECTION_SHA256,
     VIEWER_SCHEMA,
     ViewerContainer,
     ViewerDeltaError,
@@ -47,6 +45,8 @@ from viewer_delta import (
     assemble_viewer_container,
     build_python_viewer_parts,
     load_native_viewer_parts,
+    load_pinned_contract,
+    resolve_source_contract,
     write_viewer_parts_descriptor,
 )
 
@@ -231,6 +231,7 @@ class ViewerBuildRequest:
     generation_token: str
     request_epoch: int
     request_sequence: int
+    profile_revision: int = VIEWER_PROFILE_REVISION
 
 
 @dataclass(frozen=True)
@@ -613,6 +614,7 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
             generation_token=viewer_request.generation_token,
             expected_mode=job.mode,
             expected_source_replay_sha256=source_object.expected_sha256,
+            expected_profile_revision=viewer_request.profile_revision,
         ):
             return
         try:
@@ -648,6 +650,7 @@ def _process_reprocess_job(job: ReplayReprocessJob) -> None:
                     downloaded.path,
                     json_path,
                     viewer_parts_directory,
+                    profile_revision=viewer_request.profile_revision,
                 )
         except ClientError as error:
             if not _is_nonretryable_s3_download_error(error):
@@ -943,16 +946,20 @@ def _viewer_request_from_payload(
     *,
     attempt_id: str,
 ) -> ViewerBuildRequest:
+    try:
+        contract = load_pinned_contract(target.get("profile_revision"))
+    except ViewerDeltaError as error:
+        raise NonRetryableReplayError("Replay viewer target revision is unsupported") from error
     expected = {
         "artifact_kind": VIEWER_ARTIFACT_KIND,
         "format": VIEWER_DELTA_FORMAT,
         "container_version": VIEWER_CONTAINER_VERSION,
-        "manifest_schema_sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+        "manifest_schema_sha256": contract.manifest_sha256,
         "encoding_sha256": VIEWER_ENCODING_SHA256,
         "schema_name": VIEWER_SCHEMA,
         "profile": VIEWER_PROFILE,
-        "profile_revision": VIEWER_PROFILE_REVISION,
-        "projection_sha256": VIEWER_PROJECTION_SHA256,
+        "profile_revision": contract.revision,
+        "projection_sha256": contract.source_contract["projection_sha256"],
     }
     actual = {key: target.get(key) for key in expected}
     if actual != expected:
@@ -978,6 +985,7 @@ def _viewer_request_from_payload(
         generation_token=generation_token,
         request_epoch=request_epoch,
         request_sequence=request_sequence,
+        profile_revision=contract.revision,
     )
 
 
@@ -1212,11 +1220,14 @@ def _parse_downloaded_replay_with_viewer(
     source_path: Path,
     json_path: Path,
     viewer_parts_directory: Path,
+    *,
+    profile_revision: int = VIEWER_PROFILE_REVISION,
 ) -> tuple[ParsedReplay, ViewerParts]:
     parsed, viewer_parts = _parse_downloaded_replay_products(
         source_path,
         json_path,
         viewer_parts_directory=viewer_parts_directory,
+        profile_revision=profile_revision,
     )
     if viewer_parts is None:
         raise ReplayProcessingError("Replay viewer parts were not produced")
@@ -1228,6 +1239,7 @@ def _parse_downloaded_replay_products(
     json_path: Path,
     *,
     viewer_parts_directory: Path | None = None,
+    profile_revision: int = VIEWER_PROFILE_REVISION,
 ) -> tuple[ParsedReplay, ViewerParts | None]:
     mode = _native_extractor_mode()
     binary_path = _native_extractor_path()
@@ -1243,11 +1255,13 @@ def _parse_downloaded_replay_products(
                     source_path,
                     binary_path=binary_path,
                     viewer_parts_directory=viewer_parts_directory,
+                    profile_revision=profile_revision,
                 )
             viewer_parts = (
                 load_native_viewer_parts(
                     viewer_parts_directory,
                     native_binary_path=binary_path,
+                    revision=profile_revision,
                 )
                 if viewer_parts_directory is not None
                 else None
@@ -1269,7 +1283,7 @@ def _parse_downloaded_replay_products(
     _decompress_replay(source_path, json_path)
     parsed = _parse_replay(json_path)
     viewer_parts = (
-        build_python_viewer_parts(json_path, viewer_parts_directory)
+        build_python_viewer_parts(json_path, viewer_parts_directory, revision=profile_revision)
         if viewer_parts_directory is not None
         else None
     )
@@ -1283,6 +1297,7 @@ def _parse_replay_native(
     *,
     binary_path: Path | None = None,
     viewer_parts_directory: Path | None = None,
+    profile_revision: int = VIEWER_PROFILE_REVISION,
 ) -> ParsedReplay:
     global PROCESS_TREE_PEAK_RSS_KIB
     PROCESS_TREE_PEAK_RSS_KIB = 0
@@ -1300,7 +1315,10 @@ def _parse_replay_native(
                 str(_spatial_cell_size()),
             ]
         if viewer_parts_directory is not None:
-            arguments.extend(["--viewer-parts", str(viewer_parts_directory)])
+            arguments.extend([
+                "--viewer-parts", str(viewer_parts_directory),
+                "--viewer-profile-revision", str(profile_revision),
+            ])
         process = subprocess.Popen(
             arguments,
             stdout=subprocess.PIPE,
@@ -2994,10 +3012,11 @@ def _viewer_artifact_key(
     upload_id: str,
     generation_token: str,
     artifact_sha256: str,
+    profile_revision: int = VIEWER_PROFILE_REVISION,
 ) -> str:
     prefix = _settings()["viewer_artifact_prefix"]
     filename = (
-        f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{VIEWER_PROFILE_REVISION}."
+        f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{profile_revision}."
         f"{artifact_sha256}.viewer-delta.v1.hsrv"
     )
     return f"{prefix}{upload_id}/generations/{generation_token}/{filename}"
@@ -3016,10 +3035,19 @@ def _write_viewer_artifact(
 ) -> dict[str, Any]:
     if source_size_bytes < 1:
         raise ReplayProcessingError("Viewer artifact source size must be positive")
+    contract = load_pinned_contract(request.profile_revision)
+    if (
+        parts.profile_revision != contract.revision
+        or container.manifest.get("sourceContract") != {
+            **contract.source_contract, "tick_count": container.tick_count
+        }
+    ):
+        raise ReplayProcessingError("Viewer artifact does not match its requested contract")
     key = _viewer_artifact_key(
         upload_id,
         request.generation_token,
         container.sha256,
+        contract.revision,
     )
     version_id = _put_immutable_file(
         bucket=bucket,
@@ -3033,10 +3061,10 @@ def _write_viewer_artifact(
             "encoding-sha256": VIEWER_ENCODING_SHA256,
             "format": VIEWER_DELTA_FORMAT,
             "generation-token": request.generation_token,
-            "manifest-schema-sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+            "manifest-schema-sha256": contract.manifest_sha256,
             "profile": VIEWER_PROFILE,
-            "profile-revision": str(VIEWER_PROFILE_REVISION),
-            "projection-sha256": VIEWER_PROJECTION_SHA256,
+            "profile-revision": str(contract.revision),
+            "projection-sha256": contract.source_contract["projection_sha256"],
             "schema": VIEWER_SCHEMA,
             "source-sha256": source_replay_sha256,
         },
@@ -3053,12 +3081,12 @@ def _write_viewer_artifact(
         "artifact_kind": VIEWER_ARTIFACT_KIND,
         "format": VIEWER_DELTA_FORMAT,
         "container_version": VIEWER_CONTAINER_VERSION,
-        "manifest_schema_sha256": VIEWER_MANIFEST_SCHEMA_SHA256,
+        "manifest_schema_sha256": contract.manifest_sha256,
         "encoding_sha256": VIEWER_ENCODING_SHA256,
         "schema": VIEWER_SCHEMA,
         "profile": VIEWER_PROFILE,
-        "profile_revision": VIEWER_PROFILE_REVISION,
-        "projection_sha256": VIEWER_PROJECTION_SHA256,
+        "profile_revision": contract.revision,
+        "projection_sha256": contract.source_contract["projection_sha256"],
         "generation_token": request.generation_token,
         "request_epoch": request.request_epoch,
         "request_sequence": request.request_sequence,
@@ -3075,7 +3103,7 @@ def _write_viewer_artifact(
         "producer": {
             "name": PROCESSOR_NAME,
             "implementation": parts.producer,
-            "contract": f"{VIEWER_SCHEMA}/{VIEWER_PROFILE}-r{VIEWER_PROFILE_REVISION}",
+            "contract": f"{VIEWER_SCHEMA}/{VIEWER_PROFILE}-r{contract.revision}",
         },
         "metadata": {
             "mode": mode,
@@ -3271,6 +3299,7 @@ def _replay_persisted_completion(
     generation_token: str,
     expected_mode: str,
     expected_source_replay_sha256: str | None = None,
+    expected_profile_revision: int | None = None,
 ) -> bool:
     key = _completion_manifest_key(upload_id, generation_token)
     listing = S3.list_objects_v2(Bucket=bucket, Prefix=key, MaxKeys=1)
@@ -3288,6 +3317,7 @@ def _replay_persisted_completion(
         generation_token=generation_token,
         expected_mode=expected_mode,
         expected_source_replay_sha256=expected_source_replay_sha256,
+        expected_profile_revision=expected_profile_revision,
     )
     _dispatch_completion(manifest)
     LOGGER.info(
@@ -3319,6 +3349,7 @@ def _validate_completion_manifest(
     generation_token: str,
     expected_mode: str,
     expected_source_replay_sha256: str | None = None,
+    expected_profile_revision: int | None = None,
 ) -> None:
     if (
         value.get("schema") != "halospawns.replayViewerArtifactCompletion.v1"
@@ -3355,9 +3386,24 @@ def _validate_completion_manifest(
         != value.get("source_replay_sha256")
         or viewer_artifact.get("format") != VIEWER_DELTA_FORMAT
         or viewer_artifact.get("encoding_sha256") != VIEWER_ENCODING_SHA256
-        or viewer_artifact.get("projection_sha256") != VIEWER_PROJECTION_SHA256
     ):
         raise ReplayProcessingError("Persisted replay completion payload is invalid")
+    try:
+        contract = resolve_source_contract(viewer_artifact)
+        # Initial-upload retries retain their original revision across promotions.
+        # Explicit rebuild jobs still require the revision selected by the API.
+        if (
+            (
+                expected_profile_revision is not None
+                and contract.revision != expected_profile_revision
+            )
+            or viewer_artifact.get("manifest_schema_sha256") != contract.manifest_sha256
+            or viewer_artifact.get("artifact_kind") != VIEWER_ARTIFACT_KIND
+            or viewer_artifact.get("container_version") != VIEWER_CONTAINER_VERSION
+        ):
+            raise ViewerDeltaError("Persisted viewer encoding does not match its contract")
+    except ViewerDeltaError as error:
+        raise ReplayProcessingError("Persisted replay completion payload is invalid") from error
 
 
 def _dispatch_completion(value: dict[str, Any]) -> None:

@@ -136,6 +136,7 @@ components:
             uploads_ingest: dev/uploads-ingest/terraform.tfstate
             app_api: dev/app-api/terraform.tfstate
         replay_parser:
+          image_tag: first-person-r2-default-20260928
           memory_mb: 3008
           timeout_seconds: 600
         native_maps:

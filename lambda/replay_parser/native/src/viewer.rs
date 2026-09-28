@@ -18,9 +18,11 @@ use std::time::{Duration, Instant};
 
 const VIEWER_SCHEMA: &str = "halospawns.viewerReplay.v1";
 const VIEWER_PROFILE: &str = "frontend-default";
-const VIEWER_PROFILE_REVISION: u32 = 1;
-const VIEWER_PROJECTION_SHA256: &str =
+pub const VIEWER_PROFILE_REVISION: u32 = 2;
+const VIEWER_PROJECTION_V1_SHA256: &str =
     "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec";
+const VIEWER_PROJECTION_V2_SHA256: &str =
+    "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530";
 const PARTS_SCHEMA: &str = "halospawns.viewerReplayDeltaParts.v1";
 const CONTAINER_RESULT_SCHEMA: &str = "halospawns.viewerReplayDeltaContainer.v1";
 const VIEWER_DELTA_FORMAT: &str = "halospawns.viewerReplayDelta.v1";
@@ -74,13 +76,18 @@ const FLOAT32_MODE_VALUE_PREDICTION: u8 = 3;
 
 static WRITER: OnceLock<Mutex<Option<ViewerWriter>>> = OnceLock::new();
 static PROJECTION: OnceLock<Result<Projection, String>> = OnceLock::new();
+static PROFILE_REVISION: OnceLock<u32> = OnceLock::new();
 
 #[derive(Debug)]
 struct Projection {
+    revision: u32,
+    projection_sha256: &'static str,
     definitions: Map<String, Value>,
     limits: Map<String, Value>,
     root_fields: Map<String, Value>,
     tick: CompiledProjection,
+    tick_validator: jsonschema::Validator,
+    replay_validator: jsonschema::Validator,
 }
 
 #[derive(Debug)]
@@ -92,6 +99,7 @@ struct CompiledObjectField {
 
 #[derive(Debug)]
 enum CompiledProjection {
+    Nullable(Box<CompiledProjection>),
     Scalar {
         nullable: bool,
     },
@@ -113,16 +121,48 @@ enum CompiledProjection {
 
 impl Projection {
     fn load() -> Result<Self, Box<dyn Error>> {
-        let document: Value = serde_json::from_str(include_str!(
-            "../../contracts/replays/frontend-default.v1.projection.json"
-        ))?;
+        Self::load_revision(*PROFILE_REVISION.get().unwrap_or(&VIEWER_PROFILE_REVISION))
+    }
+
+    fn load_revision(revision: u32) -> Result<Self, Box<dyn Error>> {
+        let (projection_json, schema_json, projection_sha256) = match revision {
+            1 => (
+                include_str!("../../contracts/replays/frontend-default.v1.projection.json"),
+                include_str!("../../contracts/replays/halospawns.viewerReplay.v1.schema.json"),
+                VIEWER_PROJECTION_V1_SHA256,
+            ),
+            2 => (
+                include_str!("../../contracts/replays/frontend-default.v2.projection.json"),
+                include_str!(
+                    "../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
+                ),
+                VIEWER_PROJECTION_V2_SHA256,
+            ),
+            _ => return Err("unsupported viewer replay profile revision".into()),
+        };
+        let document: Value = serde_json::from_str(projection_json)?;
+        let mut canonical = document.clone();
+        canonical.sort_all_objects();
+        if format!("{:x}", Sha256::digest(serde_json::to_vec(&canonical)?)) != projection_sha256 {
+            return Err("viewer projection hash does not match its pinned contract".into());
+        }
+        let mut schema: Value = serde_json::from_str(schema_json)?;
+        let tick_validator = jsonschema::validator_for(&serde_json::json!({
+            "$defs": schema["$defs"], "$ref": "#/$defs/tick"
+        }))?;
+        schema["required"] = serde_json::json!([]);
+        let properties = schema["properties"]
+            .as_object_mut()
+            .ok_or("missing schema properties")?;
+        properties.remove("artifact");
+        properties.remove("ticks");
+        let replay_validator = jsonschema::validator_for(&schema)?;
         let object = document
             .as_object()
             .ok_or("viewer projection must be an object")?;
         if object.get("schema").and_then(Value::as_str) != Some(VIEWER_SCHEMA)
             || object.get("profile").and_then(Value::as_str) != Some(VIEWER_PROFILE)
-            || object.get("profile_revision").and_then(Value::as_u64)
-                != Some(VIEWER_PROFILE_REVISION.into())
+            || object.get("profile_revision").and_then(Value::as_u64) != Some(revision.into())
         {
             return Err("viewer projection identity does not match the pinned contract".into());
         }
@@ -152,10 +192,14 @@ impl Projection {
             0,
         )?;
         Ok(Self {
+            revision,
+            projection_sha256,
             definitions,
             limits,
             root_fields,
             tick,
+            tick_validator,
+            replay_validator,
         })
     }
 
@@ -196,6 +240,9 @@ impl Projection {
     }
 
     fn project(&self, node: &Value, source: &Value) -> Result<Value, Box<dyn Error>> {
+        if source.is_null() && nullable_node(node) {
+            return Ok(Value::Null);
+        }
         let node = self.resolve(node)?;
         if node.as_str() == Some("scalar") {
             return project_scalar(source, false);
@@ -236,7 +283,9 @@ impl Projection {
                         .get("source")
                         .and_then(Value::as_str)
                         .unwrap_or(output_key);
-                    let Some(value) = source.get(source_key).filter(|value| !value.is_null())
+                    let Some(value) = source
+                        .get(source_key)
+                        .filter(|value| !value.is_null() || nullable_node(child))
                     else {
                         continue;
                     };
@@ -283,6 +332,11 @@ impl Projection {
             _ => Err("viewer projection node kind is unsupported".into()),
         }
     }
+}
+
+fn nullable_node(node: &Value) -> bool {
+    node.as_str() == Some("nullable_scalar")
+        || node.get("nullable").and_then(Value::as_bool) == Some(true)
 }
 
 fn resolve_projection_node<'a>(
@@ -334,6 +388,19 @@ fn compile_projection(
 ) -> Result<CompiledProjection, Box<dyn Error>> {
     if depth > MAX_JSON_DEPTH {
         return Err("viewer projection exceeds the maximum depth".into());
+    }
+    if node.get("nullable").and_then(Value::as_bool) == Some(true) {
+        let mut nonnull = node.clone();
+        nonnull
+            .as_object_mut()
+            .ok_or("nullable node is not an object")?
+            .remove("nullable");
+        return Ok(CompiledProjection::Nullable(Box::new(compile_projection(
+            definitions,
+            limits,
+            &nonnull,
+            depth + 1,
+        )?)));
     }
     let node = resolve_projection_node(definitions, node)?;
     if node.as_str() == Some("scalar") {
@@ -426,8 +493,26 @@ fn compile_projection(
 }
 
 impl CompiledProjection {
+    fn nullable(&self) -> bool {
+        matches!(self, Self::Nullable(_) | Self::Scalar { nullable: true })
+    }
+
+    fn nonnull(&self) -> &Self {
+        match self {
+            Self::Nullable(inner) => inner.nonnull(),
+            _ => self,
+        }
+    }
+
     fn project(&self, source: &Value) -> Result<Value, Box<dyn Error>> {
         match self {
+            Self::Nullable(inner) => {
+                if source.is_null() {
+                    Ok(Value::Null)
+                } else {
+                    inner.project(source)
+                }
+            }
             Self::Scalar { nullable } => project_scalar(source, *nullable),
             Self::Object {
                 fields, required, ..
@@ -444,7 +529,7 @@ impl CompiledProjection {
                 for field in fields {
                     if let Some(value) = source
                         .get(&field.source_key)
-                        .filter(|value| !value.is_null())
+                        .filter(|value| !value.is_null() || field.node.nullable())
                     {
                         output.insert(field.output_key.clone(), field.node.project(value)?);
                     }
@@ -661,7 +746,7 @@ impl ProjectedVisitor<'_> {
     where
         E: DeError,
     {
-        if matches!(self.node, CompiledProjection::Scalar { .. }) {
+        if matches!(self.node.nonnull(), CompiledProjection::Scalar { .. }) {
             Ok(Some(value))
         } else {
             Err(E::custom("viewer projection expected a collection"))
@@ -676,6 +761,7 @@ impl ProjectedVisitor<'_> {
             return Ok(None);
         }
         match self.node {
+            CompiledProjection::Nullable(_) => Ok(Some(Value::Null)),
             CompiledProjection::Scalar { nullable: true } => Ok(Some(Value::Null)),
             CompiledProjection::Scalar { nullable: false } => {
                 Err(E::custom("viewer projection expected a non-null scalar"))
@@ -760,7 +846,7 @@ impl<'de> Visitor<'de> for ProjectedVisitor<'_> {
             limit,
             take_first,
             items,
-        } = self.node
+        } = self.node.nonnull()
         else {
             return Err(A::Error::custom(
                 "viewer projection expected a scalar or object",
@@ -804,7 +890,7 @@ impl<'de> Visitor<'de> for ProjectedVisitor<'_> {
     where
         A: MapAccess<'de>,
     {
-        match self.node {
+        match self.node.nonnull() {
             CompiledProjection::Object {
                 fields,
                 required,
@@ -816,7 +902,7 @@ impl<'de> Visitor<'de> for ProjectedVisitor<'_> {
                         values[index] = mapping.next_value_seed(ProjectedSeed {
                             node: &fields[index].node,
                             depth: self.depth + 1,
-                            omit_null: true,
+                            omit_null: !fields[index].node.nullable(),
                         })?;
                     } else {
                         mapping.next_value_seed(SafetySeed {
@@ -893,6 +979,9 @@ pub fn project_tick_raw(source: &str) -> Result<(Value, [u8; 32], Duration), Box
     .deserialize(&mut deserializer)?
     .ok_or("viewer tick projection unexpectedly omitted its root")?;
     deserializer.end()?;
+    if !projection()?.tick_validator.is_valid(&projected) {
+        return Err("viewer tick violates its closed schema".into());
+    }
     let semantic_digest = semantic_value_digest(&projected)?;
     Ok((projected, semantic_digest, started.elapsed()))
 }
@@ -908,6 +997,9 @@ pub fn project_tick(source: &Value) -> Result<(Value, [u8; 32], Duration), Box<d
     let started = Instant::now();
     validate_json_safety(source, 3)?;
     let projected = projection()?.tick.project(source)?;
+    if !projection()?.tick_validator.is_valid(&projected) {
+        return Err("viewer tick violates its closed schema".into());
+    }
     let semantic_digest = semantic_value_digest(&projected)?;
     Ok((projected, semantic_digest, started.elapsed()))
 }
@@ -1604,6 +1696,7 @@ fn javascript_number(value: f64) -> Result<String, Box<dyn Error>> {
     })
 }
 
+#[cfg(test)]
 fn write_tick_json(output: &mut Vec<u8>, value: &Value) -> Result<(), Box<dyn Error>> {
     match value {
         Value::Null => output.extend_from_slice(b"null"),
@@ -1644,6 +1737,44 @@ fn write_tick_json(output: &mut Vec<u8>, value: &Value) -> Result<(), Box<dyn Er
     Ok(())
 }
 
+fn write_decoded_tick_json(
+    output: &mut Vec<u8>,
+    value: &DecodedValue,
+) -> Result<(), Box<dyn Error>> {
+    match value {
+        DecodedValue::Null => output.extend_from_slice(b"null"),
+        DecodedValue::Bool(true) => output.extend_from_slice(b"true"),
+        DecodedValue::Bool(false) => output.extend_from_slice(b"false"),
+        DecodedValue::Number(value) => {
+            output.extend_from_slice(javascript_number(*value)?.as_bytes())
+        }
+        DecodedValue::String(value) => write_json_string(output, value),
+        DecodedValue::Array(values) => {
+            output.push(b'[');
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    output.push(b',');
+                }
+                write_decoded_tick_json(output, value)?;
+            }
+            output.push(b']');
+        }
+        DecodedValue::Object(values) => {
+            output.push(b'{');
+            for (index, (key, value)) in values.iter().enumerate() {
+                if index > 0 {
+                    output.push(b',');
+                }
+                write_json_string(output, key);
+                output.push(b':');
+                write_decoded_tick_json(output, value)?;
+            }
+            output.push(b'}');
+        }
+    }
+    Ok(())
+}
+
 fn digest_hex(bytes: impl AsRef<[u8]>) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let bytes = bytes.as_ref();
@@ -1672,9 +1803,9 @@ impl TickHasher {
         }
     }
 
-    fn update(&mut self, tick: &Value) -> Result<(), Box<dyn Error>> {
+    fn update(&mut self, tick: &DecodedValue) -> Result<(), Box<dyn Error>> {
         self.serialized.clear();
-        write_tick_json(&mut self.serialized, tick)?;
+        write_decoded_tick_json(&mut self.serialized, tick)?;
         self.digest
             .update(self.serialized.len().to_string().as_bytes());
         self.digest.update(b":");
@@ -1716,7 +1847,10 @@ fn update_semantic_hash(digest: &mut Sha256, value: &Value) -> Result<(), Box<dy
         Value::Object(values) => {
             digest.update([VALUE_OBJECT]);
             digest.update((values.len() as u64).to_le_bytes());
-            for (key, value) in values {
+            // Delta patches may append optional keys; member order is not a JSON value.
+            let mut entries = values.iter().collect::<Vec<_>>();
+            entries.sort_unstable_by(|left, right| left.0.cmp(right.0));
+            for (key, value) in entries {
                 digest.update((key.len() as u64).to_le_bytes());
                 digest.update(key.as_bytes());
                 update_semantic_hash(digest, value)?;
@@ -1765,7 +1899,9 @@ fn update_decoded_semantic_hash(digest: &mut Sha256, value: &DecodedValue) {
         DecodedValue::Object(values) => {
             digest.update([VALUE_OBJECT]);
             digest.update((values.len() as u64).to_le_bytes());
-            for (key, value) in values.iter() {
+            let mut entries = values.iter().collect::<Vec<_>>();
+            entries.sort_unstable_by(|left, right| left.0.cmp(right.0));
+            for (key, value) in entries {
                 digest.update((key.len() as u64).to_le_bytes());
                 digest.update(key.as_bytes());
                 update_decoded_semantic_hash(digest, value);
@@ -1780,7 +1916,15 @@ fn decoded_semantic_value_digest(value: &DecodedValue) -> [u8; 32] {
     digest.finalize().into()
 }
 
-fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<(usize, usize, String), Box<dyn Error>> {
+struct DecodedChunkValidation {
+    first_tick: usize,
+    tick_count: usize,
+    semantic_sha256: String,
+    tick_sha256: String,
+    tick_hash_duration: Duration,
+}
+
+fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<DecodedChunkValidation, Box<dyn Error>> {
     let mut reader = BinaryReader::new(bytes);
     if reader.bytes(4)? != CHUNK_MAGIC || reader.byte()? != CHUNK_VERSION {
         return Err("viewer delta chunk header is invalid".into());
@@ -1795,17 +1939,30 @@ fn decode_chunk_semantic_hash(bytes: &[u8]) -> Result<(usize, usize, String), Bo
     digest.update((tick_count as u64).to_le_bytes());
     let mut previous = read_value(&mut reader, 1)?;
     digest.update(decoded_semantic_value_digest(&previous));
+    let mut tick_hasher = TickHasher::new();
+    let started = Instant::now();
+    tick_hasher.update(&previous)?;
+    let mut tick_hash_duration = started.elapsed();
     let mut before_previous = None;
     for _ in 1..tick_count {
         let next = read_patched_value(&mut reader, Some(&previous), before_previous.as_ref(), 1)?;
         digest.update(decoded_semantic_value_digest(&next));
+        let started = Instant::now();
+        tick_hasher.update(&next)?;
+        tick_hash_duration += started.elapsed();
         before_previous = Some(previous);
         previous = next;
     }
     if reader.offset != bytes.len() {
         return Err("viewer delta chunk contains trailing bytes".into());
     }
-    Ok((first_tick, tick_count, digest_hex(digest.finalize())))
+    Ok(DecodedChunkValidation {
+        first_tick,
+        tick_count,
+        semantic_sha256: digest_hex(digest.finalize()),
+        tick_sha256: tick_hasher.finish(),
+        tick_hash_duration,
+    })
 }
 
 fn validate_zstd_round_trip(
@@ -2333,13 +2490,13 @@ struct ChunkTask {
     first_tick: usize,
     tick_count: usize,
     raw: Vec<u8>,
-    expected_tick_sha256: String,
     expected_semantic_sha256: String,
 }
 
 struct ChunkWorkResult {
     part: ChunkPart,
     validation_duration_ms: u128,
+    tick_hash_duration_ms: u128,
     compression_duration_ms: u128,
     chunk_write_duration_ms: u128,
 }
@@ -2368,15 +2525,17 @@ fn process_chunk(
     validation_buffer: &mut Vec<u8>,
 ) -> Result<ChunkWorkResult, Box<dyn Error>> {
     let validation_started = Instant::now();
-    let (decoded_first_tick, decoded_tick_count, decoded_semantic_sha256) =
-        decode_chunk_semantic_hash(&task.raw)?;
-    if decoded_first_tick != task.first_tick
-        || decoded_tick_count != task.tick_count
-        || decoded_semantic_sha256 != task.expected_semantic_sha256
+    let decoded = decode_chunk_semantic_hash(&task.raw)?;
+    if decoded.first_tick != task.first_tick
+        || decoded.tick_count != task.tick_count
+        || decoded.semantic_sha256 != task.expected_semantic_sha256
     {
         return Err("viewer delta chunk failed lossless semantic validation".into());
     }
-    let mut validation_duration_ms = validation_started.elapsed().as_millis();
+    let mut validation_duration_ms = validation_started
+        .elapsed()
+        .saturating_sub(decoded.tick_hash_duration)
+        .as_millis();
 
     let compression_started = Instant::now();
     compressed.clear();
@@ -2404,9 +2563,10 @@ fn process_chunk(
             compressed_file,
             compressed_bytes: compressed.len(),
             compressed_sha256: sha256_hex(compressed),
-            tick_sha256: task.expected_tick_sha256,
+            tick_sha256: decoded.tick_sha256,
         },
         validation_duration_ms,
+        tick_hash_duration_ms: decoded.tick_hash_duration.as_millis(),
         compression_duration_ms,
         chunk_write_duration_ms,
     })
@@ -2479,7 +2639,6 @@ struct ViewerWriter {
     chunk_write_duration_ms: u128,
     pending: Vec<Value>,
     pending_semantic_digests: Vec<[u8; 32]>,
-    pending_tick_hasher: TickHasher,
     tick_count: usize,
     dispatched_chunks: usize,
     raw_chunk_bytes: u64,
@@ -2518,7 +2677,6 @@ impl ViewerWriter {
             chunk_write_duration_ms: 0,
             pending: Vec::with_capacity(KEYFRAME_INTERVAL),
             pending_semantic_digests: Vec::with_capacity(KEYFRAME_INTERVAL),
-            pending_tick_hasher: TickHasher::new(),
             tick_count: 0,
             dispatched_chunks: 0,
             raw_chunk_bytes: 0,
@@ -2542,9 +2700,6 @@ impl ViewerWriter {
             return Err("viewer replay tick count exceeds the pinned limit".into());
         }
         self.projection_duration += projection_duration;
-        let hash_started = Instant::now();
-        self.pending_tick_hasher.update(&projected)?;
-        self.tick_hash_duration_ms += hash_started.elapsed().as_millis();
         self.pending.push(projected);
         self.pending_semantic_digests.push(semantic_digest);
         self.tick_count += 1;
@@ -2563,9 +2718,6 @@ impl ViewerWriter {
         let expected_semantic_sha256 = semantic_tick_hash(&self.pending_semantic_digests);
         let encoded = encode_chunk(&self.pending, first_tick)?;
         self.encode_duration_ms += started.elapsed().as_millis();
-
-        let expected_tick_sha256 =
-            std::mem::replace(&mut self.pending_tick_hasher, TickHasher::new()).finish();
 
         let index = self.dispatched_chunks;
         let tick_count = self.pending.len();
@@ -2587,7 +2739,6 @@ impl ViewerWriter {
                 first_tick,
                 tick_count,
                 raw: encoded,
-                expected_tick_sha256,
                 expected_semantic_sha256,
             })
             .map_err(|_| "viewer chunk worker queue closed unexpectedly")?;
@@ -2599,6 +2750,7 @@ impl ViewerWriter {
     fn absorb_result(&mut self, result: ChunkWorkMessage) -> Result<(), Box<dyn Error>> {
         let result = result.map_err(|error| format!("viewer chunk worker failed: {error}"))?;
         self.validation_duration_ms += result.validation_duration_ms;
+        self.tick_hash_duration_ms += result.tick_hash_duration_ms;
         self.compression_duration_ms += result.compression_duration_ms;
         self.chunk_write_duration_ms += result.chunk_write_duration_ms;
         self.compressed_chunk_bytes = self
@@ -2660,12 +2812,18 @@ impl ViewerWriter {
             }
         }
         self.projection_duration += projection_started.elapsed();
+        if !projection
+            .replay_validator
+            .is_valid(&Value::Object(replay.clone()))
+        {
+            return Err("viewer replay metadata violates its closed schema".into());
+        }
         self.finish_workers()?;
         let source_contract = serde_json::json!({
             "schema": VIEWER_SCHEMA,
             "profile": VIEWER_PROFILE,
-            "profile_revision": VIEWER_PROFILE_REVISION,
-            "projection_sha256": VIEWER_PROJECTION_SHA256,
+            "profile_revision": projection.revision,
+            "projection_sha256": projection.projection_sha256,
             "tick_count": self.tick_count,
         });
         let descriptor = serde_json::json!({
@@ -2700,7 +2858,10 @@ fn writer() -> &'static Mutex<Option<ViewerWriter>> {
     WRITER.get_or_init(|| Mutex::new(None))
 }
 
-pub fn configure(directory: &Path) -> Result<(), Box<dyn Error>> {
+pub fn configure(directory: &Path, revision: u32) -> Result<(), Box<dyn Error>> {
+    PROFILE_REVISION
+        .set(revision)
+        .map_err(|_| "viewer revision was already initialized")?;
     *writer()
         .lock()
         .map_err(|_| "viewer writer lock is poisoned")? =
@@ -2762,8 +2923,10 @@ impl SourceContract {
     fn validate(&self, tick_count: usize) -> Result<(), Box<dyn Error>> {
         if self.schema != VIEWER_SCHEMA
             || self.profile != VIEWER_PROFILE
-            || self.profile_revision != VIEWER_PROFILE_REVISION
-            || self.projection_sha256 != VIEWER_PROJECTION_SHA256
+            || !matches!(
+                (self.profile_revision, self.projection_sha256.as_str()),
+                (1, VIEWER_PROJECTION_V1_SHA256) | (2, VIEWER_PROJECTION_V2_SHA256)
+            )
             || self.tick_count != tick_count
         {
             return Err("viewer parts source contract is invalid".into());
@@ -2998,6 +3161,21 @@ pub fn finalize_container(
         serde_json::from_reader(BufReader::new(File::open(directory.join("parts.json"))?))?;
     let (raw_chunk_bytes, compressed_chunk_bytes) = validate_parts(&parts, directory)?;
     let manifest_raw = fs::read(manifest_path)?;
+    let manifest_value: Value = serde_json::from_slice(&manifest_raw)?;
+    let manifest_schema: Value = serde_json::from_str(
+        match parts.source_contract.profile_revision {
+            1 => include_str!(
+                "../../contracts/replays/halospawns.viewerReplayDelta.v1.manifest.schema.json"
+            ),
+            2 => include_str!(
+                "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"
+            ),
+            _ => return Err("unsupported viewer manifest revision".into()),
+        },
+    )?;
+    if !jsonschema::validator_for(&manifest_schema)?.is_valid(&manifest_value) {
+        return Err("viewer manifest violates its closed schema".into());
+    }
     let manifest: ViewerManifest = serde_json::from_slice(&manifest_raw)?;
     validate_manifest(&manifest, &parts)?;
 
@@ -3093,6 +3271,91 @@ pub fn finalize_container(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_contract_is_revision_two_and_revision_one_remains_pinned() {
+        let selected = Projection::load().expect("default projection");
+        assert_eq!(selected.revision, 2);
+        assert_eq!(selected.projection_sha256, VIEWER_PROJECTION_V2_SHA256);
+        let legacy = Projection::load_revision(1).expect("legacy projection");
+        assert_eq!(legacy.projection_sha256, VIEWER_PROJECTION_V1_SHA256);
+    }
+
+    #[test]
+    fn revision_two_projectors_match_the_first_person_golden() {
+        let projection = Projection::load_revision(2).expect("revision two");
+        let source: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/replays/viewer_v2_first_person_canonical.json"
+        ))
+        .unwrap();
+        let expected: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/replays/viewer_v2_first_person_projected.json"
+        ))
+        .unwrap();
+        let mut projected_ticks = Vec::new();
+        for (tick, expected_tick) in source["ticks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(expected["ticks"].as_array().unwrap())
+        {
+            let interpreted = projection
+                .project(&projection.definitions["tick"], tick)
+                .unwrap();
+            let compiled = projection.tick.project(tick).unwrap();
+            let raw = serde_json::to_string(tick).unwrap();
+            let streamed = ProjectedSeed {
+                node: &projection.tick,
+                depth: 3,
+                omit_null: false,
+            }
+            .deserialize(&mut serde_json::Deserializer::from_str(&raw))
+            .unwrap()
+            .unwrap();
+            for value in [&interpreted, &compiled, &streamed] {
+                assert_eq!(
+                    serde_json::to_vec(value).unwrap(),
+                    serde_json::to_vec(expected_tick).unwrap()
+                );
+                assert!(projection.tick_validator.is_valid(value));
+            }
+            projected_ticks.push(streamed);
+        }
+        let golden: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/replays/viewer_v2_first_person_delta.json"
+        ))
+        .unwrap();
+        let raw = encode_chunk(&projected_ticks, 0).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&raw)),
+            golden["sha256"].as_str().unwrap()
+        );
+        assert!(Projection::load_revision(3).is_err());
+    }
+
+    #[test]
+    fn revision_two_closed_validator_enforces_source_bounds() {
+        let projection = Projection::load_revision(2).unwrap();
+        for player in [
+            serde_json::json!({"first_person_weapon": {"state": -32769}}),
+            serde_json::json!({"first_person_weapon": {"animation_tick": 32768}}),
+            serde_json::json!({"first_person_weapon": {"animation_id": true}}),
+            serde_json::json!({"first_person_weapon": {"weapon_object": 4294967296_u64}}),
+            serde_json::json!({"time_of_last_shot": -1}),
+            serde_json::json!({"time_of_last_shot": 4294967296_u64}),
+            serde_json::json!({"player_speed": 3.5e38}),
+            serde_json::json!({"player_object_data": {"airborne": 256}}),
+            serde_json::json!({"player_object_data": {"zoom_level": 128}}),
+            serde_json::json!({"player_object_data": {"weapons": [{"reload_time": -32769}]}}),
+            serde_json::json!({"first_person_weapon": {"unknown": 1}}),
+        ] {
+            assert!(
+                !projection
+                    .tick_validator
+                    .is_valid(&serde_json::json!({"players": [player]}))
+            );
+        }
+    }
 
     #[test]
     fn projects_unknown_fields_and_encodes_bounded_chunk() {
@@ -3209,9 +3472,8 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .expect("hash source semantics");
         let expected_semantic_hash = semantic_tick_hash(&semantic_digests);
-        let (_, _, decoded_semantic_hash) =
-            decode_chunk_semantic_hash(&encoded).expect("hash decoded semantics");
-        assert_eq!(decoded_semantic_hash, expected_semantic_hash);
+        let decoded = decode_chunk_semantic_hash(&encoded).expect("hash decoded semantics");
+        assert_eq!(decoded.semantic_sha256, expected_semantic_hash);
         let (first_tick, decoded) = decode_chunk(&encoded).expect("decode chunk");
         assert_eq!(first_tick, 7);
         assert!(
@@ -3254,7 +3516,7 @@ mod tests {
             "../../tests/fixtures/replays/viewer_v1_projected.json"
         ))
         .expect("projected fixture");
-        let projection = Projection::load().expect("load projection");
+        let projection = Projection::load_revision(1).expect("load revision one");
         let source_ticks = source["ticks"].as_array().expect("source ticks");
         let expected_ticks = expected["ticks"].as_array().expect("expected ticks");
         let projected_ticks = source_ticks
@@ -3266,13 +3528,14 @@ mod tests {
             .iter()
             .map(|tick| {
                 let raw = serde_json::to_string(tick).expect("serialize source tick");
-                let (projected, semantic_digest, _) =
-                    project_tick_raw(&raw).expect("project raw tick");
-                assert_eq!(
-                    semantic_digest,
-                    semantic_value_digest(&projected).expect("hash projected tick")
-                );
-                projected
+                ProjectedSeed {
+                    node: &projection.tick,
+                    depth: 3,
+                    omit_null: false,
+                }
+                .deserialize(&mut serde_json::Deserializer::from_str(&raw))
+                .expect("project raw revision-one tick")
+                .expect("projected tick")
             })
             .collect::<Vec<_>>();
         assert_eq!(raw_projected_ticks, projected_ticks);

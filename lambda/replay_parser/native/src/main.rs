@@ -1310,6 +1310,7 @@ enum Command {
         output: PathBuf,
         cell_size: f64,
         viewer_parts: Option<PathBuf>,
+        viewer_profile_revision: u32,
     },
     FinalizeViewer {
         viewer_parts: PathBuf,
@@ -1324,6 +1325,7 @@ fn parse_args() -> Result<Command, Box<dyn Error>> {
     let mut output = None;
     let mut cell_size = 0.5;
     let mut viewer_parts = None;
+    let mut viewer_profile_revision = viewer::VIEWER_PROFILE_REVISION;
     let mut finalize_viewer = false;
     let mut viewer_manifest = None;
     let mut viewer_output = None;
@@ -1337,6 +1339,15 @@ fn parse_args() -> Result<Command, Box<dyn Error>> {
                 cell_size = args.next().ok_or("--cell-size requires a value")?.parse()?;
             }
             "--viewer-parts" => viewer_parts = args.next().map(PathBuf::from),
+            "--viewer-profile-revision" => {
+                viewer_profile_revision = args
+                    .next()
+                    .ok_or("--viewer-profile-revision requires a value")?
+                    .parse()?;
+                if !matches!(viewer_profile_revision, 1 | 2) {
+                    return Err("unsupported viewer profile revision".into());
+                }
+            }
             "--finalize-viewer" => finalize_viewer = true,
             "--viewer-manifest" => viewer_manifest = args.next().map(PathBuf::from),
             "--viewer-output" => viewer_output = args.next().map(PathBuf::from),
@@ -1366,6 +1377,7 @@ fn parse_args() -> Result<Command, Box<dyn Error>> {
         output: output.ok_or("--output is required")?,
         cell_size,
         viewer_parts,
+        viewer_profile_revision,
     })
 }
 
@@ -1376,12 +1388,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             output,
             cell_size,
             viewer_parts,
+            viewer_profile_revision,
         } => {
             CELL_SIZE
                 .set(cell_size)
                 .map_err(|_| "cell size was already initialized")?;
             if let Some(directory) = viewer_parts {
-                viewer::configure(&directory)?;
+                viewer::configure(&directory, viewer_profile_revision)?;
             }
             let extracted = extract_replay(BoundedReader::new(
                 input_reader(&input)?,
