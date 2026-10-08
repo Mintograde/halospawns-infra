@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { ENGINE_PROFILES, resolveMap, selectProfile, verifyEngine,
+  validateRegistry, assertRetainedProfiles, REGISTRY_SCHEMA } from '../runtime/profiles.mjs';
+
+const profile = ENGINE_PROFILES[0];
+const envelope = { ...profile, map: 'dread', map_bytes: 2048 };
+const map = { engine_profile: profile.id, scenario: 'dread', size_bytes: 2048, sha256: 'a'.repeat(64) };
+const catalog = maps => ({ schema: 'halospawns.h1FilmMapCatalog.v1', maps });
+const registry = profiles => ({ schema: REGISTRY_SCHEMA, profiles });
+
+test('adding a later decompilation retains exact old film routing independent of order', () => {
+  const later = { ...profile, id: 'future-fixture-only', protocol_revision: 46,
+    build: 'Future test build', wasm_sha256: 'b'.repeat(64), glue_sha256: 'c'.repeat(64) };
+  for (const order of [[profile, later], [later, profile]]) {
+    const profiles = validateRegistry(registry(order));
+    assert.equal(selectProfile(envelope, profiles).id, profile.id);
+    assert.equal(selectProfile(later, profiles).id, later.id);
+    assertRetainedProfiles(profiles, [profile]);
+  }
+  assert.throws(() => selectProfile({ ...envelope, protocol_revision: 999 }, [profile, later]));
+  assert.throws(() => verifyEngine(profile, later), /pinned engine/);
+});
+
+test('registry rejects ambiguous, unsupported and path-escaping profiles', () => {
+  for (const entries of [[profile, profile], [profile, { ...profile, id: 'ambiguous' }],
+    [{ ...profile, id: '../engine' }], [{ ...profile, port: '../port' }],
+    [{ ...profile, adapter: 'unknown' }], [{ ...profile, export_contract: 'HSFT0002' }],
+    [{ ...profile, tick_rate: 60 }], [{ ...profile, build: '' }]]) {
+    assert.throws(() => validateRegistry(registry(entries)));
+  }
+});
+
+test('every retained profile stays present with identical identities, contracts and binaries', async () => {
+  const previous = validateRegistry(JSON.parse(await readFile(
+    new URL('./fixtures/retained-profiles.json', import.meta.url), 'utf8')));
+  assertRetainedProfiles(ENGINE_PROFILES, previous);
+  assert.throws(() => assertRetainedProfiles([], previous), /Unknown engine/);
+  for (const key of ['wasm_sha256', 'glue_sha256', 'build', 'adapter', 'port', 'export_contract']) {
+    assert.throws(() => assertRetainedProfiles([{ ...profile, [key]: 'changed' }], previous),
+      /Previously supported/);
+  }
+});
+
+test('dispatch binds format, protocol, rate, build and both engine artifacts', () => {
+  assert.equal(selectProfile(envelope), profile);
+  for (const key of ['format', 'protocol_revision', 'tick_rate', 'build']) {
+    assert.throws(() => selectProfile({ ...envelope, [key]: 'unknown' }));
+  }
+  verifyEngine(profile, profile);
+  assert.throws(() => verifyEngine(profile, { ...profile, wasm_sha256: 'b'.repeat(64) }));
+  assert.throws(() => verifyEngine(profile, { ...profile, glue_sha256: 'b'.repeat(64) }));
+});
+
+test('map names and file sizes cannot cross builds or resolve ambiguous cache variants', () => {
+  assert.deepEqual(resolveMap(profile, envelope, catalog([map])), map);
+  for (const maps of [[], [{ ...map, engine_profile: 'another-build' }],
+    [{ ...map, size_bytes: 2049 }], [map, { ...map, sha256: 'b'.repeat(64) }]]) {
+    assert.throws(() => resolveMap(profile, envelope, catalog(maps)));
+  }
+  assert.throws(() => resolveMap(profile, { ...envelope, map: '../dread' }, catalog([map])));
+  assert.throws(() => resolveMap(profile, { ...envelope, build: 'different build' }, catalog([map])));
+  assert.throws(() => resolveMap(profile, envelope, catalog([{ ...map, sha256: 'not-a-hash' }])));
+});

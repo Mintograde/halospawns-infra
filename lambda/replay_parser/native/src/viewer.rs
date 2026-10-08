@@ -1624,30 +1624,35 @@ fn deep_exact_equal(left: &Value, right: &Value) -> bool {
 fn write_json_string(output: &mut Vec<u8>, value: &str) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     output.push(b'"');
-    for character in value.chars() {
-        match character {
-            '"' => output.extend_from_slice(br#"\""#),
-            '\\' => output.extend_from_slice(br#"\\"#),
-            '\u{0008}' => output.extend_from_slice(br#"\b"#),
-            '\u{0009}' => output.extend_from_slice(br#"\t"#),
-            '\u{000a}' => output.extend_from_slice(br#"\n"#),
-            '\u{000c}' => output.extend_from_slice(br#"\f"#),
-            '\u{000d}' => output.extend_from_slice(br#"\r"#),
-            character if character < '\u{0020}' => {
-                let value = character as u8;
+    let bytes = value.as_bytes();
+    let mut start = 0;
+    for (index, &byte) in bytes.iter().enumerate() {
+        if byte >= 0x20 && byte != b'"' && byte != b'\\' {
+            continue;
+        }
+        output.extend_from_slice(&bytes[start..index]);
+        match byte {
+            b'"' => output.extend_from_slice(br#"\""#),
+            b'\\' => output.extend_from_slice(br#"\\"#),
+            8 => output.extend_from_slice(br#"\b"#),
+            9 => output.extend_from_slice(br#"\t"#),
+            10 => output.extend_from_slice(br#"\n"#),
+            12 => output.extend_from_slice(br#"\f"#),
+            13 => output.extend_from_slice(br#"\r"#),
+            value => {
                 output.extend_from_slice(br#"\u00"#);
                 output.push(HEX[usize::from(value >> 4)]);
                 output.push(HEX[usize::from(value & 0x0f)]);
             }
-            character => {
-                let mut encoded = [0_u8; 4];
-                output.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
-            }
         }
+        start = index + 1;
     }
+    output.extend_from_slice(&bytes[start..]);
     output.push(b'"');
 }
 
+// Retain the original formatter as an independent byte-parity oracle in tests.
+#[cfg(test)]
 fn javascript_number(value: f64) -> Result<String, Box<dyn Error>> {
     if !value.is_finite() {
         return Err("tick hash rejects non-finite numbers".into());
@@ -1694,6 +1699,66 @@ fn javascript_number(value: f64) -> Result<String, Box<dyn Error>> {
     } else {
         rendered
     })
+}
+
+fn write_javascript_number(output: &mut Vec<u8>, value: f64) -> Result<(), Box<dyn Error>> {
+    if !value.is_finite() {
+        return Err("tick hash rejects non-finite numbers".into());
+    }
+    if value == 0.0 {
+        output.push(b'0');
+        return Ok(());
+    }
+    let mut buffer = ryu::Buffer::new();
+    let text = buffer.format_finite(value);
+    let Some((mantissa, raw_exponent)) = text.split_once('e') else {
+        output.extend_from_slice(text.strip_suffix(".0").unwrap_or(text).as_bytes());
+        return Ok(());
+    };
+    let exponent: i32 = raw_exponent.parse()?;
+    if mantissa.starts_with('-') {
+        output.push(b'-');
+    }
+    let mut digits = [0_u8; 24];
+    let mut count = 0;
+    for byte in mantissa
+        .bytes()
+        .filter(|byte| *byte != b'-' && *byte != b'.')
+    {
+        digits[count] = byte;
+        count += 1;
+    }
+    let digits = &digits[..count];
+    let position = 1 + exponent;
+    if (1e-6..1e21).contains(&value.abs()) {
+        if position <= 0 {
+            output.extend_from_slice(b"0.");
+            output.resize(output.len() + (-position) as usize, b'0');
+            output.extend_from_slice(digits);
+        } else {
+            let position = position as usize;
+            if position >= count {
+                output.extend_from_slice(digits);
+                output.resize(output.len() + position - count, b'0');
+            } else {
+                output.extend_from_slice(&digits[..position]);
+                output.push(b'.');
+                output.extend_from_slice(&digits[position..]);
+            }
+        }
+    } else {
+        output.push(digits[0]);
+        if count > 1 {
+            output.push(b'.');
+            output.extend_from_slice(&digits[1..]);
+        }
+        output.push(b'e');
+        if exponent >= 0 {
+            output.push(b'+');
+        }
+        write!(output, "{exponent}")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1746,7 +1811,7 @@ fn write_decoded_tick_json(
         DecodedValue::Bool(true) => output.extend_from_slice(b"true"),
         DecodedValue::Bool(false) => output.extend_from_slice(b"false"),
         DecodedValue::Number(value) => {
-            output.extend_from_slice(javascript_number(*value)?.as_bytes())
+            write_javascript_number(output, *value)?;
         }
         DecodedValue::String(value) => write_json_string(output, value),
         DecodedValue::Array(values) => {
@@ -3504,6 +3569,59 @@ mod tests {
             serialized,
             b"[0,333333333.3333333,1e+30,4.5,0.002,1e-27,0.000001,1e-7,100000000000000000000,1e+21]"
         );
+    }
+
+    #[test]
+    fn allocation_free_number_formatting_matches_the_original() {
+        let mut output = Vec::new();
+        let mut check = |value: f64| {
+            output.clear();
+            if value.is_finite() {
+                write_javascript_number(&mut output, value).unwrap();
+                assert_eq!(
+                    output,
+                    javascript_number(value).unwrap().as_bytes(),
+                    "{value:?}"
+                );
+            } else {
+                assert!(write_javascript_number(&mut output, value).is_err());
+            }
+        };
+        for value in [
+            0.0,
+            -0.0,
+            f64::MIN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ] {
+            check(value);
+        }
+        for exponent in -323..=308 {
+            let value = 10.0_f64.powi(exponent);
+            for bits in value.to_bits().saturating_sub(2)..=value.to_bits().saturating_add(2) {
+                check(f64::from_bits(bits));
+                check(-f64::from_bits(bits));
+            }
+        }
+        let mut bits = 0x9e3779b97f4a7c15_u64;
+        for _ in 0..100_000 {
+            bits ^= bits << 13;
+            bits ^= bits >> 7;
+            bits ^= bits << 17;
+            check(f64::from_bits(bits));
+            check(f32::from_bits(bits as u32) as f64);
+        }
+    }
+
+    #[test]
+    fn bulk_string_hash_serialization_preserves_escapes_and_utf8() {
+        let value = "plain / \"quoted\" \\\u{0000}\u{0001}\u{0008}\t\n\u{000c}\r\u{001f} \u{e9}\u{1f680}\u{2028}";
+        let mut output = Vec::new();
+        write_json_string(&mut output, value);
+        assert_eq!(output, serde_json::to_vec(value).unwrap());
     }
 
     #[test]

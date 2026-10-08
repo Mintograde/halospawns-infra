@@ -19,6 +19,13 @@ terraform:
 
 components:
   terraform:
+    ecr:
+      vars:
+        repositories:
+          halospawns-h1-film:
+            image_tag_mutability: IMMUTABLE
+            force_delete: false
+            untagged_image_expiry_days: 7
     frontend-site:
       vars:
         dns:
@@ -129,6 +136,10 @@ components:
             - http://127.0.0.1:5180
     map-processing:
       vars:
+        h1_film:
+          enabled: true
+          image_tag: foundation-20261008-r1
+          memory_mb: 3008
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:

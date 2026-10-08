@@ -13,3 +13,6 @@ backend.tf.json
 *.terraform.tfvars.json
 .build/
 lambda/replay_parser/native/target/
+lambda/h1_film/encoder/target/
+lambda/h1_film/artifacts/
+experiments/

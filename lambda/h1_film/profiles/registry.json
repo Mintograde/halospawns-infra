@@ -1,0 +1,19 @@
+{
+  "schema": "halospawns.h1EngineRegistry.v1",
+  "profiles": [
+    {
+      "id": "h1-performance-beta3-p45-wasm-v1",
+      "format": 2,
+      "protocol_revision": 45,
+      "tick_rate": 120,
+      "build": "2.0 Public Beta 3 - September 28 2026",
+      "adapter": "film-v2-120-v1",
+      "port": "beta3",
+      "export_contract": "HSFT0001",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "wasm_sha256": "d49d466d263927cd17050af63690525be08e2fb1a0f805322e88d0d8cd1a6e9b",
+      "glue_sha256": "21b54e1d321a3e116ecce26de68c17e078e598122c7ad8475fb3ff0eba4a04ab"
+    }
+  ]
+}
