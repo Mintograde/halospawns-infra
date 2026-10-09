@@ -1,10 +1,11 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: the dev cloud intake worker, dedicated queue/routing,
-HMAC API routes and scoped S3/SQS/SSM permissions are deployed. The worker
-reuses the existing replay finalizer and retains the original film/version.
-Concurrency remains zero, its SQS mapping is disabled, and both API H1 flags
-remain false. Dread/Downrush passed the complete worker locally, including
+Status on 2026-10-09: the user explicitly authorized single-user dev enablement
+ahead of the remaining acceptance work. Both API H1 flags are true on `live=173`,
+and the existing intake worker consumes its batch-one queue with concurrency 1.
+The worker reuses the existing finalizer and retains original film/version pins.
+The API uses the existing worker ceilings as provisional dev limits, not measured
+performance claims. Dread/Downrush passed the complete worker locally, including
 both reprocess product modes and persisted completion retries. Actual AWS
 conversion/performance and hosted map/browser acceptance remain pending.
 Existing Xbox consumers and prod are unchanged. This is not full semantic parity.
@@ -16,13 +17,67 @@ only reference/benchmark tooling and historical notes. See [README.md](README.md
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
 
+## Dev preview enabled 2026-10-09
+
+The user's explicit request to enable flags for their single-user dev environment
+supersedes the earlier requirement to wait for all acceptance gates in dev only.
+It does not approve maps, waive identity/hash validation, complete the acceptance
+handoffs or authorize prod activation.
+
+- API `H1FILM_UPLOADS_ENABLED=true`, `H1FILM_PROCESSING_ENABLED=true`.
+- Provisional API limits: 536,870,912 bytes (512 MiB), 432,000 source ticks
+  (60 minutes at 120 Hz), 4 players. These match the unchanged worker ceilings;
+  actual Lambda cold/warm/headroom measurements remain outstanding.
+- Worker concurrency 1; SQS mapping Enabled, batch 1. Existing immutable image
+  `intake-20261008-r1`, resources, IAM, source retention and validation unchanged.
+- The existing code updater configuration-promoted `live=172 -> 173` with
+  unchanged application code SHA-256. No new API artifact/image was published.
+- `app-api`: planned/applied **1 add / 3 updates / 1 destroy**. The replacement
+  is the configuration-invocation bookkeeping resource, not a Lambda replacement.
+  `map-processing`: **0 adds / 2 updates / 0 destroys**, only H1 concurrency
+  and its mapping. All other dev components were no-op; final full plan is no-op.
+- Verification: 14 app-api and 5 map-processing mocked Terraform tests pass;
+  live flags/limits, worker image/concurrency/mapping, empty queue/DLQ verified.
+  Health 200, unsigned ingest and unauthenticated admin reads 401. A correctly
+  signed read-only resolver probe for a nonexistent scenario returns
+  `404 missing_map`, passing the enabled gate without a write.
+- No film upload/conversion/reprocess or map approval was submitted. Approve
+  compatible maps via the user's admin UI before expecting film resolution.
+  No schema, workflow, credential, Xbox consumer or prod change; no AWS blocker.
+
+Implementation change: `stacks/dev.yaml`, `app-api.h1_film` and
+`map-processing.h1_film`. Commands from the infra repo root:
+
+```powershell
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\app-api' test -no-color
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\map-processing' test -no-color
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\app-api' apply -no-color dev-app-api.planfile
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\map-processing' apply -no-color dev-map-processing.planfile
+.\scripts\plan.ps1 dev
+```
+
+Generated plan/apply logs: `.build/h1-enable-*-20261009.log`. Saved plans were
+inspected for exact resource/settings scope before apply. The initial test
+commands using a forward-slash `-filter` selected zero tests on Windows; the
+unfiltered commands above reran both complete component suites successfully.
+The existing foundation audit intentionally expects dormant controls and is not
+an enabled-state acceptance check. Do not restore zero concurrency merely to
+make that historical audit pass.
+
+Rollback, if requested: set both API flags false and apply `app-api` through
+the updater, then set the H1 mapping false/concurrency zero and apply
+`map-processing`. Preserve map approvals, source pins and completed artifacts.
+
 ## Dev intake wiring deployed 2026-10-08
 
 The user cleared this infra phase while the API/frontend dev releases were in
 progress. This supersedes the health-only foundation described below; it does
 not imply that the remaining activation gates have passed.
 
-| Setting | Applied dev value |
+| Setting | Historical 2026-10-08 value (enablement above supersedes gates) |
 | --- | --- |
 | Account / region | `halospawns-dev` / `283279960672` / `us-east-1` |
 | Function / image | `halospawns-h1-film-dev` / `intake-20261008-r1` |
@@ -332,7 +387,18 @@ inspection modules, API schema snapshots/fixtures, verification tools/tests,
 the read-only audit script and cross-repo handoffs. Shared Xbox runtime code was
 not changed. API/frontend application deployment remains owned by those repos.
 
-### Activation gates still open
+### Remaining acceptance work
+
+Read-only readiness audit on 2026-10-09 verified corrected API `dbd7822` as
+`live=172` and frontend site/admin review `4f2f95d` deployed (runs `37886797287`
+and `37885702044`, respectively). The migration and three H1 RLS tables are
+present. The 40 Beta 3 candidates are catalog-ready, but there are zero reviewed
+bindings, H1 uploads, conversions, completions and replay rows. Current/versioned
+map-read IAM and processed-version lifecycle retention pass live checks.
+The pinned intake audit passes with zero concurrency/disabled mapping; queue
+and DLQ are empty. Both API flags remain false and measured limits unset.
+That audit preceded the explicit dev enablement above. Deployment and dev flags
+are now complete, but the following validation remains before broader rollout:
 
 1. Obtain API/frontend readiness and existing revision-2 browser acceptance;
    verify artifact-bound 120/120/30 clocks, same-session 120 -> 30 -> 120, and
@@ -344,19 +410,19 @@ not changed. API/frontend application deployment remains owned by those repos.
    `20261009-api-infra-h1film-retained-map-sources`; normal originals and all
    derived versions under `maps/processed/` no longer expire. Legacy staging
    noncurrent versions still expire after 7 days and need separate retention
-   review if selected. Confirm compatible API/frontend releases and complete
-   the user's hosted preview/approval smoke; HEAD does not prove geometry or
+   review if selected. Compatible API/frontend releases are verified; complete
+   the user's hosted preview/approval smoke. HEAD does not prove geometry or
    source hashes. No approval has been seeded by this infra work.
 3. Measure actual Lambda cold/warm duration, memory, temp and finalization
    headroom using reviewed inputs, plus partial/non-Slayer/hostile-input fixtures.
-   Set explicit API and worker size/tick/player limits from those measurements,
-   no larger than 512 MiB / 432,000 ticks / 4 players. Current worker ceilings
-   are safety maxima, not a measured admission envelope; API limits are unset.
-4. Coordinate a bounded dev test with concurrency 1 and controlled processing,
-   not general upload enablement. Verify bootstrap/full completion, canonical
+   Refine API and worker size/tick/player limits from those measurements,
+   no larger than 512 MiB / 432,000 ticks / 4 players. Current API/worker ceilings
+   are explicitly provisional for the user-authorized dev preview, not measured.
+4. Coordinate a bounded test on the enabled single-worker dev path. Verify
+   bootstrap/full completion, canonical
    owner download, DB/graph/spatial reads, browser playback, both admin modes,
-   stale/duplicate completion, SQS drain and DLQ monitoring. Enable uploads only
-   after that evidence; do not submit Xbox rebuilds to test this path.
+   stale/duplicate completion, SQS drain and DLQ monitoring. Record that evidence
+   before broader rollout; do not submit Xbox rebuilds to test this path.
 5. Keep semantic availability exclusions until their evidence is reconciled;
    retain every supported engine and old job/map pin in later releases. Prod
    requires separate authorization and its runbook prerequisites.

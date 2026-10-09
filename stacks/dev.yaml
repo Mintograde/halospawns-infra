@@ -55,8 +55,12 @@ components:
         enabled: true
         h1_film:
           enabled: true
-          processing_enabled: false
-          uploads_enabled: false
+          processing_enabled: true
+          uploads_enabled: true
+          # User-authorized dev preview; existing worker ceilings, not measured limits.
+          max_size_bytes: 536870912
+          max_source_ticks: 432000
+          max_players: 4
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:
@@ -155,8 +159,8 @@ components:
           image_tag: intake-20261008-r1
           memory_mb: 3008
           intake_configured: true
-          event_source_enabled: false
-          reserved_concurrency: 0
+          event_source_enabled: true
+          reserved_concurrency: 1
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:
