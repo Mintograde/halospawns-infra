@@ -7,4 +7,6 @@ test('the reusable runner has no CLI side effects and still requires an explicit
   await assert.rejects(convertFilm(options), /exactly one/);
   await assert.rejects(convertFilm({ ...options, reference: '.', 'trusted-local': true }), /exactly one/);
   assert.equal(options.film, 'unused.h1film');
+  await assert.rejects(convertFilm({ ...options, 'trusted-local': true, 'source-viewer-only': true }),
+    /requires --trusted-local and --skip-readback/);
 });

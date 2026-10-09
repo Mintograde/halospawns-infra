@@ -2,6 +2,9 @@
 #![allow(dead_code)]
 include!("../../../replay_parser/native/src/viewer.rs");
 
+#[path = "tick_hash.rs"]
+mod tick_hash;
+
 const LOCAL_CHUNK_RAW_LIMIT: usize = 64 * 1024 * 1024;
 
 // Moving whole tick trees between threads increased CPU use in the constrained
@@ -89,6 +92,14 @@ impl CompiledProjection {
                     return Err("viewer projection array exceeds its pinned limit".into());
                 }
                 source.truncate(*limit);
+                if let Self::Scalar { nullable } = items.as_ref() {
+                    if source.iter().any(|value| {
+                        value.is_array() || value.is_object() || (value.is_null() && !nullable)
+                    }) {
+                        return Err("viewer projection expected a JSON scalar".into());
+                    }
+                    return Ok(Value::Array(source));
+                }
                 for value in &mut source {
                     *value = items.project_owned(value.take())?;
                 }
@@ -102,6 +113,13 @@ struct IncrementalChunk {
     binary: BinaryWriter,
     previous: Option<Value>,
     before_previous: Option<Value>,
+    decoded: Option<DecodedValue>,
+    decoded_before: Option<DecodedValue>,
+    decoded_strings: Vec<Arc<str>>,
+    tick_hash: tick_hash::CachedTickHasher,
+    encode_duration: Duration,
+    validation_duration: Duration,
+    hash_duration: Duration,
 }
 impl IncrementalChunk {
     fn new(first_tick: usize, count: usize) -> Result<Self, Box<dyn Error>> {
@@ -114,9 +132,18 @@ impl IncrementalChunk {
             binary,
             previous: None,
             before_previous: None,
+            decoded: None,
+            decoded_before: None,
+            decoded_strings: Vec::new(),
+            tick_hash: tick_hash::CachedTickHasher::new(),
+            encode_duration: Duration::ZERO,
+            validation_duration: Duration::ZERO,
+            hash_duration: Duration::ZERO,
         })
     }
-    fn push(&mut self, next: Value) -> Result<(), Box<dyn Error>> {
+    fn push(&mut self, next: Value) -> Result<Value, Box<dyn Error>> {
+        let started = Instant::now();
+        let offset = self.binary.bytes.len();
         if self.previous.is_none() {
             write_value(&mut self.binary, &next)?;
         } else {
@@ -127,18 +154,136 @@ impl IncrementalChunk {
                 self.before_previous.as_ref(),
             )?;
         }
-        self.before_previous = self.previous.replace(next);
+        self.encode_duration += started.elapsed();
         if self.binary.bytes.len() > LOCAL_CHUNK_RAW_LIMIT {
             return Err("chunk exceeds the local 64 MiB raw-memory budget".into());
         }
-        Ok(())
+        // Compare the decoder's actual values while the source is still alive.
+        // This proves losslessness without serializing/hashing both trees.
+        let started = Instant::now();
+        let decoded = verify_tick(
+            &self.binary.bytes[offset..],
+            &next,
+            self.decoded.as_ref(),
+            self.decoded_before.as_ref(),
+            &mut self.decoded_strings,
+        )?;
+        self.validation_duration += started.elapsed();
+        let started = Instant::now();
+        self.tick_hash.update(&decoded)?;
+        self.hash_duration += started.elapsed();
+        self.decoded_before = self.decoded.replace(decoded);
+        let spare = self.before_previous.take().unwrap_or(Value::Null);
+        self.before_previous = self.previous.replace(next);
+        Ok(spare)
     }
 }
 
-fn local_collector(directory: &Path, level: i32) -> Result<ViewerWriter, Box<dyn Error>> {
+fn exact_decoded(source: &Value, decoded: &DecodedValue) -> bool {
+    match (source, decoded) {
+        (Value::Null, DecodedValue::Null) => true,
+        (Value::Bool(a), DecodedValue::Bool(b)) => a == b,
+        (Value::Number(_), DecodedValue::Number(b)) => {
+            number(source).is_some_and(|a| a.to_bits() == b.to_bits())
+        }
+        (Value::String(a), DecodedValue::String(b)) => a == b.as_ref(),
+        (Value::Array(a), DecodedValue::Array(b)) => {
+            a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| exact_decoded(a, b))
+        }
+        (Value::Object(a), DecodedValue::Object(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|((key, a), (other_key, b_value))| {
+                        // Optional fields can return in a different insertion order.
+                        let value = if key == other_key.as_ref() {
+                            Some(b_value)
+                        } else {
+                            b.get(key.as_str())
+                        };
+                        value.is_some_and(|b| exact_decoded(a, b))
+                    })
+        }
+        _ => false,
+    }
+}
+
+fn verify_tick(
+    bytes: &[u8],
+    source: &Value,
+    previous: Option<&DecodedValue>,
+    before_previous: Option<&DecodedValue>,
+    strings: &mut Vec<Arc<str>>,
+) -> Result<DecodedValue, Box<dyn Error>> {
+    let mut reader = BinaryReader::new(bytes);
+    reader.strings = std::mem::take(strings);
+    let decoded = if previous.is_none() {
+        read_value(&mut reader, 1)?
+    } else {
+        read_patched_value(&mut reader, previous, before_previous, 1)?
+    };
+    if reader.offset != bytes.len() || !exact_decoded(source, &decoded) {
+        return Err("viewer delta tick failed lossless validation".into());
+    }
+    *strings = reader.strings;
+    Ok(decoded)
+}
+
+struct VerifiedChunk {
+    raw: Vec<u8>,
+    directory: PathBuf,
+    index: usize,
+    first_tick: usize,
+    tick_count: usize,
+    tick_sha256: String,
+}
+
+fn compress_verified(
+    task: VerifiedChunk,
+    compressor: &mut zstd::bulk::Compressor<'static>,
+    decompressor: &mut zstd::bulk::Decompressor<'static>,
+    compressed: &mut Vec<u8>,
+    validation: &mut Vec<u8>,
+) -> Result<ChunkWorkResult, Box<dyn Error>> {
+    let started = Instant::now();
+    compressed.clear();
+    let capacity = zstd::zstd_safe::compress_bound(task.raw.len());
+    if compressed.capacity() < capacity {
+        compressed.reserve(capacity);
+    }
+    compressor.compress_to_buffer(&task.raw, compressed)?;
+    let compression_duration_ms = started.elapsed().as_millis();
+    let started = Instant::now();
+    validate_zstd_round_trip(decompressor, compressed, &task.raw, validation)?;
+    let validation_duration_ms = started.elapsed().as_millis();
+    let compressed_file = format!("chunk-{:05}.hsrd.zst", task.index);
+    let started = Instant::now();
+    fs::write(task.directory.join(&compressed_file), &compressed)?;
+    Ok(ChunkWorkResult {
+        part: ChunkPart {
+            index: task.index,
+            first_tick: task.first_tick,
+            tick_count: task.tick_count,
+            raw_bytes: task.raw.len(),
+            compressed_file,
+            compressed_bytes: compressed.len(),
+            compressed_sha256: sha256_hex(compressed),
+            tick_sha256: task.tick_sha256,
+        },
+        validation_duration_ms,
+        tick_hash_duration_ms: 0,
+        compression_duration_ms,
+        chunk_write_duration_ms: started.elapsed().as_millis(),
+    })
+}
+
+fn local_collector(
+    directory: &Path,
+    level: i32,
+) -> Result<(ViewerWriter, SyncSender<VerifiedChunk>), Box<dyn Error>> {
     fs::create_dir(directory)?;
     projection()?;
-    let (sender, receiver) = mpsc::sync_channel::<ChunkTask>(1);
+    let (sender, receiver) = mpsc::sync_channel::<VerifiedChunk>(1);
     let (results, result_receiver) = mpsc::channel();
     // One bounded compression worker per output. The default level 6 needs far
     // less time and workspace than the production batch encoder's level 19.
@@ -151,7 +296,7 @@ fn local_collector(directory: &Path, level: i32) -> Result<ViewerWriter, Box<dyn
             let mut compressed = Vec::new();
             let mut validation = Vec::new();
             while let Ok(task) = receiver.recv() {
-                let result = process_chunk(
+                let result = compress_verified(
                     task,
                     &mut compressor,
                     &mut decompressor,
@@ -168,74 +313,77 @@ fn local_collector(directory: &Path, level: i32) -> Result<ViewerWriter, Box<dyn
             let _ = results.send(Err(error.to_string()));
         }
     });
-    Ok(ViewerWriter {
-        directory: directory.to_owned(),
-        task_sender: Some(sender),
-        result_receiver,
-        worker_handles: vec![handle],
-        worker_count: 1,
-        started: Instant::now(),
-        projection_duration: Duration::ZERO,
-        encode_duration_ms: 0,
-        tick_hash_duration_ms: 0,
-        validation_duration_ms: 0,
-        compression_duration_ms: 0,
-        chunk_write_duration_ms: 0,
-        pending: Vec::new(),
-        pending_semantic_digests: Vec::new(),
-        tick_count: 0,
-        dispatched_chunks: 0,
-        raw_chunk_bytes: 0,
-        compressed_chunk_bytes: 0,
-        chunks: Vec::new(),
-    })
+    Ok((
+        ViewerWriter {
+            directory: directory.to_owned(),
+            task_sender: None,
+            result_receiver,
+            worker_handles: vec![handle],
+            worker_count: 1,
+            started: Instant::now(),
+            projection_duration: Duration::ZERO,
+            encode_duration_ms: 0,
+            tick_hash_duration_ms: 0,
+            validation_duration_ms: 0,
+            compression_duration_ms: 0,
+            chunk_write_duration_ms: 0,
+            pending: Vec::new(),
+            pending_semantic_digests: Vec::new(),
+            tick_count: 0,
+            dispatched_chunks: 0,
+            raw_chunk_bytes: 0,
+            compressed_chunk_bytes: 0,
+            chunks: Vec::new(),
+        },
+        sender,
+    ))
 }
 
 pub struct StreamingExport {
     collector: ViewerWriter,
+    sender: Option<SyncSender<VerifiedChunk>>,
     chunk: Option<IncrementalChunk>,
-    digests: Vec<[u8; 32]>,
+    chunk_ticks: usize,
     expected: usize,
-    encode_duration: Duration,
 }
 impl StreamingExport {
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
         if !(1..=MAX_TICKS).contains(&expected) || !(1..=19).contains(&level) {
             return Err("invalid tick count or compression level".into());
         }
+        let (collector, sender) = local_collector(directory, level)?;
         Ok(Self {
-            collector: local_collector(directory, level)?,
+            collector,
+            sender: Some(sender),
             chunk: None,
-            digests: Vec::with_capacity(KEYFRAME_INTERVAL),
+            chunk_ticks: 0,
             expected,
-            encode_duration: Duration::ZERO,
         })
     }
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
-        let (projected, digest, duration) = project_tick(source)?;
-        self.push_projected(projected, digest, duration)
+        self.push_owned(source.clone())
     }
     pub fn push_owned(&mut self, source: Value) -> Result<(), Box<dyn Error>> {
+        self.push_recycled(source).map(|_| ())
+    }
+    pub fn push_recycled(&mut self, source: Value) -> Result<Value, Box<dyn Error>> {
         let started = Instant::now();
         validate_json_safety(&source, 3)?;
         let projected = projection()?.tick.project_owned(source)?;
         if !projection()?.tick_validator.is_valid(&projected) {
             return Err("viewer tick violates its closed schema".into());
         }
-        let digest = semantic_value_digest(&projected)?;
-        self.push_projected(projected, digest, started.elapsed())
+        self.push_projected(projected, started.elapsed())
     }
     fn push_projected(
         &mut self,
         projected: Value,
-        digest: [u8; 32],
         duration: Duration,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Value, Box<dyn Error>> {
         if self.collector.tick_count >= self.expected {
             return Err("too many source ticks".into());
         }
         self.collector.projection_duration += duration;
-        let started = Instant::now();
         if self.chunk.is_none() {
             let first = self.collector.tick_count;
             self.chunk = Some(IncrementalChunk::new(
@@ -243,34 +391,36 @@ impl StreamingExport {
                 KEYFRAME_INTERVAL.min(self.expected - first),
             )?);
         }
-        self.chunk.as_mut().unwrap().push(projected)?;
-        self.digests.push(digest);
+        let spare = self.chunk.as_mut().unwrap().push(projected)?;
+        self.chunk_ticks += 1;
         self.collector.tick_count += 1;
-        self.encode_duration += started.elapsed();
-        if self.digests.len() == KEYFRAME_INTERVAL || self.collector.tick_count == self.expected {
-            let raw = self.chunk.take().unwrap().binary.bytes;
+        if self.chunk_ticks == KEYFRAME_INTERVAL || self.collector.tick_count == self.expected {
+            let chunk = self.chunk.take().unwrap();
+            self.collector.encode_duration_ms += chunk.encode_duration.as_millis();
+            self.collector.validation_duration_ms += chunk.validation_duration.as_millis();
+            self.collector.tick_hash_duration_ms += chunk.hash_duration.as_millis();
+            let raw = chunk.binary.bytes;
             self.collector.raw_chunk_bytes += raw.len() as u64;
             if self.collector.raw_chunk_bytes > MAX_UNCOMPRESSED_BYTES {
                 return Err("raw replay exceeds contract limit".into());
             }
-            self.collector
-                .task_sender
+            self.sender
                 .as_ref()
                 .unwrap()
-                .send(ChunkTask {
+                .send(VerifiedChunk {
                     directory: self.collector.directory.clone(),
                     index: self.collector.dispatched_chunks,
-                    first_tick: self.collector.tick_count - self.digests.len(),
-                    tick_count: self.digests.len(),
+                    first_tick: self.collector.tick_count - self.chunk_ticks,
+                    tick_count: self.chunk_ticks,
                     raw,
-                    expected_semantic_sha256: semantic_tick_hash(&self.digests),
+                    tick_sha256: chunk.tick_hash.finish(),
                 })
                 .map_err(|_| "compression worker closed")?;
-            self.digests.clear();
+            self.chunk_ticks = 0;
             self.collector.dispatched_chunks += 1;
             self.collector.collect_ready_results()?;
         }
-        Ok(())
+        Ok(spare)
     }
     pub fn finish(
         mut self,
@@ -282,7 +432,7 @@ impl StreamingExport {
         if self.collector.tick_count != self.expected || self.chunk.is_some() {
             return Err("incomplete tick stream".into());
         }
-        self.collector.encode_duration_ms = self.encode_duration.as_millis();
+        self.sender.take();
         self.collector.finish(metadata)?;
         let directory = &self.collector.directory;
         let parts: PartsDescriptor =
@@ -306,7 +456,7 @@ impl StreamingExport {
 
 impl Drop for StreamingExport {
     fn drop(&mut self) {
-        self.collector.task_sender.take();
+        self.sender.take();
         for worker in self.collector.worker_handles.drain(..) {
             let _ = worker.join();
         }
@@ -347,6 +497,11 @@ impl EncodingWorker {
             self.flush()?;
         }
         Ok(())
+    }
+
+    pub fn push_recycled(&mut self, tick: Value) -> Result<Value, Box<dyn Error>> {
+        self.push_owned(tick)?;
+        Ok(Value::Null)
     }
 
     fn flush(&mut self) -> Result<(), Box<dyn Error>> {
@@ -763,11 +918,55 @@ mod incremental_tests {
             serde_json::json!({"p":[]}),
         ];
         let expected = encode_chunk(&ticks, 2048).unwrap();
+        let expected_hash = decode_chunk_semantic_hash(&expected).unwrap().tick_sha256;
         let mut stream = IncrementalChunk::new(2048, ticks.len()).unwrap();
         for tick in ticks {
             stream.push(tick).unwrap();
         }
         assert_eq!(stream.binary.bytes, expected);
+        assert_eq!(stream.tick_hash.finish(), expected_hash);
+    }
+
+    #[test]
+    fn inline_validation_rejects_wrong_values_types_signed_zero_and_trailing_bytes() {
+        let source =
+            serde_json::json!({"x":-0.0,"text":"value","array":[null,true,4294901761_u64]});
+        let mut binary = BinaryWriter::new();
+        write_value(&mut binary, &source).unwrap();
+        assert!(verify_tick(&binary.bytes, &source, None, None, &mut Vec::new()).is_ok());
+        for (key, wrong) in [
+            ("x", serde_json::json!(0.0)),
+            ("text", serde_json::json!(null)),
+            ("array", serde_json::json!([null, true, 4294901762_u64])),
+        ] {
+            let mut different = source.clone();
+            different[key] = wrong;
+            assert!(verify_tick(&binary.bytes, &different, None, None, &mut Vec::new()).is_err());
+        }
+        binary.bytes.push(0);
+        assert!(verify_tick(&binary.bytes, &source, None, None, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn inline_validation_matches_independent_decoder_across_optional_fields_and_predictions() {
+        let mut stream = IncrementalChunk::new(0, 257).unwrap();
+        let mut ticks = Vec::new();
+        for index in 0..257 {
+            let mut tick = serde_json::json!({"first":index, "optional":null,
+                "nodes":[index as f32 * 0.125, -0.0, (index as f32).sin()],
+                "last":["repeat", "string", index % 7 == 0]});
+            if index % 3 == 0 {
+                tick.as_object_mut().unwrap().shift_remove("optional");
+            }
+            stream.push(tick.clone()).unwrap();
+            ticks.push(tick);
+        }
+        let expected = encode_chunk(&ticks, 0).unwrap();
+        assert_eq!(stream.binary.bytes, expected);
+        assert_eq!(
+            stream.tick_hash.finish(),
+            decode_chunk_semantic_hash(&expected).unwrap().tick_sha256
+        );
     }
 
     fn pair(directory: &Path, count: usize, altered: bool) {

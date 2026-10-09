@@ -2,7 +2,7 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `native-analytics3-20261009-r1`, with dedicated queue/API wiring and scoped data access.
+to `performance-20261009-r1`, with dedicated queue/API wiring and scoped data access.
 The user enabled the single-user dev preview on 2026-10-09: concurrency one,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
@@ -28,6 +28,10 @@ Benchmark history, comparisons and the Windows-native oracle remain under
 `../../experiments/h1-film`. Its old WASM conversion CLI forwards here; active
 runtime code never imports from `experiments`. Game source, raw maps, compiled
 engines and generated replay files are not committed to this package.
+
+The dev [performance release](PERFORMANCE.md) roughly halves offline worker
+runtime across three retained films, with identical products. Actual Lambda
+conversion measurements remain pending.
 
 ## Dev Deployment
 
@@ -92,6 +96,12 @@ not a way to force an incompatible simulator.
 comparison. The latter remains a trusted-local tool, not a hostile-upload API.
 The optional analytics intermediate is never a viewer fallback or canonical
 source. Full integration and reproduction: [DEPLOYMENT.md](DEPLOYMENT.md).
+
+Local conversion still produces both viewer rates and performs an independent
+readback by default. The cloud fast path uses `--source-viewer-only` together
+with `--trusted-local --skip-readback`, requiring inline lossless verification
+of every tick and compressed chunk. This omits only the unused 30 Hz viewer;
+the 30 Hz analytics sidecar is retained.
 
 Analytics revision 3 is deployed in dev. It adds native damage/pickup totals and
 cumulative timelines, verified recorded kill pairs and a resolved-rules subset,

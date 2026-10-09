@@ -1,7 +1,8 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: native analytics revision 3 is deployed in dev as
-`native-analytics3-20261009-r1`. Both API H1 flags are true on `live=174`,
+Status on 2026-10-09: the runtime performance release, retaining native analytics
+revision 3, is deployed in dev as `performance-20261009-r1`.
+Both API H1 flags are true on `live=175`,
 and the intake worker consumes its batch-one queue with concurrency 1.
 The worker reuses the existing finalizer and retains original film/version pins.
 The API uses the existing worker ceilings as provisional dev limits, not measured
@@ -17,6 +18,65 @@ Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
+
+## Runtime performance deployed 2026-10-09
+
+The user authorized applying the [runtime performance work](PERFORMANCE.md).
+Published and deployed only the H1 worker image in dev. Its three-film offline
+results roughly halve whole-worker harness runtime with identical viewer bytes
+and gameplay products. This does not establish actual Lambda conversion times
+or satisfy the pending hosted revision-3 reparse/browser acceptance gates.
+
+- Image: `283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film:performance-20261009-r1`.
+- ECR digest: `sha256:3ef684fac0e5a34375bfaead2d2e40011a97e6964420178448139f901e7eef32`;
+  compressed size 272,582,992 bytes. No existing tag was overwritten.
+- Image ID `sha256:a2ecc3656149aeacc400c4106bd5a29f11b9dbd5a1956e83c7a0ca7a036dd7a9`
+  exactly matches the benchmarked local candidate. Live encoder SHA-256 is
+  `1c4e96c65abbae68d49024ad522ce58c494683cc0a405d29d2dd2a2f1129672c`.
+- Focused and full pre-apply plans: **0 adds / 1 in-place update / 0 destroys**,
+  only `aws_lambda_function.h1_film[0].image_uri` and computed `last_modified`.
+  Reviewed the saved plan JSON and checked its SHA-256 before applying it.
+  The apply completed with exactly that one resource change.
+- Pre-apply drift also noted externally released renderer version `244 -> 245`
+  and API output version `173 -> 175`. No renderer/API code or alias was changed;
+  `map-processing` refreshed its renderer state during the image-only apply.
+  The focused post-apply plan is no-op. The final full dev plan has zero resource
+  actions: five components are no-op and `app-api` has only its existing output
+  refresh `173 -> 175`, which was not applied.
+- Live function is Active/Successful at the expected image digest. Health
+  returned 200 in intake mode with the expected encoder and retained engine
+  hashes. The enabled batch-one mapping, concurrency 1, 3,008 MiB memory,
+  900-second timeout and 8,192 MiB temporary storage are unchanged.
+- API `live=175`, both H1 flags, and provisional 512 MiB / 432,000 tick / four
+  player limits are unchanged. Queue and DLQ were empty before/after. No IAM,
+  source/map pin, secret, Xbox consumer, website or prod change. No film upload
+  or reprocess job was submitted. No AWS/profile/session blocker remains.
+
+Validation retained from the exact candidate image: 48 Rust, 37 H1 Python,
+12 Node and 81 shared parser tests; real Prisoner/Dread/Downrush complete-worker
+comparisons; Prisoner analytics revisions 1/2; byte-exact dual-rate chunks and
+independent full readback. One optional Rust profiler remains ignored. Release
+also reran all five mocked component tests, retained-engine audit, read-only
+non-root container health/job rejection, and live health/configuration checks.
+
+Evidence: `L:/tmp/halospawns-h1-performance-20261009/release`. Exact release commands:
+
+```powershell
+.\scripts\publish-h1-film.ps1 dev -Tag performance-20261009-r1 -EngineRoot .build/h1-film-9c8c68566d1b4e57b571201bc6c57035 -PreviousRegistry L:/tmp/halospawns-h1-native3-20261009/previous-registry.json
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' test -no-color
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color dev-map-processing.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Changed for deployment: `stacks/dev.yaml`, `AGENTS.md`, `ATMOS_MIGRATION_PLAN.md`,
+`HANDOFFS.md`, and H1 `README.md`, `DEPLOYMENT.md`, `PERFORMANCE.md`. Runtime/test/tool
+changes and detailed offline evidence are listed in `PERFORMANCE.md`. No Terraform
+resource definitions changed. A compatible rollback can repin the prior
+`native-analytics3-20261009-r1` after a reviewed component plan; do not use the
+older intake/foundation images for queued revision-3 jobs.
 
 ## Native analytics revision 3 deployed 2026-10-09
 

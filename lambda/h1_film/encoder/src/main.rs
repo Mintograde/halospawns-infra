@@ -30,6 +30,8 @@ struct Request {
     export_contract: String,
     #[serde(default = "default_analytics_revision")]
     analytics_revision: u8,
+    #[serde(default)]
+    source_viewer_only: bool,
 }
 fn default_analytics_revision() -> u8 {
     2
@@ -408,11 +410,15 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         request.ticks,
         request.zstd_level,
     )?;
-    let mut low = artifact::StreamingExport::new(
-        &directory.join("parts-30"),
-        sampling::sample_count(request.ticks, 4),
-        request.zstd_level,
-    )?;
+    let mut low = (!request.source_viewer_only)
+        .then(|| {
+            artifact::StreamingExport::new(
+                &directory.join("parts-30"),
+                sampling::sample_count(request.ticks, 4),
+                request.zstd_level,
+            )
+        })
+        .transpose()?;
     let input = io::stdin();
     let mut source = transport::Stream::new(BufReader::with_capacity(64 * 1024, input.lock()))?;
     let mut observations = Observations {
@@ -431,7 +437,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             )
         })
         .transpose()?;
-    while let Some(mut tick) = source.next()? {
+    let mut spare = Value::Null;
+    while let Some(mut tick) = source.next_reusing(spare)? {
         if count >= request.ticks {
             return Err("engine exported more ticks than the film".into());
         }
@@ -443,11 +450,11 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         if let Some(analytics) = &mut analytics {
             analytics.observe(&tick, count)?;
         }
-        let sample = count.is_multiple_of(4).then(|| tick.clone());
-        high.push_owned(tick)?;
+        let sample = (low.is_some() && count.is_multiple_of(4)).then(|| tick.clone());
+        spare = high.push_recycled(tick)?;
         if let Some(mut sample) = sample {
             sampling::normalize(&mut sample, count, 4, &request.map)?;
-            low.push_owned(sample)?;
+            low.as_mut().unwrap().push_owned(sample)?;
         }
         count += 1;
     }
@@ -464,12 +471,16 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         &format!("{}-120hz", request.replay_id),
         &request.recorded_at,
     )?;
-    let low = low.finish(
-        &observations.metadata(&request, 4)?,
-        &directory.join("replay.30hz.hsrdc"),
-        &format!("{}-30hz", request.replay_id),
-        &request.recorded_at,
-    )?;
+    let low = low
+        .map(|writer| {
+            writer.finish(
+                &observations.metadata(&request, 4)?,
+                &directory.join("replay.30hz.hsrdc"),
+                &format!("{}-30hz", request.replay_id),
+                &request.recorded_at,
+            )
+        })
+        .transpose()?;
     let analytics = analytics
         .map(|writer| {
             writer.finish(
@@ -490,6 +501,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
+        "verification":{"mode":"inline-lossless", "120hz":count,
+            "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
         "export_contract":request.export_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,
         "native_analytics":native.map(|native| native.product()),
@@ -518,7 +531,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         directory.join("encoding.json"),
         serde_json::to_vec_pretty(&report)?,
     )?;
-    println!("Encoded {count} source ticks into 120 Hz and 30 Hz artifacts");
+    println!("Encoded and verified {count} source ticks");
     Ok(())
 }
 
@@ -629,6 +642,7 @@ mod observation_tests {
             source.push(tick);
         }
         let request = Request {
+            source_viewer_only: false,
             analytics_revision: 2,
             ticks: 5,
             players: 1,
@@ -861,6 +875,7 @@ mod observation_tests {
             let mut analytics = analytics::Export::new(&path).unwrap();
             let mut observations = Observations::default();
             let request = Request {
+                source_viewer_only: false,
                 analytics_revision: 2,
                 ticks: 12,
                 players: 1,

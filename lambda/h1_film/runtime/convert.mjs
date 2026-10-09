@@ -21,6 +21,8 @@ export async function convertFilm(options) {
   }
   assert.ok(Boolean(values.reference) !== Boolean(values['trusted-local']), 'Use exactly one of --reference or --trusted-local');
   assert.ok(!values['skip-readback'] || values['trusted-local'], '--skip-readback requires --trusted-local');
+  assert.ok(!values['source-viewer-only'] || (values['trusted-local'] && values['skip-readback']),
+    '--source-viewer-only requires --trusted-local and --skip-readback');
   if (values.reference) values.reference = resolve(values.reference);
   const timeout = Number(values.timeout) * 1000;
   assert.ok(Number.isFinite(timeout) && timeout > 0 && timeout <= 3600000);
@@ -80,6 +82,7 @@ export async function convertFilm(options) {
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
   request.analytics_revision = analyticsRevision;
+  request.source_viewer_only = Boolean(values['source-viewer-only']);
   if (values.analytics) {
     request.analytics_context = { engine_profile: profile.id, gametype: native.envelope.gametype,
       map: native.envelope.map, map_sha256: mapHash, film_sha256: filmHash,
@@ -196,7 +199,13 @@ export async function convertFilm(options) {
       const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
       report.encoding = Object.fromEntries(Object.entries(encoding).filter(([key]) => key !== 'source_events'));
       assert.equal(encoding.source_ticks, native.envelope.ticks);
-      for (const [rate, count] of [['120hz', native.envelope.ticks], ['30hz', Math.ceil(native.envelope.ticks / 4)]]) {
+      const rates = [['120hz', native.envelope.ticks]];
+      if (!values['source-viewer-only']) rates.push(['30hz', Math.ceil(native.envelope.ticks / 4)]);
+      if (values['source-viewer-only']) {
+        assert.equal(encoding['30hz'], null);
+        assert.deepEqual(encoding.verification, { mode: 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
+      }
+      for (const [rate, count] of rates) {
         const replay = join(stage, 'candidate', `replay.${rate}.hsrdc`);
         assert.equal(encoding[rate].tickCount, count);
         assert.equal((await stat(replay)).size, encoding[rate].sizeBytes);

@@ -146,11 +146,18 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
         or analytics.get("ticks") != (statistics_ticks + 3) // 4
     ):
         raise ValueError("Missing 30 Hz H1 analytics contract")
-    for name, details, limit in [
+    products = [
         ("analytics.30hz.json.zst", analytics, 64 * 1024 * 1024),
         ("replay.120hz.hsrdc", encoding.get("120hz", {}), 1024 * 1024 * 1024),
-        ("replay.30hz.hsrdc", encoding.get("30hz", {}), 1024 * 1024 * 1024),
-    ]:
+    ]
+    if "30hz" in encoding and encoding["30hz"] is None:
+        if report.get("reference") or encoding.get("verification") != {
+            "mode": "inline-lossless", "120hz": ticks, "30hz": None,
+        }:
+            raise ValueError("Missing source-rate viewer verification")
+    else:
+        products.append(("replay.30hz.hsrdc", encoding.get("30hz", {}), 1024 * 1024 * 1024))
+    for name, details, limit in products:
         path = candidate / name
         size = path.stat().st_size
         if not 0 < size <= limit or size != details.get(

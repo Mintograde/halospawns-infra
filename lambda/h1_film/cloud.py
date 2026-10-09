@@ -549,6 +549,8 @@ def convert(job, film, work, deadline):
             "--profile",
             binding["engine_profile"],
             "--trusted-local",
+            "--skip-readback",
+            "--source-viewer-only",
             "--analytics",
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
@@ -560,6 +562,13 @@ def convert(job, film, work, deadline):
         deadline - 180,
         output_name="convert.log",
     )
+    # The encoder compares every decoded tick to its source and checks every
+    # compressed chunk. Require that evidence before omitting the second scan.
+    ticks = job["conversion"]["film"]["source_tick_count"]
+    encoding = analytics._json(directory / "candidate/encoding.json")
+    require(encoding.get("verification") == {
+        "mode": "inline-lossless", "120hz": ticks, "30hz": None,
+    }, "conversion_failed")
     return directory
 
 

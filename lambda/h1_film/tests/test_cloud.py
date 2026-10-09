@@ -92,6 +92,30 @@ class CloudTests(unittest.TestCase):
             ):
                 cloud.validate_job(self.job)
 
+    def test_conversion_requires_inline_lossless_evidence_without_second_readback(self):
+        ticks = self.job["conversion"]["film"]["source_tick_count"]
+        proof = {"mode": "inline-lossless", "120hz": ticks, "30hz": None}
+        for evidence in (proof, None, {**proof, "120hz": ticks - 1},
+                         {**proof, "30hz": 0}, {**proof, "mode": "unverified"}):
+            with self.subTest(evidence=evidence), tempfile.TemporaryDirectory() as temporary:
+                work = Path(temporary)
+
+                def converted(command, *args, **kwargs):
+                    self.assertIn("--skip-readback", command)
+                    self.assertIn("--source-viewer-only", command)
+                    self.assertIn("--engine-permissions", command)
+                    candidate = work / "conversion/candidate"
+                    candidate.mkdir(parents=True)
+                    (candidate / "encoding.json").write_text(json.dumps({"verification": evidence}))
+
+                with patch.object(cloud, "download"), patch.object(cloud, "run_bounded", converted):
+                    if evidence == proof:
+                        self.assertEqual(cloud.convert(self.job, work / "film", work,
+                                                       time.monotonic() + 900), work / "conversion")
+                    else:
+                        with self.assertRaises(cloud.FilmError):
+                            cloud.convert(self.job, work / "film", work, time.monotonic() + 900)
+
     def test_revision_three_requires_a_versioned_pinned_job(self):
         for revision in (1, 2, 3):
             job = copy.deepcopy(self.job)

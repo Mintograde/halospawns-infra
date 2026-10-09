@@ -84,6 +84,28 @@ class H1ProductTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "hash mismatch"):
                 h1_film.verified_products(root, film_sha256="a" * 64)
 
+    def test_source_rate_only_requires_evidence_and_still_checks_viewer_and_analytics_hashes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.fixture(root)
+            path = root / "candidate/encoding.json"
+            encoding = json.loads(path.read_text())
+            encoding["30hz"] = None
+            (root / "candidate/replay.30hz.hsrdc").unlink()
+            path.write_text(json.dumps(encoding))
+            with self.assertRaisesRegex(ValueError, "source-rate viewer verification"):
+                h1_film.verified_products(root, film_sha256="a" * 64)
+            encoding["verification"] = {"mode": "inline-lossless", "120hz": 5, "30hz": None}
+            path.write_text(json.dumps(encoding))
+            h1_film.verified_products(root, film_sha256="a" * 64)
+            for name in ("replay.120hz.hsrdc", "analytics.30hz.json.zst"):
+                product = root / "candidate" / name
+                original = product.read_bytes()
+                product.write_bytes(b"X" * len(original))
+                with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                    h1_film.verified_products(root, film_sha256="a" * 64)
+                product.write_bytes(original)
+
     def match_only_fixture(self, root, end):
         report = self.fixture(root)
         encoding_path = root / "candidate" / "encoding.json"

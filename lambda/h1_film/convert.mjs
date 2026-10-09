@@ -8,6 +8,7 @@ const { values } = parseArgs({ options: {
   timeout: { type: 'string', default: '1800' },
   'trusted-local': { type: 'boolean', default: false },
   'skip-readback': { type: 'boolean', default: false },
+  'source-viewer-only': { type: 'boolean', default: false },
   'engine-permissions': { type: 'boolean', default: false },
   analytics: { type: 'boolean', default: false }, 'map-catalog': { type: 'string' },
   'analytics-revision': { type: 'string', default: '2' },
