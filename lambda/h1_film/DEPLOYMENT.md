@@ -61,6 +61,68 @@ its own logs. There is no input write/delete, database credential, function URL
 or invoke policy. Xbox/map/renderer consumers remain enabled and unchanged;
 the Xbox image stays `first-person-r2-default-20260928`.
 
+### Map review access applied 2026-10-09
+
+Handoff `20261008-api-infra-h1film-map-review-access` is implemented in dev.
+`app-api/data.tf` adds only `s3:GetObject` and `s3:GetObjectVersion` on
+`arn:aws:s3:::uploads-dev-283279960672/maps/unprocessed/*` to the API execution
+role. It depends on H1 contract adoption, not upload/processing activation.
+There are no new listing, write, delete, credential, environment or gateway
+permissions. Admin candidate/history/preview/approval continue through the
+existing JWT-required default route.
+
+The focused and aggregate pre-apply plans showed exactly **0 add / 1 change /
+0 destroy**, an in-place API inline policy update. The five other components
+were no-op. Apply matched that plan; focused and full post-apply plans are no-op
+in all six components. API `live=171` and its code hash were unchanged; no
+publication or alias promotion was necessary for a shared execution-role policy.
+Both API H1 flags remain false, the worker mapping disabled and concurrency zero.
+The expired dev SSO session was renewed; no remaining AWS/profile blocker.
+
+Validation: all 14 app-api Terraform tests pass, including disabled-capability
+review access, the exact action/resource scope, no grant without H1 adoption,
+and no new admin JWT exceptions. Live role-policy inspection and IAM simulation
+allow both raw-map read actions. They deny bucket/version listing, raw-map
+delete/version-delete/ACL/tag mutation, reads/writes of failed or similarly
+named unrelated prefixes, and another bucket. Existing map-upload PutObject
+permission predates this change and was deliberately preserved.
+
+Storage finding: an operator read-only S3 listing returned **zero current
+objects** under `maps/unprocessed/`. A sampled key,
+`maps/unprocessed/0c142af0-161b-4b7e-8e4b-e021dc81276c-temple.map`, has a latest
+delete marker. Current HEAD returned 404; HEAD of version
+`oKq5KQ4G2gwYBbhgziQ3DRFrfCNtmn7t` returned 78,000,644 bytes. These HEADs used
+the dev operator identity; API-role access was checked with IAM simulation,
+not an authenticated admin UI request. The user owns the approval smoke.
+The new IAM grant cannot make deleted current objects available: the preview
+can still correctly report `raw_source_unavailable`.
+
+Retention decision for this access-only apply: preserve existing identities;
+do not restore/copy/reupload objects or seed approvals. Lifecycle is unchanged
+(7-day noncurrent raw-map expiration / 30-day processed-map expiration).
+Durable preservation and current-source recovery remain explicitly open under
+`20261008-user-infra-h1film-lambda-integration`, before film activation. The
+existing `pipelines.maps.preserve_source_versions` switch can stop raw-version
+expiration in place, but covers all raw maps, not only the 40-map Beta 3 set;
+that broader retention change has been raised separately with the user.
+Preservation alone would not remove delete markers or make current HEAD succeed.
+
+Exact plan/apply commands from the repo root:
+
+```powershell
+.\scripts\plan.ps1 dev app-api *> .build/h1-map-review-app-api-plan-20261009.log
+.\scripts\plan.ps1 dev *> .build/h1-map-review-dev-preapply-20261009.log
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\app-api' apply -no-color dev-app-api.planfile *> .build/h1-map-review-app-api-apply-20261009.log
+.\scripts\plan.ps1 dev app-api *> .build/h1-map-review-app-api-postapply-20261009.log
+.\scripts\plan.ps1 dev *> .build/h1-map-review-dev-postapply-20261009.log
+```
+
+Changed code/test files: `components/terraform/app-api/data.tf` and
+`components/terraform/app-api/tests/asset-delivery.tftest.hcl`. The migration
+log and both repos' handoffs record completion and the separate source blocker.
+No worker image, lifecycle, source object, map approval, Xbox consumer or prod
+resource was changed.
+
 ### Runtime and validation
 
 `worker.py` / `cloud.py` accept only the configured SQS/SNS origin or pinned API

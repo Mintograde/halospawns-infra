@@ -17,6 +17,13 @@ run "h1_disabled_by_default" {
     condition     = length(local.h1_film_api_routes) == 0 && !contains(keys(local.app_lambda_environment), "H1FILM_PROCESSING_QUEUE_URL")
     error_message = "H1 must not change existing stacks without explicit adoption."
   }
+  assert {
+    condition = length([
+      for statement in data.aws_iam_policy_document.app_runtime[0].statement : statement
+      if statement.sid == "InspectH1FilmRawMapVersions"
+    ]) == 0
+    error_message = "Stacks without H1 adoption must not acquire raw-map review permissions."
+  }
 }
 
 run "h1_contracts_without_activation" {
@@ -54,6 +61,26 @@ run "h1_contracts_without_activation" {
       alltrue([for route in local.h1_film_api_routes : route.authorization_type == "NONE"])
     )
     error_message = "Contracts must expose HMAC routes without enabling producers or claiming measured limits."
+  }
+  assert {
+    condition = (
+      toset(one([
+        for statement in data.aws_iam_policy_document.app_runtime[0].statement : statement.actions
+        if statement.sid == "InspectH1FilmRawMapVersions"
+      ])) == toset(["s3:GetObject", "s3:GetObjectVersion"]) &&
+      toset(one([
+        for statement in data.aws_iam_policy_document.app_runtime[0].statement : statement.resources
+        if statement.sid == "InspectH1FilmRawMapVersions"
+      ])) == toset(["arn:aws:s3:::uploads-dev-283279960672/maps/unprocessed/*"])
+    )
+    error_message = "Disabled-capability map review needs only current/versioned reads of this bucket's raw maps, with no list/write/delete grants."
+  }
+  assert {
+    condition = alltrue([
+      for route in concat(local.app_api_public_routes, local.h1_film_api_routes) :
+      !strcontains(route.route_key, "/v1/admin/h1film-map-bindings")
+    ])
+    error_message = "Admin H1 candidate/history/preview/approval routes must retain the JWT-required default integration."
   }
 }
 
