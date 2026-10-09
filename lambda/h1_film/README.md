@@ -1,16 +1,19 @@
 # H1 Film Worker
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
-adapter. A dormant dev runtime is deployed as `halospawns-h1-film-dev` with
-zero concurrency and no triggers or data access. Cloud intake/finalization
-and hosted viewer adoption remain gated; existing Xbox uploads are unchanged.
+adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
+to `intake-20261008-r1`, with dedicated queue/API wiring and scoped data access.
+It remains switched off: zero concurrency, disabled SQS mapping and both API
+capability flags false. Hosted activation remains gated; Xbox uploads are unchanged.
 
 ## Layout
 
 | Path | Responsibility |
 | --- | --- |
 | `convert.mjs` | Local CLI, including the differential/native-reference mode |
-| `handler.mjs`, `Dockerfile` | Health-only, fail-closed Lambda foundation and private Linux image |
+| `worker.py`, `cloud.py`, `Dockerfile` | Python Lambda intake, bounded Node/WASM conversion and shared replay finalization |
+| `handler.mjs` | Exact health request and retained fail-closed foundation mode |
+| `contracts/` | API-owned v1 job/completion schema snapshots; semantic checks also run in `cloud.py` |
 | `runtime/` | Reusable `convertFilm`, exact profile dispatch and engine verification |
 | `runtime/adapters/` | Versioned film readers and simulation verification |
 | `profiles/registry.json` | Shared Node/Python engine identities, ABI and artifact pins |
@@ -18,25 +21,25 @@ and hosted viewer adoption remain gated; existing Xbox uploads are unchanged.
 | `encoder/` | Bounded tick-stream encoder; reuses `../replay_parser` codecs/contracts |
 | `analytics.py`, `registry.py` | Verified products and normal replay-parser adaptation |
 | `tools/` | Candidate builds, engine staging/auditing, catalogs and offline reconciliation |
-| `tests/` | Profile retention, multi-version dispatch, integrity and analytics tests |
+| `tests/` | Profile retention, multi-version dispatch, intake/retry, integrity and analytics tests |
 
 Benchmark history, comparisons and the Windows-native oracle remain under
 `../../experiments/h1-film`. Its old WASM conversion CLI forwards here; active
 runtime code never imports from `experiments`. Game source, raw maps, compiled
 engines and generated replay files are not committed to this package.
 
-## Dev Foundation
+## Dev Deployment
 
-The immutable image contains the converter and every registered engine. It
-does **not** contain a cloud upload handler, Python finalizer or game maps.
-The handler accepts only the exact `halospawns.h1FilmHealth.v1` health request;
-job events fail, never return an empty success batch. AWS concurrency is zero,
-so even health invocations are blocked there. Local container tests exercise
-the real Lambda runtime interface before publication.
+The immutable image contains every registered engine, the Python source adapter,
+and the unchanged shared replay parser/finalizer. Game maps/source are excluded.
+Foundation mode still accepts only the exact `halospawns.h1FilmHealth.v1`
+request and rejects jobs. Dev uses intake mode, but concurrency zero blocks all
+AWS invocations, including health. The disabled batch-one SQS mapping is the
+only configured job entry point; there is no function URL or invoke policy.
 
 ```powershell
 .\scripts\publish-h1-film.ps1 -Tag '<new-release-tag>' -EngineRoot '<private-engine-store>' -BuildOnly
-.\scripts\verify-h1-film-foundation.ps1 -Tag foundation-20261008-r1
+.\scripts\verify-h1-film-foundation.ps1 -Tag intake-20261008-r1 -Mode intake
 ```
 
 Omitting `-BuildOnly` publishes to private dev ECR after account, immutability,
@@ -44,8 +47,9 @@ engine-retention and container checks. It does not update Lambda. Pin the new
 tag in `stacks/dev.yaml`, review the `map-processing` plan, then apply it.
 Use `-PreviousRegistry` with the previous immutable release's registry for
 later releases. Terraform resolves the release tag to an image digest.
-See [deployment](DEPLOYMENT.md#dev-foundation-deployed-2026-10-08) for the exact
-foundation scope, validation evidence and still-required activation gates.
+See [deployment](DEPLOYMENT.md#dev-intake-wiring-deployed-2026-10-08) for the exact
+scope, validation evidence and still-required activation gates. Do not raise
+concurrency or enable API flags merely because the image is deployed.
 
 ## Supported Versions
 

@@ -53,6 +53,10 @@ components:
     app-api:
       vars:
         enabled: true
+        h1_film:
+          enabled: true
+          processing_enabled: false
+          uploads_enabled: false
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:
@@ -108,6 +112,7 @@ components:
           alert_subscriptions: {}
         trusted_services:
           parameter_names:
+            h1-film: /halospawns/dev/app-api/trusted-clients/h1-film/hmac-secret
             heatmap-processing: /halospawns/dev/app-api/trusted-clients/heatmap-processing/hmac-secret
             live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret
             map-processing: /halospawns/dev/app-api/trusted-clients/map-processing/hmac-secret
@@ -121,6 +126,13 @@ components:
           queue_age_threshold_seconds:
             replays: 300
         pipelines:
+          films:
+            unprocessed_prefix: films/unprocessed/
+            preserve_source_versions: true
+            visibility_timeout_seconds: 5400
+            message_retention_seconds: 604800
+            receive_wait_time_seconds: 20
+            max_receive_count: 4
           replays:
             visibility_timeout_seconds: 3600
         storage:
@@ -138,8 +150,11 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: foundation-20261008-r1
+          image_tag: intake-20261008-r1
           memory_mb: 3008
+          intake_configured: true
+          event_source_enabled: false
+          reserved_concurrency: 0
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:

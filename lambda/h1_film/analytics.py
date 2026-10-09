@@ -1,4 +1,4 @@
-"""H1 analytics adaptation. Not registered as a live upload handler yet."""
+"""Verified H1 analytics adaptation shared by local reconciliation and intake."""
 
 from __future__ import annotations
 

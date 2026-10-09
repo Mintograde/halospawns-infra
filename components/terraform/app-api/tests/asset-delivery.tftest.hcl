@@ -11,6 +11,64 @@ mock_provider "aws" {
 }
 mock_provider "archive" {}
 
+run "h1_disabled_by_default" {
+  command = plan
+  assert {
+    condition     = length(local.h1_film_api_routes) == 0 && !contains(keys(local.app_lambda_environment), "H1FILM_PROCESSING_QUEUE_URL")
+    error_message = "H1 must not change existing stacks without explicit adoption."
+  }
+}
+
+run "h1_contracts_without_activation" {
+  command = plan
+  variables {
+    h1_film = { enabled = true }
+    trusted_services = {
+      parameter_names = { h1-film = "/halospawns/dev/app-api/trusted-clients/h1-film/hmac-secret" }
+    }
+  }
+  override_data {
+    target = data.terraform_remote_state.uploads_ingest[0]
+    values = {
+      outputs = {
+        uploads_bucket_name = "uploads-dev-283279960672"
+        uploads_bucket_arn  = "arn:aws:s3:::uploads-dev-283279960672"
+        pipelines = {
+          films = {
+            queue_name         = "films-processing-queue"
+            dlq_name           = "films-processing-dlq"
+            queue_url          = "https://sqs.us-east-1.amazonaws.com/283279960672/films-processing-queue"
+            queue_arn          = "arn:aws:sqs:us-east-1:283279960672:films-processing-queue"
+            unprocessed_prefix = "films/unprocessed/"
+          }
+        }
+      }
+    }
+  }
+  assert {
+    condition = (
+      local.app_lambda_environment.H1FILM_UPLOADS_ENABLED == "false" &&
+      local.app_lambda_environment.H1FILM_PROCESSING_ENABLED == "false" &&
+      !contains(keys(local.app_lambda_environment), "H1FILM_MAX_SIZE_BYTES") &&
+      length(local.h1_film_api_routes) == 2 &&
+      alltrue([for route in local.h1_film_api_routes : route.authorization_type == "NONE"])
+    )
+    error_message = "Contracts must expose HMAC routes without enabling producers or claiming measured limits."
+  }
+}
+
+run "h1_activation_requires_measured_bounds" {
+  command = plan
+  variables { h1_film = { enabled = true, processing_enabled = true } }
+  expect_failures = [var.h1_film]
+}
+
+run "h1_uploads_require_processing" {
+  command = plan
+  variables { h1_film = { uploads_enabled = true } }
+  expect_failures = [var.h1_film]
+}
+
 override_data {
   target = data.terraform_remote_state.uploads_ingest[0]
   values = {

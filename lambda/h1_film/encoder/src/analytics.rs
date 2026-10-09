@@ -212,6 +212,7 @@ impl Export {
         }
         Ok(
             json!({"schema":"halospawns.h1AnalyticsSource.v1", "ticks":self.samples,
+            "match_end_source_tick":self.first_ended_tick,
             "ticks_per_second":30, "uncompressed_bytes":raw_bytes, "size_bytes":bytes}),
         )
     }

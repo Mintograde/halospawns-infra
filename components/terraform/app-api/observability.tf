@@ -125,6 +125,10 @@ locals {
       primary   = "#27AE60"
       secondary = "#6FCF97"
     }
+    films = {
+      primary   = "#A12B59"
+      secondary = "#D5769A"
+    }
     map-rendering = {
       primary   = "#F2994A"
       secondary = "#F2C94C"

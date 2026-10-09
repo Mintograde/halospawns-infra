@@ -147,6 +147,7 @@ variable "pipelines" {
     unprocessed_prefix         = string
     processed_prefix           = optional(string)
     failed_prefix              = optional(string)
+    preserve_source_versions   = optional(bool, false)
     visibility_timeout_seconds = optional(number, 300)
     message_retention_seconds  = optional(number, 604800)
     receive_wait_time_seconds  = optional(number, 20)

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adapterFor, readEnvelope } from './film.mjs';
 import { resolveMap, selectProfile } from './profiles.mjs';
@@ -134,7 +134,13 @@ export async function convertFilm(options) {
       { cwd: work, env: environment, windowsHide: true, stdio: ['pipe', encoderLog, encoderLog] });
     const encoded = completion(encoder);
     encoder.stdin.on('error', () => kill());
-    const engine = spawn(process.execPath, ['--max-old-space-size=4096',
+    const permissions = values['engine-permissions'] ? ['--permission',
+      `--allow-fs-read=${work}`, `--allow-fs-read=${dirname(values.engine)}`,
+      `--allow-fs-read=${fileURLToPath(new URL('./metrics.mjs', import.meta.url))}`,
+      `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs', import.meta.url))}`,
+      `--allow-fs-write=${work}`, `--allow-fs-write=${environment.H1_EXPORT_METRICS}`,
+      '--import', new URL('./engine-permissions.mjs', import.meta.url).href] : [];
+    const engine = spawn(process.execPath, [...permissions, '--max-old-space-size=4096',
       '--import', new URL('./metrics.mjs', import.meta.url).href, values.engine,
       '--film', 'input.h1film', '--deterministic', '--ticks', String(native.envelope.ticks + 10), '--dump', 'NUL'],
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });

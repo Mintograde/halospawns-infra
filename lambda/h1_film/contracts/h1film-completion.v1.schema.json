@@ -1,0 +1,115 @@
+{
+  "$comment": "Generated from API schemas/h1films.py SHA256 29855cbddcdbb0a806afddc1b273e4fc53064d43d8c85fb3bb3fa5eb9ead0d46",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "analytics_revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Analytics Revision",
+      "type": "integer"
+    },
+    "conversion_id": {
+      "format": "uuid",
+      "title": "Conversion Id",
+      "type": "string"
+    },
+    "engine_profile": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Engine Profile",
+      "type": "string"
+    },
+    "expected_hash_checks": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Expected Hash Checks",
+      "type": "integer"
+    },
+    "glue_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Glue Sha256",
+      "type": "string"
+    },
+    "hash_checks": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Hash Checks",
+      "type": "integer"
+    },
+    "hash_mismatches": {
+      "maximum": 0,
+      "minimum": 0,
+      "title": "Hash Mismatches",
+      "type": "integer"
+    },
+    "match_end_source_tick": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Match End Source Tick"
+    },
+    "played_tick_count": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Played Tick Count",
+      "type": "integer"
+    },
+    "raw_map_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Raw Map Sha256",
+      "type": "string"
+    },
+    "recording_complete": {
+      "title": "Recording Complete",
+      "type": "boolean"
+    },
+    "recording_duration_seconds": {
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "title": "Recording Duration Seconds",
+      "type": "number"
+    },
+    "seed_mismatches": {
+      "maximum": 0,
+      "minimum": 0,
+      "title": "Seed Mismatches",
+      "type": "integer"
+    },
+    "source_tick_count": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Source Tick Count",
+      "type": "integer"
+    },
+    "wasm_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Wasm Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "conversion_id",
+    "engine_profile",
+    "wasm_sha256",
+    "glue_sha256",
+    "raw_map_sha256",
+    "source_tick_count",
+    "played_tick_count",
+    "hash_checks",
+    "expected_hash_checks",
+    "hash_mismatches",
+    "seed_mismatches",
+    "recording_duration_seconds",
+    "recording_complete"
+  ],
+  "title": "H1FilmCompletion",
+  "type": "object"
+}

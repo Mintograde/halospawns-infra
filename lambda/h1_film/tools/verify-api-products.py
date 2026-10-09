@@ -17,11 +17,25 @@ def main():
     args = parser.parse_args()
     sys.path.insert(0, str(args.api.resolve() / "src"))
     from halospawns_api.repositories.replay_ingest import _game_graph_data_from_meta
+    from halospawns_api.schemas.h1films import H1FilmJob
     from halospawns_api.schemas.replay_ingest import ReplayIngestRequest
+    from halospawns_api.schemas.replay_viewer_artifacts import (
+        ReplayViewerArtifactCompletionRequest,
+    )
     from halospawns_api.services.replay_ingest import _spatial_events_from_game_meta
 
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
+    checked_modes = ["initial"]
+    for mode, model in (("viewer-rebuild", ReplayViewerArtifactCompletionRequest),
+                        ("full-reparse", ReplayIngestRequest)):
+        path = args.finalization.with_name(f"{mode}-completion.json")
+        if path.exists():
+            other = model.model_validate_json(path.read_text(encoding="utf-8"))
+            job = H1FilmJob.model_validate_json(path.with_name(f"{mode}-job.json").read_text(encoding="utf-8"))
+            assert other.h1film == request.h1film
+            assert str(other.reprocess_attempt_id) == str(job.attempt_id)
+            checked_modes.append(mode)
     participants = tuple(
         {**p.model_dump(), "id": f"offline-slot-{p.slot_index}"}
         for p in request.participants
@@ -41,6 +55,7 @@ def main():
     result = {
         "status": "api_schema_and_pure_builders_verified",
         "database_access": False,
+        "product_modes": checked_modes,
         "participants": len(participants),
         "graphs": graphs,
         "spatial_event_count": len(events),

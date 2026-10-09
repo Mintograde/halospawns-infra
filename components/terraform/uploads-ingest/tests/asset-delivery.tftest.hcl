@@ -104,6 +104,40 @@ run "invalid_mode" {
   expect_failures = [var.asset_delivery_mode]
 }
 
+run "h1_preserves_canonical_versions" {
+  state_key = "assets"
+  command   = plan
+  variables {
+    pipelines = {
+      maps = {
+        unprocessed_prefix = "maps/unprocessed/"
+        processed_prefix   = "maps/processed/"
+        failed_prefix      = "maps/failed/"
+      }
+      replays = {
+        unprocessed_prefix = "replays/unprocessed/"
+        processed_prefix   = "replays/processed/"
+        failed_prefix      = "replays/failed/"
+      }
+      films = {
+        unprocessed_prefix         = "films/unprocessed/"
+        preserve_source_versions   = true
+        visibility_timeout_seconds = 5400
+      }
+    }
+  }
+  assert {
+    condition = (
+      !contains(keys(local.pipeline_lifecycle_rules), "films-unprocessed") &&
+      local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
+      local.pipelines.films.unprocessed_prefix == "films/unprocessed/" &&
+      aws_sqs_queue.file_processing["films"].visibility_timeout_seconds == 5400 &&
+      length(local.asset_download_object_arns) == 8
+    )
+    error_message = "Keep pinned film versions without broadening CDN access or changing Xbox retention."
+  }
+}
+
 run "cdn_not_provisioned" {
   state_key = "assets"
   command   = plan

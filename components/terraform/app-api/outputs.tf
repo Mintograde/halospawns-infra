@@ -126,6 +126,8 @@ output "api_contract" {
     replay_finalization               = "/v1/ingest/replay-uploads"
     replay_viewer_artifact_completion = "/v1/ingest/replay-viewer-artifacts"
     replay_reprocess_attempt_status   = "/v1/ingest/replay-reprocess-attempts/{attempt_id}/status"
+    h1_film_prepare                   = "/v1/ingest/h1films/prepare"
+    h1_film_resolve_map               = "/v1/ingest/h1films/resolve-map"
     map_finalization                  = "/v1/ingest/map-uploads"
     map_support_resource_ingest       = "/v1/ingest/map-support-resources"
     map_support_resource_resolve      = "/v1/ingest/map-support-resources/resolve"

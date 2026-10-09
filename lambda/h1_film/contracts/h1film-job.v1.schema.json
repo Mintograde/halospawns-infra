@@ -1,0 +1,381 @@
+{
+  "$comment": "Generated from API schemas/h1films.py SHA256 29855cbddcdbb0a806afddc1b273e4fc53064d43d8c85fb3bb3fa5eb9ead0d46",
+  "$defs": {
+    "H1FilmEngine": {
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "title": "Build",
+          "type": "string"
+        },
+        "format": {
+          "title": "Format",
+          "type": "integer"
+        },
+        "glue_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Glue Sha256",
+          "type": "string"
+        },
+        "protocol_revision": {
+          "title": "Protocol Revision",
+          "type": "integer"
+        },
+        "tick_rate": {
+          "title": "Tick Rate",
+          "type": "integer"
+        },
+        "wasm_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Wasm Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "protocol_revision",
+        "tick_rate",
+        "build",
+        "wasm_sha256",
+        "glue_sha256"
+      ],
+      "title": "H1FilmEngine",
+      "type": "object"
+    },
+    "H1FilmEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Build",
+          "type": "string"
+        },
+        "engine_profile": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Engine Profile",
+          "type": "string"
+        },
+        "format": {
+          "minimum": 1,
+          "title": "Format",
+          "type": "integer"
+        },
+        "hash_sample_count": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Hash Sample Count",
+          "type": "integer"
+        },
+        "map_size_bytes": {
+          "maximum": 268435456,
+          "minimum": 1,
+          "title": "Map Size Bytes",
+          "type": "integer"
+        },
+        "player_count": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Player Count",
+          "type": "integer"
+        },
+        "protocol_revision": {
+          "minimum": 1,
+          "title": "Protocol Revision",
+          "type": "integer"
+        },
+        "scenario": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,159}$",
+          "title": "Scenario",
+          "type": "string"
+        },
+        "source_tick_count": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Source Tick Count",
+          "type": "integer"
+        },
+        "tick_rate": {
+          "minimum": 1,
+          "title": "Tick Rate",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "engine_profile",
+        "format",
+        "protocol_revision",
+        "tick_rate",
+        "build",
+        "scenario",
+        "map_size_bytes",
+        "source_tick_count",
+        "player_count",
+        "hash_sample_count"
+      ],
+      "title": "H1FilmEvidence",
+      "type": "object"
+    },
+    "H1FilmIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "conversion_id": {
+          "format": "uuid",
+          "title": "Conversion Id",
+          "type": "string"
+        },
+        "engine": {
+          "$ref": "#/$defs/H1FilmEngine"
+        },
+        "film": {
+          "$ref": "#/$defs/H1FilmEvidence"
+        },
+        "map_binding": {
+          "$ref": "#/$defs/H1FilmMapBinding"
+        },
+        "source": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "source_kind": {
+          "const": "h1film",
+          "title": "Source Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversion_id",
+        "source_kind",
+        "source",
+        "film",
+        "engine",
+        "map_binding"
+      ],
+      "title": "H1FilmIdentity",
+      "type": "object"
+    },
+    "H1FilmMapBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "binding_id": {
+          "format": "uuid",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "corrected_exporter": {
+          "title": "Corrected Exporter",
+          "type": "string"
+        },
+        "engine_profile": {
+          "title": "Engine Profile",
+          "type": "string"
+        },
+        "game_release_key": {
+          "title": "Game Release Key",
+          "type": "string"
+        },
+        "glb_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Glb Sha256",
+          "type": "string"
+        },
+        "map_id": {
+          "format": "uuid",
+          "title": "Map Id",
+          "type": "string"
+        },
+        "raw_source": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "scenario": {
+          "title": "Scenario",
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding_id",
+        "map_id",
+        "game_release_key",
+        "raw_source",
+        "glb_sha256",
+        "corrected_exporter",
+        "engine_profile",
+        "scenario"
+      ],
+      "title": "H1FilmMapBinding",
+      "type": "object"
+    },
+    "H1FilmSource": {
+      "additionalProperties": false,
+      "properties": {
+        "s3_bucket": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "S3 Bucket",
+          "type": "string"
+        },
+        "s3_key": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Key",
+          "type": "string"
+        },
+        "s3_version_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Version Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 536870912,
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "s3_bucket",
+        "s3_key",
+        "s3_version_id",
+        "size_bytes",
+        "sha256"
+      ],
+      "title": "H1FilmSource",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Attempt Id"
+    },
+    "conversion": {
+      "$ref": "#/$defs/H1FilmIdentity"
+    },
+    "environment": {
+      "title": "Environment",
+      "type": "string"
+    },
+    "game_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Game Id"
+    },
+    "generation_token": {
+      "format": "uuid",
+      "title": "Generation Token",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "full_reparse",
+        "viewer_rebuild"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "replay_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Replay Id"
+    },
+    "requested_outputs": {
+      "items": {
+        "enum": [
+          "viewer_artifact",
+          "game",
+          "participants",
+          "stats",
+          "spawn_points",
+          "game_meta",
+          "graph_context",
+          "spatial_artifact"
+        ],
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Requested Outputs",
+      "type": "array"
+    },
+    "schema": {
+      "const": "halospawns.h1film_job.v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "source_kind": {
+      "const": "h1film",
+      "title": "Source Kind",
+      "type": "string"
+    },
+    "trigger": {
+      "enum": [
+        "initial_intake",
+        "manual_reprocess"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    },
+    "upload_id": {
+      "format": "uuid",
+      "title": "Upload Id",
+      "type": "string"
+    },
+    "viewer_artifact_target": {
+      "additionalProperties": true,
+      "title": "Viewer Artifact Target",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "job_id",
+    "trigger",
+    "environment",
+    "source_kind",
+    "upload_id",
+    "replay_id",
+    "game_id",
+    "attempt_id",
+    "generation_token",
+    "mode",
+    "conversion",
+    "requested_outputs",
+    "viewer_artifact_target"
+  ],
+  "title": "H1FilmJob",
+  "type": "object"
+}

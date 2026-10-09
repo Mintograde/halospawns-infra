@@ -1,0 +1,22 @@
+{
+  "upload_id": "22222222-2222-4222-8222-222222222222",
+  "source": {
+    "s3_bucket": "contract-fixture-bucket",
+    "s3_key": "films/unprocessed/22222222-2222-4222-8222-222222222222-example.h1film",
+    "s3_version_id": "fixture-film-version-1",
+    "size_bytes": 1024,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "film": {
+    "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+    "format": 2,
+    "protocol_revision": 45,
+    "tick_rate": 120,
+    "build": "2.0 Public Beta 3 - September 28 2026",
+    "scenario": "example",
+    "map_size_bytes": 2048,
+    "source_tick_count": 120,
+    "player_count": 1,
+    "hash_sample_count": 1
+  }
+}

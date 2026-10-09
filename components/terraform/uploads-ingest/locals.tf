@@ -42,7 +42,7 @@ locals {
         prefix                             = pipeline.unprocessed_prefix
         expiration_days                    = null
         noncurrent_version_expiration_days = var.storage.pipeline_lifecycle.temporary_noncurrent_version_expiration_days
-      }
+      } if !pipeline.preserve_source_versions
     },
     {
       for name, pipeline in local.pipelines : "${name}-processed" => {

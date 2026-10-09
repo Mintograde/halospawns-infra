@@ -4,6 +4,8 @@
 !lambda/h1_film/handler.mjs
 !lambda/h1_film/convert.mjs
 !lambda/h1_film/package.json
+!lambda/h1_film/*.py
+!lambda/h1_film/contracts/**
 !lambda/h1_film/runtime/**
 !lambda/h1_film/profiles/**
 !lambda/h1_film/encoder/**
@@ -16,5 +18,12 @@ lambda/h1_film/encoder/target/**
 !lambda/replay_parser/
 !lambda/replay_parser/native/
 !lambda/replay_parser/native/src/
-!lambda/replay_parser/native/src/viewer.rs
+!lambda/replay_parser/native/Cargo.toml
+!lambda/replay_parser/native/Cargo.lock
+!lambda/replay_parser/native/src/**
 !lambda/replay_parser/contracts/**
+!lambda/replay_parser/handler.py
+!lambda/replay_parser/viewer_delta.py
+!lambda/replay_parser/requirements.txt
+**/target/**
+**/__pycache__/**

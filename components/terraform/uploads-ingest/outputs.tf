@@ -21,6 +21,11 @@ output "file_processing_queue_arns" {
   }
 }
 
+output "file_uploaded_topic_arns" {
+  description = "Expected SNS notification topics by upload type."
+  value       = { for name, topic in aws_sns_topic.file_uploaded : name => topic.arn }
+}
+
 output "asset_delivery" {
   description = "Non-secret download contract, retained in S3 mode for future switching."
   value = {

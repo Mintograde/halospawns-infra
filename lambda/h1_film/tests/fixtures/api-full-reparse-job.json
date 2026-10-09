@@ -1,0 +1,84 @@
+{
+  "schema": "halospawns.h1film_job.v1",
+  "job_id": "h1film:22222222-2222-4222-8222-222222222222:generation:77777777-7777-4777-8777-777777777777",
+  "trigger": "manual_reprocess",
+  "environment": "dev",
+  "source_kind": "h1film",
+  "upload_id": "22222222-2222-4222-8222-222222222222",
+  "replay_id": "88888888-8888-4888-8888-888888888888",
+  "game_id": "99999999-9999-4999-8999-999999999999",
+  "attempt_id": "77777777-7777-4777-8777-777777777777",
+  "generation_token": "77777777-7777-4777-8777-777777777777",
+  "mode": "full_reparse",
+  "conversion": {
+    "conversion_id": "33333333-3333-4333-8333-333333333333",
+    "source_kind": "h1film",
+    "source": {
+      "s3_bucket": "contract-fixture-bucket",
+      "s3_key": "films/unprocessed/22222222-2222-4222-8222-222222222222-example.h1film",
+      "s3_version_id": "fixture-film-version-1",
+      "size_bytes": 1024,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "film": {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "format": 2,
+      "protocol_revision": 45,
+      "tick_rate": 120,
+      "build": "2.0 Public Beta 3 - September 28 2026",
+      "scenario": "example",
+      "map_size_bytes": 2048,
+      "source_tick_count": 120,
+      "player_count": 1,
+      "hash_sample_count": 1
+    },
+    "engine": {
+      "format": 2,
+      "protocol_revision": 45,
+      "tick_rate": 120,
+      "build": "2.0 Public Beta 3 - September 28 2026",
+      "wasm_sha256": "d49d466d263927cd17050af63690525be08e2fb1a0f805322e88d0d8cd1a6e9b",
+      "glue_sha256": "21b54e1d321a3e116ecce26de68c17e078e598122c7ad8475fb3ff0eba4a04ab"
+    },
+    "map_binding": {
+      "binding_id": "44444444-4444-4444-8444-444444444444",
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "map_id": "55555555-5555-4555-8555-555555555555",
+      "game_release_key": "h1_beta3_fixture",
+      "scenario": "example",
+      "raw_source": {
+        "s3_bucket": "contract-fixture-bucket",
+        "s3_key": "maps/unprocessed/example.map",
+        "s3_version_id": "fixture-map-version-1",
+        "size_bytes": 2048,
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "glb_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "corrected_exporter": "fixture-corrected-pc-geometry-exporter"
+    }
+  },
+  "requested_outputs": [
+    "viewer_artifact",
+    "game",
+    "participants",
+    "stats",
+    "spawn_points",
+    "game_meta",
+    "graph_context",
+    "spatial_artifact"
+  ],
+  "viewer_artifact_target": {
+    "artifact_kind": "viewer_replay_delta",
+    "format": "halospawns.viewerReplayDelta.v1",
+    "container_version": 1,
+    "manifest_schema_sha256": "40b8250eab05112c7ee9f2f4d5ac8b776d9bcb35fbf7ce1bdbb7c4e247c3397b",
+    "encoding_sha256": "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb",
+    "profile": "frontend-default",
+    "profile_revision": 2,
+    "projection_sha256": "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530",
+    "schema_name": "halospawns.viewerReplay.v1",
+    "generation_token": "77777777-7777-4777-8777-777777777777",
+    "request_epoch": 1,
+    "request_sequence": 2
+  }
+}

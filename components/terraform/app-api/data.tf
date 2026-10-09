@@ -99,6 +99,33 @@ data "aws_iam_policy_document" "artifact_bucket" {
 data "aws_iam_policy_document" "app_runtime" {
   count = var.enabled ? 1 : 0
 
+  dynamic "statement" {
+    for_each = local.h1_film_api_enabled ? [1] : []
+    content {
+      sid       = "PresignH1FilmUploads"
+      actions   = ["s3:PutObject"]
+      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.h1_film_api_enabled ? [1] : []
+    content {
+      sid       = "DownloadOwnedH1FilmVersion"
+      actions   = ["s3:GetObjectVersion"]
+      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.h1_film_api_enabled && local.h1_film_pipeline != null ? [1] : []
+    content {
+      sid       = "SendH1FilmProcessingJobs"
+      actions   = ["sqs:SendMessage"]
+      resources = [local.h1_film_pipeline.queue_arn]
+    }
+  }
+
   statement {
     sid       = "ReadRuntimeParameters"
     actions   = ["ssm:GetParameter"]
