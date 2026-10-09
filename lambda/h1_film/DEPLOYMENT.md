@@ -17,6 +17,96 @@ only reference/benchmark tooling and historical notes. See [README.md](README.md
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
 
+## Match-only analytics implemented 2026-10-09
+
+Implemented locally; not published or applied. The live worker remains
+`intake-20261008-r1`. The user requested playable postgame without contributing
+to match statistics/events. H1 may also expose richer/alternative native
+statistics, not only Xbox-equivalent fields; source-specific API/UI work remains
+in the parity handoffs.
+
+The encoder freezes match counters/events and clips the private analytics
+sidecar while preserving every viewer tick. Final engine-gated scores survive;
+ungated shots/damage/pickup counts stop at the preceding snapshot. End-marker
+occupancy is excluded. This conservative 120 Hz cutoff does not resolve action
+ordering inside the ending update; exact sub-tick hooks remain future work.
+Films without an observed end retain their observed coverage. Boundary details
+and partial-film behavior: `COMPATIBILITY.md`.
+
+New output carries analytics revision 2, independent of viewer revision 2.
+API locally accepts revisions 1 and 2, bounds revision-2 graph keys to match
+coverage, and preserves old reads/completion retries. No simulation profile,
+WASM/glue bytes, immutable viewer contracts or aggregate eligibility changed.
+
+Verification:
+
+- 36 Rust tests passed; one opt-in profiling test skipped. Boundary fixtures
+  cover end ticks 0/1/3/4/5/8, partial/no-end coverage, final scores, frozen viewer
+  counters, retained movement, event clipping and both output rates.
+- 24 H1 Python and 12 Node tests passed. The completion schema snapshot matches
+  the API model, including revision-1 defaults and revision-2 acceptance.
+- All 81 production parser tests passed with a freshly built native extractor.
+  Two initial default-viewer-revision failures with an older cached extractor
+  disappeared after rebuilding from current source.
+- 119 focused API unit tests and six isolated local PostgreSQL cases passed,
+  covering persisted availability, idempotency, aggregate exclusion, stale
+  reprocessing and revision-1-to-2 promotion. No shared database was used.
+- API Ruff, Rust formatting and whitespace checks passed. API source-only Lambda
+  packaging passed; it is not a dependency/native-wheel release ZIP or a Linux
+  worker container build.
+- Prisoner, Dread and Downrush passed all 704/630/671 recorded world hash checks
+  with zero hash/seed mismatches and complete 120/30 Hz readback. Comparison
+  against retained artifacts verifies all gameplay state unchanged except match
+  statistics. Whole-file hashes intentionally change for corrected stats/events;
+  local historical `recordedAt` values also differ and are not UTC evidence.
+- Prisoner retains 84,367 viewer ticks (703.058333 seconds), with match end at
+  tick 77,811 and 19,453 analytics samples. Final shots are 282/245/296/279,
+  removing 11 postgame shots. Slot 3 damage dealt is 4,666 instead of 4,766;
+  kills/deaths and the 40-50 score are unchanged. Events fall from 968 to 958.
+  Native/Python analytics and shared finalization agree offline.
+
+Evidence: `L:\tmp\halospawns-h1-postgame-20261009`, including conversion reports,
+complete artifact readback, `comparison.json`, Dread/Downrush comparison reports,
+`compare_artifacts.py`, `prisoner-reconciliation-fresh/` and a source packaging
+smoke ZIP. No private source/map/engine or generated product is committed.
+
+Primary commands from infra, using the configured Python SDK:
+
+```powershell
+cargo test --locked --manifest-path lambda/h1_film/encoder/Cargo.toml --target-dir .build/h1-encoder
+cargo fmt --check --manifest-path lambda/h1_film/encoder/Cargo.toml
+npm --prefix lambda/h1_film test
+.\.venv\Scripts\python.exe -m unittest discover -s lambda/h1_film/tests -q
+cargo build --locked --release --manifest-path lambda/h1_film/encoder/Cargo.toml --target-dir .build/h1-encoder
+cargo build --locked --release --manifest-path lambda/replay_parser/native/Cargo.toml --target-dir .build/h1-encoder
+$env:REPLAY_EXTRACTOR_TEST_BINARY = 'L:/bens_stuff/projects/halospawns-infra/.build/h1-encoder/release/replay-extractor.exe'
+.\.venv\Scripts\python.exe -m unittest discover -s lambda/replay_parser/tests -q
+node lambda/h1_film/convert.mjs --film 'L:/tmp/halospawns-h1-parity-20261009/source.h1film' --assets 'L:/bens_stuff/xbox mod/Games/H1 Performance Build 2.0 Beta 3' --engine 'L:/tmp/halospawns-h1-film-wasm-20261004/h1-film.js' --encoder .build/h1-encoder/release/h1-film-encoder.exe --trusted-local --analytics --output 'L:/tmp/halospawns-h1-postgame-20261009/prisoner'
+.\.venv\Scripts\python.exe lambda/h1_film/tools/reconcile.py --conversion 'L:/tmp/halospawns-h1-postgame-20261009/prisoner' --film 'L:/tmp/halospawns-h1-parity-20261009/source.h1film' --extractor .build/h1-encoder/release/replay-extractor.exe --output 'L:/tmp/halospawns-h1-postgame-20261009/prisoner-reconciliation-fresh'
+```
+
+Dread/Downrush used the same converter options with their retained source films
+and separate outputs. API tests used isolated `uv run --no-project` with the
+configured infra SDK and `--with` the API's `[dev]` package: `pytest
+tests/unit/test_h1films.py tests/unit/test_h1film_routes.py
+tests/unit/test_h1film_map_reviews.py -q`. PostgreSQL used
+`HALOSPAWNS_TEST_POSTGRES=1` and `pytest tests/integration/test_h1films_postgres.py
+-k 'full_completion_persistence or reprocess_fences' -q`.
+
+Changed runtime files: `encoder/src/main.rs`, `encoder/src/analytics.rs`,
+`runtime/convert.mjs`, `analytics.py`, `cloud.py`, the completion schema snapshot,
+plus tests/docs. API changes: `schemas/h1films.py`, `services/h1film_ingest.py`,
+tests/docs. Svelte only has an updated handoff; no frontend implementation yet.
+
+Release order: publish compatible API code, build/test a new immutable worker
+image with every retained engine, review focused/full dev plans, then apply the
+reviewed H1 image update. Full-reparse the existing game to repair stored stats,
+graphs and spatial products together, then verify hosted scoreboard/graphs/tail
+seeking. Viewer-only rebuild cannot repair stored match statistics.
+No Terraform component/resource, stack pin, secret, hosted data or prod change
+was made. No plan/apply or cloud reprocessing command ran; no AWS session was
+needed. Container publication and hosted browser/reparse acceptance remain open.
+
 ## Dev preview enabled 2026-10-09
 
 The user's explicit request to enable flags for their single-user dev environment

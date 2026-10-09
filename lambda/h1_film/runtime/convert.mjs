@@ -179,7 +179,13 @@ export async function convertFilm(options) {
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');
       const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
-      assert.equal(encoding.analytics.ticks, Math.ceil(native.envelope.ticks / 4));
+      const end = encoding.analytics.match_end_source_tick;
+      assert.ok(end === null || (Number.isInteger(end) && end >= 0 && end < native.envelope.ticks));
+      const statisticsTicks = end === null ? native.envelope.ticks : end + 1;
+      assert.equal(encoding.analytics_revision, 2);
+      assert.equal(encoding.analytics.analytics_revision, 2);
+      assert.equal(encoding.analytics.statistics_source_ticks, statisticsTicks);
+      assert.equal(encoding.analytics.ticks, Math.ceil(statisticsTicks / 4));
       assert.equal((await stat(path)).size, encoding.analytics.size_bytes);
       report.analytics = { ...encoding.analytics, sha256: await sha256(path) };
     }

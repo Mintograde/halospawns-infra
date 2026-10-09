@@ -13,6 +13,7 @@ from .registry import profile_for_report
 
 ANALYTICS_SCHEMA = "halospawns.h1AnalyticsSource.v1"
 KNOWN_GAPS = {
+    "match_end_subtick": "Ungated PGCR counters stop before the first ended snapshot. Exact ordering within that transition tick requires engine hooks; final engine-gated scores are retained.",
     "damage": "PGCR damage dealt is rounded; damage received includes self/environment damage. Xbox uses attributed damage deltas.",
     "weapon_shots": "Per-weapon shot attribution is not exported.",
     "opponent_matrices": "Damage/kill/death attribution by opponent is not exported; counters cannot establish pairs.",
@@ -73,10 +74,24 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     ):
         raise ValueError("Incomplete H1 simulation evidence")
     analytics = report.get("analytics", {})
+    revision = encoding.get("analytics_revision", 1)
+    end = analytics.get("match_end_source_tick")
+    if end is not None and (type(end) is not int or not 0 <= end < ticks):
+        raise ValueError("Invalid H1 match-end boundary")
+    statistics_ticks = end + 1 if revision == 2 and end is not None else ticks
+    if type(revision) is not int or revision not in (1, 2):
+        raise ValueError("Unsupported H1 analytics revision")
+    if analytics.get("analytics_revision", 1) != revision:
+        raise ValueError("Inconsistent H1 analytics revision")
+    if revision == 2 and (
+        analytics.get("statistics_source_ticks") != statistics_ticks
+        or encoding.get("analytics") != {k: v for k, v in analytics.items() if k != "sha256"}
+    ):
+        raise ValueError("Inconsistent H1 match-only analytics evidence")
     if (
         analytics.get("schema") != profile["analytics_contract"]
         or analytics.get("ticks_per_second") != 30
-        or analytics.get("ticks") != (ticks + 3) // 4
+        or analytics.get("ticks") != (statistics_ticks + 3) // 4
     ):
         raise ValueError("Missing 30 Hz H1 analytics contract")
     for name, details, limit in [
@@ -157,7 +172,10 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             "analytics_tick_rate": 30,
             "position_sampling": "every_fourth_source_tick_live_body_only",
             "counter_sampling": "every_source_tick_then_aggregate_to_30hz",
-            "postgame": "retained",
+            "analytics_revision": encoding.get("analytics_revision", 1),
+            "postgame": "retained_in_viewer_excluded_from_statistics"
+            if encoding.get("analytics_revision", 1) == 2
+            else "retained",
             "parity_status": "partial_pending_semantic_reconciliation",
             "known_gaps": KNOWN_GAPS,
         },

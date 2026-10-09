@@ -1,11 +1,11 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 29855cbddcdbb0a806afddc1b273e4fc53064d43d8c85fb3bb3fa5eb9ead0d46",
+  "$comment": "Generated from API schemas/h1films.py SHA256 08385fdecd98570fc8983b9d5e67553512c83be9ca5e4d2df492fefa0fd3c48c",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "analytics_revision": {
-      "const": 1,
       "default": 1,
+      "enum": [1, 2],
       "title": "Analytics Revision",
       "type": "integer"
     },

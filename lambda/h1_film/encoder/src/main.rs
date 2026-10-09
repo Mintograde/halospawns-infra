@@ -70,8 +70,20 @@ struct Observations {
     series: BTreeMap<u64, BTreeMap<&'static str, BTreeMap<usize, Value>>>,
     metric_points: usize,
     final_meta: Map<String, Value>,
-    ended: bool,
+    match_end_source_tick: Option<usize>,
 }
+
+const SCORE_FIELDS: &[&str] = &[
+    "kills",
+    "deaths",
+    "assists",
+    "suicides",
+    "team_kills",
+    "score",
+    "ctf_score",
+    "shots_fired",
+    "shots_hit",
+];
 
 #[derive(serde::Serialize)]
 struct ObservedEvent {
@@ -81,6 +93,44 @@ struct ObservedEvent {
 }
 
 impl Observations {
+    fn freeze_statistics(&self, tick: &mut Value, postgame: bool) {
+        if let Some(players) = tick["players"].as_array_mut() {
+            for player in players {
+                let counters = player["player_index"]
+                    .as_u64()
+                    .and_then(|id| self.previous.get(&id));
+                for &field in SCORE_FIELDS {
+                    // The end flag is exported after the update. Scoring counters
+                    // are engine-gated; PGCR shots and damage are not. Preserve
+                    // the winning score, but exclude end-tick postgame activity.
+                    if !postgame && !matches!(field, "shots_fired" | "shots_hit") {
+                        continue;
+                    }
+                    if let Some(value) = counters.and_then(|before| before.get(field)) {
+                        player[field] = value.clone();
+                    } else if let Some(player) = player.as_object_mut() {
+                        player.remove(field);
+                    }
+                }
+            }
+        }
+        if !self.final_meta.is_empty() {
+            tick["game_meta"] = json!(self.final_meta);
+        } else if let Some(players) = tick["game_meta"]["players"].as_object_mut() {
+            // A film starting in postgame has no observed in-match PGCR baseline.
+            for player in players.values_mut().filter_map(Value::as_object_mut) {
+                for field in [
+                    "damage_dealt",
+                    "damage_received",
+                    "camo_count",
+                    "overshield_count",
+                ] {
+                    player.remove(field);
+                }
+            }
+        }
+    }
+
     fn event(&mut self, ordinal: usize, description: String) -> Result<(), Box<dyn Error>> {
         if self.events.len() >= 200_000 {
             return Err("events exceed the replay contract limit".into());
@@ -99,7 +149,7 @@ impl Observations {
 
     fn observe(
         &mut self,
-        tick: &Value,
+        tick: &mut Value,
         ordinal: usize,
         seats: usize,
     ) -> Result<(), Box<dyn Error>> {
@@ -113,6 +163,11 @@ impl Observations {
         self.last_clock = Some(clock);
         if ordinal == 0 {
             self.event(ordinal, "Game recording started".into())?;
+        }
+        let postgame = self.match_end_source_tick.is_some();
+        let ends_now = tick["game_ended_this_tick"].as_bool() == Some(true);
+        if postgame || ends_now {
+            self.freeze_statistics(tick, postgame);
         }
         let players = tick["players"].as_array().ok_or("missing players")?;
         if players.len() > 4 || (ordinal == 0 && players.len() != seats) {
@@ -143,6 +198,9 @@ impl Observations {
                 .max_shots
                 .max(player["shots_fired"].as_u64().unwrap_or(0));
             self.max_deaths = self.max_deaths.max(player["deaths"].as_u64().unwrap_or(0));
+            if postgame {
+                continue;
+            }
             // Observe counters at 120 Hz before decimation; do not guess killer/victim pairs.
             let mut counters = Map::new();
             for key in [
@@ -154,6 +212,7 @@ impl Observations {
                 "shots_fired",
                 "shots_hit",
                 "score",
+                "ctf_score",
             ] {
                 if let Some(value) = player.get(key) {
                     counters.insert(key.into(), value.clone());
@@ -238,7 +297,10 @@ impl Observations {
                         }
                     }
                 }
-                if counters["unit"].as_u64().is_some() && before["unit"] == counters["unit"] {
+                if !ends_now
+                    && counters["unit"].as_u64().is_some()
+                    && before["unit"] == counters["unit"]
+                {
                     for (key, item) in [
                         ("primary_nades", "frag grenade"),
                         ("secondary_nades", "plasma grenade"),
@@ -253,7 +315,8 @@ impl Observations {
                     }
                 }
             }
-            if counters["unit"].as_u64().is_some()
+            if !ends_now
+                && counters["unit"].as_u64().is_some()
                 && before
                     .as_ref()
                     .is_none_or(|old| old["unit"] != counters["unit"])
@@ -271,14 +334,12 @@ impl Observations {
                     .ok_or("invalid object type")?,
             );
         }
-        if let Some(meta) = tick["game_meta"].as_object() {
+        if !postgame && let Some(meta) = tick["game_meta"].as_object() {
             self.final_meta = meta.clone();
         }
-        if tick["game_ended_this_tick"].as_bool().unwrap_or(false) {
-            if !self.ended {
-                self.event(ordinal, "Game ended".into())?;
-            }
-            self.ended = true;
+        if ends_now && !postgame {
+            self.event(ordinal, "Game ended".into())?;
+            self.match_end_source_tick = Some(ordinal);
         }
         Ok(())
     }
@@ -287,7 +348,16 @@ impl Observations {
         request: &Request,
         stride: usize,
     ) -> Result<Map<String, Value>, Box<dyn Error>> {
-        let count = sampling::sample_count(request.ticks, stride);
+        self.metadata_for_source_ticks(request, stride, request.ticks)
+    }
+
+    fn metadata_for_source_ticks(
+        &self,
+        request: &Request,
+        stride: usize,
+        source_ticks: usize,
+    ) -> Result<Map<String, Value>, Box<dyn Error>> {
+        let count = sampling::sample_count(source_ticks, stride);
         let mut meta = self.final_meta.clone();
         meta.insert("map_name".into(), json!(request.map));
         if let Some(players) = meta.get_mut("players").and_then(Value::as_object_mut) {
@@ -307,7 +377,7 @@ impl Observations {
             .collect();
         let mut replay =
             json!({"summary":{"ticks_recorded":count, "ticks_elapsed":count, "ticks_dropped":0,
-            "recording_duration":request.ticks as f64/120.0, "is_full_game":self.ended},
+            "recording_duration":request.ticks as f64/120.0, "is_full_game":self.match_end_source_tick.is_some()},
             "game_meta":meta, "events":events})
             .as_object()
             .unwrap()
@@ -345,7 +415,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         if count >= request.ticks {
             return Err("engine exported more ticks than the film".into());
         }
-        observations.observe(&tick, count, request.players)?;
+        observations.observe(&mut tick, count, request.players)?;
         sampling::normalize(&mut tick, count, 1, &request.map)?;
         if let Some(analytics) = &mut analytics {
             analytics.observe(&tick, count)?;
@@ -380,7 +450,13 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let analytics = analytics
         .map(|writer| {
             writer.finish(
-                &observations.metadata(&request, 4)?,
+                &observations.metadata_for_source_ticks(
+                    &request,
+                    4,
+                    observations
+                        .match_end_source_tick
+                        .map_or(count, |end| end + 1),
+                )?,
                 request.analytics_context.as_ref().unwrap(),
                 count,
             )
@@ -388,7 +464,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         .transpose()?;
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
         "export_contract":request.export_contract,
-        "analytics":analytics,
+        "analytics":analytics, "analytics_revision":2,
         "source_first_clock":observations.first_clock, "source_last_clock":observations.last_clock,
         "source_hz":120, "sampling":{"120hz":{"stride":1,"phase":0}, "30hz":{"stride":4,"phase":0}},
         "field_units":{"respawn_timer":"output-rate ticks, positive remainder rounded up", "reload_time":"output-rate ticks, positive remainder rounded up",
@@ -464,10 +540,10 @@ mod observation_tests {
         for mode in [3, 4] {
             let mut observations = Observations::default();
             for index in 0..100 {
-                let tick = json!({"current_tick":index,"game_type":mode,
+                let mut tick = json!({"current_tick":index,"game_type":mode,
                     "players":[{"player_index":0,"score":index,"deaths":if index >= 50 { 1 } else { 0 }}],
                     "objects":[]});
-                observations.observe(&tick, index, 1).unwrap();
+                observations.observe(&mut tick, index, 1).unwrap();
             }
             assert_eq!(observations.events.len(), 2);
             assert_eq!(observations.previous[&0]["score"], 99);
@@ -486,8 +562,9 @@ mod observation_tests {
             event_bytes: 8 * 1024 * 1024,
             ..Default::default()
         };
-        let tick = json!({"current_tick":0,"players":[{"player_index":0,"deaths":0}],"objects":[]});
-        let error = observations.observe(&tick, 0, 1).unwrap_err();
+        let mut tick =
+            json!({"current_tick":0,"players":[{"player_index":0,"deaths":0}],"objects":[]});
+        let error = observations.observe(&mut tick, 0, 1).unwrap_err();
         assert!(error.to_string().contains("metadata budget"));
     }
 
@@ -495,11 +572,11 @@ mod observation_tests {
     fn unsampled_counter_changes_and_respawns_are_retained() {
         let mut observations = Observations::default();
         for index in 0..5 {
-            let tick = json!({"current_tick":index,"players":[{"player_index":0,
+            let mut tick = json!({"current_tick":index,"players":[{"player_index":0,
                 "player_object_id":if index == 1 { -1 } else if index > 1 { -65534 } else { -65535 },
                 "deaths":if index > 0 { 1 } else { 0 },"shots_fired":0}],"objects":[],
                 "game_meta":{"map_name":"downrush"}});
-            observations.observe(&tick, index, 1).unwrap();
+            observations.observe(&mut tick, index, 1).unwrap();
         }
         assert_eq!(observations.body_replacements, 1);
         assert_eq!(observations.events[1].source_tick, 1);
@@ -512,11 +589,11 @@ mod observation_tests {
         let mut source = Vec::new();
         for index in 0..5 {
             let value = index.min(2);
-            let tick = json!({"current_tick":index,"game_time_info":{"game_time":index},"players":[{"player_index":0,"name":"A",
+            let mut tick = json!({"current_tick":index,"game_time_info":{"game_time":index},"players":[{"player_index":0,"name":"A",
                 "kills":value,"deaths":value,"assists":value,"shots_fired":value}],"objects":[],
                 "game_meta":{"players":{"0":{"name":"A","damage_dealt":value * 10,
                     "damage_received":value * 5}}}});
-            observations.observe(&tick, index, 1).unwrap();
+            observations.observe(&mut tick, index, 1).unwrap();
             source.push(tick);
         }
         let request = Request {
@@ -609,7 +686,7 @@ mod observation_tests {
         let mut observations = Observations::default();
         observations
             .observe(
-                &json!({"current_tick":0,"players":[{"player_index":0,
+                &mut json!({"current_tick":0,"players":[{"player_index":0,
             "kills":5,"deaths":3,"assists":2}],"objects":[]}),
                 0,
                 1,
@@ -618,5 +695,184 @@ mod observation_tests {
         assert_eq!(observations.events.len(), 1);
         assert!(observations.series.is_empty());
         assert_eq!(observations.initial_counters[&0]["kills"], 5);
+    }
+
+    fn match_tick(i: usize, end: Option<usize>) -> Value {
+        json!({"current_tick":i,"game_time_info":{"game_time":i},
+            "game_type":2,"game_engine_has_teams":false,"game_ended_this_tick":end==Some(i),
+            "players":[{"player_index":0,"name":"A","kills":i,"deaths":i,"assists":i,
+                "suicides":i,"team_kills":i,"score":i,"ctf_score":i,
+                "shots_fired":i,"shots_hit":i,"object_ref":1,"player_object_id":1,
+                "player_object_data":{"x":i,"y":1,"z":2,"primary_nades":20-i}}],
+            "objects":[{"object_type":2,"object_id":1,"x":i,"y":1,"z":2}],
+            "game_meta":{"game_type":2,"has_teams":false,"players":{"0":{"name":"A",
+                "damage_dealt":i*10,"damage_received":i*5,"camo_count":i,"overshield_count":i}}}})
+    }
+
+    #[test]
+    fn match_end_freezes_statistics_and_events_but_not_replay_movement() {
+        for end in [0, 1, 3, 4, 5, 8] {
+            let mut observations = Observations::default();
+            for i in 0..12 {
+                let mut tick = match_tick(i, Some(end));
+                observations.observe(&mut tick, i, 1).unwrap();
+                assert_eq!(tick["players"][0]["kills"], i.min(end));
+                assert_eq!(tick["players"][0]["score"], i.min(end));
+                assert_eq!(tick["players"][0]["ctf_score"], i.min(end));
+                assert_eq!(tick["players"][0]["player_object_data"]["x"], i);
+                assert_eq!(tick["objects"][0]["x"], i);
+                if end > 0 {
+                    assert_eq!(tick["players"][0]["shots_fired"], i.min(end - 1));
+                    assert_eq!(tick["players"][0]["shots_hit"], i.min(end - 1));
+                    assert_eq!(
+                        tick["game_meta"]["players"]["0"]["damage_dealt"],
+                        i.min(end - 1) * 10
+                    );
+                    assert_eq!(
+                        tick["game_meta"]["players"]["0"]["camo_count"],
+                        i.min(end - 1)
+                    );
+                } else {
+                    assert!(tick["players"][0].get("shots_fired").is_none());
+                    assert!(
+                        tick["game_meta"]["players"]["0"]
+                            .get("damage_dealt")
+                            .is_none()
+                    );
+                }
+            }
+            assert_eq!(observations.last_clock, Some(11));
+            assert_eq!(observations.match_end_source_tick, Some(end));
+            assert!(
+                observations
+                    .events
+                    .iter()
+                    .all(|event| event.source_tick <= end)
+            );
+            assert_eq!(
+                observations
+                    .events
+                    .iter()
+                    .filter(|event| event.description == "Game ended")
+                    .count(),
+                1
+            );
+            assert!(
+                observations
+                    .events
+                    .iter()
+                    .filter(|event| event.source_tick == end)
+                    .all(|event| !event.description.contains("picked up")
+                        && !event.description.contains("threw a")
+                        && !event.description.contains("spawned"))
+            );
+            for (metric, series) in observations.series.get(&0).into_iter().flatten() {
+                let limit = if matches!(
+                    *metric,
+                    "kills_by_tick" | "deaths_by_tick" | "assists_by_tick"
+                ) {
+                    end
+                } else {
+                    end.saturating_sub(1)
+                };
+                assert!(series.keys().all(|tick| *tick <= limit));
+            }
+        }
+    }
+
+    #[test]
+    fn postgame_still_validates_clock_and_roster() {
+        let mut observations = Observations::default();
+        observations
+            .observe(&mut match_tick(0, Some(0)), 0, 1)
+            .unwrap();
+        assert!(
+            observations
+                .observe(&mut match_tick(2, None), 1, 1)
+                .is_err()
+        );
+        let mut bad = match_tick(1, None);
+        let duplicate = bad["players"][0].clone();
+        bad["players"].as_array_mut().unwrap().push(duplicate);
+        assert!(observations.observe(&mut bad, 1, 1).is_err());
+    }
+
+    #[test]
+    fn analytics_stops_at_match_end_while_both_viewer_rates_keep_the_tail() {
+        for end in [None, Some(0), Some(1), Some(3), Some(4), Some(5), Some(8)] {
+            let directory = std::env::temp_dir()
+                .join(format!("h1-match-window-{}-{end:?}", std::process::id()));
+            fs::create_dir(&directory).unwrap();
+            let path = directory.join("analytics.zst");
+            let mut analytics = analytics::Export::new(&path).unwrap();
+            let mut observations = Observations::default();
+            let request = Request {
+                ticks: 12,
+                players: 1,
+                map: "prisoner".into(),
+                replay_id: "boundary".into(),
+                recorded_at: "1970-01-01T00:00:00Z".into(),
+                analytics_context: None,
+                zstd_level: 1,
+                source_tick_rate: 120,
+                export_contract: default_export_contract(),
+            };
+            let mut high =
+                artifact::StreamingExport::new(&directory.join("parts-120"), 12, 1).unwrap();
+            let mut low =
+                artifact::StreamingExport::new(&directory.join("parts-30"), 3, 1).unwrap();
+            for i in 0..12 {
+                let mut tick = match_tick(i, end);
+                observations.observe(&mut tick, i, 1).unwrap();
+                sampling::normalize(&mut tick, i, 1, &request.map).unwrap();
+                analytics.observe(&tick, i).unwrap();
+                high.push(&tick).unwrap();
+                if i.is_multiple_of(4) {
+                    sampling::normalize(&mut tick, i, 4, &request.map).unwrap();
+                    low.push(&tick).unwrap();
+                }
+            }
+            let ticks = end.map_or(12, |end| end + 1);
+            let metadata = observations
+                .metadata_for_source_ticks(&request, 4, ticks)
+                .unwrap();
+            let result = analytics
+                .finish(&metadata, &json!({"gametype":"Slayer"}), 12)
+                .unwrap();
+            assert_eq!(result["ticks"], ticks.div_ceil(4));
+            assert_eq!(result["statistics_source_ticks"], ticks);
+            let parsed: Value =
+                serde_json::from_slice(&zstd::decode_all(File::open(&path).unwrap()).unwrap())
+                    .unwrap();
+            assert_eq!(parsed["ticks"].as_array().unwrap().len(), ticks.div_ceil(4));
+            assert_eq!(
+                parsed["ticks"].as_array().unwrap().last().unwrap()["players"][0]["score"],
+                end.unwrap_or(11)
+            );
+            if let Some(end) = end.filter(|tick| tick.is_multiple_of(4)) {
+                assert!(parsed["ticks"][end / 4]["players"][0]["player_object_data"].is_null());
+            }
+            let high_report = high
+                .finish(
+                    &observations.metadata(&request, 1).unwrap(),
+                    &directory.join("high.hsrdc"),
+                    "boundary-120hz",
+                    &request.recorded_at,
+                )
+                .unwrap();
+            let low_report = low
+                .finish(
+                    &observations.metadata(&request, 4).unwrap(),
+                    &directory.join("low.hsrdc"),
+                    "boundary-30hz",
+                    &request.recorded_at,
+                )
+                .unwrap();
+            assert_eq!(serde_json::to_value(high_report).unwrap()["tickCount"], 12);
+            assert_eq!(serde_json::to_value(low_report).unwrap()["tickCount"], 3);
+            artifact::verify_pair(&directory.join("high.hsrdc"), &directory.join("low.hsrdc"))
+                .unwrap();
+            fs::remove_dir_all(directory).unwrap();
+        }
     }
 }

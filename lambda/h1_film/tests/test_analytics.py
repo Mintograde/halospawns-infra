@@ -84,6 +84,53 @@ class H1ProductTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "hash mismatch"):
                 h1_film.verified_products(root, film_sha256="a" * 64)
 
+    def match_only_fixture(self, root, end):
+        report = self.fixture(root)
+        encoding_path = root / "candidate" / "encoding.json"
+        encoding = json.loads(encoding_path.read_text())
+        ticks = report["envelope"]["ticks"] if end is None else end + 1
+        report["analytics"].update(
+            analytics_revision=2,
+            match_end_source_tick=end,
+            statistics_source_ticks=ticks,
+            ticks=(ticks + 3) // 4,
+        )
+        encoding["analytics_revision"] = 2
+        encoding["analytics"] = {
+            key: value for key, value in report["analytics"].items() if key != "sha256"
+        }
+        (root / "report.json").write_text(json.dumps(report))
+        encoding_path.write_text(json.dumps(encoding))
+        return report, encoding
+
+    def test_match_only_products_keep_full_simulation_and_validate_shorter_analytics(self):
+        for end in (None, 0, 1, 3, 4):
+            with self.subTest(end=end), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                report, encoding = self.match_only_fixture(root, end)
+                h1_film.verified_products(root, film_sha256="a" * 64)
+                self.assertEqual(encoding["source_ticks"], 5)
+                if end is not None and end < 4:
+                    self.assertEqual(report["analytics"]["ticks"], 1)
+
+    def test_match_only_products_reject_conflicting_windows_and_revisions(self):
+        for field, value in (
+            ("match_end_source_tick", -1),
+            ("match_end_source_tick", 5),
+            ("match_end_source_tick", True),
+            ("match_end_source_tick", 1.5),
+            ("statistics_source_ticks", 5),
+            ("analytics_revision", 1),
+            ("ticks", 2),
+        ):
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                report, _ = self.match_only_fixture(root, 1)
+                report["analytics"][field] = value
+                (root / "report.json").write_text(json.dumps(report))
+                with self.assertRaises(ValueError):
+                    h1_film.verified_products(root, film_sha256="a" * 64)
+
     def test_unverified_desynced_unknown_profile_and_wrong_rate_are_rejected(self):
         for group, key, value in [
             (None, "status", "started"),
@@ -196,13 +243,18 @@ class H1AdaptationTests(unittest.TestCase):
             "provenance": {"film_sha256": "a" * 64, "map_sha256": "b" * 64},
         }
         result = h1_film.adapt_parsed_replay(
-            parsed, report=report, encoding={"final_counters": {"0": counters}}
+            parsed, report=report, encoding={"final_counters": {"0": counters}, "analytics_revision": 2}
         )
         self.assertEqual(result.game["map_id"], binding["map_id"])
         self.assertEqual(result.participants[0]["stats"]["score"], 0)
         self.assertEqual(result.participants[0]["stats"]["shots_hit"], 3)
         self.assertNotIn("game.host_style", result.facts["game"])
         self.assertEqual(result.metadata["h1_film"]["analytics_tick_rate"], 30)
+        self.assertEqual(result.metadata["h1_film"]["analytics_revision"], 2)
+        self.assertEqual(
+            result.metadata["h1_film"]["postgame"],
+            "retained_in_viewer_excluded_from_statistics",
+        )
         self.assertEqual(parsed.participants[0]["stats"]["score"], None)
         report["map_binding"]["sha256"] = "c" * 64
         with self.assertRaisesRegex(ValueError, "simulated map"):

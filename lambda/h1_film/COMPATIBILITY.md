@@ -109,6 +109,38 @@ their established SHA-256 pins and real-film parity evidence.
 
 ## Regression Evidence
 
+### Match-only analytics revision 2
+
+The 2026-10-09 correction retains the simulation profile, WASM/glue hashes,
+`HSFT0001`, `halospawns.h1AnalyticsSource.v1` envelope, and released viewer
+contracts. `analytics_revision: 2` versions the corrected analytics policy,
+independently of viewer projection revision 2. API completion must accept
+analytics revisions 1 and 2 before publishing the new worker.
+
+Playback still contains every source tick. On the first ended snapshot, final
+engine-gated scoring fields are retained, while ungated PGCR shots, damage and
+pickup counts freeze at the preceding snapshot. Later replay ticks retain live
+poses, objects, weapons and movement with frozen match counters. Match events
+stop at the end marker. The analytics sidecar ends at that marker, and an
+end-marker position sample is excluded from occupancy. Subsample events are
+clamped to the last analytics sample, not to a postgame sample.
+
+The sidecar/report includes `statistics_source_ticks` (`end + 1`, or the full
+source count if no end was observed). At 30 Hz its sample count is the ceiling
+of that value divided by four. Recording duration and simulation/hash coverage
+remain the full film. No-end/partial films keep their observed coverage; a film
+starting in postgame has no inferred PGCR baseline or occupancy.
+
+The ungated cutoff is conservative at 120 Hz. It cannot resolve ordering of
+multiple actions within the ending update, particularly objective-mode endings.
+Exact sub-tick attribution requires the future retained engine/exporter-hook
+work; do not claim that broader semantic acceptance is complete.
+
+Old products and persisted revision-1 completions remain readable and retryable.
+New generation/reprocessing uses revision 2. Full reparse is required to repair
+stored statistics, graphs and spatial products; a viewer-only rebuild changes
+only that artifact. Old no-end viewer files should remain byte-identical.
+
 The initial retained corpus is Dread and Downrush from the Beta 3 build. Original
 native references remain at `L:\tmp\halospawns-h1-film-20261003-parity-v2`.
 The earlier analytics proof remains at

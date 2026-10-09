@@ -83,6 +83,9 @@ impl Export {
     }
 
     pub fn observe(&mut self, tick: &Value, ordinal: usize) -> Result<(), Box<dyn Error>> {
+        if self.first_ended_tick.is_some() {
+            return Ok(());
+        }
         let players = tick["players"]
             .as_array()
             .ok_or("missing analytics players")?;
@@ -103,7 +106,7 @@ impl Export {
             "players": players.iter().map(|player| {
                 let mut selected = selected_player(player);
                 // The viewer retains corpses, but occupancy measures living players.
-                selected["player_object_data"] = if player["object_ref"] == -1 {
+                selected["player_object_data"] = if self.first_ended_tick.is_some() || player["object_ref"] == -1 {
                     Value::Null
                 } else if let Some(body) = player["player_object_data"].as_object() {
                     Value::Object(["x", "y", "z"].iter().filter_map(|key|
@@ -158,7 +161,8 @@ impl Export {
             }
         }
         self.flush_pending()?;
-        if self.samples != source_ticks.div_ceil(4) {
+        let statistics_source_ticks = self.first_ended_tick.map_or(source_ticks, |end| end + 1);
+        if self.samples != statistics_source_ticks.div_ceil(4) {
             return Err("analytics sample count differs from source".into());
         }
         let mut root = metadata.clone();
@@ -191,7 +195,9 @@ impl Export {
                 "schema": "halospawns.h1AnalyticsSource.v1", "context": context,
                 "source_ticks": source_ticks, "source_tick_rate": 120,
                 "analytics_tick_rate": 30, "position_stride": 4,
-                "counters": "observed_every_source_tick",
+                "analytics_revision": 2, "statistics_source_ticks": statistics_source_ticks,
+                "counters": "match_only_observed_every_source_tick",
+                "postgame": "excluded_from_statistics_retained_in_viewer",
                 "host_topology": "unavailable", "corpse_positions": "excluded",
             }),
         );
@@ -213,6 +219,7 @@ impl Export {
         Ok(
             json!({"schema":"halospawns.h1AnalyticsSource.v1", "ticks":self.samples,
             "match_end_source_tick":self.first_ended_tick,
+            "analytics_revision":2, "statistics_source_ticks":statistics_source_ticks,
             "ticks_per_second":30, "uncompressed_bytes":raw_bytes, "size_bytes":bytes}),
         )
     }

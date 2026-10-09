@@ -577,7 +577,7 @@ def completion_proof(job, report, encoding):
         "recording_duration_seconds": film["source_tick_count"] / film["tick_rate"],
         "match_end_source_tick": encoding["analytics"].get("match_end_source_tick"),
         "recording_complete": False,
-        "analytics_revision": 1,
+        "analytics_revision": encoding.get("analytics_revision", 1),
     }
     validate_proof(pin, proof)
     return proof

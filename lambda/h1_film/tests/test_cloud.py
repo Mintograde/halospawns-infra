@@ -214,15 +214,42 @@ class CloudTests(unittest.TestCase):
     def test_completion_proof_checks_semantics_not_only_json_shape(self):
         proof = fixture("completion")["h1film"]
         cloud.validate_proof(self.job["conversion"], proof)
+        cloud.validate_proof(self.job["conversion"], {**proof, "analytics_revision": 2})
         for mutation in (
             {"played_tick_count": 119},
             {"hash_checks": 2},
             {"wasm_sha256": "a" * 64},
             {"recording_duration_seconds": 2},
             {"match_end_source_tick": 120},
+            {"analytics_revision": 3},
         ):
             with self.assertRaises(cloud.FilmError):
                 cloud.validate_proof(self.job["conversion"], {**proof, **mutation})
+
+    def test_completion_proof_preserves_the_producer_analytics_revision(self):
+        pin = self.job["conversion"]
+        report = {
+            "map_binding": {"map_id": pin["map_binding"]["map_id"]},
+            "provenance": {
+                **pin["engine"],
+                "map_sha256": pin["map_binding"]["raw_source"]["sha256"],
+            },
+            "simulation": {
+                "played_ticks": pin["film"]["source_tick_count"],
+                "hash_checks": pin["film"]["hash_sample_count"],
+                "hash_mismatches": 0,
+                "seed_mismatches": 0,
+            },
+        }
+        for revision in (1, 2):
+            encoding = {"analytics": {"match_end_source_tick": 90}}
+            if revision == 2:
+                encoding["analytics_revision"] = 2
+            proof = cloud.completion_proof(self.job, report, encoding)
+            self.assertEqual(proof["analytics_revision"], revision)
+            self.assertEqual(proof["source_tick_count"], 120)
+            self.assertEqual(proof["recording_duration_seconds"], 1)
+            self.assertEqual(proof["match_end_source_tick"], 90)
 
     def test_foundation_rejects_jobs_and_extra_health_fields(self):
         with patch.dict(os.environ, {"H1_WORKER_MODE": "foundation"}):

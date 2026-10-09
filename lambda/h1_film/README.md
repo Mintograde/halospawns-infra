@@ -3,8 +3,9 @@
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
 to `intake-20261008-r1`, with dedicated queue/API wiring and scoped data access.
-It remains switched off: zero concurrency, disabled SQS mapping and both API
-capability flags false. Hosted activation remains gated; Xbox uploads are unchanged.
+The user enabled the single-user dev preview on 2026-10-09: concurrency one,
+SQS mapping enabled and both API capability flags true. Broader acceptance and
+prod activation remain pending; Xbox uploads are unchanged.
 
 ## Layout
 
@@ -33,9 +34,9 @@ engines and generated replay files are not committed to this package.
 The immutable image contains every registered engine, the Python source adapter,
 and the unchanged shared replay parser/finalizer. Game maps/source are excluded.
 Foundation mode still accepts only the exact `halospawns.h1FilmHealth.v1`
-request and rejects jobs. Dev uses intake mode, but concurrency zero blocks all
-AWS invocations, including health. The disabled batch-one SQS mapping is the
-only configured job entry point; there is no function URL or invoke policy.
+request and rejects jobs. Dev uses intake mode with its batch-one SQS mapping
+as the only configured job entry point; there is no function URL or invoke policy.
+The foundation audit below deliberately expects dormant gates, not current dev.
 
 ```powershell
 .\scripts\publish-h1-film.ps1 -Tag '<new-release-tag>' -EngineRoot '<private-engine-store>' -BuildOnly
@@ -91,6 +92,12 @@ not a way to force an incompatible simulator.
 comparison. The latter remains a trusted-local tool, not a hostile-upload API.
 The optional analytics intermediate is never a viewer fallback or canonical
 source. Full integration and reproduction: [DEPLOYMENT.md](DEPLOYMENT.md).
+
+Analytics revision 2 is implemented locally, not yet deployed. It retains the
+full postgame replay while freezing match statistics/events and clipping spatial
+analytics. API compatibility must ship before the next worker release; repair
+existing games with a full reparse. Boundary semantics and remaining sub-tick
+limits are in [COMPATIBILITY.md](COMPATIBILITY.md#match-only-analytics-revision-2).
 
 ## Validation
 
