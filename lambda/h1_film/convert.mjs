@@ -10,6 +10,7 @@ const { values } = parseArgs({ options: {
   'skip-readback': { type: 'boolean', default: false },
   'engine-permissions': { type: 'boolean', default: false },
   analytics: { type: 'boolean', default: false }, 'map-catalog': { type: 'string' },
+  'analytics-revision': { type: 'string', default: '2' },
 } });
 
 try {

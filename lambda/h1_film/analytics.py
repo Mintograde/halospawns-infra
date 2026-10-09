@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,52 @@ KNOWN_GAPS = {
     "host_topology": "Playback-local seats cannot establish the recording's host/controller topology.",
     "recorded_at": "Film format does not establish an authoritative UTC match timestamp.",
 }
+
+NATIVE_METRICS = {
+    "pgcr_damage_dealt": "damage_dealt",
+    "vitality_damage_received": "damage_received",
+    "camo_pickups": "camo_count",
+    "overshield_pickups": "overshield_count",
+}
+
+
+def validate_native_product(product: dict, *, encoding: dict, report: dict) -> None:
+    """Check semantic invariants that are not expressible in the DTO JSON schema."""
+    slots = [player["slot_index"] for player in product["players"]]
+    if len(slots) != len(set(slots)) or set(slots) != set(encoding["players"]):
+        raise ValueError("Native slots differ from observed roster")
+    end = report["analytics"].get("match_end_source_tick")
+    stop = report["envelope"]["ticks"] if end is None else end
+    points = 0
+    for player in product["players"]:
+        counters = encoding["final_counters"][str(player["slot_index"])]
+        for name, metric in player["metrics"].items():
+            value, series = metric.get("value"), metric.get("series")
+            expected = counters.get(NATIVE_METRICS[name]) if stop else None
+            if value != expected or (stop == 0 and value is not None):
+                raise ValueError("Native total differs from match-end counters")
+            values = [value, *(point["value"] for point in series or [])]
+            if any(number is not None and (
+                type(number) not in (int, float) or not math.isfinite(number)
+                or not 0 <= number <= 2**53 - 1
+                or (name != "vitality_damage_received" and type(number) is not int)
+            ) for number in values):
+                raise ValueError("Invalid native metric precision/value")
+            if series is None:
+                continue
+            if value is None or len(series) > 4096:
+                raise ValueError("Native timeline lacks an observed total or exceeds its budget")
+            last_tick, last_value = -1, 0
+            for point in series:
+                tick, number = point["source_tick"], point["value"]
+                if type(tick) is not int or not last_tick < tick < stop or tick < 0 or number < last_value:
+                    raise ValueError("Invalid native cumulative timeline")
+                last_tick, last_value = tick, number
+            if last_value != value:
+                raise ValueError("Native timeline does not reconcile with its total")
+            points += len(series)
+    if points > 16384:
+        raise ValueError("Native timelines exceed combined point budget")
 
 
 def _json(path: Path, limit: int = 16 * 1024 * 1024) -> dict[str, Any]:
@@ -78,16 +125,21 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     end = analytics.get("match_end_source_tick")
     if end is not None and (type(end) is not int or not 0 <= end < ticks):
         raise ValueError("Invalid H1 match-end boundary")
-    statistics_ticks = end + 1 if revision == 2 and end is not None else ticks
-    if type(revision) is not int or revision not in (1, 2):
+    statistics_ticks = end + 1 if revision in (2, 3) and end is not None else ticks
+    if type(revision) is not int or revision not in (1, 2, 3):
         raise ValueError("Unsupported H1 analytics revision")
     if analytics.get("analytics_revision", 1) != revision:
         raise ValueError("Inconsistent H1 analytics revision")
-    if revision == 2 and (
+    if revision >= 2 and (
         analytics.get("statistics_source_ticks") != statistics_ticks
         or encoding.get("analytics") != {k: v for k, v in analytics.items() if k != "sha256"}
     ):
         raise ValueError("Inconsistent H1 match-only analytics evidence")
+    if revision == 3 and (
+        not isinstance(encoding.get("native_analytics"), dict)
+        or report.get("encoding", {}).get("native_analytics") != encoding["native_analytics"]
+    ):
+        raise ValueError("Missing or inconsistent H1 native analytics evidence")
     if (
         analytics.get("schema") != profile["analytics_contract"]
         or analytics.get("ticks_per_second") != 30
@@ -174,12 +226,20 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             "counter_sampling": "every_source_tick_then_aggregate_to_30hz",
             "analytics_revision": encoding.get("analytics_revision", 1),
             "postgame": "retained_in_viewer_excluded_from_statistics"
-            if encoding.get("analytics_revision", 1) == 2
+            if encoding.get("analytics_revision", 1) >= 2
             else "retained",
             "parity_status": "partial_pending_semantic_reconciliation",
             "known_gaps": KNOWN_GAPS,
         },
     }
+    if encoding.get("analytics_revision", 1) == 3:
+        metadata["h1_film"]["known_gaps"] = {
+            key: value for key, value in KNOWN_GAPS.items() if key != "powerup_timeline"
+        }
+        metadata["h1_film"]["known_gaps"].update(
+            opponent_matrices="Verified EVT1 can establish recorded kill pairs; damage attribution by opponent is not exported.",
+            gametype_settings="Reviewed resolved variant fields may be available; complete runtime settings are not exported.",
+        )
     # A film shorter than four ticks has one occupancy sample carrying its final
     # scores. Preserve the independently captured first-tick graph baseline.
     graph_players = metadata.get("graph_context", {}).get("players", {})

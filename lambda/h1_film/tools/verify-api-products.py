@@ -23,15 +23,20 @@ def main():
         ReplayViewerArtifactCompletionRequest,
     )
     from halospawns_api.services.replay_ingest import _spatial_events_from_game_meta
+    from halospawns_api.services.h1film_ingest import normalize_h1film_ingest
 
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
+    request = normalize_h1film_ingest(request)
     checked_modes = ["initial"]
     for mode, model in (("viewer-rebuild", ReplayViewerArtifactCompletionRequest),
                         ("full-reparse", ReplayIngestRequest)):
         path = args.finalization.with_name(f"{mode}-completion.json")
         if path.exists():
             other = model.model_validate_json(path.read_text(encoding="utf-8"))
+            if mode == "full-reparse":
+                other = normalize_h1film_ingest(other)
+                assert other.metadata.get("native_analytics") == request.metadata.get("native_analytics")
             job = H1FilmJob.model_validate_json(path.with_name(f"{mode}-job.json").read_text(encoding="utf-8"))
             assert other.h1film == request.h1film
             assert str(other.reprocess_attempt_id) == str(job.attempt_id)
@@ -57,6 +62,7 @@ def main():
         "database_access": False,
         "product_modes": checked_modes,
         "participants": len(participants),
+        "native_analytics": request.metadata.get("native_analytics"),
         "graphs": graphs,
         "spatial_event_count": len(events),
         "spatial_event_sample": [dataclasses.asdict(event) for event in events[:8]],

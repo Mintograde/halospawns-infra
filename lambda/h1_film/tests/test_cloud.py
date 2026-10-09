@@ -92,6 +92,67 @@ class CloudTests(unittest.TestCase):
             ):
                 cloud.validate_job(self.job)
 
+    def test_revision_three_requires_a_versioned_pinned_job(self):
+        for revision in (1, 2, 3):
+            job = copy.deepcopy(self.job)
+            job.update(schema="halospawns.h1film_job.v2", analytics_revision=revision)
+            job["conversion"]["engine"]["exporter_revision"] = 1
+            self.assertEqual(cloud.validate_job(job).profile_revision, 2)
+            self.assertEqual(cloud.work_from_record(record(job)), job)
+        for mutate in (
+            lambda j: j.update(analytics_revision=3),
+            lambda j: j.update(schema="halospawns.h1film_job.v2"),
+            lambda j: j.update(schema="halospawns.h1film_job.v2", analytics_revision=4),
+            lambda j: j["conversion"]["engine"].update(exporter_revision=1),
+            lambda j: j.update(schema="halospawns.h1film_job.v2", analytics_revision=True),
+        ):
+            job = copy.deepcopy(self.job)
+            mutate(job)
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_job(job)
+        job = copy.deepcopy(self.job)
+        job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
+        job["conversion"]["engine"]["exporter_revision"] = 2
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_job(job)
+
+    def test_revision_three_completion_and_retry_must_echo_exact_pins(self):
+        pin = copy.deepcopy(self.job["conversion"])
+        proof = {**fixture("completion")["h1film"], "analytics_revision": 3, "recording_closed": True}
+        cloud.validate_proof(pin, proof, analytics_revision=3)
+        for revision in (None, 1, 2):
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_proof(pin, proof, analytics_revision=revision)
+        pin["engine"]["exporter_revision"] = 1
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_proof(pin, proof, analytics_revision=3)
+        cloud.validate_proof(pin, {**proof, "exporter_revision": 1}, analytics_revision=3)
+
+    def test_prepare_requests_native_analytics_but_recovers_already_pinned_jobs(self):
+        source = self.job["conversion"]["source"]
+        evidence = self.job["conversion"]["film"]
+        item = {"upload_id": self.job["upload_id"], "source": source}
+        for retained in (False, True):
+            job = copy.deepcopy(self.job)
+            if not retained:
+                job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
+            responses = [{"data": {"job": job}}]
+            if retained:
+                responses.insert(0, cloud.FilmError("identity_conflict"))
+            with (
+                patch.object(cloud, "download", return_value=source),
+                patch.object(cloud, "inspect_film", return_value=evidence),
+                patch.object(cloud, "replay_completion", return_value=True) as retry,
+                patch.object(cloud, "api", side_effect=responses) as api,
+            ):
+                context = MagicMock()
+                context.get_remaining_time_in_millis.return_value = 600000
+                cloud.execute(item, context)
+                self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 3)
+                if retained:
+                    self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])
+                self.assertEqual(retry.call_args.args[0], job)
+
     def test_sqs_job_routing_and_exact_origin(self):
         self.assertEqual(cloud.work_from_record(record(self.job)), self.job)
         bad = record(self.job)

@@ -1,26 +1,131 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: the user explicitly authorized single-user dev enablement
-ahead of the remaining acceptance work. Both API H1 flags are true on `live=173`,
-and the existing intake worker consumes its batch-one queue with concurrency 1.
+Status on 2026-10-09: native analytics revision 3 is deployed in dev as
+`native-analytics3-20261009-r1`. Both API H1 flags are true on `live=174`,
+and the intake worker consumes its batch-one queue with concurrency 1.
 The worker reuses the existing finalizer and retains original film/version pins.
 The API uses the existing worker ceilings as provisional dev limits, not measured
-performance claims. Dread/Downrush passed the complete worker locally, including
-both reprocess product modes and persisted completion retries. Actual AWS
-conversion/performance and hosted map/browser acceptance remain pending.
+performance claims. Prisoner/Dread/Downrush passed the complete worker locally,
+including both reprocess product modes and persisted completion retries. The
+user's earlier hosted Prisoner conversion exists; revision-3 hosted reparse,
+Lambda performance and broader map/browser acceptance remain pending.
 Existing Xbox consumers and prod are unchanged. This is not full semantic parity.
 API current/versioned reads and durable lifecycle retention for retained
-`maps/processed/` originals are now deployed; explicit map approval remains open.
+`maps/processed/` originals are deployed; broader map approval remains open.
 
 Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
 
+## Native analytics revision 3 deployed 2026-10-09
+
+User-authorized dev-only release. New initial uploads explicitly request v2 jobs
+with analytics revision 3. Old v1 jobs, explicit revisions 1/2, original engines
+and persisted retries remain supported. Native totals and cumulative 120 Hz
+timelines cover PGCR damage dealt, precise exported received vitality damage,
+camo pickups and overshield pickups. Recorded EVT1 supplies verified kill pairs;
+the reviewed resolved-variant subset supplies some rules. These are H1-native
+metrics, not Xbox-equivalent attribution. See `COMPATIBILITY.md` for limits,
+missing/partial coverage and the conservative pre-end PGCR boundary.
+
+- Image: `283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film:native-analytics3-20261009-r1`.
+- Digest: `sha256:45a12e7ba1889f1dc178c28b0be9f34c4a650bc22217484a8e9cd67f856e857c`;
+  ECR compressed size 272,575,698 bytes. Old release tags were not overwritten.
+- Retained simulation profile/WASM/glue and viewer revision 2 are unchanged.
+  Live encoder SHA-256: `ec8b8ace41b5479995b8c5b7491a3b36860d778017d72fe9d6162fdf68709121`.
+- Compatible API `live=174`, commit `08e0609`, run `37947628446`; compatible
+  frontend `93f954b`, run `37965521776`, were already deployed. This release
+  did not deploy either application or the API's later local column-flag work.
+- Only `map-processing` changed: **0 adds / 1 in-place update / 0 destroys**,
+  solely the H1 Lambda image. Its 3,008 MiB memory, 900-second timeout, 8,192 MiB
+  temporary storage, concurrency 1 and enabled batch-one mapping are unchanged.
+  No IAM, queue, source/map pin, secret, Xbox consumer, API flag or prod change.
+- Focused post-apply plan is no-op. Full pre-apply plan confirmed only that image
+  action; the final full plan has no resource actions. API state still reports
+  an output-only `173 -> 174` refresh from its earlier code deployment. That
+  unrelated output refresh was not applied.
+- Live function is Active/Successful with the expected digest. Health returned
+  200 in intake mode with the retained engine and new encoder hashes. API flags
+  remain true on 174; queue and DLQ were empty. No AWS/profile/session blocker.
+
+Validation: 42 Rust tests (one optional profiling test ignored), 35 H1 Python,
+12 Node, 81 shared parser, 154 focused API unit, 11 isolated PostgreSQL and five
+mocked Terraform tests pass. Local Linux runs were read-only/non-root, network
+disabled, and exercised initial/full-reparse/viewer-rebuild plus three persisted
+completion retries. Each film passed all recorded hashes and dual-rate readback:
+
+| Film | Source ticks | Match end | Hash checks | Verified kill pairs |
+| --- | ---: | ---: | ---: | ---: |
+| Prisoner | 84,367 | 77,811 | 704 | 90 |
+| Dread | 75,584 | 73,603 | 630 | 96 |
+| Downrush | 80,430 | 77,793 | 671 | 82 |
+
+All three native products passed the actual deployed API commit's schema,
+normalization, graph and spatial builders. The deployed frontend's pure native
+selectors also accepted all three products, preserving all four metric totals,
+series, fractional values and frozen postgame totals without the API's later
+local column flags. This is not a hosted browser test. Prisoner also passed complete Linux
+runs under explicit revisions 1 and 2. Revision 3 removes 11 postgame shots and
+100 PGCR dealt-damage points versus revision 1; final kills/deaths and the full
+84,367-tick recording survive. Its viewer artifact is byte-identical to revision
+2 (`9afc68ab2f55830b6e2d697560292e5649ab83495d4c12d64c1ddfe8323a93a5`).
+Pretty-printed offline callbacks measured 186,278 to 237,301 bytes; these are
+local evidence, not Lambda performance or hosted browser acceptance claims.
+
+Private evidence: `L:/tmp/halospawns-h1-native3-20261009`, including build/publish,
+plan/apply, test logs, offline callbacks and live health. Release commands:
+
+```powershell
+.\scripts\publish-h1-film.ps1 dev -Tag native-analytics3-20261009-r1 -EngineRoot .build/h1-film-9c8c68566d1b4e57b571201bc6c57035 -PreviousRegistry L:/tmp/halospawns-h1-native3-20261009/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 dev -Tag native-analytics3-20261009-r1 -EngineRoot .build/h1-film-9c8c68566d1b4e57b571201bc6c57035 -PreviousRegistry L:/tmp/halospawns-h1-native3-20261009/previous-registry.json
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' test -no-color
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color dev-map-processing.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Changed files: `stacks/dev.yaml`; `encoder/src/{main,analytics,native}.rs`;
+`{analytics,cloud,recorded}.py`; `convert.mjs`, `runtime/convert.mjs`; job,
+completion and native-product schema snapshots; `tests/test_{cloud,native,recorded}.py`;
+`tools/{snapshot-api-contract,verify-api-products,verify-cloud}.py`; compatibility,
+README, deployment, migration and handoff documentation. No API/frontend runtime
+file was changed by this release.
+
+### Existing game and remaining gates
+
+No upload or hosted reparse was submitted. The existing game
+`3274e229-70d5-469d-b45e-f71dc1f621ce` still needs an authenticated admin request:
+
+```text
+POST /v1/admin/replays/e55ffeee-54c5-4763-afce-a9948c75edcd/reprocess
+```
+
+```json
+{"mode":"full_reparse","h1film_analytics_revision":3,"reason":"H1 native analytics and match-only statistics"}
+```
+
+Preserve the original exporter and selected viewer target by omitting exporter
+selection. Existing source/map pins and attempt fences remain authoritative.
+No permanent admin session was available here. The current frontend request
+builder drops revision fields, so its ordinary full-rebuild button alone does
+not select revision 3. The owning frontend follow-up is
+`20261009-infra-svelte-h1film-reparse-revision-selector` in its `HANDOFFS.md`.
+Do not bypass admin authorization or repin the stored conversion directly.
+
+After that bounded reparse, verify scoreboard/native graphs and forward/backward
+tail seeking at both viewer rates. Glass, active camo, item runtime state, exact
+end-update attribution, rockets fired, headshots and streaks remain separate
+retained-exporter work. Do not roll back to the old intake image while v2/revision-3
+jobs are outstanding; it cannot process that contract. Coordinate pending jobs
+with the API before a rollback, or publish a compatible corrective release.
+
 ## Match-only analytics implemented 2026-10-09
 
-Implemented locally; not published or applied. The live worker remains
-`intake-20261008-r1`. The user requested playable postgame without contributing
+Historical local milestone, superseded by the revision-3 deployment above. At
+this milestone the worker remained `intake-20261008-r1`. The user requested playable postgame without contributing
 to match statistics/events. H1 may also expose richer/alternative native
 statistics, not only Xbox-equivalent fields; source-specific API/UI work remains
 in the parity handoffs.

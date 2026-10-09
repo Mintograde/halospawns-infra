@@ -42,6 +42,7 @@ impl<W: Write> Write for Bounded<W> {
 // Private, non-playable input to the existing Xbox analytics extractor. Positions
 // are sampled at 30 Hz; metadata counters are observed at 120 Hz before retiming.
 pub struct Export {
+    revision: u8,
     output: Bounded<zstd::stream::write::Encoder<'static, BufWriter<File>>>,
     pending: Option<Value>,
     final_players: Vec<Value>,
@@ -64,7 +65,12 @@ fn selected_player(player: &Value) -> Value {
 }
 
 impl Export {
+    #[cfg(test)]
     pub fn new(path: &Path) -> Result<Self, Box<dyn Error>> {
+        Self::with_revision(path, 2)
+    }
+
+    pub fn with_revision(path: &Path, revision: u8) -> Result<Self, Box<dyn Error>> {
         let file = File::options().write(true).create_new(true).open(path)?;
         let mut output = Bounded {
             inner: zstd::stream::write::Encoder::new(BufWriter::new(file), 3)?,
@@ -72,6 +78,7 @@ impl Export {
         };
         output.write_all(b"{\"ticks\":[")?;
         Ok(Self {
+            revision,
             output,
             pending: None,
             final_players: Vec::new(),
@@ -83,7 +90,7 @@ impl Export {
     }
 
     pub fn observe(&mut self, tick: &Value, ordinal: usize) -> Result<(), Box<dyn Error>> {
-        if self.first_ended_tick.is_some() {
+        if self.revision >= 2 && self.first_ended_tick.is_some() {
             return Ok(());
         }
         let players = tick["players"]
@@ -106,7 +113,7 @@ impl Export {
             "players": players.iter().map(|player| {
                 let mut selected = selected_player(player);
                 // The viewer retains corpses, but occupancy measures living players.
-                selected["player_object_data"] = if self.first_ended_tick.is_some() || player["object_ref"] == -1 {
+                selected["player_object_data"] = if (self.revision >= 2 && self.first_ended_tick.is_some()) || player["object_ref"] == -1 {
                     Value::Null
                 } else if let Some(body) = player["player_object_data"].as_object() {
                     Value::Object(["x", "y", "z"].iter().filter_map(|key|
@@ -161,7 +168,11 @@ impl Export {
             }
         }
         self.flush_pending()?;
-        let statistics_source_ticks = self.first_ended_tick.map_or(source_ticks, |end| end + 1);
+        let statistics_source_ticks = if self.revision == 1 {
+            source_ticks
+        } else {
+            self.first_ended_tick.map_or(source_ticks, |end| end + 1)
+        };
         if self.samples != statistics_source_ticks.div_ceil(4) {
             return Err("analytics sample count differs from source".into());
         }
@@ -195,9 +206,9 @@ impl Export {
                 "schema": "halospawns.h1AnalyticsSource.v1", "context": context,
                 "source_ticks": source_ticks, "source_tick_rate": 120,
                 "analytics_tick_rate": 30, "position_stride": 4,
-                "analytics_revision": 2, "statistics_source_ticks": statistics_source_ticks,
-                "counters": "match_only_observed_every_source_tick",
-                "postgame": "excluded_from_statistics_retained_in_viewer",
+                "analytics_revision": self.revision, "statistics_source_ticks": statistics_source_ticks,
+                "counters": if self.revision == 1 { "observed_every_source_tick" } else { "match_only_observed_every_source_tick" },
+                "postgame": if self.revision == 1 { "retained" } else { "excluded_from_statistics_retained_in_viewer" },
                 "host_topology": "unavailable", "corpse_positions": "excluded",
             }),
         );
@@ -219,7 +230,7 @@ impl Export {
         Ok(
             json!({"schema":"halospawns.h1AnalyticsSource.v1", "ticks":self.samples,
             "match_end_source_tick":self.first_ended_tick,
-            "analytics_revision":2, "statistics_source_ticks":statistics_source_ticks,
+            "analytics_revision":self.revision, "statistics_source_ticks":statistics_source_ticks,
             "ticks_per_second":30, "uncompressed_bytes":raw_bytes, "size_bytes":bytes}),
         )
     }

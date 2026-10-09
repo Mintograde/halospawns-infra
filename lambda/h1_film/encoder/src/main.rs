@@ -1,5 +1,6 @@
 mod analytics;
 mod artifact;
+mod native;
 mod sampling;
 mod transport;
 
@@ -27,6 +28,11 @@ struct Request {
     source_tick_rate: u32,
     #[serde(default = "default_export_contract")]
     export_contract: String,
+    #[serde(default = "default_analytics_revision")]
+    analytics_revision: u8,
+}
+fn default_analytics_revision() -> u8 {
+    2
 }
 fn default_level() -> i32 {
     6
@@ -48,12 +54,16 @@ impl Request {
         if self.source_tick_rate != 120 || self.export_contract != "HSFT0001" {
             return Err("unsupported engine rate or export contract".into());
         }
+        if !(1..=3).contains(&self.analytics_revision) {
+            return Err("unsupported analytics revision".into());
+        }
         Ok(())
     }
 }
 
 #[derive(Default)]
 struct Observations {
+    legacy_analytics: bool,
     first_clock: Option<u64>,
     last_clock: Option<u64>,
     players: BTreeSet<u64>,
@@ -164,9 +174,10 @@ impl Observations {
         if ordinal == 0 {
             self.event(ordinal, "Game recording started".into())?;
         }
-        let postgame = self.match_end_source_tick.is_some();
-        let ends_now = tick["game_ended_this_tick"].as_bool() == Some(true);
-        if postgame || ends_now {
+        let postgame = self.match_end_source_tick.is_some() && !self.legacy_analytics;
+        let ends_now = tick["game_ended_this_tick"].as_bool() == Some(true)
+            && self.match_end_source_tick.is_none();
+        if !self.legacy_analytics && (postgame || ends_now) {
             self.freeze_statistics(tick, postgame);
         }
         let players = tick["players"].as_array().ok_or("missing players")?;
@@ -297,7 +308,7 @@ impl Observations {
                         }
                     }
                 }
-                if !ends_now
+                if (!ends_now || self.legacy_analytics)
                     && counters["unit"].as_u64().is_some()
                     && before["unit"] == counters["unit"]
                 {
@@ -315,7 +326,7 @@ impl Observations {
                     }
                 }
             }
-            if !ends_now
+            if (!ends_now || self.legacy_analytics)
                 && counters["unit"].as_u64().is_some()
                 && before
                     .as_ref()
@@ -404,16 +415,28 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     )?;
     let input = io::stdin();
     let mut source = transport::Stream::new(BufReader::with_capacity(64 * 1024, input.lock()))?;
-    let mut observations = Observations::default();
+    let mut observations = Observations {
+        legacy_analytics: request.analytics_revision == 1,
+        ..Default::default()
+    };
+    let mut native = (request.analytics_revision == 3).then(native::NativeAnalytics::default);
     let mut count = 0;
     let mut analytics = request
         .analytics_context
         .as_ref()
-        .map(|_| analytics::Export::new(&directory.join("analytics.30hz.json.zst")))
+        .map(|_| {
+            analytics::Export::with_revision(
+                &directory.join("analytics.30hz.json.zst"),
+                request.analytics_revision,
+            )
+        })
         .transpose()?;
     while let Some(mut tick) = source.next()? {
         if count >= request.ticks {
             return Err("engine exported more ticks than the film".into());
+        }
+        if let Some(native) = &mut native {
+            native.observe(&tick, count)?;
         }
         observations.observe(&mut tick, count, request.players)?;
         sampling::normalize(&mut tick, count, 1, &request.map)?;
@@ -453,9 +476,13 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
                 &observations.metadata_for_source_ticks(
                     &request,
                     4,
-                    observations
-                        .match_end_source_tick
-                        .map_or(count, |end| end + 1),
+                    if request.analytics_revision == 1 {
+                        count
+                    } else {
+                        observations
+                            .match_end_source_tick
+                            .map_or(count, |end| end + 1)
+                    },
                 )?,
                 request.analytics_context.as_ref().unwrap(),
                 count,
@@ -464,7 +491,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         .transpose()?;
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
         "export_contract":request.export_contract,
-        "analytics":analytics, "analytics_revision":2,
+        "analytics":analytics, "analytics_revision":request.analytics_revision,
+        "native_analytics":native.map(|native| native.product()),
         "source_first_clock":observations.first_clock, "source_last_clock":observations.last_clock,
         "source_hz":120, "sampling":{"120hz":{"stride":1,"phase":0}, "30hz":{"stride":4,"phase":0}},
         "field_units":{"respawn_timer":"output-rate ticks, positive remainder rounded up", "reload_time":"output-rate ticks, positive remainder rounded up",
@@ -477,6 +505,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         "max_objects":observations.max_objects, "max_player_shots":observations.max_shots,
         "max_player_deaths":observations.max_deaths, "counter_events":observations.events.len(),
         "source_events":observations.events, "chart_points":observations.metric_points,
+        "kill_ticks":observations.series.iter().map(|(slot, metrics)| (slot.to_string(), json!(
+            metrics.get("kills_by_tick").into_iter().flatten().map(|(tick, positions)|
+                (tick.to_string(), json!(positions.as_array().map_or(0, Vec::len))))
+                .collect::<Map<String, Value>>()))).collect::<Map<String, Value>>(),
         "body_handle_replacements":observations.body_replacements,
         "game_type":observations.final_meta.get("game_type"), "has_teams":observations.final_meta.get("has_teams"),
         "initial_counters":observations.initial_counters,
@@ -597,6 +629,7 @@ mod observation_tests {
             source.push(tick);
         }
         let request = Request {
+            analytics_revision: 2,
             ticks: 5,
             players: 1,
             map: "downrush".into(),
@@ -798,6 +831,27 @@ mod observation_tests {
     }
 
     #[test]
+    fn explicitly_pinned_revision_one_retains_postgame_statistics() {
+        let mut observations = Observations {
+            legacy_analytics: true,
+            ..Default::default()
+        };
+        for i in 0..12 {
+            let mut tick = match_tick(i, Some(3));
+            observations.observe(&mut tick, i, 1).unwrap();
+            assert_eq!(tick["players"][0]["shots_fired"], i);
+        }
+        assert_eq!(observations.match_end_source_tick, Some(3));
+        assert_eq!(observations.previous[&0]["damage_dealt"], 110);
+        assert!(
+            observations
+                .events
+                .iter()
+                .any(|event| event.source_tick > 3)
+        );
+    }
+
+    #[test]
     fn analytics_stops_at_match_end_while_both_viewer_rates_keep_the_tail() {
         for end in [None, Some(0), Some(1), Some(3), Some(4), Some(5), Some(8)] {
             let directory = std::env::temp_dir()
@@ -807,6 +861,7 @@ mod observation_tests {
             let mut analytics = analytics::Export::new(&path).unwrap();
             let mut observations = Observations::default();
             let request = Request {
+                analytics_revision: 2,
                 ticks: 12,
                 players: 1,
                 map: "prisoner".into(),

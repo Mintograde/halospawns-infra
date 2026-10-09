@@ -21,7 +21,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-from . import analytics
+from . import analytics, recorded
 from .registry import IDENTITY, load_registry
 
 PACKAGE = Path(__file__).parent
@@ -140,6 +140,8 @@ def validate_source(source, *, raw_map=False):
 
 def validate_job(job):
     validate_schema("job", job)
+    versioned = job["schema"] == "halospawns.h1film_job.v2"
+    require(versioned == (job.get("analytics_revision") is not None))
     require(job["environment"] == os.environ["ENVIRONMENT"] == "dev")
     conversion = job["conversion"]
     film, engine, binding = (
@@ -147,6 +149,8 @@ def validate_job(job):
     )
     profile = load_registry().get(film["engine_profile"])
     require(profile is not None, "unsupported_build")
+    exporter = engine.get("exporter_revision")
+    require(exporter is None or (versioned and type(exporter) is int and exporter == 1), "unsupported_build")
     require(
         all(
             engine.get(key) == profile[key]
@@ -225,7 +229,7 @@ def work_from_record(record):
     require(isinstance(body, str) and len(body.encode()) <= 256 * 1024)
     payload = json.loads(body)
     require(isinstance(payload, dict))
-    if payload.get("schema") == "halospawns.h1film_job.v1":
+    if payload.get("schema") in {"halospawns.h1film_job.v1", "halospawns.h1film_job.v2"}:
         validate_job(payload)
         return payload
     require(
@@ -546,6 +550,8 @@ def convert(job, film, work, deadline):
             binding["engine_profile"],
             "--trusted-local",
             "--analytics",
+            "--analytics-revision",
+            str(job.get("analytics_revision") or 2),
             "--engine-permissions",
             "--timeout",
             str(timeout),
@@ -579,12 +585,26 @@ def completion_proof(job, report, encoding):
         "recording_complete": False,
         "analytics_revision": encoding.get("analytics_revision", 1),
     }
-    validate_proof(pin, proof)
+    if pin["engine"].get("exporter_revision") is not None:
+        proof["exporter_revision"] = pin["engine"]["exporter_revision"]
+    if proof["analytics_revision"] == 3:
+        # The format reader validates the closed trailer separately from simulation.
+        require(report["envelope"]["end_reason"] in (1, 2))
+        proof["recording_closed"] = True
+        start = recorded.match_start(report, encoding)
+        if start is not None:
+            proof["match_start_source_tick"] = start
+    validate_proof(pin, proof, analytics_revision=job.get("analytics_revision"))
     return proof
 
 
-def validate_proof(pin, proof):
+def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    require(
+        proof.get("analytics_revision", 1) == analytics_revision
+        if analytics_revision is not None else proof.get("analytics_revision", 1) < 3
+    )
+    require(proof.get("exporter_revision") == pin["engine"].get("exporter_revision"))
     require(
         proof["conversion_id"] == pin["conversion_id"]
         and proof["engine_profile"] == pin["film"]["engine_profile"]
@@ -713,6 +733,15 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         spatial_artifact=spatial,
     )
     payload.update(source_kind="h1film", h1film=proof)
+    if proof["analytics_revision"] == 3:
+        native = encoding["native_analytics"]
+        validate_schema("native-analytics", native)
+        analytics.validate_native_product(native, encoding=encoding, report=report)
+        payload["h1film_analytics"] = {
+            **native, "kill_attribution": recorded.kill_attribution(film, report=report, encoding=encoding),
+            "resolved_variant": recorded.resolved_variant(film, encoding=encoding),
+        }
+        validate_schema("native-analytics", payload["h1film_analytics"])
     return "/v1/ingest/replay-uploads", payload
 
 
@@ -738,7 +767,7 @@ def replay_completion(job):
     )
     payload = manifest["callback"]["payload"]
     proof = payload.get("h1film")
-    validate_proof(pin, proof)
+    validate_proof(pin, proof, analytics_revision=job.get("analytics_revision"))
     require(payload.get("source_kind") == "h1film" and "cleanup_object" not in manifest)
     require(payload["viewer_artifact"].get("playback") == PLAYBACK)
     for key in ("generation_token", "request_epoch", "request_sequence"):
@@ -771,15 +800,16 @@ def execute(work_item, context):
         source = download(source, film, metadata=source_metadata)
         evidence = inspect_film(film, work, deadline)
         if job is None:
-            result = api(
-                "POST",
-                "/v1/ingest/h1films/prepare",
-                {
-                    "upload_id": work_item["upload_id"],
-                    "source": source,
-                    "film": evidence,
-                },
-            )
+            prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
+            try:
+                result = api("POST", "/v1/ingest/h1films/prepare", {**prepare, "analytics_revision": 3})
+            except FilmError as error:
+                if error.reason != "identity_conflict":
+                    raise
+                # A redelivered notification can belong to an already pinned
+                # legacy job. Omission retrieves that job without repinning it;
+                # the API still checks the complete original source identity.
+                result = api("POST", "/v1/ingest/h1films/prepare", prepare)
             job = result["data"]["job"]
             validate_job(job)
             require(

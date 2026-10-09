@@ -109,6 +109,45 @@ their established SHA-256 pins and real-film parity evidence.
 
 ## Regression Evidence
 
+### Native analytics revision 3
+
+The worker requests `halospawns.h1film_job.v2` with `analytics_revision: 3`
+for new uploads. Versioned jobs select and echo their exact analytics revision;
+explicit revisions 1/2 and unpinned v1 jobs remain supported. An already-pinned
+legacy prepare is retrieved without changing its identity, and persisted
+completion retries must still match the original job. Unpinned v1 jobs cannot
+complete with revision 3. No engine, simulation tuple, reviewed map or viewer
+contract pin changes are required for this adapter-only release. Viewer revision
+2 remains selected; glass/camo/item state needs a separate retained exporter.
+
+Revision 3 retains revision 2's conservative match-end cutoff. Its additional
+`halospawns.h1NativeAnalytics.v1` product carries four source-native metrics:
+integer PGCR damage-dealt points, floating-point vitality damage received, and
+integer camo/overshield pickup counts. Damage received retains the exporter's
+precision and includes self/environment damage; these are not Xbox-attributed
+damage metrics. Each timeline records the first observed cumulative baseline
+and subsequent changes at source 120 Hz, never invented pre-recording zeros.
+Totals/timelines are independently nullable. Missing samples invalidate that
+timeline. Exceeding 4,096 points per metric or 16,384 combined drops the affected
+timeline in full while retaining its observed total; no truncation/decimation
+is presented as complete coverage. End-tick ungated updates and the entire
+postgame tail are excluded. Postgame-only films have no inferred native totals.
+
+The bounded Beta 3 adapter also reads the original format-2 EVT1 section. Only
+recorded enemy-kill pairs with stable roster slots and verified clock mapping
+are used, and each event must match a simulated kill-counter delta at that exact
+tick. Missing/unsupported clocks, capped sections and partial recordings keep
+explicit availability/coverage reasons. The resolved custom-variant record
+supplies reviewed mode, teamplay, score limit, respawn/suicide penalties, shields
+and tracker fields. Bare built-in variants and unverified fields stay unknown;
+map-clamped starting grenades and unexported time limits are not guessed.
+
+`recording_closed` requires the validated film trailer. A known match start
+requires both recording and simulation clocks at zero with an active first
+snapshot. A closed recording or observed end alone never proves full-match
+coverage. Full reparse, not viewer-only rebuilding, is required to populate the
+new native metrics and repair existing stored match statistics.
+
 ### Match-only analytics revision 2
 
 The 2026-10-09 correction retains the simulation profile, WASM/glue hashes,
@@ -137,7 +176,8 @@ Exact sub-tick attribution requires the future retained engine/exporter-hook
 work; do not claim that broader semantic acceptance is complete.
 
 Old products and persisted revision-1 completions remain readable and retryable.
-New generation/reprocessing uses revision 2. Full reparse is required to repair
+Revision 2 introduced the corrected default; revision 3 now adds the native
+product above. Explicit revision-2 jobs retain this policy. Full reparse is required to repair
 stored statistics, graphs and spatial products; a viewer-only rebuild changes
 only that artifact. Old no-end viewer files should remain byte-identical.
 

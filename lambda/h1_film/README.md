@@ -2,7 +2,7 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `intake-20261008-r1`, with dedicated queue/API wiring and scoped data access.
+to `native-analytics3-20261009-r1`, with dedicated queue/API wiring and scoped data access.
 The user enabled the single-user dev preview on 2026-10-09: concurrency one,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
@@ -20,7 +20,7 @@ prod activation remain pending; Xbox uploads are unchanged.
 | `profiles/registry.json` | Shared Node/Python engine identities, ABI and artifact pins |
 | `engines/beta3/` | Beta 3 exporter, WASM compatibility port and native reference integration |
 | `encoder/` | Bounded tick-stream encoder; reuses `../replay_parser` codecs/contracts |
-| `analytics.py`, `registry.py` | Verified products and normal replay-parser adaptation |
+| `analytics.py`, `registry.py`, `recorded.py` | Verified native products, retained profiles, recorded rules/events and replay-parser adaptation |
 | `tools/` | Candidate builds, engine staging/auditing, catalogs and offline reconciliation |
 | `tests/` | Profile retention, multi-version dispatch, intake/retry, integrity and analytics tests |
 
@@ -93,11 +93,15 @@ comparison. The latter remains a trusted-local tool, not a hostile-upload API.
 The optional analytics intermediate is never a viewer fallback or canonical
 source. Full integration and reproduction: [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Analytics revision 2 is implemented locally, not yet deployed. It retains the
-full postgame replay while freezing match statistics/events and clipping spatial
-analytics. API compatibility must ship before the next worker release; repair
-existing games with a full reparse. Boundary semantics and remaining sub-tick
-limits are in [COMPATIBILITY.md](COMPATIBILITY.md#match-only-analytics-revision-2).
+Analytics revision 3 is deployed in dev. It adds native damage/pickup totals and
+cumulative timelines, verified recorded kill pairs and a resolved-rules subset,
+while retaining full postgame playback with match-only statistics/events/spatial
+analytics. Revisions 1/2 remain supported. Existing games need an explicit
+revision-3 full reparse; the ordinary admin UI currently omits that selector.
+Use `--analytics-revision 3` for local native-product conversion. Boundary
+semantics and remaining exporter gaps are in
+[COMPATIBILITY.md](COMPATIBILITY.md#native-analytics-revision-3); release and
+reparse details are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Validation
 

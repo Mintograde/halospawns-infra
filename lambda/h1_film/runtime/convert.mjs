@@ -13,6 +13,8 @@ export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
     analytics: false, ...options };
   const totalStarted = performance.now();
+  const analyticsRevision = Number(values['analytics-revision'] ?? 2);
+  assert.ok([1, 2, 3].includes(analyticsRevision), 'Unsupported analytics revision');
   for (const key of ['film', 'assets', 'encoder', 'output']) {
     assert.ok(values[key], `Missing --${key}`);
     values[key] = resolve(values[key]);
@@ -77,6 +79,7 @@ export async function convertFilm(options) {
   const request = JSON.parse(await readFile(requestPath, 'utf8'));
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
+  request.analytics_revision = analyticsRevision;
   if (values.analytics) {
     request.analytics_context = { engine_profile: profile.id, gametype: native.envelope.gametype,
       map: native.envelope.map, map_sha256: mapHash, film_sha256: filmHash,
@@ -181,9 +184,9 @@ export async function convertFilm(options) {
       const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
       const end = encoding.analytics.match_end_source_tick;
       assert.ok(end === null || (Number.isInteger(end) && end >= 0 && end < native.envelope.ticks));
-      const statisticsTicks = end === null ? native.envelope.ticks : end + 1;
-      assert.equal(encoding.analytics_revision, 2);
-      assert.equal(encoding.analytics.analytics_revision, 2);
+      const statisticsTicks = analyticsRevision === 1 || end === null ? native.envelope.ticks : end + 1;
+      assert.equal(encoding.analytics_revision, analyticsRevision);
+      assert.equal(encoding.analytics.analytics_revision, analyticsRevision);
       assert.equal(encoding.analytics.statistics_source_ticks, statisticsTicks);
       assert.equal(encoding.analytics.ticks, Math.ceil(statisticsTicks / 4));
       assert.equal((await stat(path)).size, encoding.analytics.size_bytes);

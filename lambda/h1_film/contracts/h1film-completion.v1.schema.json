@@ -1,11 +1,15 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 08385fdecd98570fc8983b9d5e67553512c83be9ca5e4d2df492fefa0fd3c48c",
+  "$comment": "Generated from API schemas/h1films.py SHA256 90ed5f2a53047a98348cebc6999cf86a5fd0f0e8f183ed875d075696abb84740",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "analytics_revision": {
       "default": 1,
-      "enum": [1, 2],
+      "enum": [
+        1,
+        2,
+        3
+      ],
       "title": "Analytics Revision",
       "type": "integer"
     },
@@ -25,6 +29,19 @@
       "minimum": 1,
       "title": "Expected Hash Checks",
       "type": "integer"
+    },
+    "exporter_revision": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exporter Revision"
     },
     "glue_sha256": {
       "pattern": "^[0-9a-f]{64}$",
@@ -56,6 +73,19 @@
       "default": null,
       "title": "Match End Source Tick"
     },
+    "match_start_source_tick": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Match Start Source Tick"
+    },
     "played_tick_count": {
       "maximum": 432000,
       "minimum": 1,
@@ -66,6 +96,18 @@
       "pattern": "^[0-9a-f]{64}$",
       "title": "Raw Map Sha256",
       "type": "string"
+    },
+    "recording_closed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recording Closed"
     },
     "recording_complete": {
       "title": "Recording Complete",

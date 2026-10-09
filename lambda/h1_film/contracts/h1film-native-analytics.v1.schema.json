@@ -1,0 +1,369 @@
+{
+  "$comment": "Generated from API schemas/h1film_analytics.py SHA256 dfa01bc3d41460a8c544a48b96579060dc4fb539ed44a3f28a864d325213e1b3",
+  "$defs": {
+    "H1CreditedKill": {
+      "additionalProperties": false,
+      "properties": {
+        "killer_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Killer Slot",
+          "type": "integer"
+        },
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "victim_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Victim Slot",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_tick",
+        "killer_slot",
+        "victim_slot"
+      ],
+      "title": "H1CreditedKill",
+      "type": "object"
+    },
+    "H1KillAttribution": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/H1CreditedKill"
+          },
+          "maxItems": 8192,
+          "title": "Events",
+          "type": "array"
+        },
+        "provenance": {
+          "const": "recorded_evt1",
+          "default": "recorded_evt1",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "missing_section",
+                "capped_section",
+                "unverified_clock",
+                "partial_recording"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "coverage"
+      ],
+      "title": "H1KillAttribution",
+      "type": "object"
+    },
+    "H1NativeMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "series": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/H1NativeMetricPoint"
+              },
+              "maxItems": 4096,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Series"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "H1NativeMetric",
+      "type": "object"
+    },
+    "H1NativeMetricPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "source_tick",
+        "value"
+      ],
+      "title": "H1NativeMetricPoint",
+      "type": "object"
+    },
+    "H1NativePlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/H1NativeMetric"
+          },
+          "maxProperties": 4,
+          "propertyNames": {
+            "enum": [
+              "pgcr_damage_dealt",
+              "vitality_damage_received",
+              "camo_pickups",
+              "overshield_pickups"
+            ]
+          },
+          "title": "Metrics",
+          "type": "object"
+        },
+        "slot_index": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot_index"
+      ],
+      "title": "H1NativePlayer",
+      "type": "object"
+    },
+    "H1ResolvedVariant": {
+      "additionalProperties": false,
+      "properties": {
+        "game_type": {
+          "enum": [
+            "slayer",
+            "ctf",
+            "oddball",
+            "king",
+            "race"
+          ],
+          "title": "Game Type",
+          "type": "string"
+        },
+        "motion_tracker": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "friends",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Motion Tracker"
+        },
+        "provenance": {
+          "const": "recorded_resolved_variant",
+          "default": "recorded_resolved_variant",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "respawn_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Respawn Seconds"
+        },
+        "score_to_win": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score To Win"
+        },
+        "shields_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shields Enabled"
+        },
+        "starting_grenades": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Starting Grenades"
+        },
+        "suicide_penalty_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suicide Penalty Seconds"
+        },
+        "teamplay": {
+          "title": "Teamplay",
+          "type": "boolean"
+        },
+        "time_limit_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Limit Seconds"
+        }
+      },
+      "required": [
+        "game_type",
+        "teamplay"
+      ],
+      "title": "H1ResolvedVariant",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "kill_attribution": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1KillAttribution"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "players": {
+      "items": {
+        "$ref": "#/$defs/H1NativePlayer"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "title": "Players",
+      "type": "array"
+    },
+    "resolved_variant": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1ResolvedVariant"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema": {
+      "const": "halospawns.h1NativeAnalytics.v1",
+      "default": "halospawns.h1NativeAnalytics.v1",
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "players"
+  ],
+  "title": "H1NativeAnalytics",
+  "type": "object"
+}

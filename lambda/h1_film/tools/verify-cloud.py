@@ -97,6 +97,7 @@ def main():
     parser.add_argument("--film", required=True, type=Path)
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3), default=3)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     logging.basicConfig(level=logging.INFO)
@@ -146,6 +147,7 @@ def main():
             assert payload["source"] == source
             assert payload["film"]["scenario"] == binding["scenario"]
             job["conversion"]["film"] = payload["film"]
+            job.update(schema="halospawns.h1film_job.v2", analytics_revision=args.analytics_revision)
             return {"data": {"job": copy.deepcopy(job)}}
         assert path in {
             "/v1/ingest/replay-uploads",
@@ -191,6 +193,7 @@ def main():
             )
             retry = retry.get("job", retry)
             retry["conversion"] = copy.deepcopy(current["conversion"])
+            retry.update(schema=current["schema"], analytics_revision=current["analytics_revision"])
             generation = str(uuid.uuid5(uuid.NAMESPACE_URL, source["sha256"] + mode))
             retry.update(
                 attempt_id=generation,

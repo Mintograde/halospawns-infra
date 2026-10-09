@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import runpy
+import sys
 from pathlib import Path
 
 
@@ -14,6 +15,8 @@ def main():
     root = Path(__file__).resolve().parents[1]
     source = args.api / "src/halospawns_api/schemas/h1films.py"
     models = runpy.run_path(str(source))
+    sys.path.insert(0, str(args.api / "src"))
+    from halospawns_api.schemas.h1film_analytics import H1NativeAnalytics
     provenance = (
         "Generated from API schemas/h1films.py SHA256 "
         + hashlib.sha256(source.read_bytes()).hexdigest()
@@ -34,6 +37,14 @@ def main():
         path.write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+    native = H1NativeAnalytics.model_json_schema(by_alias=True)
+    native["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    native["$comment"] = "Generated from API schemas/h1film_analytics.py SHA256 " + hashlib.sha256(
+        (source.parent / "h1film_analytics.py").read_bytes()
+    ).hexdigest()
+    (root / "contracts/h1film-native-analytics.v1.schema.json").write_text(
+        json.dumps(native, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     for name in (
         "initial-job",
         "viewer-rebuild-job",
