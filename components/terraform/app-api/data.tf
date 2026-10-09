@@ -102,9 +102,12 @@ data "aws_iam_policy_document" "app_runtime" {
   dynamic "statement" {
     for_each = local.h1_film_api_enabled ? [1] : []
     content {
-      sid       = "InspectH1FilmRawMapVersions"
-      actions   = ["s3:GetObject", "s3:GetObjectVersion"]
-      resources = ["${local.uploads_bucket_arn}/maps/unprocessed/*"]
+      sid     = "InspectH1FilmRawMapVersions"
+      actions = ["s3:GetObject", "s3:GetObjectVersion"]
+      resources = concat(
+        ["${local.uploads_bucket_arn}/maps/unprocessed/*"],
+        local.map_asset_get_object_resource_arns,
+      )
     }
   }
 

@@ -49,7 +49,7 @@ locals {
         prefix                             = pipeline.processed_prefix
         expiration_days                    = null
         noncurrent_version_expiration_days = var.storage.pipeline_lifecycle.processed_noncurrent_version_expiration_days
-      } if pipeline.processed_prefix != null
+      } if pipeline.processed_prefix != null && !pipeline.preserve_processed_versions
     },
     {
       for name, pipeline in local.pipelines : "${name}-failed" => {

@@ -8,6 +8,12 @@ mock_provider "aws" {
   mock_data "aws_iam_policy_document" {
     defaults = { json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
   }
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:us-east-1:283279960672:test-topic" }
+  }
+  mock_resource "aws_acm_certificate" {
+    defaults = { arn = "arn:aws:acm:us-east-1:283279960672:certificate/00000000-0000-0000-0000-000000000000" }
+  }
 }
 
 variables {
@@ -129,12 +135,90 @@ run "h1_preserves_canonical_versions" {
   assert {
     condition = (
       !contains(keys(local.pipeline_lifecycle_rules), "films-unprocessed") &&
+      local.pipeline_lifecycle_rules["maps-processed"].noncurrent_version_expiration_days == 30 &&
       local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
       local.pipelines.films.unprocessed_prefix == "films/unprocessed/" &&
       aws_sqs_queue.file_processing["films"].visibility_timeout_seconds == 5400 &&
       length(local.asset_download_object_arns) == 8
     )
     error_message = "Keep pinned film versions without broadening CDN access or changing Xbox retention."
+  }
+}
+
+run "h1_preserves_retained_map_versions" {
+  state_key = "assets"
+  command   = apply
+  variables {
+    pipelines = {
+      maps = {
+        unprocessed_prefix          = "maps/unprocessed/"
+        processed_prefix            = "maps/processed/"
+        failed_prefix               = "maps/failed/"
+        preserve_processed_versions = true
+      }
+      replays = {
+        unprocessed_prefix = "replays/unprocessed/"
+        processed_prefix   = "replays/processed/"
+        failed_prefix      = "replays/failed/"
+      }
+      films = {
+        unprocessed_prefix       = "films/unprocessed/"
+        preserve_source_versions = true
+      }
+    }
+  }
+  assert {
+    condition = (
+      !contains(keys(local.pipeline_lifecycle_rules), "maps-processed") &&
+      !contains(keys(local.pipeline_lifecycle_rules), "films-unprocessed") &&
+      local.pipeline_lifecycle_rules["maps-unprocessed"].noncurrent_version_expiration_days == 7 &&
+      local.pipeline_lifecycle_rules["maps-failed"].expiration_days == 90 &&
+      local.pipeline_lifecycle_rules["maps-failed"].noncurrent_version_expiration_days == 7 &&
+      local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
+      local.pipeline_lifecycle_rules["replays-processed"].noncurrent_version_expiration_days == 30 &&
+      local.pipeline_lifecycle_rules["replays-failed"].expiration_days == 90 &&
+      local.pipeline_lifecycle_rules["replays-failed"].noncurrent_version_expiration_days == 7
+    )
+    error_message = "Preserve processed map originals without changing staging, film, replay or failed-object retention."
+  }
+  assert {
+    condition = alltrue([
+      for rule in aws_s3_bucket_lifecycle_configuration.replay_spatial_artifacts.rule :
+      length(rule.expiration) == 0 && length(rule.noncurrent_version_expiration) == 0
+      if rule.status == "Enabled" && (
+        startswith("maps/processed/", try(coalesce(rule.filter[0].prefix, try(rule.filter[0].and[0].prefix, null)), "")) ||
+        startswith(try(coalesce(rule.filter[0].prefix, try(rule.filter[0].and[0].prefix, null)), ""), "maps/processed/")
+      )
+    ])
+    error_message = "No effective lifecycle expiration rule may overlap the retained processed-map prefix, even through an ancestor or child prefix."
+  }
+  assert {
+    condition = (
+      length(local.asset_download_object_arns) == 8 &&
+      !contains(local.asset_download_object_arns, "${local.uploads_bucket_arn}/maps/processed/*.map")
+    )
+    error_message = "Retaining raw originals must not make them downloadable through CloudFront."
+  }
+}
+
+run "staging_preservation_keeps_processed_expiry" {
+  state_key = "assets"
+  command   = plan
+  variables {
+    pipelines = {
+      maps = {
+        unprocessed_prefix       = "maps/unprocessed/"
+        processed_prefix         = "maps/processed/"
+        preserve_source_versions = true
+      }
+    }
+  }
+  assert {
+    condition = (
+      !contains(keys(local.pipeline_lifecycle_rules), "maps-unprocessed") &&
+      local.pipeline_lifecycle_rules["maps-processed"].noncurrent_version_expiration_days == 30
+    )
+    error_message = "The existing staging preservation option must not silently change processed retention."
   }
 }
 

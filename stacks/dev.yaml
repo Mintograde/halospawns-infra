@@ -126,6 +126,8 @@ components:
           queue_age_threshold_seconds:
             replays: 300
         pipelines:
+          maps:
+            preserve_processed_versions: true
           films:
             unprocessed_prefix: films/unprocessed/
             preserve_source_versions: true

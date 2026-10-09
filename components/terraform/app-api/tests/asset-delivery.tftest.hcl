@@ -71,9 +71,12 @@ run "h1_contracts_without_activation" {
       toset(one([
         for statement in data.aws_iam_policy_document.app_runtime[0].statement : statement.resources
         if statement.sid == "InspectH1FilmRawMapVersions"
-      ])) == toset(["arn:aws:s3:::uploads-dev-283279960672/maps/unprocessed/*"])
+        ])) == toset([
+        "arn:aws:s3:::uploads-dev-283279960672/maps/unprocessed/*",
+        "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*",
+      ])
     )
-    error_message = "Disabled-capability map review needs only current/versioned reads of this bucket's raw maps, with no list/write/delete grants."
+    error_message = "Disabled-capability review must read retained and legacy map versions without suffix-case restrictions or new list/write/delete grants."
   }
   assert {
     condition = alltrue([

@@ -1,6 +1,6 @@
 # H1 film Lambda integration
 
-Status on 2026-10-08: the dev cloud intake worker, dedicated queue/routing,
+Status on 2026-10-09: the dev cloud intake worker, dedicated queue/routing,
 HMAC API routes and scoped S3/SQS/SSM permissions are deployed. The worker
 reuses the existing replay finalizer and retains the original film/version.
 Concurrency remains zero, its SQS mapping is disabled, and both API H1 flags
@@ -8,6 +8,8 @@ remain false. Dread/Downrush passed the complete worker locally, including
 both reprocess product modes and persisted completion retries. Actual AWS
 conversion/performance and hosted map/browser acceptance remain pending.
 Existing Xbox consumers and prod are unchanged. This is not full semantic parity.
+API current/versioned reads and durable lifecycle retention for retained
+`maps/processed/` originals are now deployed; explicit map approval remains open.
 
 Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
@@ -87,25 +89,36 @@ delete/version-delete/ACL/tag mutation, reads/writes of failed or similarly
 named unrelated prefixes, and another bucket. Existing map-upload PutObject
 permission predates this change and was deliberately preserved.
 
-Storage finding: an operator read-only S3 listing returned **zero current
-objects** under `maps/unprocessed/`. A sampled key,
+Historical storage observation: an operator read-only S3 listing returned
+**zero current objects** under `maps/unprocessed/`. A sampled staging key,
 `maps/unprocessed/0c142af0-161b-4b7e-8e4b-e021dc81276c-temple.map`, has a latest
 delete marker. Current HEAD returned 404; HEAD of version
 `oKq5KQ4G2gwYBbhgziQ3DRFrfCNtmn7t` returned 78,000,644 bytes. These HEADs used
 the dev operator identity; API-role access was checked with IAM simulation,
 not an authenticated admin UI request. The user owns the approval smoke.
-The new IAM grant cannot make deleted current objects available: the preview
-can still correctly report `raw_source_unavailable`.
 
-Retention decision for this access-only apply: preserve existing identities;
-do not restore/copy/reupload objects or seed approvals. Lifecycle is unchanged
-(7-day noncurrent raw-map expiration / 30-day processed-map expiration).
-Durable preservation and current-source recovery remain explicitly open under
-`20261008-user-infra-h1film-lambda-integration`, before film activation. The
-existing `pipelines.maps.preserve_source_versions` switch can stop raw-version
-expiration in place, but covers all raw maps, not only the 40-map Beta 3 set;
-that broader retention change has been raised separately with the user.
-Preservation alone would not remove delete markers or make current HEAD succeed.
+Correction (2026-10-09): staging deletion is expected. Normal processing copies
+the original to `maps/processed/<upload_id>/<original-filename>.map`, registers
+that key as `map_files.file_role = 'original'`, then deletes the upload staging
+key. The metadata `original_s3_key` is historical, not the review source. A
+subsequent read-only database/operator HEAD audit found all 40 Beta 3 catalog
+originals readable under `maps/processed/`, with current immutable versions and
+catalog-matching sizes. No recovery/reupload or catalog rewrite is needed;
+HEAD did not verify hashes, geometry or live API-role/admin-session access.
+
+At this access-only checkpoint, the API staging-only restriction was corrected
+locally pending release. Current processed-object reads already existed, but
+exact-version inspection still needed processed-prefix `s3:GetObjectVersion`.
+The worker already accepted and could read these versions. Completed follow-up:
+`20261009-api-infra-h1film-retained-map-sources` in `HANDOFFS.md`.
+
+Lifecycle is unchanged by this access-only apply (7-day unprocessed noncurrent
+expiry / 30-day processed noncurrent expiry). Durable retention must protect
+the **processed original** versions pinned by H1 bindings.
+`pipelines.maps.preserve_source_versions` suppresses only unprocessed expiry,
+not the independent processed rule. The retained-source apply below resolves
+processed-original retention without restoring/copying/reuploading objects or
+seeding approvals.
 
 Exact plan/apply commands from the repo root:
 
@@ -119,9 +132,98 @@ terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\a
 
 Changed code/test files: `components/terraform/app-api/data.tf` and
 `components/terraform/app-api/tests/asset-delivery.tftest.hcl`. The migration
-log and both repos' handoffs record completion and the separate source blocker.
+log and both repos' handoffs record completion and the corrected source contract.
 No worker image, lifecycle, source object, map approval, Xbox consumer or prod
 resource was changed.
+
+### Retained map sources applied 2026-10-09
+
+Handoff `20261009-api-infra-h1film-retained-map-sources` is complete in dev.
+Normal review sources are the catalog's original-role files under
+`maps/processed/<upload_id>/<original-filename>.map`, not deleted staging keys.
+The API's existing H1 inspection statement now covers both configured processed
+map assets and legacy `maps/unprocessed/*`. The effective new permission is
+processed-prefix `s3:GetObjectVersion`; current reads already existed. There is
+no suffix restriction, so mixed-case `.MAP` remains supported. The other 15
+policy statements, gateway routes, environment and credentials are unchanged.
+
+Retention decision: `pipelines.maps.preserve_processed_versions: true` in dev
+suppresses both generated processed-map lifecycle rules: noncurrent expiration
+and expired-delete-marker cleanup. The new per-pipeline option defaults to
+false, preserving other stacks' existing behavior. All existing and future
+versions under `maps/processed/` are exempt from lifecycle expiration, including
+originals, GLBs, JSON and screenshots. S3 lifecycle filters do not offer a file
+extension suffix selector; keeping this existing prefix requires no object
+retagging, copying or catalog migration. See
+[AWS lifecycle filters](https://docs.aws.amazon.com/AmazonS3/latest/userguide/intro-lifecycle-filters.html).
+
+This deliberately retains old derived assets too: storage now grows with
+overwrites/reprocessing instead of reclaiming those versions after 30 days.
+Any later selective cleanup needs a coordinated pin-aware retention contract.
+This is lifecycle protection, not Object Lock: it does not prevent authorized
+explicit version deletion or recover previously expired objects. Legacy staging
+noncurrent expiry stays at 7 days; existing staging-only preservation does not
+protect processed originals. Do not treat legacy staging pins as durably
+retained without a separate review. The initial 40-map Beta 3 batch uses retained
+processed sources.
+
+Reviewed plans and applies each changed **0 add / 1 update / 0 destroy** in
+`uploads-ingest` and `app-api`, respectively. The full pre-apply plan had no
+other resource changes. A concurrent API release advanced version `171 -> 172`;
+the API apply only refreshed that output and changed the shared role policy,
+with no code publication or alias promotion. Focused post-apply plans and the
+final six-component dev plan have zero resource or output changes.
+
+Validation:
+
+- All 14 app-api and 9 uploads-ingest Terraform tests pass. Mocked apply checks
+  the resolved lifecycle, including ancestor/child-prefix expiry overlap, and
+  verifies default and staging-only preservation remain backward-compatible.
+- Live lifecycle comparison removed exactly `maps-processed-retention` and
+  `maps-processed-expired-delete-markers`; all other 21 rules are identical.
+  No enabled expiration rule overlaps `maps/processed/`; bucket versioning is
+  enabled. Replay, film, failed-object, staging and multipart policies remain.
+- Live role inspection and 28 IAM action/resource simulation decisions pass:
+  current/versioned processed and legacy reads (including uppercase `.MAP`),
+  existing GLB reads and legacy upload writes; denials for processed mutations,
+  bucket/version listing and unrelated prefixes/buckets. No extra grants added.
+- Operator current and exact-version HEAD of the retained Temple original
+  returned unchanged version `5TtpO_p2iMlr6EtV6nFkxWfqQTqwSw7s`, 78,000,644 bytes.
+  The historical staging version above is also still readable. These are
+  operator HEADs plus role simulation, not live admin-session acceptance or
+  raw-byte/hash/geometry verification. The API-owned audit of all 40 catalog
+  originals remains separate evidence; no source or catalog was changed here.
+- Anonymous CloudFront HEAD of the existing Temple GLB is 200 (20,595,848 bytes);
+  its original `.map` is still 403. The worker's live read-only audit passes
+  unchanged: image `intake-20261008-r1`, scoped version reads, disabled mapping,
+  concurrency zero, no function URL or invocation policy. API `live=172` has
+  both H1 flags false and the default route remains JWT-required.
+
+No AWS/profile/session blocker remains. API/frontend release verification and
+the user's hosted admin preview/approval smoke remain separate; echo the
+server-filled preview unchanged, never reconstruct a staging path. No approvals,
+film jobs, engine releases, object restores or prod changes were made.
+
+Exact plan/apply and audit commands from the repo root:
+
+```powershell
+.\scripts\plan.ps1 dev uploads-ingest *> .build/h1-retained-maps-uploads-plan-20261009.log
+.\scripts\plan.ps1 dev app-api *> .build/h1-retained-maps-api-plan-20261009.log
+.\scripts\plan.ps1 dev *> .build/h1-retained-maps-dev-preapply-20261009.log
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\uploads-ingest' apply -no-color dev-uploads-ingest.planfile *> .build/h1-retained-maps-uploads-apply-20261009.log
+terraform '-chdir=L:\bens_stuff\projects\halospawns-infra\components\terraform\app-api' apply -no-color dev-app-api.planfile *> .build/h1-retained-maps-api-apply-20261009.log
+.\scripts\verify-h1-film-foundation.ps1 -Tag intake-20261008-r1 -Mode intake *> .build/h1-retained-maps-worker-audit-20261009.log
+.\scripts\plan.ps1 dev uploads-ingest *> .build/h1-retained-maps-uploads-postapply-20261009.log
+.\scripts\plan.ps1 dev app-api *> .build/h1-retained-maps-api-postapply-20261009.log
+.\scripts\plan.ps1 dev *> .build/h1-retained-maps-dev-postapply-20261009.log
+```
+
+Changed implementation files: `components/terraform/app-api/data.tf`, its
+`tests/asset-delivery.tftest.hcl`, `components/terraform/uploads-ingest/locals.tf`,
+`variables.tf`, its `tests/asset-delivery.tftest.hcl`, and `stacks/dev.yaml`.
+Documentation: this runbook, root migration log/handoffs, and the API repo's
+handoffs, roadmap and map-review contract. Local generated audit evidence is
+under `.build/h1-retained-maps-*20261009*`; no generated plans are committed.
 
 ### Runtime and validation
 
@@ -237,11 +339,14 @@ not changed. API/frontend application deployment remains owned by those repos.
    unknown UTC/partial analytics behavior on desktop/mobile.
 2. Review exact hosted map IDs/releases, original S3 versions/hash/size and
    corrected GLB hashes through API `POST /v1/admin/h1film-map-bindings`. No local
-   test UUID or filename-only lookup establishes a hosted binding. Coordinate
-   durable raw-map retention: current noncurrent `maps/unprocessed/` versions
-   expire after 7 days and `maps/processed/` after 30 days. These existing rules
-   were not changed. A current HEAD is insufficient proof of a pin surviving
-   future overwrites/rebuilds; settle retention/archive ownership before intake.
+   test UUID or filename-only lookup establishes a hosted binding. Processed
+   version-read IAM and durable lifecycle retention are deployed under
+   `20261009-api-infra-h1film-retained-map-sources`; normal originals and all
+   derived versions under `maps/processed/` no longer expire. Legacy staging
+   noncurrent versions still expire after 7 days and need separate retention
+   review if selected. Confirm compatible API/frontend releases and complete
+   the user's hosted preview/approval smoke; HEAD does not prove geometry or
+   source hashes. No approval has been seeded by this infra work.
 3. Measure actual Lambda cold/warm duration, memory, temp and finalization
    headroom using reviewed inputs, plus partial/non-Slayer/hostile-input fixtures.
    Set explicit API and worker size/tick/player limits from those measurements,

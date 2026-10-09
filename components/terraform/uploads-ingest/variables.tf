@@ -144,14 +144,15 @@ variable "storage" {
 variable "pipelines" {
   description = "Upload notification and processing queue configuration keyed by stable upload type."
   type = map(object({
-    unprocessed_prefix         = string
-    processed_prefix           = optional(string)
-    failed_prefix              = optional(string)
-    preserve_source_versions   = optional(bool, false)
-    visibility_timeout_seconds = optional(number, 300)
-    message_retention_seconds  = optional(number, 604800)
-    receive_wait_time_seconds  = optional(number, 20)
-    max_receive_count          = optional(number, 4)
+    unprocessed_prefix          = string
+    processed_prefix            = optional(string)
+    failed_prefix               = optional(string)
+    preserve_source_versions    = optional(bool, false)
+    preserve_processed_versions = optional(bool, false)
+    visibility_timeout_seconds  = optional(number, 300)
+    message_retention_seconds   = optional(number, 604800)
+    receive_wait_time_seconds   = optional(number, 20)
+    max_receive_count           = optional(number, 4)
   }))
   default = {
     maps = {
