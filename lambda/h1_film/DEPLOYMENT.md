@@ -1,12 +1,12 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: the runtime performance release, retaining native analytics
-revision 3, is deployed in dev as `performance-20261009-r1`.
-Both API H1 flags are true on `live=175`,
+Status on 2026-10-09: the second runtime performance release, retaining native analytics
+revision 3, is deployed in dev as `performance-20261009-r2`.
+Both API H1 flags are true on `live=176`,
 and the intake worker consumes its batch-one queue with concurrency 1.
 The worker reuses the existing finalizer and retains original film/version pins.
 The API uses the existing worker ceilings as provisional dev limits, not measured
-performance claims. Prisoner/Dread/Downrush passed the complete worker locally,
+performance claims. Nine LAN films covering nine maps passed the complete worker locally,
 including both reprocess product modes and persisted completion retries. The
 user's earlier hosted Prisoner conversion exists; revision-3 hosted reparse,
 Lambda performance and broader map/browser acceptance remain pending.
@@ -18,6 +18,77 @@ Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
+
+## Second performance release deployed 2026-10-09
+
+The user refreshed dev SSO and explicitly requested apply of the second tested
+candidate. Published immutable `performance-20261009-r2`, then applied only the
+H1 image in `map-processing`. The experimental native/HUD build is **not** in
+this release; the retained WASM/glue, viewer contracts and analytics revisions
+are unchanged.
+
+- ECR image: `283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film:performance-20261009-r2`.
+- Digest: `sha256:deb644ddb752a6bbadc9f0d7be2c2c759ba9129c23586063bc6392a5639ef195`;
+  compressed size 272,602,783 bytes. No existing release tag was overwritten.
+- Image ID `sha256:a24cb1f9a7d5ad04fe59fad9a6992c73de5f8cf2c55329f41b539656e7c6e29f`
+  exactly matches the nine-map packaged candidate. Live encoder SHA-256:
+  `f271eb7661bdbea1337bdc9493fe25e4557811902a2755cfb190bd26228c8400`.
+- The initial credential-retry plan, before repinning, was no-op. Focused and
+  full pre-apply plans then showed **0 adds / 1 update / 0 destroys**, solely
+  `aws_lambda_function.h1_film[0].image_uri` and computed `last_modified`.
+  The full plan also showed the existing API output-only refresh `173 -> 176`.
+- Reviewed saved plan SHA-256:
+  `2a85e3db70e359a98b3b08de18846f8c8da3bf489842ec92c91ac012ef0dcc55`.
+  Checked the dev account, digest, action/attribute allowlist and unchanged
+  limits, then rechecked the plan hash immediately before applying.
+  Apply completed with **0 added / 1 changed / 0 destroyed**.
+- Planning observed an external renderer function/alias release `245 -> 247`.
+  The apply refreshed that state without changing its code or alias. API
+  `live=176` was already deployed before this release and remains unchanged.
+- Focused post-apply plan is no-op. The final full dev plan has zero resource
+  actions: five components are no-op; `app-api` has only its unapplied output
+  refresh `173 -> 176`. No aggregate apply was run.
+- Live function is Active/Successful at the expected digest. Health returned
+  200 in intake mode with the expected encoder and every retained engine hash.
+  The entire SQS mapping matches its pre-release snapshot, remaining enabled
+  with batch size 1. Concurrency 1, 3,008 MiB memory, 900-second timeout,
+  8,192 MiB temporary storage and both API H1 flags/limits are unchanged.
+  Queue and DLQ remained empty. No IAM, source/map pin, secret, Xbox consumer,
+  website or prod change. No film upload or reparse was submitted.
+  There is no remaining AWS/profile/session blocker.
+
+The candidate passed 52 Rust, 37 Python and 12 Node tests; nine paired full-worker
+comparisons (745,485 ticks and 6,215 recorded hashes per image); retained analytics
+revisions 1/2; exact dual-rate chunk/container comparisons and independent readback;
+and blocked/failed-encoder cleanup checks. Publication reran retained-engine and
+read-only/non-root container health/rejection checks; all five mocked component
+tests passed. Offline conversion totals are 505.658 -> 260.832 seconds versus R1;
+whole harness totals are 553.268 -> 307.885 seconds. These are not actual Lambda
+duration measurements or a 10x result. Hosted revision-3 reparse and browser
+acceptance remain separate coordinated work.
+
+Evidence: `L:/tmp/halospawns-h1-perf2-20261009/release`.
+Exact publication and plan/apply commands, in order:
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+.\scripts\publish-h1-film.ps1 dev -Tag performance-20261009-r2 -EngineRoot .build/h1-film-9c8c68566d1b4e57b571201bc6c57035 -PreviousRegistry L:/tmp/halospawns-h1-perf2-20261009/release/previous-registry.json
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' test -no-color
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-perf2-20261009/release/map-processing.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+The reviewed plan is a byte-for-byte private copy of Atmos's generated
+`dev-map-processing.planfile`, inspected using `terraform show -json`. Changed
+for deployment: `stacks/dev.yaml`, `AGENTS.md`, `ATMOS_MIGRATION_PLAN.md`,
+`HANDOFFS.md`, and H1 `README.md`, `DEPLOYMENT.md`, `PERFORMANCE.md`. Runtime changes
+are documented in [PERFORMANCE.md](PERFORMANCE.md#second-local-candidate).
+No Terraform resource definitions changed. A compatible rollback can repin
+`performance-20261009-r1` after reviewing a focused component plan; leave the
+enabled gates and retained analytics/engine contracts intact.
 
 ## Runtime performance deployed 2026-10-09
 

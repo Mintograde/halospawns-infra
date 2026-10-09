@@ -140,6 +140,11 @@ export async function convertFilm(options) {
       { cwd: work, env: environment, windowsHide: true, stdio: ['pipe', encoderLog, encoderLog] });
     const encoded = completion(encoder);
     encoder.stdin.on('error', () => kill());
+    // The retained exporter retries EAGAIN with a 2 ms sleep. It owns all writes
+    // to this descriptor, so blocking backpressure avoids polling latency.
+    if (process.platform === 'linux' && typeof encoder.stdin._handle?.setBlocking === 'function') {
+      assert.equal(encoder.stdin._handle.setBlocking(true), 0, 'Cannot configure encoder pipe');
+    }
     const permissions = values['engine-permissions'] ? ['--permission',
       `--allow-fs-read=${work}`, `--allow-fs-read=${dirname(values.engine)}`,
       `--allow-fs-read=${fileURLToPath(new URL('./metrics.mjs', import.meta.url))}`,

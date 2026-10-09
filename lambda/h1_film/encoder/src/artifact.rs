@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 include!("../../../replay_parser/native/src/viewer.rs");
 
+#[path = "ordered_delta.rs"]
+mod ordered_delta;
 #[path = "tick_hash.rs"]
 mod tick_hash;
 
@@ -15,6 +17,133 @@ pub type PrimaryExport = EncodingWorker;
 pub type PrimaryExport = StreamingExport;
 
 impl CompiledProjection {
+    fn project_reusing(&self, source: &Value, target: &mut Value) -> Result<(), Box<dyn Error>> {
+        match (self, source) {
+            (Self::Nullable(inner), _) if !source.is_null() => {
+                inner.project_reusing(source, target)
+            }
+            (Self::Nullable(_), Value::Null) => {
+                *target = Value::Null;
+                Ok(())
+            }
+            (Self::Scalar { nullable }, _) => {
+                if source.is_array() || source.is_object() || (source.is_null() && !nullable) {
+                    return Err("viewer projection expected a JSON scalar".into());
+                }
+                if let (Value::String(source), Value::String(target)) = (source, &mut *target) {
+                    if source != target {
+                        target.clone_from(source);
+                    }
+                } else {
+                    *target = source.clone();
+                }
+                Ok(())
+            }
+            (
+                Self::Object {
+                    fields,
+                    required,
+                    source_indexes,
+                },
+                Value::Object(source),
+            ) if fields.len() <= 64 => {
+                for key in required {
+                    if source.get(key).is_none_or(Value::is_null) {
+                        return Err("viewer projection is missing a required object field".into());
+                    }
+                }
+                let mut selected = [None; 64];
+                let mut count = 0;
+                for (key, value) in source {
+                    if let Some(&index) = source_indexes.get(key)
+                        && (!value.is_null() || fields[index].node.nullable())
+                    {
+                        selected[index] = Some(value);
+                        count += 1;
+                    }
+                }
+                let selected = || {
+                    fields
+                        .iter()
+                        .zip(selected)
+                        .filter_map(|(field, value)| value.map(|value| (field, value)))
+                };
+                if let Value::Object(output) = target
+                    && output.len() == count
+                    && output
+                        .keys()
+                        .zip(selected())
+                        .all(|(key, (field, _))| key == &field.output_key)
+                {
+                    for (target, (field, value)) in output.values_mut().zip(selected()) {
+                        field.node.project_reusing(value, target)?;
+                    }
+                } else {
+                    let mut output = Map::with_capacity(count);
+                    for (field, value) in selected() {
+                        let mut target = Value::Null;
+                        field.node.project_reusing(value, &mut target)?;
+                        output.insert(field.output_key.clone(), target);
+                    }
+                    *target = Value::Object(output);
+                }
+                Ok(())
+            }
+            (
+                Self::Array {
+                    limit,
+                    take_first,
+                    items,
+                },
+                Value::Array(source),
+            ) => {
+                if !take_first && source.len() > *limit {
+                    return Err("viewer projection array exceeds its pinned limit".into());
+                }
+                if !target.is_array() {
+                    *target = Value::Array(Vec::new());
+                }
+                let output = target.as_array_mut().unwrap();
+                output.resize_with(source.len().min(*limit), || Value::Null);
+                for (source, target) in source.iter().zip(output) {
+                    items.project_reusing(source, target)?;
+                }
+                Ok(())
+            }
+            (Self::Map { limit, values }, Value::Object(source)) => {
+                if source.len() > *limit {
+                    return Err("viewer projection map exceeds its pinned limit".into());
+                }
+                let selected = || source.iter().filter(|(_, value)| !value.is_null());
+                if let Value::Object(output) = target
+                    && output.len() == selected().count()
+                    && output
+                        .keys()
+                        .zip(selected())
+                        .all(|(key, (other, _))| key == other)
+                {
+                    for (target, (_, source)) in output.values_mut().zip(selected()) {
+                        values.project_reusing(source, target)?;
+                    }
+                    Ok(())
+                } else {
+                    let mut output = Map::with_capacity(source.len());
+                    for (key, source) in selected() {
+                        let mut target = Value::Null;
+                        values.project_reusing(source, &mut target)?;
+                        output.insert(key.clone(), target);
+                    }
+                    *target = Value::Object(output);
+                    Ok(())
+                }
+            }
+            _ => {
+                *target = self.project(source)?;
+                Ok(())
+            }
+        }
+    }
+
     // The binary transport owns its tick tree. Retain arrays, strings and keys
     // instead of cloning them through the borrowed production-ingest interface.
     fn project_owned(&self, source: Value) -> Result<Value, Box<dyn Error>> {
@@ -147,7 +276,7 @@ impl IncrementalChunk {
         if self.previous.is_none() {
             write_value(&mut self.binary, &next)?;
         } else {
-            write_delta(
+            ordered_delta::write(
                 &mut self.binary,
                 self.previous.as_ref(),
                 &next,
@@ -345,6 +474,8 @@ pub struct StreamingExport {
     chunk: Option<IncrementalChunk>,
     chunk_ticks: usize,
     expected: usize,
+    spare: Value,
+    validator: crate::fast_schema::Validator,
 }
 impl StreamingExport {
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
@@ -358,10 +489,20 @@ impl StreamingExport {
             chunk: None,
             chunk_ticks: 0,
             expected,
+            spare: Value::Null,
+            validator: crate::fast_schema::Validator::for_revision(projection()?.revision)?,
         })
     }
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
-        self.push_owned(source.clone())
+        let started = Instant::now();
+        validate_json_safety(source, 3)?;
+        let mut projected = std::mem::take(&mut self.spare);
+        projection()?.tick.project_reusing(source, &mut projected)?;
+        if !self.validator.is_valid(&projected) {
+            return Err("viewer tick violates its closed schema".into());
+        }
+        self.spare = self.push_projected(projected, started.elapsed())?;
+        Ok(())
     }
     pub fn push_owned(&mut self, source: Value) -> Result<(), Box<dyn Error>> {
         self.push_recycled(source).map(|_| ())
@@ -472,6 +613,10 @@ pub struct EncodingWorker {
 
 impl EncodingWorker {
     const BATCH: usize = 8;
+
+    pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
+        self.push_owned(source.clone())
+    }
 
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
         let mut export = StreamingExport::new(directory, expected, level)?;
@@ -873,14 +1018,21 @@ mod incremental_tests {
         ]);
         for revision in [1, 2] {
             let projection = Projection::load_revision(revision).unwrap();
-            for input in &inputs {
+            let mut recycled = Value::Null;
+            for input in inputs.iter().cycle().take(inputs.len() * 3) {
                 let expected = projection.tick.project(input);
                 let actual = projection.tick.project_owned(input.clone());
+                let reused = projection.tick.project_reusing(input, &mut recycled);
+                assert_eq!(reused.is_ok(), expected.is_ok());
                 assert_eq!(actual.is_ok(), expected.is_ok());
                 if let (Ok(actual), Ok(expected)) = (actual, expected) {
                     assert!(deep_exact_equal(&actual, &expected));
                     assert_eq!(
                         serde_json::to_vec(&actual).unwrap(),
+                        serde_json::to_vec(&expected).unwrap()
+                    );
+                    assert_eq!(
+                        serde_json::to_vec(&recycled).unwrap(),
                         serde_json::to_vec(&expected).unwrap()
                     );
                 }
@@ -902,7 +1054,12 @@ mod incremental_tests {
             serde_json::json!({"before":null}),
         ] {
             let expected = node.project(&input);
-            let actual = node.project_owned(input);
+            let actual = node.project_owned(input.clone());
+            let mut recycled = serde_json::json!({"after":[false, 0.0]});
+            assert_eq!(
+                node.project_reusing(&input, &mut recycled).is_ok(),
+                expected.is_ok()
+            );
             assert_eq!(actual.is_ok(), expected.is_ok());
             if let (Ok(actual), Ok(expected)) = (actual, expected) {
                 assert!(deep_exact_equal(&actual, &expected));

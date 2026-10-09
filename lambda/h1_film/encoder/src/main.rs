@@ -1,5 +1,6 @@
 mod analytics;
 mod artifact;
+mod fast_schema;
 mod native;
 mod sampling;
 mod transport;
@@ -451,7 +452,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             analytics.observe(&tick, count)?;
         }
         let sample = (low.is_some() && count.is_multiple_of(4)).then(|| tick.clone());
-        spare = high.push_recycled(tick)?;
+        high.push(&tick)?;
+        spare = tick;
         if let Some(mut sample) = sample {
             sampling::normalize(&mut sample, count, 4, &request.map)?;
             low.as_mut().unwrap().push_owned(sample)?;
