@@ -34,8 +34,43 @@ export function validateRegistry(document) {
   return Object.freeze(profiles);
 }
 
-export const ENGINE_PROFILES = validateRegistry(JSON.parse(
-  readFileSync(new URL('../profiles/registry.json', import.meta.url), 'utf8')));
+const registry = JSON.parse(readFileSync(new URL('../profiles/registry.json', import.meta.url), 'utf8'));
+export const ENGINE_PROFILES = validateRegistry(registry);
+
+export function validateExporters(document, profiles = ENGINE_PROFILES) {
+  const entries = document.exporters ?? [];
+  assert.ok(Array.isArray(entries) && entries.length <= 256, 'Invalid exporter registry');
+  const ids = new Set();
+  return Object.freeze(entries.map(entry => {
+    assert.ok(entry && typeof entry === 'object' && !Array.isArray(entry));
+    profileById(entry.engine_profile, profiles);
+    assert.ok(Number.isSafeInteger(entry.revision) && entry.revision >= 2, 'Invalid exporter revision');
+    const id = `${entry.engine_profile}:${entry.revision}`;
+    assert.ok(!ids.has(id), 'Duplicate exporter revision');
+    ids.add(id);
+    for (const key of ['wasm_sha256', 'glue_sha256']) assert.match(entry[key], /^[0-9a-f]{64}$/);
+    return Object.freeze({ ...entry });
+  }));
+}
+
+export const ENGINE_EXPORTERS = validateExporters(registry);
+
+export function selectExporter(profile, revision, exporters = ENGINE_EXPORTERS) {
+  if (revision === undefined) return profile;
+  assert.ok(Number.isSafeInteger(revision) && revision >= 1, 'Invalid exporter revision');
+  if (revision === 1) return Object.freeze({ ...profile, exporter_revision: 1 });
+  const exporter = exporters.find(entry => entry.engine_profile === profile.id && entry.revision === revision);
+  assert.ok(exporter, 'Unknown exporter revision');
+  return Object.freeze({ ...profile, exporter_revision: revision,
+    wasm_sha256: exporter.wasm_sha256, glue_sha256: exporter.glue_sha256 });
+}
+
+export function assertRetainedExporters(current, previous) {
+  for (const exporter of previous) {
+    assert.deepEqual(current.find(entry => entry.engine_profile === exporter.engine_profile
+      && entry.revision === exporter.revision), exporter, 'Previously supported exporter changed');
+  }
+}
 
 export function selectProfile(envelope, profiles = ENGINE_PROFILES) {
   const matches = profiles.filter(profile => IDENTITY.every(key => profile[key] === envelope[key]));

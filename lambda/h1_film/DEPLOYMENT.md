@@ -1,15 +1,16 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: the second runtime performance release, retaining native analytics
-revision 3, is deployed in dev as `performance-20261009-r2`.
-Both API H1 flags are true on `live=176`,
+Status on 2026-10-09: retained exporter revision 2 and viewer revision 3 are
+deployed in dev as `viewer3-glass-20261009-r1`, retaining native analytics 3.
+Both API H1 flags are true on `live=178`,
 and the intake worker consumes its batch-one queue with concurrency 1.
 The worker reuses the existing finalizer and retains original film/version pins.
 The API uses the existing worker ceilings as provisional dev limits, not measured
 performance claims. Nine LAN films covering nine maps passed the complete worker locally,
 including both reprocess product modes and persisted completion retries. The
-user's earlier hosted Prisoner conversion exists; revision-3 hosted reparse,
-Lambda performance and broader map/browser acceptance remain pending.
+32 existing H1 films have been queued for the new default through the existing
+fenced SQS reprocess path. The canary succeeded and activated viewer revision 3;
+the remaining asynchronous backfill and broader parity acceptance are tracked below.
 Existing Xbox consumers and prod are unchanged. This is not full semantic parity.
 API current/versioned reads and durable lifecycle retention for retained
 `maps/processed/` originals are deployed; broader map approval remains open.
@@ -18,6 +19,84 @@ Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
+
+## Glass default deployed 2026-10-09
+
+New H1 intake and newly requested H1 reparses now select analytics 3, retained
+exporter 2 and viewer 3. Exporter 2 observes the engine's BSP-0 intact bits and
+emits the inverse as the nullable uint32 `broken_surfaces` snapshot. Unknown or
+multi-BSP state remains null. Revision-3 projection and delta encoding retain
+the field. The simulation profile, recorded input, RNG and map bindings do not
+change. No camo/runtime-item state or Xbox equivalence is claimed.
+
+Explicit old exporter/viewer pins and persisted retries remain supported, with
+the original WASM/glue bundled alongside `exporter-2/`. The global/Xbox viewer
+default stays 2; only H1 source-specific selection changes. API inventory now
+classifies old supported H1 revisions as stale rather than unsupported.
+
+- API commit `bfd57f2232e5e1d31878e3d3629303fbd0624325` deployed first via
+  successful run `38006549483`; `halospawns-dev-app-api:live` is version `178`.
+- Immutable H1 image tag: `viewer3-glass-20261009-r1`; digest
+  `sha256:13f892c275fbfe8e4b652c7a00993261dab88ac30a045258bc61f23a63c39bbc`.
+  Encoder: `6572f2923d224d82f70708d99f231e2d542ffe05a20ff3c68a7264db4fcf5be1`.
+- Exporter-2 WASM: `51054b891f959b3b1363ff65dbbe317af38cf05f83c6eb80af5424591f9ce442`;
+  glue: `f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc`.
+  Registry entries are append-only; the original profile record is unchanged.
+- Release source is the isolated `codex/h1film-viewer3-default` worktree based
+  on `b791c1b`. Unfinished native/performance experiments in the main worktree
+  were not included in this image.
+- Full pre-apply plan: 0 adds / 1 update / 0 destroys, solely the H1 Lambda
+  image. Reviewed saved plan SHA-256:
+  `0e97428db35099d73d8a73b519720a5caa929e0ab1673f7d4f46875f103597d9`.
+  Applied that plan; final full dev plan has zero resource actions (the existing
+  API output-only refresh remains). Active/Successful live health verifies
+  both exporter bundles. Gates, IAM, concurrency 1, batch size 1, 3,008 MiB
+  memory, 900-second timeout and 8,192 MiB temporary storage are unchanged.
+- Offline nine-map full-worker checks cover 745,485 ticks and 6,215 recorded
+  hashes, both reprocess modes and idempotent completion retries. Independent
+  frontend-codec decoding compared every non-glass field of every tick and all
+  analytics products with the previous image: unchanged. Prisoner and Temple
+  have recorded glass transitions; the other seven films retain mask 0.
+- API suite: 1,392 passed, two optional corpus skips; expanded focused checks:
+  159 passed and Ruff clean. H1 worker: 38 Python and 13 Node tests pass;
+  replay-parser Python: 82 tests, three optional native skips. Frontend:
+  all 1,952 workspace tests pass. CI also validated Linux API packaging.
+
+### Bounded dev backfill
+
+The user requested the future default and backfill. A frozen manifest matches
+all 32 existing H1 films by replay/source/hash/size/version/map/selected artifact
+and lifecycle epoch. Normal reprocess attempt SQL atomically allocates request
+sequences; the existing dispatcher sends each attempt to `films-processing-queue`.
+Each attempt has an audit record identifying the actual AWS SSO operator, not a
+fabricated Supabase user. No direct result/artifact selection writes were made.
+
+- Operation: `d7c88885-f9cb-4419-8eba-d31d20f1ed44`.
+- Canary replay: `55dd6401-0314-4fe8-a896-56f1af8a6dc0`; attempt
+  `776792e3-ab75-5fd1-a2b5-d4db4c0666e0` succeeded and activated viewer 3,
+  exporter 2. Lambda took 103.86 seconds, used 701 MiB, and verified all 589
+  recorded hashes across 70,582 ticks.
+- Canary artifact SHA-256:
+  `2e3b44ec8b97b1390fd6678d76bf7fa25761b62ff70699c2dc59b29c98e3c9c6`.
+- Chrome checks at 1440x1000 and 390x844 loaded the actual hosted canary bytes
+  and hosted Prisoner GLB through the local viewer. Eight forward/backward seeks
+  reproduce masks `0,0,1,1,3,3,0,0`; pane visibility matches and the collision
+  BVH is reused. Glass breaks at ticks 2,236 and 5,701. Both canvases are
+  nonblank, camera movement changes pixels, and there are no page errors or
+  overflow. Screenshots and report:
+  `../halospawns-svelte/smoke-runs/h1film-glass-20261009/` (ignored).
+- The other 31 jobs were dispatched after the canary passed. Submission is
+  complete; do not treat queued attempts as completed or enqueue duplicates.
+  Existing selected artifacts remain playable until each fenced completion
+  activates its new generation.
+- Local evidence and operator status tool:
+  `L:/tmp/halospawns-h1-viewer3-20261009/` (`backfill-scope.json`,
+  `backfill-dispatch.log`, `backfill.py --manifest <manifest> --status`).
+
+Do not roll the worker back to `performance-20261009-r2` while exporter-2 jobs
+exist: that image cannot honor the new pins. Any rollback must retain both
+exporters and viewer revisions 1/2/3. No prod, Xbox, map approval or website
+cutover is part of this release.
 
 ## Second performance release deployed 2026-10-09
 

@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory)][string]$Map,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$CandidateEncoder,
-    [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3
+    [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3,
+    [ValidateSet(1, 2)][int]$ExporterRevision = 1,
+    [ValidateSet(1, 2, 3)][int]$ViewerRevision = 2
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
@@ -37,7 +39,8 @@ if ($encoderPath) {
 }
 $arguments += @('--entrypoint', '/var/lang/bin/python3', $Image, '/harness.py',
     '--film', '/input/film.h1film', '--map', "/input/$mapName", '--output', '/out/worker',
-    '--analytics-revision', "$AnalyticsRevision")
+    '--analytics-revision', "$AnalyticsRevision",
+    '--exporter-revision', "$ExporterRevision", '--viewer-revision', "$ViewerRevision")
 & docker @arguments *> (Join-Path $outputPath 'worker.log')
 if ($LASTEXITCODE) { throw "Offline worker failed. See $outputPath/worker.log" }
 $report = Get-Content -LiteralPath (Join-Path $outputPath 'worker/report.json') -Raw | ConvertFrom-Json
@@ -49,6 +52,8 @@ $completion = Get-Content -LiteralPath (Join-Path $outputPath 'worker/finalizati
     encoder_sha256 = $report.provenance.encoder_sha256
     film_sha256 = $report.provenance.film_sha256
     analytics_revision = $AnalyticsRevision
+    exporter_revision = $ExporterRevision
+    viewer_revision = $ViewerRevision
     source_ticks = $verification.source_ticks
     hash_checks = $verification.hash_checks
     conversion_seconds = $report.timing.total_seconds

@@ -31,10 +31,15 @@ struct Request {
     export_contract: String,
     #[serde(default = "default_analytics_revision")]
     analytics_revision: u8,
+    #[serde(default = "default_viewer_revision")]
+    viewer_profile_revision: u32,
     #[serde(default)]
     source_viewer_only: bool,
 }
 fn default_analytics_revision() -> u8 {
+    2
+}
+fn default_viewer_revision() -> u32 {
     2
 }
 fn default_level() -> i32 {
@@ -405,6 +410,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let started = Instant::now();
     let request: Request = serde_json::from_reader(BufReader::new(File::open(request_path)?))?;
     request.validate()?;
+    artifact::select_revision(request.viewer_profile_revision)?;
     fs::create_dir(directory)?;
     let mut high = artifact::PrimaryExport::new(
         &directory.join("parts-120"),
@@ -644,6 +650,7 @@ mod observation_tests {
             source.push(tick);
         }
         let request = Request {
+            viewer_profile_revision: 2,
             source_viewer_only: false,
             analytics_revision: 2,
             ticks: 5,
@@ -877,6 +884,7 @@ mod observation_tests {
             let mut analytics = analytics::Export::new(&path).unwrap();
             let mut observations = Observations::default();
             let request = Request {
+                viewer_profile_revision: 2,
                 source_viewer_only: false,
                 analytics_revision: 2,
                 ticks: 12,

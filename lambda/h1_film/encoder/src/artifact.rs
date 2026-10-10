@@ -9,6 +9,13 @@ mod tick_hash;
 
 const LOCAL_CHUNK_RAW_LIMIT: usize = 64 * 1024 * 1024;
 
+pub fn select_revision(revision: u32) -> Result<(), Box<dyn Error>> {
+    Projection::load_revision(revision)?;
+    PROFILE_REVISION
+        .set(revision)
+        .map_err(|_| "viewer revision already initialized".into())
+}
+
 // Moving whole tick trees between threads increased CPU use in the constrained
 // static-glibc build. Windows benefits from the additional bounded pipeline.
 #[cfg(windows)]

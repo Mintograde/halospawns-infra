@@ -21,6 +21,8 @@ from unittest.mock import patch
 
 from botocore.exceptions import ClientError
 from h1_film import cloud, worker
+from h1_film.registry import load_registry, select_exporter
+from replay_parser import viewer_delta
 
 
 class LocalS3:
@@ -98,6 +100,8 @@ def main():
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3), default=3)
+    parser.add_argument("--exporter-revision", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3), default=2)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     logging.basicConfig(level=logging.INFO)
@@ -120,6 +124,21 @@ def main():
     job = json.loads(
         (cloud.PACKAGE / "tests/fixtures/api-initial-job.json").read_text()
     )["job"]
+    if args.exporter_revision != 1:
+        engine = job["conversion"]["engine"]
+        selected = select_exporter(
+            load_registry()[job["conversion"]["film"]["engine_profile"]],
+            args.exporter_revision,
+        )
+        engine.update({key: selected[key] for key in (
+            "wasm_sha256", "glue_sha256", "exporter_revision"
+        )})
+    projection_sha, manifest_sha = viewer_delta.VIEWER_CONTRACT_PINS[args.viewer_revision]
+    job["viewer_artifact_target"].update(
+        profile_revision=args.viewer_revision,
+        projection_sha256=projection_sha,
+        manifest_schema_sha256=manifest_sha,
+    )
     source = job["conversion"]["source"]
     source.update(
         size_bytes=args.film.stat().st_size,
@@ -193,6 +212,10 @@ def main():
             )
             retry = retry.get("job", retry)
             retry["conversion"] = copy.deepcopy(current["conversion"])
+            retry["viewer_artifact_target"].update({
+                key: value for key, value in current["viewer_artifact_target"].items()
+                if key not in {"generation_token", "request_epoch", "request_sequence"}
+            })
             retry.update(schema=current["schema"], analytics_revision=current["analytics_revision"])
             generation = str(uuid.uuid5(uuid.NAMESPACE_URL, source["sha256"] + mode))
             retry.update(
@@ -295,6 +318,8 @@ def main():
         "total_seconds": round(time.monotonic() - started, 3),
         "product_modes": ["initial", "viewer_rebuild", "full_reparse"],
         "viewer_bytes": payload["viewer_artifact"]["size_bytes"],
+        "exporter_revision": args.exporter_revision,
+        "viewer_revision": args.viewer_revision,
         "output_sha256": hashlib.sha256(
             json.dumps(payload, sort_keys=True).encode()
         ).hexdigest(),

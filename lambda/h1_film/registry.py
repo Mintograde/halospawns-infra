@@ -66,10 +66,36 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict]:
     return result
 
 
+def select_exporter(profile: dict, revision: int | None, path: Path = REGISTRY_PATH) -> dict:
+    if revision is None:
+        return profile
+    if type(revision) is not int or revision < 1:
+        raise ValueError("Invalid exporter revision")
+    if revision == 1:
+        return {**profile, "exporter_revision": 1}
+    document = json.loads(path.read_text(encoding="utf-8"))
+    entries = document.get("exporters", [])
+    if not isinstance(entries, list) or len(entries) > 256:
+        raise ValueError("Invalid exporter registry")
+    matches = [entry for entry in entries if isinstance(entry, dict)
+               and entry.get("engine_profile") == profile["id"]
+               and type(entry.get("revision")) is int and entry["revision"] == revision]
+    if len(matches) != 1:
+        raise ValueError("Unsupported exporter revision")
+    exporter = matches[0]
+    if any(not isinstance(exporter.get(key), str)
+           or not re.fullmatch(r"[0-9a-f]{64}", exporter[key])
+           for key in ("wasm_sha256", "glue_sha256")):
+        raise ValueError("Invalid exporter hash")
+    return {**profile, "exporter_revision": revision,
+            **{key: exporter[key] for key in ("wasm_sha256", "glue_sha256")}}
+
+
 def profile_for_report(report: dict) -> dict:
     profile = load_registry().get(report.get("engine_profile"))
     if profile is None:
         raise ValueError("Unsupported H1 engine profile")
+    profile = select_exporter(profile, report.get("exporter_revision"))
     envelope = report.get("envelope", {})
     if any(
         type(envelope.get(k)) is not type(profile[k]) or envelope[k] != profile[k]

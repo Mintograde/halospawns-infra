@@ -15,5 +15,13 @@
       "wasm_sha256": "d49d466d263927cd17050af63690525be08e2fb1a0f805322e88d0d8cd1a6e9b",
       "glue_sha256": "21b54e1d321a3e116ecce26de68c17e078e598122c7ad8475fb3ff0eba4a04ab"
     }
+  ],
+  "exporters": [
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 2,
+      "wasm_sha256": "51054b891f959b3b1363ff65dbbe317af38cf05f83c6eb80af5424591f9ce442",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    }
   ]
 }

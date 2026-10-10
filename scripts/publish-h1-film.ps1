@@ -45,10 +45,19 @@ try {
     # Copy only verified, registered binaries into the private Docker context.
     $buildRoot = [IO.Path]::GetFullPath((Join-Path $repo '.build'))
     $stage = Join-Path $buildRoot "h1-film-$([guid]::NewGuid().ToString('N'))"
-    $profiles = (Get-Content -Raw -LiteralPath 'lambda/h1_film/profiles/registry.json' | ConvertFrom-Json).profiles
+    $engineRegistry = Get-Content -Raw -LiteralPath 'lambda/h1_film/profiles/registry.json' | ConvertFrom-Json
+    $profiles = $engineRegistry.profiles
     foreach ($engine in $profiles) {
         Invoke-Checked node @('lambda/h1_film/tools/stage-engine.mjs', '--profile', $engine.id,
             '--from', (Join-Path $engines "$($engine.id)/h1-film.js"), '--engine-root', $stage)
+    }
+    if ($engineRegistry.PSObject.Properties.Name -contains 'exporters') {
+        foreach ($exporter in $engineRegistry.exporters) {
+            Invoke-Checked node @('lambda/h1_film/tools/stage-engine.mjs', '--profile', $exporter.engine_profile,
+                '--exporter-revision', [string]$exporter.revision,
+                '--from', (Join-Path $engines "$($exporter.engine_profile)/exporter-$($exporter.revision)/h1-film.js"),
+                '--engine-root', $stage)
+        }
     }
     Invoke-Checked docker @('buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--load',
         '--build-context', "engines=$stage", '-f', 'lambda/h1_film/Dockerfile', '-t', $localImage, '-t', $remoteImage, '.')

@@ -40,6 +40,9 @@ impl Validator {
             2 => include_str!(
                 "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
             ),
+            3 => include_str!(
+                "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"
+            ),
             _ => return Err("unsupported viewer schema revision".into()),
         })?;
         Self::compile(&document["$defs"]["tick"], &document, 0)
@@ -227,6 +230,9 @@ mod tests {
             ),
             include_str!(
                 "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
+            ),
+            include_str!(
+                "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"
             ),
         ] {
             let document: Value = serde_json::from_str(text).unwrap();

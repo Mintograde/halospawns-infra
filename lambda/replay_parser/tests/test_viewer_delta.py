@@ -36,8 +36,8 @@ class ViewerDeltaCodecTests(unittest.TestCase):
             contract.manifest_sha256, viewer_delta.VIEWER_MANIFEST_SCHEMA_SHA256
         )
 
-    def test_both_revisions_are_pinned_and_unknown_tuples_are_rejected(self) -> None:
-        for revision in (1, 2):
+    def test_retained_revisions_are_pinned_and_unknown_tuples_are_rejected(self) -> None:
+        for revision in (1, 2, 3):
             contract = viewer_delta.load_pinned_contract(revision)
             self.assertEqual(
                 viewer_delta.resolve_source_contract(contract.source_contract), contract
@@ -46,12 +46,27 @@ class ViewerDeltaCodecTests(unittest.TestCase):
                 viewer_delta.resolve_source_contract(
                     {**contract.source_contract, "projection_sha256": "0" * 64}
                 )
-        for revision in (0, 3, True, "2", None, [], {}):
+        for revision in (0, 4, True, "2", None, [], {}):
             with (
                 self.subTest(revision=revision),
                 self.assertRaises(viewer_delta.ViewerDeltaError),
             ):
                 viewer_delta.load_pinned_contract(revision)
+
+    def test_revision_three_retains_glass_snapshots_and_reads_the_independent_golden(self):
+        source = json.loads((FIXTURE_DIR / "viewer_v3_state_projected.json").read_text())
+        golden = json.loads((FIXTURE_DIR / "viewer_v3_state_delta.json").read_text())
+        raw = base64.b64decode(golden["base64"])
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), golden["sha256"])
+        self.assertEqual(viewer_delta.decode_replay_delta_chunk(raw)[1], source["ticks"])
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            parts = viewer_delta.build_python_viewer_parts(
+                FIXTURE_DIR / "viewer_v3_state_projected.json",
+                Path(temporary_directory), revision=3,
+            )
+            self.assertEqual(parts.profile_revision, 3)
+            encoded = parts.chunks[0].raw_path.read_bytes()
+            self.assertEqual(viewer_delta.decode_replay_delta_chunk(encoded)[1], source["ticks"])
 
     def test_revision_two_golden_preserves_field_order_nulls_and_exact_values(
         self,

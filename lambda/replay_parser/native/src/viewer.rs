@@ -23,6 +23,8 @@ const VIEWER_PROJECTION_V1_SHA256: &str =
     "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec";
 const VIEWER_PROJECTION_V2_SHA256: &str =
     "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530";
+const VIEWER_PROJECTION_V3_SHA256: &str =
+    "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a";
 const PARTS_SCHEMA: &str = "halospawns.viewerReplayDeltaParts.v1";
 const CONTAINER_RESULT_SCHEMA: &str = "halospawns.viewerReplayDeltaContainer.v1";
 const VIEWER_DELTA_FORMAT: &str = "halospawns.viewerReplayDelta.v1";
@@ -137,6 +139,11 @@ impl Projection {
                     "../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
                 ),
                 VIEWER_PROJECTION_V2_SHA256,
+            ),
+            3 => (
+                include_str!("../../contracts/replays/frontend-default.v3.projection.json"),
+                include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"),
+                VIEWER_PROJECTION_V3_SHA256,
             ),
             _ => return Err("unsupported viewer replay profile revision".into()),
         };
@@ -2990,7 +2997,9 @@ impl SourceContract {
             || self.profile != VIEWER_PROFILE
             || !matches!(
                 (self.profile_revision, self.projection_sha256.as_str()),
-                (1, VIEWER_PROJECTION_V1_SHA256) | (2, VIEWER_PROJECTION_V2_SHA256)
+                (1, VIEWER_PROJECTION_V1_SHA256)
+                    | (2, VIEWER_PROJECTION_V2_SHA256)
+                    | (3, VIEWER_PROJECTION_V3_SHA256)
             )
             || self.tick_count != tick_count
         {
@@ -3235,6 +3244,9 @@ pub fn finalize_container(
             2 => include_str!(
                 "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"
             ),
+            3 => include_str!(
+                "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v3.manifest.schema.json"
+            ),
             _ => return Err("unsupported viewer manifest revision".into()),
         },
     )?;
@@ -3347,6 +3359,48 @@ mod tests {
     }
 
     #[test]
+    fn revision_three_preserves_complete_glass_snapshots_and_nullable_state() {
+        let projection = Projection::load_revision(3).unwrap();
+        let source: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/replays/viewer_v3_state_projected.json"
+        ))
+        .unwrap();
+        let ticks = source["ticks"].as_array().unwrap();
+        let mut projected = Vec::new();
+        for tick in ticks {
+            let value = projection.tick.project(tick).unwrap();
+            assert_eq!(value, *tick);
+            assert!(projection.tick_validator.is_valid(&value));
+            assert!(Projection::load_revision(2)
+                .unwrap()
+                .tick
+                .project(tick)
+                .unwrap()
+                .get("broken_surfaces")
+                .is_none());
+            projected.push(value);
+        }
+        for chunk in projected.chunks(3).rev() {
+            let bytes = encode_chunk(chunk, 0).unwrap();
+            let (_, decoded) = decode_chunk(&bytes).unwrap();
+            assert_eq!(decoded.len(), chunk.len());
+            assert!(decoded
+                .iter()
+                .zip(chunk)
+                .all(|(a, b)| deep_exact_equal(a, b)));
+        }
+        for invalid in [
+            serde_json::json!(-1),
+            serde_json::json!(4294967296u64),
+            serde_json::json!(true),
+        ] {
+            assert!(!projection
+                .tick_validator
+                .is_valid(&serde_json::json!({"broken_surfaces":invalid})));
+        }
+    }
+
+    #[test]
     fn revision_two_projectors_match_the_first_person_golden() {
         let projection = Projection::load_revision(2).expect("revision two");
         let source: Value = serde_json::from_str(include_str!(
@@ -3395,7 +3449,7 @@ mod tests {
             format!("{:x}", Sha256::digest(&raw)),
             golden["sha256"].as_str().unwrap()
         );
-        assert!(Projection::load_revision(3).is_err());
+        assert!(Projection::load_revision(4).is_err());
     }
 
     #[test]

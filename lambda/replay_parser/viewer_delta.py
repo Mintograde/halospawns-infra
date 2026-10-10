@@ -32,6 +32,10 @@ VIEWER_CONTRACT_PINS = {
         "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530",
         "40b8250eab05112c7ee9f2f4d5ac8b776d9bcb35fbf7ce1bdbb7c4e247c3397b",
     ),
+    3: (
+        "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a",
+        "361094bfdbacb4ef25b86051e194d2bec5bd4a0b8a64bb5a709737f91274ee87",
+    ),
 }
 VIEWER_PROJECTION_SHA256, VIEWER_MANIFEST_SCHEMA_SHA256 = VIEWER_CONTRACT_PINS[
     VIEWER_PROFILE_REVISION
@@ -199,7 +203,7 @@ def load_pinned_contract(
     return _load_pinned_contract(revision)
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def _load_pinned_contract(revision: int) -> PinnedViewerContract:
     directory = Path(__file__).resolve().parent / "contracts" / "replays"
     registry = _load_json_object(directory / "supported-contracts.json")
