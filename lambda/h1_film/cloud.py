@@ -22,7 +22,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 
 from . import analytics, recorded
-from .registry import IDENTITY, load_registry
+from .registry import IDENTITY, load_registry, select_exporter
 
 PACKAGE = Path(__file__).parent
 NODE_ROOT = Path(os.getenv("H1_NODE_ROOT", str(PACKAGE)))
@@ -150,7 +150,11 @@ def validate_job(job):
     profile = load_registry().get(film["engine_profile"])
     require(profile is not None, "unsupported_build")
     exporter = engine.get("exporter_revision")
-    require(exporter is None or (versioned and type(exporter) is int and exporter == 1), "unsupported_build")
+    require(exporter is None or versioned, "unsupported_build")
+    try:
+        profile = select_exporter(profile, exporter)
+    except ValueError as error:
+        raise FilmError("unsupported_build") from error
     require(
         all(
             engine.get(key) == profile[key]
@@ -203,8 +207,7 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    # The retained encoder currently emits revision 2; do not silently ignore a pin.
-    require(request.profile_revision == 2, "unsupported_build")
+    require(request.profile_revision in (1, 2, 3), "unsupported_build")
     return request
 
 
@@ -554,6 +557,10 @@ def convert(job, film, work, deadline):
             "--analytics",
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
+            "--viewer-revision",
+            str(job["viewer_artifact_target"]["profile_revision"]),
+            *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
+              if job["conversion"]["engine"].get("exporter_revision") is not None else []),
             "--engine-permissions",
             "--timeout",
             str(timeout),
@@ -811,7 +818,9 @@ def execute(work_item, context):
         if job is None:
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
             try:
-                result = api("POST", "/v1/ingest/h1films/prepare", {**prepare, "analytics_revision": 3})
+                result = api("POST", "/v1/ingest/h1films/prepare", {
+                    **prepare, "analytics_revision": 3, "exporter_revision": 2,
+                })
             except FilmError as error:
                 if error.reason != "identity_conflict":
                     raise

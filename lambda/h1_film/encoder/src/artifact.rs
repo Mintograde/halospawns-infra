@@ -2,12 +2,21 @@
 #![allow(dead_code)]
 include!("../../../replay_parser/native/src/viewer.rs");
 
+#[path = "float_delta.rs"]
+mod float_delta;
 #[path = "ordered_delta.rs"]
 mod ordered_delta;
 #[path = "tick_hash.rs"]
 mod tick_hash;
 
 const LOCAL_CHUNK_RAW_LIMIT: usize = 64 * 1024 * 1024;
+
+pub fn select_revision(revision: u32) -> Result<(), Box<dyn Error>> {
+    Projection::load_revision(revision)?;
+    PROFILE_REVISION
+        .set(revision)
+        .map_err(|_| "viewer revision already initialized".into())
+}
 
 // Moving whole tick trees between threads increased CPU use in the constrained
 // static-glibc build. Windows benefits from the additional bounded pipeline.
@@ -105,6 +114,26 @@ impl CompiledProjection {
                 }
                 let output = target.as_array_mut().unwrap();
                 output.resize_with(source.len().min(*limit), || Value::Null);
+                if let Self::Scalar { nullable } = items.as_ref() {
+                    for (source, target) in source.iter().zip(output) {
+                        if source.is_array()
+                            || source.is_object()
+                            || (source.is_null() && !nullable)
+                        {
+                            return Err("viewer projection expected a JSON scalar".into());
+                        }
+                        if let (Value::String(source), Value::String(target)) =
+                            (source, &mut *target)
+                        {
+                            if source != target {
+                                target.clone_from(source);
+                            }
+                        } else {
+                            *target = source.clone();
+                        }
+                    }
+                    return Ok(());
+                }
                 for (source, target) in source.iter().zip(output) {
                     items.project_reusing(source, target)?;
                 }

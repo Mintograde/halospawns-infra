@@ -35,10 +35,14 @@ maps, with identical products. It optimizes the Rust encoder and Linux
 backpressure. Actual Lambda conversion measurements remain pending; the separate
 native-engine experiment is not deployed.
 
+The [third local performance pass](PERFORMANCE.md#third-local-candidate) compares
+numeric-array optimizations and a full-worker native experiment against R2.
+Neither is deployed; the current dev pin above remains authoritative.
+
 ## Dev Deployment
 
 The immutable image contains every registered engine, the Python source adapter,
-and the unchanged shared replay parser/finalizer. Game maps/source are excluded.
+and the shared replay parser/finalizer. Game maps/source are excluded.
 Foundation mode still accepts only the exact `halospawns.h1FilmHealth.v1`
 request and rejects jobs. Dev uses intake mode with its batch-one SQS mapping
 as the only configured job entry point; there is no function URL or invoke policy.

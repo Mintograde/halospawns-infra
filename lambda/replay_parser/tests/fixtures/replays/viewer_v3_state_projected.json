@@ -1,0 +1,19 @@
+{
+  "artifact": {
+    "schema": "halospawns.viewerReplay.v1",
+    "profile": "frontend-default",
+    "profile_revision": 3,
+    "projection_sha256": "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a",
+    "tick_count": 8
+  },
+  "ticks": [
+    {"players": [{"camo_timer": 0, "derived_stats": {"has_camo": false}, "player_object_data": {"camo_amount": 0}}], "objects": [{"object_id": 1, "parent_ref": "0xffffffff", "vel_x": 0, "vel_y": 0, "vel_z": 0, "ang_vel_x": 0, "ang_vel_y": 0, "ang_vel_z": 0, "flags": "0x0", "state_flags": 8}], "broken_surfaces": 0},
+    {"players": [{"camo_timer": 1, "derived_stats": {"has_camo": true}, "player_object_data": {"camo_amount": 0.125}}], "objects": [{"object_id": 1, "parent_ref": "0xffffffff", "vel_x": 0.0123456789, "vel_y": -1.25, "vel_z": 2.5, "ang_vel_x": 0.5, "ang_vel_y": -0.25, "ang_vel_z": 0, "flags": "0x80000000", "state_flags": 4}], "broken_surfaces": 1},
+    {"players": [{"camo_timer": 30, "derived_stats": {"has_camo": true}, "player_object_data": {"camo_amount": 1}}], "objects": [{"object_id": 1, "parent_ref": "0x1234", "flags": "0xffffffff", "state_flags": 3}], "broken_surfaces": 2},
+    {"players": [{"camo_timer": 31, "derived_stats": {"has_camo": true}, "player_object_data": {"camo_amount": 0.75, "shields": 2}}], "objects": [{"object_id": 1, "state_flags": 255}], "broken_surfaces": 3},
+    {"players": [{"camo_timer": 0.25, "derived_stats": {"has_camo": true}, "player_object_data": {"camo_amount": 0.03125}}], "broken_surfaces": 2147483648},
+    {"players": [{"camo_timer": null, "derived_stats": {"has_camo": false}, "player_object_data": null}], "broken_surfaces": 4294967295},
+    {"players": [{"derived_stats": {"has_camo": null}, "player_object_data": {"camo_amount": null}}], "objects": [{"flags": null, "state_flags": null, "vel_x": null}], "broken_surfaces": null},
+    {"players": [{"derived_stats": null}]}
+  ]
+}

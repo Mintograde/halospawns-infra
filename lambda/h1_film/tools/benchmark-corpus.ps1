@@ -4,9 +4,13 @@ param(
     [Parameter(Mandatory)][string]$FilmsDirectory,
     [Parameter(Mandatory)][string]$MapsDirectory,
     [Parameter(Mandatory)][string]$OutputDirectory,
+    [string]$CandidateEncoder,
+    [string]$NativeModule,
     [switch]$AllFilms
 )
 $ErrorActionPreference = 'Stop'
+if ($CandidateEncoder) { $CandidateEncoder = (Resolve-Path -LiteralPath $CandidateEncoder).Path }
+if ($NativeModule) { $NativeModule = (Resolve-Path -LiteralPath $NativeModule).Path }
 $root = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $root) { throw 'Corpus output must be a new directory.' }
 $films = @(
@@ -45,7 +49,12 @@ for ($i = 0; $i -lt $films.Count; $i++) {
     foreach ($side in $order) {
         Write-Host "[$($i + 1)/$($films.Count)] $name $side"
         try {
-            & (Join-Path $PSScriptRoot 'benchmark.ps1') -Image $images[$side] -Film $film.film -Map $map -OutputDirectory (Join-Path $root "$name-$side")
+            $overrides = @{}
+            if ($side -eq 'candidate') {
+                if ($CandidateEncoder) { $overrides.CandidateEncoder = $CandidateEncoder }
+                if ($NativeModule) { $overrides.NativeModule = $NativeModule }
+            }
+            & (Join-Path $PSScriptRoot 'benchmark.ps1') -Image $images[$side] -Film $film.film -Map $map -OutputDirectory (Join-Path $root "$name-$side") @overrides
         } catch {
             $errors[$side] = $_.Exception.Message
         }

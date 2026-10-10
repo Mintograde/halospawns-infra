@@ -6,7 +6,7 @@ import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/prom
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adapterFor, readEnvelope } from './film.mjs';
-import { resolveMap, selectProfile } from './profiles.mjs';
+import { resolveMap, selectProfile, selectExporter } from './profiles.mjs';
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
 
 export async function convertFilm(options) {
@@ -35,7 +35,8 @@ export async function convertFilm(options) {
     assert.equal(native.status, 'verified');
     assert.deepEqual(envelope, native.envelope, 'Film envelope differs from the native baseline');
   }
-  const profile = selectProfile(envelope);
+  const profile = selectExporter(selectProfile(envelope), values['exporter-revision'] === undefined
+    ? undefined : Number(values['exporter-revision']));
   const adapter = adapterFor(profile);
   if (values.profile) assert.equal(values.profile, profile.id, 'Requested profile does not match the film');
   assert.ok(!(values.engine && values['engine-root']), 'Choose --engine or --engine-root, not both');
@@ -82,6 +83,8 @@ export async function convertFilm(options) {
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
   request.analytics_revision = analyticsRevision;
+  request.viewer_profile_revision = Number(values['viewer-revision'] ?? 2);
+  assert.ok([1, 2, 3].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
   if (values.analytics) {
     request.analytics_context = { engine_profile: profile.id, gametype: native.envelope.gametype,
@@ -116,6 +119,7 @@ export async function convertFilm(options) {
     envelope: native.envelope, reference: values.reference,
     benchmark_mode: values['trusted-local'], timing: { preflight_staging_seconds: stagingSeconds },
     engine_profile: profile.id, export_contract: profile.export_contract,
+    ...(profile.exporter_revision === undefined ? {} : { exporter_revision: profile.exporter_revision }),
     ...(mapBinding ? { map_binding: mapBinding } : {}),
     provenance: { film_sha256: native.provenance.film_sha256, map_sha256: native.provenance.map_sha256,
       ...engineHashes, encoder_sha256: await sha256(values.encoder), node: process.version } };

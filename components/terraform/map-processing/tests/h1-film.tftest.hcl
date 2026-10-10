@@ -106,6 +106,56 @@ run "activation_requires_concurrency" {
   }
   expect_failures = [var.h1_film]
 }
+run "intake_supports_five_concurrent_films" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 5
+    }
+  }
+  assert {
+    condition = (
+      aws_lambda_function.h1_film[0].reserved_concurrent_executions == 5 &&
+      aws_lambda_event_source_mapping.h1_film[0].enabled &&
+      aws_lambda_event_source_mapping.h1_film[0].batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.h1_film[0].function_response_types, "ReportBatchItemFailures")
+    )
+    error_message = "Five concurrent invocations must retain one film per invocation and partial failure reporting."
+  }
+}
+run "concurrency_above_five_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 6
+    }
+  }
+  expect_failures = [var.h1_film]
+}
+run "fractional_concurrency_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 4.5
+    }
+  }
+  expect_failures = [var.h1_film]
+}
 run "intake_requires_resource_headroom" {
   command = plan
   variables {

@@ -30,9 +30,16 @@ export async function resolveEngine(profile, root) {
   assert.match(profile.id, /^[a-z0-9][a-z0-9-]{0,95}$/, 'Invalid engine profile ID');
   const path = join(base, profile.id);
   assert.ok(!(await lstat(path)).isSymbolicLink(), 'Engine profiles cannot be symlinks');
-  const directory = await realpath(path);
-  // Exactly one immutable directory per profile. Never fall back to newest.
+  let directory = await realpath(path);
   assert.equal(dirname(directory), base, 'Engine profile must be a direct store child');
+  if ((profile.exporter_revision ?? 1) > 1) {
+    assert.ok(Number.isSafeInteger(profile.exporter_revision), 'Invalid exporter revision');
+    const revisionPath = join(directory, `exporter-${profile.exporter_revision}`);
+    assert.ok(!(await lstat(revisionPath)).isSymbolicLink(), 'Exporters cannot be symlinks');
+    const revisionDirectory = await realpath(revisionPath);
+    assert.equal(dirname(revisionDirectory), directory, 'Exporter must be a direct profile child');
+    directory = revisionDirectory;
+  }
   assert.deepEqual(JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')),
     { type: 'commonjs' }, 'Pinned Emscripten glue requires a CommonJS package boundary');
   return inspectEngine(profile, join(directory, 'h1-film.js'));

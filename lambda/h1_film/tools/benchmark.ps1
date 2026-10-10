@@ -4,7 +4,10 @@ param(
     [Parameter(Mandatory)][string]$Map,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$CandidateEncoder,
-    [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3
+    [string]$NativeModule,
+    [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3,
+    [ValidateSet(1, 2)][int]$ExporterRevision = 1,
+    [ValidateSet(1, 2, 3)][int]$ViewerRevision = 2
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
@@ -14,6 +17,7 @@ $mapName = [IO.Path]::GetFileName($mapPath)
 $outputPath = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $outputPath) { throw 'Benchmark output must be a new directory.' }
 $encoderPath = if ($CandidateEncoder) { (Resolve-Path -LiteralPath $CandidateEncoder).Path }
+$nativePath = if ($NativeModule) { (Resolve-Path -LiteralPath $NativeModule).Path }
 New-Item -ItemType Directory -Path $outputPath | Out-Null
 $arguments = @(
     'run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000',
@@ -35,9 +39,18 @@ if ($encoderPath) {
         '--mount', "type=bind,source=$encoderPath,target=/var/task/bin/h1-film-encoder,readonly"
     )
 }
-$arguments += @('--entrypoint', '/var/lang/bin/python3', $Image, '/harness.py',
+$harness = '/harness.py'
+if ($nativePath) {
+    $arguments += @(
+        '--mount', "type=bind,source=$nativePath,target=/native/engine.node,readonly",
+        '--mount', "type=bind,source=$repo/lambda/h1_film/tools/wasm2c,target=/native-tools,readonly"
+    )
+    $harness = '/native-tools/worker.py'
+}
+$arguments += @('--entrypoint', '/var/lang/bin/python3', $Image, $harness,
     '--film', '/input/film.h1film', '--map', "/input/$mapName", '--output', '/out/worker',
-    '--analytics-revision', "$AnalyticsRevision")
+    '--analytics-revision', "$AnalyticsRevision",
+    '--exporter-revision', "$ExporterRevision", '--viewer-revision', "$ViewerRevision")
 & docker @arguments *> (Join-Path $outputPath 'worker.log')
 if ($LASTEXITCODE) { throw "Offline worker failed. See $outputPath/worker.log" }
 $report = Get-Content -LiteralPath (Join-Path $outputPath 'worker/report.json') -Raw | ConvertFrom-Json
@@ -46,9 +59,13 @@ $completion = Get-Content -LiteralPath (Join-Path $outputPath 'worker/finalizati
 [pscustomobject]@{
     status = $verification.status
     image = $Image
+    encoder_override = [bool]$encoderPath
+    execution_variant = if ($nativePath) { $report.offline_execution_variant } else { 'registered_wasm' }
     encoder_sha256 = $report.provenance.encoder_sha256
     film_sha256 = $report.provenance.film_sha256
     analytics_revision = $AnalyticsRevision
+    exporter_revision = $ExporterRevision
+    viewer_revision = $ViewerRevision
     source_ticks = $verification.source_ticks
     hash_checks = $verification.hash_checks
     conversion_seconds = $report.timing.total_seconds

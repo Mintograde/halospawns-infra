@@ -2,13 +2,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { ENGINE_PROFILES, resolveMap, selectProfile, verifyEngine,
-  validateRegistry, assertRetainedProfiles, REGISTRY_SCHEMA } from '../runtime/profiles.mjs';
+  validateRegistry, assertRetainedProfiles, REGISTRY_SCHEMA, selectExporter,
+  validateExporters, assertRetainedExporters, ENGINE_EXPORTERS } from '../runtime/profiles.mjs';
 
 const profile = ENGINE_PROFILES[0];
 const envelope = { ...profile, map: 'dread', map_bytes: 2048 };
 const map = { engine_profile: profile.id, scenario: 'dread', size_bytes: 2048, sha256: 'a'.repeat(64) };
 const catalog = maps => ({ schema: 'halospawns.h1FilmMapCatalog.v1', maps });
 const registry = profiles => ({ schema: REGISTRY_SCHEMA, profiles });
+
+test('exporter revisions retain the simulation identity and reject unknown or rewritten pins', () => {
+  assert.equal(selectExporter(profile, undefined), profile);
+  const current = selectExporter(profile, 2);
+  for (const key of ['id', 'format', 'protocol_revision', 'tick_rate', 'build']) {
+    assert.equal(current[key], profile[key]);
+  }
+  assert.notEqual(current.wasm_sha256, profile.wasm_sha256);
+  assert.equal(selectExporter(profile, 1).wasm_sha256, profile.wasm_sha256);
+  for (const revision of [0, 3, true, '2']) assert.throws(() => selectExporter(profile, revision));
+  assertRetainedExporters(ENGINE_EXPORTERS, ENGINE_EXPORTERS);
+  assert.throws(() => assertRetainedExporters([], ENGINE_EXPORTERS));
+  assert.throws(() => validateExporters({ exporters: [...ENGINE_EXPORTERS, ...ENGINE_EXPORTERS] }));
+});
 
 test('adding a later decompilation retains exact old film routing independent of order', () => {
   const later = { ...profile, id: 'future-fixture-only', protocol_revision: 46,

@@ -40,6 +40,9 @@ impl Validator {
             2 => include_str!(
                 "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
             ),
+            3 => include_str!(
+                "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"
+            ),
             _ => return Err("unsupported viewer schema revision".into()),
         })?;
         Self::compile(&document["$defs"]["tick"], &document, 0)
@@ -189,8 +192,22 @@ impl Validator {
                 maximum,
                 items,
             } => value.as_array().is_some_and(|values| {
-                (*minimum..=*maximum).contains(&values.len())
-                    && values.iter().all(|v| items.is_valid(v))
+                if !(*minimum..=*maximum).contains(&values.len()) {
+                    return false;
+                }
+                if let Self::Number {
+                    minimum,
+                    maximum,
+                    integer: false,
+                } = items.as_ref()
+                {
+                    return values.iter().all(|value| {
+                        value
+                            .as_f64()
+                            .is_some_and(|v| v >= *minimum && v <= *maximum)
+                    });
+                }
+                values.iter().all(|v| items.is_valid(v))
             }),
             Self::Object {
                 minimum,
@@ -227,6 +244,9 @@ mod tests {
             ),
             include_str!(
                 "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
+            ),
+            include_str!(
+                "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"
             ),
         ] {
             let document: Value = serde_json::from_str(text).unwrap();

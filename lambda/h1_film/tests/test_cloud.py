@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from h1_film import cloud, worker
+from h1_film.registry import select_exporter, load_registry
+from replay_parser.viewer_delta import VIEWER_CONTRACT_PINS
 
 FIXTURES = Path(__file__).with_name("fixtures")
 ENV = {
@@ -152,6 +154,25 @@ class CloudTests(unittest.TestCase):
             cloud.validate_proof(pin, proof, analytics_revision=3)
         cloud.validate_proof(pin, {**proof, "exporter_revision": 1}, analytics_revision=3)
 
+    def test_registered_glass_exporter_and_viewer_revision_three_are_pinned(self):
+        job = copy.deepcopy(self.job)
+        job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
+        profile = load_registry()[job["conversion"]["film"]["engine_profile"]]
+        selected = select_exporter(profile, 2)
+        job["conversion"]["engine"].update({key: selected[key] for key in (
+            "wasm_sha256", "glue_sha256", "exporter_revision"
+        )})
+        projection, manifest = VIEWER_CONTRACT_PINS[3]
+        job["viewer_artifact_target"].update(
+            profile_revision=3, projection_sha256=projection, manifest_schema_sha256=manifest
+        )
+        self.assertEqual(cloud.validate_job(job).profile_revision, 3)
+        for key in ("wasm_sha256", "glue_sha256"):
+            invalid = copy.deepcopy(job)
+            invalid["conversion"]["engine"][key] = profile[key]
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_job(invalid)
+
     def test_prepare_requests_native_analytics_but_recovers_already_pinned_jobs(self):
         source = self.job["conversion"]["source"]
         evidence = self.job["conversion"]["film"]
@@ -173,8 +194,10 @@ class CloudTests(unittest.TestCase):
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute(item, context)
                 self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 3)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 2)
                 if retained:
                     self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])
+                    self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
                 self.assertEqual(retry.call_args.args[0], job)
 
     def test_sqs_job_routing_and_exact_origin(self):

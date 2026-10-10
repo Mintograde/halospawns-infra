@@ -23,6 +23,8 @@ const VIEWER_PROJECTION_V1_SHA256: &str =
     "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec";
 const VIEWER_PROJECTION_V2_SHA256: &str =
     "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530";
+const VIEWER_PROJECTION_V3_SHA256: &str =
+    "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a";
 const PARTS_SCHEMA: &str = "halospawns.viewerReplayDeltaParts.v1";
 const CONTAINER_RESULT_SCHEMA: &str = "halospawns.viewerReplayDeltaContainer.v1";
 const VIEWER_DELTA_FORMAT: &str = "halospawns.viewerReplayDelta.v1";
@@ -137,6 +139,11 @@ impl Projection {
                     "../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v2.schema.json"
                 ),
                 VIEWER_PROJECTION_V2_SHA256,
+            ),
+            3 => (
+                include_str!("../../contracts/replays/frontend-default.v3.projection.json"),
+                include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"),
+                VIEWER_PROJECTION_V3_SHA256,
             ),
             _ => return Err("unsupported viewer replay profile revision".into()),
         };
@@ -1266,6 +1273,7 @@ fn decode_signed_difference(value: u64) -> Result<i64, Box<dyn Error>> {
     }
 }
 
+#[cfg(test)]
 fn read_packed_unsigned(
     reader: &mut BinaryReader<'_>,
     count: usize,
@@ -1303,6 +1311,25 @@ fn float32_bits(value: &DecodedValue) -> Result<u32, Box<dyn Error>> {
 
 fn float32_value(bits: u32) -> Result<DecodedValue, Box<dyn Error>> {
     decoded_number(f64::from(f32::from_bits(bits)))
+}
+
+fn float32_array_bits<'a>(
+    values: &[DecodedValue],
+    scratch: &'a mut [u32; 64],
+) -> Result<Cow<'a, [u32]>, Box<dyn Error>> {
+    if values.len() <= scratch.len() {
+        for (target, value) in scratch.iter_mut().zip(values) {
+            *target = float32_bits(value)?;
+        }
+        Ok(Cow::Borrowed(&scratch[..values.len()]))
+    } else {
+        Ok(Cow::Owned(
+            values
+                .iter()
+                .map(float32_bits)
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
+    }
 }
 
 fn patched_float32_bits(base: u32, encoded: u64, xor: bool) -> Result<u32, Box<dyn Error>> {
@@ -1470,26 +1497,24 @@ fn read_patched_value(
             let previous = previous
                 .and_then(DecodedValue::as_array)
                 .ok_or("viewer dense float32 array base is malformed")?;
-            let previous_bits = previous
-                .iter()
-                .map(float32_bits)
-                .collect::<Result<Vec<_>, _>>()?;
+            // Model matrices are short arrays. Keep conversion scratch on the
+            // stack while retaining the same checked heap path for longer data.
+            let mut previous_scratch = [0u32; 64];
+            let mut history_scratch = [0u32; 64];
+            let previous_bits = float32_array_bits(previous, &mut previous_scratch)?;
             let before_previous_values = before_previous.and_then(DecodedValue::as_array);
             let before_previous_bits = before_previous_values
                 .map(|values| {
                     if values.len() != previous.len() {
                         return Err("viewer dense prediction history length is malformed".into());
                     }
-                    values
-                        .iter()
-                        .map(float32_bits)
-                        .collect::<Result<Vec<_>, Box<dyn Error>>>()
+                    float32_array_bits(values, &mut history_scratch)
                 })
                 .transpose()?;
 
             let mut output = Vec::with_capacity(previous.len());
             if tag == DELTA_DENSE_FLOAT32_DIFFERENCE_ARRAY || tag == DELTA_DENSE_FLOAT32_XOR_ARRAY {
-                for base in previous_bits {
+                for &base in previous_bits.as_ref() {
                     output.push(float32_value(patched_float32_bits(
                         base,
                         reader.varuint()?,
@@ -1530,8 +1555,17 @@ fn read_patched_value(
             if mode >= FLOAT32_MODE_BIT_PREDICTION && before_previous_bits.is_none() {
                 return Err("viewer dense bitpacked prediction history is missing".into());
             }
-            let residuals = read_packed_unsigned(reader, previous.len(), bit_width)?;
+            let mut accumulator = 0u64;
+            let mut accumulator_bits = 0u8;
+            let mask = (1u64 << bit_width) - 1;
             for index in 0..previous.len() {
+                while accumulator_bits < bit_width {
+                    accumulator |= u64::from(reader.byte()?) << accumulator_bits;
+                    accumulator_bits += 8;
+                }
+                let residual = accumulator & mask;
+                accumulator >>= bit_width;
+                accumulator_bits -= bit_width;
                 let base = match mode {
                     FLOAT32_MODE_XOR | FLOAT32_MODE_DIFFERENCE => previous_bits[index],
                     FLOAT32_MODE_BIT_PREDICTION => predict_bits(
@@ -1550,7 +1584,7 @@ fn read_patched_value(
                 };
                 output.push(float32_value(patched_float32_bits(
                     base,
-                    residuals[index],
+                    residual,
                     mode == FLOAT32_MODE_XOR,
                 )?)?);
             }
@@ -2990,7 +3024,9 @@ impl SourceContract {
             || self.profile != VIEWER_PROFILE
             || !matches!(
                 (self.profile_revision, self.projection_sha256.as_str()),
-                (1, VIEWER_PROJECTION_V1_SHA256) | (2, VIEWER_PROJECTION_V2_SHA256)
+                (1, VIEWER_PROJECTION_V1_SHA256)
+                    | (2, VIEWER_PROJECTION_V2_SHA256)
+                    | (3, VIEWER_PROJECTION_V3_SHA256)
             )
             || self.tick_count != tick_count
         {
@@ -3235,6 +3271,9 @@ pub fn finalize_container(
             2 => include_str!(
                 "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"
             ),
+            3 => include_str!(
+                "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v3.manifest.schema.json"
+            ),
             _ => return Err("unsupported viewer manifest revision".into()),
         },
     )?;
@@ -3347,6 +3386,48 @@ mod tests {
     }
 
     #[test]
+    fn revision_three_preserves_complete_glass_snapshots_and_nullable_state() {
+        let projection = Projection::load_revision(3).unwrap();
+        let source: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/replays/viewer_v3_state_projected.json"
+        ))
+        .unwrap();
+        let ticks = source["ticks"].as_array().unwrap();
+        let mut projected = Vec::new();
+        for tick in ticks {
+            let value = projection.tick.project(tick).unwrap();
+            assert_eq!(value, *tick);
+            assert!(projection.tick_validator.is_valid(&value));
+            assert!(Projection::load_revision(2)
+                .unwrap()
+                .tick
+                .project(tick)
+                .unwrap()
+                .get("broken_surfaces")
+                .is_none());
+            projected.push(value);
+        }
+        for chunk in projected.chunks(3).rev() {
+            let bytes = encode_chunk(chunk, 0).unwrap();
+            let (_, decoded) = decode_chunk(&bytes).unwrap();
+            assert_eq!(decoded.len(), chunk.len());
+            assert!(decoded
+                .iter()
+                .zip(chunk)
+                .all(|(a, b)| deep_exact_equal(a, b)));
+        }
+        for invalid in [
+            serde_json::json!(-1),
+            serde_json::json!(4294967296u64),
+            serde_json::json!(true),
+        ] {
+            assert!(!projection
+                .tick_validator
+                .is_valid(&serde_json::json!({"broken_surfaces":invalid})));
+        }
+    }
+
+    #[test]
     fn revision_two_projectors_match_the_first_person_golden() {
         let projection = Projection::load_revision(2).expect("revision two");
         let source: Value = serde_json::from_str(include_str!(
@@ -3395,7 +3476,7 @@ mod tests {
             format!("{:x}", Sha256::digest(&raw)),
             golden["sha256"].as_str().unwrap()
         );
-        assert!(Projection::load_revision(3).is_err());
+        assert!(Projection::load_revision(4).is_err());
     }
 
     #[test]
@@ -3678,6 +3759,104 @@ mod tests {
                 serde_json::to_vec(&projected).expect("serialize projected root value"),
                 serde_json::to_vec(&expected[key]).expect("serialize expected root value"),
                 "root projection mismatch for {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn dense_float_scratch_paths_preserve_modes_bits_and_truncation_checks() {
+        let kinds = [
+            DELTA_DENSE_FLOAT32_XOR_ARRAY,
+            DELTA_DENSE_FLOAT32_DIFFERENCE_ARRAY,
+            DELTA_DENSE_FLOAT32_BIT_PREDICTION_ARRAY,
+            DELTA_DENSE_FLOAT32_VALUE_PREDICTION_ARRAY,
+        ];
+        for count in [1, 13, 64, 65, 129] {
+            let a: Vec<f64> = (0..count).map(|i| (i as f32 * 0.25) as f64).collect();
+            let b: Vec<f64> = a.iter().map(|v| v + 0.125).collect();
+            let c: Vec<f64> = a
+                .iter()
+                .enumerate()
+                .map(|(i, v)| if i % 3 == 0 { -0.0 } else { v + 0.25 })
+                .collect();
+            let previous = DecodedValue::Array(Arc::new(
+                b.iter().copied().map(DecodedValue::Number).collect(),
+            ));
+            let before = DecodedValue::Array(Arc::new(
+                a.iter().copied().map(DecodedValue::Number).collect(),
+            ));
+            for mode in 0..4 {
+                let residuals: Vec<_> = (0..count)
+                    .map(|i| float_residual(mode, Some(a[i]), b[i], c[i]))
+                    .collect();
+                let width = residuals
+                    .iter()
+                    .map(|v| (64 - v.leading_zeros()) as u8)
+                    .max()
+                    .unwrap();
+                for packed in [false, true] {
+                    let mut writer = BinaryWriter::new();
+                    writer.byte(if packed {
+                        DELTA_DENSE_FLOAT32_BITPACKED_ARRAY
+                    } else {
+                        kinds[mode as usize]
+                    });
+                    if packed {
+                        writer.byte(mode);
+                        writer.byte(width);
+                        write_packed(&mut writer, count, width, |i| residuals[i]);
+                        let mut oracle = BinaryReader::new(&writer.bytes[3..]);
+                        assert_eq!(
+                            read_packed_unsigned(&mut oracle, count, width).unwrap(),
+                            residuals
+                        );
+                    } else {
+                        for residual in &residuals {
+                            writer.varuint(*residual).unwrap();
+                        }
+                    }
+                    let mut reader = BinaryReader::new(&writer.bytes);
+                    let decoded =
+                        read_patched_value(&mut reader, Some(&previous), Some(&before), 1).unwrap();
+                    assert_eq!(reader.offset, writer.bytes.len());
+                    assert_eq!(
+                        decoded
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|v| v.number().unwrap().to_bits())
+                            .collect::<Vec<_>>(),
+                        c.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+                    );
+                    for length in 0..writer.bytes.len() {
+                        let mut reader = BinaryReader::new(&writer.bytes[..length]);
+                        assert!(
+                            read_patched_value(&mut reader, Some(&previous), Some(&before), 1)
+                                .is_err()
+                        );
+                    }
+                }
+            }
+        }
+        let previous = DecodedValue::Array(Arc::new(vec![DecodedValue::Number(-0.0); 13]));
+        let bytes = [DELTA_DENSE_FLOAT32_BITPACKED_ARRAY, FLOAT32_MODE_XOR, 0];
+        let decoded =
+            read_patched_value(&mut BinaryReader::new(&bytes), Some(&previous), None, 1).unwrap();
+        assert!(
+            decoded
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|v| v.number().unwrap().is_sign_negative())
+        );
+        for bytes in [
+            [DELTA_DENSE_FLOAT32_BITPACKED_ARRAY, 4, 0],
+            [DELTA_DENSE_FLOAT32_BITPACKED_ARRAY, 0, 33],
+            [DELTA_DENSE_FLOAT32_BITPACKED_ARRAY, 2, 0],
+        ] {
+            assert!(
+                read_patched_value(&mut BinaryReader::new(&bytes), Some(&previous), None, 1)
+                    .is_err()
             );
         }
     }

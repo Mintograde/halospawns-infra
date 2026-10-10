@@ -156,11 +156,11 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: performance-20261009-r2
+          image_tag: viewer3-glass-20261009-r1
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true
-          reserved_concurrency: 1
+          reserved_concurrency: 5
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:

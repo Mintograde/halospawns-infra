@@ -4,20 +4,25 @@ import { constants } from 'node:fs';
 import { copyFile, lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { profileById } from '../runtime/profiles.mjs';
+import { profileById, selectExporter } from '../runtime/profiles.mjs';
 import { inspectEngine } from '../runtime/engine-store.mjs';
 
 const { values } = parseArgs({ options: {
   profile: { type: 'string' }, from: { type: 'string' }, 'engine-root': { type: 'string' },
+  'exporter-revision': { type: 'string' },
 } });
 assert.ok(values.from && values['engine-root'] && values.profile,
   'Use --profile <id> --from <h1-film.js> --engine-root <private directory>');
-const profile = profileById(values.profile);
+const profile = selectExporter(profileById(values.profile), values['exporter-revision'] === undefined
+  ? undefined : Number(values['exporter-revision']));
 const engine = await inspectEngine(profile, values.from);
 const root = resolve(values['engine-root']);
 await mkdir(root, { recursive: true });
-const destination = join(root, profile.id), partial = destination + '.partial';
-assert.equal(dirname(partial), root, 'Stage directory must remain inside the engine store');
+const parent = (profile.exporter_revision ?? 1) > 1 ? join(root, profile.id) : root;
+await mkdir(parent, { recursive: true });
+const destination = join(parent, (profile.exporter_revision ?? 1) > 1
+  ? `exporter-${profile.exporter_revision}` : profile.id), partial = destination + '.partial';
+assert.equal(dirname(partial), parent, 'Stage directory must remain inside the engine store');
 await assert.rejects(lstat(destination), { code: 'ENOENT' }, 'Engine profile already staged');
 // The unique new directory is ours; an interrupted prior stage requires review.
 await mkdir(partial);

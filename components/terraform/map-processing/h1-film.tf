@@ -18,12 +18,12 @@ variable "h1_film" {
 
   validation {
     condition = (
-      var.h1_film.reserved_concurrency >= 0 && var.h1_film.reserved_concurrency <= 2 &&
+      var.h1_film.reserved_concurrency >= 0 && var.h1_film.reserved_concurrency <= 5 &&
       floor(var.h1_film.reserved_concurrency) == var.h1_film.reserved_concurrency &&
       (var.h1_film.intake_configured || (!var.h1_film.event_source_enabled && var.h1_film.reserved_concurrency == 0)) &&
       (!var.h1_film.event_source_enabled || var.h1_film.reserved_concurrency > 0)
     )
-    error_message = "Consumer activation requires a configured intake and reserved concurrency of 1-2; the foundation stays at zero."
+    error_message = "Consumer activation requires a configured intake and reserved concurrency of 1-5; the foundation stays at zero."
   }
 
   validation {

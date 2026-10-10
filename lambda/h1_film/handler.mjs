@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_PROFILES } from './runtime/profiles.mjs';
+import { ENGINE_PROFILES, ENGINE_EXPORTERS, profileById, selectExporter } from './runtime/profiles.mjs';
 import { resolveEngine, sha256 } from './runtime/engine-store.mjs';
 
 async function inventory() {
@@ -10,6 +10,12 @@ async function inventory() {
   for (const profile of ENGINE_PROFILES) {
     const { hashes } = await resolveEngine(profile, root);
     profiles.push({ id: profile.id, ...hashes });
+  }
+  const exporters = [];
+  for (const entry of ENGINE_EXPORTERS) {
+    const profile = selectExporter(profileById(entry.engine_profile), entry.revision);
+    const { hashes } = await resolveEngine(profile, root);
+    exporters.push({ engine_profile: profile.id, revision: entry.revision, ...hashes });
   }
   const encoder = fileURLToPath(new URL('./bin/h1-film-encoder', import.meta.url));
   // The usage response proves the Linux executable can load without a film/map.
@@ -20,7 +26,7 @@ async function inventory() {
         else reject(new Error('Packaged encoder failed its executable check'));
       });
   });
-  return { profiles, encoder_sha256: await sha256(encoder) };
+  return { profiles, exporters, encoder_sha256: await sha256(encoder) };
 }
 
 export async function handler(event) {

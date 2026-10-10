@@ -28,6 +28,9 @@ pub(super) fn write(
     next: &Value,
     before: Option<&Value>,
 ) -> Result<(), Box<dyn Error>> {
+    if float_delta::write(writer, previous, next, before)? {
+        return Ok(());
+    }
     if let Some(previous) = previous
         && same(previous, next)
     {

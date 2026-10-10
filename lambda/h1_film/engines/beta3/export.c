@@ -19,6 +19,7 @@
 #include "headers/game_engine_globals.h"
 #include "headers/scenario.h"
 #include "headers/scenario_player.h"
+#include "headers/breakable_surface_globals.h"
 #include "headers/observer_command.h"
 #include "blampc_pgcr_stats.h"
 #include "stream.h"
@@ -307,6 +308,16 @@ void hs_export_tick(FILE *out, int frame)
     hs_begin(NULL, 1);
     hs_int("current_tick", tick);
     hs_double("current_game_time_seconds", (double)tick / TICKS_PER_SECOND);
+    if (globals && global_scenario && global_scenario->structure_bsp_references.count == 1
+        && global_structure_bsp_index == 0) {
+        const unsigned char *flags = globals->breakable_surface_flags[0];
+        /* Engine bits mean intact; the viewer snapshot uses one for broken. */
+        unsigned int intact = (unsigned int)flags[0] | ((unsigned int)flags[1] << 8)
+            | ((unsigned int)flags[2] << 16) | ((unsigned int)flags[3] << 24);
+        hs_uint("broken_surfaces", ~intact);
+    } else {
+        hs_null("broken_surfaces");
+    }
     hs_int("game_type", global_variant.game_engine_index);
     hs_bool("game_engine_has_teams", global_variant.universal_variant.teams);
     hs_bool("game_ended_this_tick", now_ended && !ended);

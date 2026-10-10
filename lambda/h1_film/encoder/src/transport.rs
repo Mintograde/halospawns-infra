@@ -28,6 +28,26 @@ impl<'a> Cursor<'a> {
         }
         Ok(std::str::from_utf8(self.take(length)?)?)
     }
+    #[inline]
+    fn scalar(&mut self, tag: u8) -> Result<Value> {
+        self.take(1)?;
+        Ok(match tag {
+            0 => Value::Null,
+            1 => Value::Bool(false),
+            2 => Value::Bool(true),
+            3 => Value::from(i32::from_le_bytes(self.take(4)?.try_into()?)),
+            4 => Value::from(self.u32()?),
+            5 | 6 => {
+                let number = if tag == 5 {
+                    f32::from_le_bytes(self.take(4)?.try_into()?) as f64
+                } else {
+                    f64::from_le_bytes(self.take(8)?.try_into()?)
+                };
+                Value::Number(Number::from_f64(number).ok_or("non-finite engine value")?)
+            }
+            _ => return Err("not a scalar engine tag".into()),
+        })
+    }
     fn value(&mut self, depth: usize) -> Result<Value> {
         if depth >= 32 {
             return Err("engine record exceeds nesting limit".into());
@@ -100,7 +120,14 @@ impl<'a> Cursor<'a> {
             }
             values.resize_with(count, || Value::Null);
             for value in values {
-                self.reuse(value, depth + 1)?;
+                if let Some(&tag @ 0..=6) = self.0.first() {
+                    if depth + 1 >= 32 {
+                        return Err("engine record exceeds nesting limit".into());
+                    }
+                    *value = self.scalar(tag)?;
+                } else {
+                    self.reuse(value, depth + 1)?;
+                }
             }
             return Ok(());
         }
@@ -297,6 +324,43 @@ mod tests {
                     .next_reusing(serde_json::json!({}))
                     .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn scalar_array_fast_path_matches_reference_and_rejects_truncation() {
+        let mut scalars = vec![0, 1, 2, 3];
+        scalars.extend_from_slice(&i32::MIN.to_le_bytes());
+        scalars.push(4);
+        scalars.extend_from_slice(&u32::MAX.to_le_bytes());
+        scalars.push(5);
+        scalars.extend_from_slice(&(-0.0f32).to_le_bytes());
+        scalars.push(6);
+        scalars.extend_from_slice(&f64::MAX.to_le_bytes());
+        let mut bytes = vec![8, 7, 0, 0, 0];
+        bytes.extend_from_slice(&scalars);
+        for depth in [0, 30] {
+            let expected = Cursor(&bytes).value(depth).unwrap();
+            let mut target = serde_json::json!([{"old": 1}]);
+            let mut cursor = Cursor(&bytes);
+            cursor.reuse(&mut target, depth).unwrap();
+            assert!(cursor.0.is_empty());
+            assert_eq!(
+                serde_json::to_vec(&target).unwrap(),
+                serde_json::to_vec(&expected).unwrap()
+            );
+        }
+        let mut target = serde_json::json!([1]);
+        assert!(Cursor(&bytes).reuse(&mut target, 31).is_err());
+        for length in 0..bytes.len() {
+            let mut target = serde_json::json!([1]);
+            assert!(Cursor(&bytes[..length]).reuse(&mut target, 0).is_err());
+        }
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut bytes = vec![8, 1, 0, 0, 0, 6];
+            bytes.extend_from_slice(&value.to_le_bytes());
+            let mut target = serde_json::json!([1]);
+            assert!(Cursor(&bytes).reuse(&mut target, 0).is_err());
         }
     }
 
