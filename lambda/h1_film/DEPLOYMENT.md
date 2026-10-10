@@ -1,24 +1,116 @@
 # H1 film Lambda integration
 
-Status on 2026-10-09: retained exporter revision 2 and viewer revision 3 are
-deployed in dev as `viewer3-glass-20261009-r1`, retaining native analytics 3.
-Both API H1 flags are true on `live=178`,
-and the intake worker consumes its batch-one queue with concurrency 5.
-The worker reuses the existing finalizer and retains original film/version pins.
-The API uses the existing worker ceilings as provisional dev limits, not measured
-performance claims. Nine LAN films covering nine maps passed the complete worker locally,
-including both reprocess product modes and persisted completion retries. The
-32 existing H1 films have been queued for the new default through the existing
-fenced SQS reprocess path. The canary succeeded and activated viewer revision 3;
-the remaining asynchronous backfill and broader parity acceptance are tracked below.
-Existing Xbox consumers and prod are unchanged. This is not full semantic parity.
-API current/versioned reads and durable lifecycle retention for retained
-`maps/processed/` originals are deployed; broader map approval remains open.
+Status on 2026-10-10: dev defaults to bounded pose compression, viewer revision 4
+and `HSRDC002`, with retained exporter 2 and analytics 3. Worker
+`pose4-20261010-r1`, API `live=179` and compatible frontend readers are deployed.
+Both H1 flags remain true, the batch-one queue remains enabled, and reserved
+concurrency remains 5. All 32 frozen dev H1 replays succeeded and selected the
+new format. Source/map pins and old explicit jobs/retries are retained.
+Existing Xbox consumers and prod are unchanged. This is not full semantic parity;
+broader map approval and unrelated parity work remain open.
 
 Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
+
+## Pose Default Deployed 2026-10-10
+
+The user authorized the new standard format and reconversion of existing dev
+films. [POSE_COMPRESSION.md](POSE_COMPRESSION.md) documents the error bound,
+fallbacks, streaming implementation and independent validation. This changes
+stored pose representation, not simulation, tick rate or analytics products.
+
+- Infra implementation `954a368`, stack pin `3c23df9`; immutable image
+  `pose4-20261010-r1`, digest
+  `sha256:0ffb6eb8c5cf548dffafa84852ecfd7c6acc4a671c980b55677d05dffef4810f`.
+  Live encoder SHA-256
+  `774e59195ba30c5dab6497d89184a337d97de30b7a198b262dfcddcb4b13bf2b`.
+  Both exporter bundles match the previous immutable image's registry.
+- Frontend `1302a2b`, successful dev run `38060200583`, deployed first.
+  API-owned migration `20261010010000_replay_pose_container.sql` was the only
+  migration in the dry run and was applied to linked dev. It changes only the
+  format/version constraint, not existing rows or permissions.
+- The worker was deployed before API default promotion. API `44f4e7a`, successful
+  dev run `38061137196`, promoted through the normal artifact/code-updater path
+  to `live=179`. No direct API Lambda code/alias writes were made.
+- Focused and full Terraform plans: **0 adds / 1 update / 0 destroys**, solely
+  `aws_lambda_function.h1_film[0].image_uri` and computed `last_modified`.
+  Reviewed plan SHA-256
+  `4c0f841d9214dd8fc49e31a68f1b99a7a1a4785ab6d211bb57d65222d0555c34`.
+  Applied that exact saved plan. Post-apply focused plan is no-op; full dev plan
+  has zero resource actions and only the unapplied API output refresh `173 -> 179`.
+  The frontend's existing map-renderer release workflow also published its
+  shared bundle (run `38060200576`, dev renderer `live=254`). No renderer behavior
+  or settings were changed in this work. Terraform refreshed computed-version
+  drift `249 -> 254`, without resource actions for the renderer.
+- Memory 3,008 MiB, timeout 900 seconds, temporary storage 8,192 MiB, concurrency
+  5, enabled batch-one mapping, IAM and other worker settings are unchanged. Live worker
+  is Active/Successful; both H1 flags are true. No AWS/session blocker remains.
+- Validation: 57 encoder tests pass (one optional benchmark skipped), five shared
+  pose tests, 20 POC tests, 39 H1 Python tests, 13 Node tests and 82 parser Python
+  tests (three optional native tests skipped). Pose Clippy is clean. API: 1,402
+  passed with isolated PostgreSQL, two optional corpus skips, Ruff clean.
+  Frontend: 1,572 viewer tests, full workspace tests, both builds and hosted
+  browser acceptance pass; CI also validates Linux API packaging.
+- Published-image offline worker tests cover all completion modes and persisted
+  retries. The canary output is byte-identical to the independent browser-tested
+  candidate and passes full Rust container readback. Legacy exporter 1/viewer 2
+  remains functional; the largest supplied film passes resource-envelope checks.
+  Game facts, participants, team stats, native analytics and spatial artifact
+  bytes match the prior release; only diagnostic memory measurements differ.
+
+### Frozen Dev Reconversion
+
+- Operation `ea24aaa5-fa1f-4a50-9f3c-1303b1956afd` freezes all 32 existing H1
+  replay/source/hash/size/version/map identities and selected artifact epochs.
+  All initially selected viewer 3 / exporter 2, totaling 4,358,658,355 bytes.
+- Canary replay `55dd6401-0314-4fe8-a896-56f1af8a6dc0`, attempt
+  `8214e673-ed7b-55c3-9518-1ab3ffa093eb`, succeeded and activated viewer 4.
+  Actual Lambda: **91.594 seconds, 614 MiB peak memory**; converter process-tree
+  RSS 295,892 KiB. Source verification: 70,582 ticks, 589 recorded hashes.
+- Hosted canary: 97,749,786 -> 22,864,597 bytes, 4.275x smaller; new SHA-256
+  `7eae439f2e13c7b29ee0992733bcf70e52b314740e6b06ab8454b9def5153dc0`.
+  Independent frontend decoding compares every old/new non-pose field exactly
+  and all 5,156,372 nodes within the bound; maximum radius-one bound 0.00008230.
+- Actual Basic-Auth-protected dev site and hosted API/CDN paths pass Chrome at
+  1440x1000 and 390x844, with repeated end/backward seeks, playback and 36 successful
+  range responses per viewport. No page errors/overflow. Additional instrumented
+  local-viewer checks of the hosted bytes compare exact decoded poses and glass
+  at cold chunk boundaries and show bounded resident memory around 132 MB.
+- The remaining 31 jobs were submitted after the canary passed, through normal
+  audited full-reparse SQL/dispatch. The existing API completion path owns all
+  artifact selection; no direct result or selection writes. **All 32 succeeded
+  and activated their matching revision-4 generations**, verified at
+  `2026-10-10T15:11:42Z`; source hashes/versions/maps remain unchanged.
+- Aggregate active artifacts: **4,358,658,355 -> 1,004,764,788 bytes**, a
+  **76.9478% reduction (4.338x)**. Individual reductions range from 4.224x to
+  4.587x. Actual Lambda durations span 65.004-212.599 seconds; reported peak
+  memory spans 576-667 MiB, with no logged errors or timeouts. The processing
+  queue and DLQ are drained. These are 32 individual observed runs, not SLA or
+  maximum-size stress-test claims.
+- Evidence and frozen operator tool: `L:/tmp/halospawns-h1-pose-default-20261010/`.
+  Browser harness/screenshots: sibling frontend ignored
+  `smoke-runs/h1film-pose-20261010/`. Source objects and older generations are
+  retained, not deleted to manufacture storage savings.
+
+Commands from infra root (API migration commands run from its owning repo):
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag pose4-20261010-r1 -EngineRoot <retained-engines> -PreviousRegistry <previous-image-registry>
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-pose-default-20261010/map-processing.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+# API repo:
+.\scripts\apply-migrations.ps1 -DryRun
+.\scripts\apply-migrations.ps1
+```
+
+Do not roll back to a reader/worker lacking revision 4 while its artifacts/jobs
+exist. No prod, legacy website cutover, Xbox default, map approval or engine
+profile expansion is part of this release.
 
 ## Reserved concurrency raised to five 2026-10-09
 

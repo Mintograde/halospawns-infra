@@ -2,8 +2,8 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `performance-20261009-r2`, with dedicated queue/API wiring and scoped data access.
-The user enabled the single-user dev preview on 2026-10-09: concurrency one,
+to `pose4-20261010-r1`, with dedicated queue/API wiring and scoped data access.
+The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
 
@@ -38,12 +38,12 @@ engines and generated replay files are not committed to this package.
 The second dev [performance release](PERFORMANCE.md#second-local-candidate)
 reduces offline conversion time by 48% against the prior release across nine
 maps, with identical products. It optimizes the Rust encoder and Linux
-backpressure. Actual Lambda conversion measurements remain pending; the separate
-native-engine experiment is not deployed.
+backpressure. Current [deployment notes](DEPLOYMENT.md) record actual Lambda
+measurements for the pose release; the native-engine experiment is not deployed.
 
 The [third local performance pass](PERFORMANCE.md#third-local-candidate) compares
 numeric-array optimizations and a full-worker native experiment against R2.
-Neither is deployed; the current dev pin above remains authoritative.
+The native engine experiment is not deployed; the current dev pin above remains authoritative.
 
 ## Dev Deployment
 
