@@ -40,7 +40,7 @@ fn default_analytics_revision() -> u8 {
     2
 }
 fn default_viewer_revision() -> u32 {
-    2
+    4
 }
 fn default_level() -> i32 {
     6
@@ -509,10 +509,11 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
-        "verification":{"mode":"inline-lossless", "120hz":count,
+        "verification":{"mode":if request.viewer_profile_revision == 4 { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
             "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
         "export_contract":request.export_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,
+        "viewer_profile_revision":request.viewer_profile_revision,
         "native_analytics":native.map(|native| native.product()),
         "source_first_clock":observations.first_clock, "source_last_clock":observations.last_clock,
         "source_hz":120, "sampling":{"120hz":{"stride":1,"phase":0}, "30hz":{"stride":4,"phase":0}},
@@ -546,6 +547,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("validate") if args.len() == 2 => {
+            println!("{}", serde_json::to_string(&artifact::validate_file(Path::new(&args[1]))?)?);
+            Ok(())
+        }
         Some("encode") if args.len() == 3 => encode(Path::new(&args[1]), Path::new(&args[2])),
         Some("verify") if args.len() == 3 => {
             let report = artifact::verify_pair(Path::new(&args[1]), Path::new(&args[2]))?;

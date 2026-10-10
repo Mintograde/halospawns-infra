@@ -396,6 +396,160 @@ struct VerifiedChunk {
     tick_sha256: String,
 }
 
+struct PoseBaseCodec;
+impl h1_pose_codec::BaseCodec for PoseBaseCodec {
+    fn encode(&self, ticks: &[Value], first: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut chunk = IncrementalChunk::new(first, ticks.len())?;
+        for tick in ticks {
+            chunk.push(tick.clone())?;
+        }
+        Ok(chunk.binary.bytes)
+    }
+    fn decode(&self, bytes: &[u8]) -> Result<(usize, Vec<Value>), Box<dyn Error>> {
+        let mut reader = BinaryReader::new(bytes);
+        if reader.bytes(4)? != CHUNK_MAGIC || reader.byte()? != CHUNK_VERSION {
+            return Err("invalid base chunk".into());
+        }
+        let first = usize::try_from(reader.varuint()?)?;
+        let count = usize::try_from(reader.varuint()?)?;
+        if !(1..=KEYFRAME_INTERVAL).contains(&count) {
+            return Err("invalid base tick count".into());
+        }
+        let (mut previous, mut before) = (None, None);
+        let mut ticks = Vec::with_capacity(count);
+        for _ in 0..count {
+            let next = if previous.is_none() {
+                read_value(&mut reader, 1)?
+            } else {
+                read_patched_value(&mut reader, previous.as_ref(), before.as_ref(), 1)?
+            };
+            ticks.push(owned_json(&next)?);
+            before = previous.replace(next);
+        }
+        if reader.offset != bytes.len() {
+            return Err("trailing base bytes".into());
+        }
+        Ok((first, ticks))
+    }
+}
+
+fn pack_poses(ticks: &[Value], first: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+    let settings = h1_pose_codec::settings();
+    let (raw, _) = h1_pose_codec::wire::pack(
+        ticks,
+        first,
+        &settings,
+        &h1_pose_codec::skeletons(),
+        &PoseBaseCodec,
+        true,
+    )?;
+    let (decoded_first, mut decoded) =
+        h1_pose_codec::wire::unpack(&raw, &settings, &PoseBaseCodec)?;
+    if decoded_first != first {
+        return Err("pose chunk offset changed".into());
+    }
+    h1_pose_codec::verify(ticks, &mut decoded)?;
+    if raw.len() > LOCAL_CHUNK_RAW_LIMIT {
+        return Err("pose chunk exceeds memory limit".into());
+    }
+    Ok(raw)
+}
+
+#[cfg(test)]
+mod pose_tests {
+    use super::*;
+    use h1_pose_codec::BaseCodec;
+
+    fn source() -> Vec<Value> {
+        (0..16).map(|frame| {
+            let nodes: Vec<_> = (0..19).map(|bone| {
+                let angle = (frame + bone) as f64 * 0.017;
+                let (s, c) = angle.sin_cos();
+                let mut node = [1. + frame as f64 / 128., bone as f64 / 64., 3., 1., c, s, 0., -s, c, 0., 0., 0., 1.];
+                if frame == 10 { node[5] += 0.1; }
+                node.map(|v| v as f32 as f64)
+            }).collect();
+            let mut player = serde_json::json!({"player_index":0, "player_object_id":if frame < 8 { 123 } else { 456 },
+                "player_object_data":{"tag_name":if frame == 14 { "unknown" } else { "characters\\cyborg_mp\\cyborg_mp" },"x":1.,"y":0.,"z":3.},
+                "model_nodes":nodes, "name":"pose fixture", "respawn_timer":0});
+            if frame == 3 { player.as_object_mut().unwrap().shift_remove("model_nodes"); }
+            if frame == 4 { player["model_nodes"] = serde_json::json!([]); }
+            serde_json::json!({"players":[player],"objects":[],"current_tick":frame,
+                "current_game_time_seconds":frame as f64/120., "broken_surfaces":frame / 4,
+                "game_time_info":{"game_time":frame},"multiplayer_map_name":"prisoner"})
+        }).collect()
+    }
+
+    #[test]
+    fn fine_pose_wire_roundtrip_lifecycle_fallback_and_golden() {
+        let ticks = source();
+        let raw = pack_poses(&ticks, 0).unwrap();
+        let golden: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/pose-v1.json")).unwrap();
+        assert_eq!(serde_json::to_value(&raw).unwrap(), golden["raw"]);
+        let mut poses = h1_pose_codec::wire::Encoder::new(
+            &h1_pose_codec::settings(),
+            &h1_pose_codec::skeletons(),
+            true,
+        )
+        .unwrap();
+        let mut base = IncrementalChunk::new(0, ticks.len()).unwrap();
+        for mut tick in ticks.clone() {
+            poses.push(&mut tick).unwrap();
+            base.push(tick).unwrap();
+        }
+        assert_eq!(poses.finish(&base.binary.bytes).unwrap().0, raw);
+        let (first, mut decoded) =
+            h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec).unwrap();
+        assert_eq!(first, 0);
+        assert_eq!(decoded[3]["players"][0].get("model_nodes"), None);
+        assert_eq!(
+            decoded[4]["players"][0]["model_nodes"],
+            serde_json::json!([])
+        );
+        for frame in [10, 14] {
+            assert!(
+                h1_pose_codec::verify(&ticks[frame..frame + 1], &mut decoded[frame..frame + 1])
+                    .is_ok()
+            );
+        }
+        let fixture = serde_json::json!({"raw":raw,"source":ticks,"decoded":decoded});
+        if let Ok(path) = std::env::var("H1_POSE_GOLDEN") {
+            fs::write(path, serde_json::to_vec(&fixture).unwrap()).unwrap();
+        }
+        let errors = h1_pose_codec::verify(&ticks, &mut decoded).unwrap();
+        assert!(errors.nodes > 0);
+        assert!(errors.max_point_bound < 0.0002);
+        for length in [0, 1, 4, 19, raw.len() - 1] {
+            assert!(
+                h1_pose_codec::wire::unpack(
+                    &raw[..length],
+                    &h1_pose_codec::settings(),
+                    &PoseBaseCodec
+                )
+                .is_err()
+            );
+        }
+        let mut bad = raw.clone();
+        bad[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(
+            h1_pose_codec::wire::unpack(&bad, &h1_pose_codec::settings(), &PoseBaseCodec).is_err()
+        );
+        assert!(
+            h1_pose_codec::wire::pack(
+                &[],
+                0,
+                &h1_pose_codec::settings(),
+                &[],
+                &PoseBaseCodec,
+                true
+            )
+            .is_err()
+        );
+        assert!(PoseBaseCodec.decode(b"invalid").is_err());
+    }
+}
+
 fn compress_verified(
     task: VerifiedChunk,
     compressor: &mut zstd::bulk::Compressor<'static>,
@@ -501,6 +655,9 @@ pub struct StreamingExport {
     collector: ViewerWriter,
     sender: Option<SyncSender<VerifiedChunk>>,
     chunk: Option<IncrementalChunk>,
+    poses: Option<h1_pose_codec::wire::Encoder>,
+    pose_duration: Duration,
+    pose_codec: bool,
     chunk_ticks: usize,
     expected: usize,
     spare: Value,
@@ -516,6 +673,9 @@ impl StreamingExport {
             collector,
             sender: Some(sender),
             chunk: None,
+            poses: None,
+            pose_duration: Duration::ZERO,
+            pose_codec: projection()?.revision == 4,
             chunk_ticks: 0,
             expected,
             spare: Value::Null,
@@ -547,7 +707,7 @@ impl StreamingExport {
     }
     fn push_projected(
         &mut self,
-        projected: Value,
+        mut projected: Value,
         duration: Duration,
     ) -> Result<Value, Box<dyn Error>> {
         if self.collector.tick_count >= self.expected {
@@ -560,6 +720,18 @@ impl StreamingExport {
                 first,
                 KEYFRAME_INTERVAL.min(self.expected - first),
             )?);
+            if self.pose_codec {
+                self.poses = Some(h1_pose_codec::wire::Encoder::new(
+                    &h1_pose_codec::settings(),
+                    &h1_pose_codec::skeletons(),
+                    true,
+                )?);
+            }
+        }
+        if let Some(poses) = &mut self.poses {
+            let started = Instant::now();
+            poses.push(&mut projected)?;
+            self.pose_duration += started.elapsed();
         }
         let spare = self.chunk.as_mut().unwrap().push(projected)?;
         self.chunk_ticks += 1;
@@ -569,7 +741,17 @@ impl StreamingExport {
             self.collector.encode_duration_ms += chunk.encode_duration.as_millis();
             self.collector.validation_duration_ms += chunk.validation_duration.as_millis();
             self.collector.tick_hash_duration_ms += chunk.hash_duration.as_millis();
-            let raw = chunk.binary.bytes;
+            let (raw, tick_sha256) = if let Some(poses) = self.poses.take() {
+                let started = Instant::now();
+                let (raw, _) = poses.finish(&chunk.binary.bytes)?;
+                self.pose_duration += started.elapsed();
+                self.collector.encode_duration_ms += self.pose_duration.as_millis();
+                self.pose_duration = Duration::ZERO;
+                let hash = sha256_hex(&raw);
+                (raw, hash)
+            } else {
+                (chunk.binary.bytes, chunk.tick_hash.finish())
+            };
             self.collector.raw_chunk_bytes += raw.len() as u64;
             if self.collector.raw_chunk_bytes > MAX_UNCOMPRESSED_BYTES {
                 return Err("raw replay exceeds contract limit".into());
@@ -583,7 +765,7 @@ impl StreamingExport {
                     first_tick: self.collector.tick_count - self.chunk_ticks,
                     tick_count: self.chunk_ticks,
                     raw,
-                    tick_sha256: chunk.tick_hash.finish(),
+                    tick_sha256,
                 })
                 .map_err(|_| "compression worker closed")?;
             self.chunk_ticks = 0;
@@ -599,7 +781,10 @@ impl StreamingExport {
         replay_id: &str,
         recorded_at: &str,
     ) -> Result<ContainerResult, Box<dyn Error>> {
-        if self.collector.tick_count != self.expected || self.chunk.is_some() {
+        if self.collector.tick_count != self.expected
+            || self.chunk.is_some()
+            || self.poses.is_some()
+        {
             return Err("incomplete tick stream".into());
         }
         self.sender.take();
@@ -609,13 +794,17 @@ impl StreamingExport {
             serde_json::from_reader(BufReader::new(File::open(directory.join("parts.json"))?))?;
         let mut offset = 0;
         let chunks: Vec<_> = parts.chunks.iter().map(|part| {
-            let chunk = serde_json::json!({"index":part.index, "firstTick":part.first_tick,
+            let mut chunk = serde_json::json!({"index":part.index, "firstTick":part.first_tick,
                 "tickCount":part.tick_count, "offset":offset, "compressedBytes":part.compressed_bytes,
                 "rawBytes":part.raw_bytes, "compressedSha256":part.compressed_sha256, "tickSha256":part.tick_sha256});
+            if self.pose_codec {
+                let hash = chunk.as_object_mut().unwrap().shift_remove("tickSha256").unwrap();
+                chunk["rawSha256"] = hash;
+            }
             offset += part.compressed_bytes;
             chunk
         }).collect();
-        let manifest = serde_json::json!({"format":VIEWER_DELTA_FORMAT, "sourceContract":parts.source_contract,
+        let manifest = serde_json::json!({"format":viewer_format(parts.source_contract.profile_revision), "sourceContract":parts.source_contract,
             "replayId":replay_id, "recordedAt":recorded_at, "keyframeInterval":KEYFRAME_INTERVAL,
             "tickCount":parts.tick_count, "chunks":chunks, "replay":parts.replay});
         let path = directory.join("manifest.json");
@@ -817,8 +1006,8 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
     let mut header = [0; 32];
     file.read_exact(&mut header)?;
     let u32_at = |start| u32::from_le_bytes(header[start..start + 4].try_into().unwrap()) as usize;
-    if &header[..8] != CONTAINER_MAGIC
-        || header[8..12] != [32, 0, 1, 0]
+    let pose_codec = &header[..8] == b"HSRDC002" && header[8..12] == [32, 0, 2, 0];
+    if (!pose_codec && (&header[..8] != CONTAINER_MAGIC || header[8..12] != [32, 0, 1, 0]))
         || u32_at(12) != 1
         || u32_at(24) as u64 != size
         || u32_at(28) != 0
@@ -842,11 +1031,18 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
         return Err("manifest raw length differs".into());
     }
     let value: Value = serde_json::from_slice(&raw)?;
-    let schema: Value = serde_json::from_str(include_str!(
-        "../../../replay_parser/contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"
-    ))?;
+    let revision = u32::try_from(
+        value["sourceContract"]["profile_revision"]
+            .as_u64()
+            .ok_or("missing revision")?,
+    )?;
+    if pose_codec != (revision == 4) {
+        return Err("container/contract version mismatch".into());
+    }
+    let selected_projection = Projection::load_revision(revision)?;
+    let schema: Value = serde_json::from_str(manifest_schema_json(revision)?)?;
     if !jsonschema::validator_for(&schema)?.is_valid(&value) {
-        return Err("manifest violates the revision-2 schema".into());
+        return Err("manifest violates its pinned schema".into());
     }
     let manifest: ViewerManifest = serde_json::from_value(value)?;
     manifest.source_contract.validate(manifest.tick_count)?;
@@ -867,7 +1063,7 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
     let mut total_raw = raw_size as u64;
     let mut selected_hash = Sha256::new();
     let chunks_start = 32 + compressed_size as u64;
-    // Every chunk starts cold. Retain two decoded ticks, never a match or a whole chunk's tree.
+    // Every chunk starts cold; pose decoding retains at most one bounded chunk.
     for (index, chunk) in manifest.chunks.iter().enumerate() {
         if chunk.index != index
             || chunk.first_tick != tick_count
@@ -892,10 +1088,24 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
             return Err("raw chunk length mismatch".into());
         }
         let mut reader = BinaryReader::new(&raw);
-        if reader.bytes(4)? != CHUNK_MAGIC
-            || reader.byte()? != CHUNK_VERSION
-            || reader.varuint()? != chunk.first_tick as u64
-            || reader.varuint()? != chunk.tick_count as u64
+        let mut pose_ticks = if pose_codec {
+            if sha256_hex(&raw) != chunk.tick_sha256 {
+                return Err("pose raw hash mismatch".into());
+            }
+            let (first, ticks) =
+                h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec)?;
+            if first != chunk.first_tick || ticks.len() != chunk.tick_count {
+                return Err("pose tick coverage differs".into());
+            }
+            Some(ticks.into_iter())
+        } else {
+            None
+        };
+        if !pose_codec
+            && (reader.bytes(4)? != CHUNK_MAGIC
+                || reader.byte()? != CHUNK_VERSION
+                || reader.varuint()? != chunk.first_tick as u64
+                || reader.varuint()? != chunk.tick_count as u64)
         {
             return Err("chunk header differs from manifest".into());
         }
@@ -903,14 +1113,29 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
         let mut before_previous = None;
         let mut tick_hash = TickHasher::new();
         for _ in 0..chunk.tick_count {
-            let next = if previous.is_none() {
-                read_value(&mut reader, 1)?
+            let next = if pose_codec {
+                None
+            } else if previous.is_none() {
+                Some(read_value(&mut reader, 1)?)
             } else {
-                read_patched_value(&mut reader, previous.as_ref(), before_previous.as_ref(), 1)?
+                Some(read_patched_value(
+                    &mut reader,
+                    previous.as_ref(),
+                    before_previous.as_ref(),
+                    1,
+                )?)
             };
-            tick_hash.update(&next)?;
-            let mut tick = owned_json(&next)?;
-            if !projection()?.tick_validator.is_valid(&tick) {
+            let mut tick = if let Some(next) = &next {
+                tick_hash.update(next)?;
+                owned_json(next)?
+            } else {
+                pose_ticks
+                    .as_mut()
+                    .unwrap()
+                    .next()
+                    .ok_or("missing pose tick")?
+            };
+            if !selected_projection.tick_validator.is_valid(&tick) {
                 return Err("decoded tick violates its schema".into());
             }
             if number(&tick["current_tick"]) != Some(tick_count as f64)
@@ -927,10 +1152,12 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
                 }
                 selected_hash.update(semantic_value_digest(&tick)?);
             }
-            before_previous = previous.replace(next);
+            if let Some(next) = next {
+                before_previous = previous.replace(next);
+            }
             tick_count += 1;
         }
-        if reader.offset != raw.len() || tick_hash.finish() != chunk.tick_sha256 {
+        if !pose_codec && (reader.offset != raw.len() || tick_hash.finish() != chunk.tick_sha256) {
             return Err("decoded tick hash or chunk trailing bytes differ".into());
         }
         total_raw += raw.len() as u64;
@@ -948,6 +1175,14 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
         file_hash: sha256_file(path)?,
         bytes: size,
     })
+}
+
+pub fn validate_file(path: &Path) -> Result<Value, Box<dyn Error>> {
+    let result = scan(path, 1)?;
+    Ok(
+        serde_json::json!({"status":"verified", "sha256":result.file_hash,
+        "tick_count":result.manifest.tick_count, "size_bytes":result.bytes}),
+    )
 }
 
 pub fn verify_pair(high_path: &Path, low_path: &Path) -> Result<Value, Box<dyn Error>> {

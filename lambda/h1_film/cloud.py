@@ -207,7 +207,7 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    require(request.profile_revision in (1, 2, 3), "unsupported_build")
+    require(request.profile_revision in (1, 2, 3, 4), "unsupported_build")
     return request
 
 
@@ -574,7 +574,8 @@ def convert(job, film, work, deadline):
     ticks = job["conversion"]["film"]["source_tick_count"]
     encoding = analytics._json(directory / "candidate/encoding.json")
     require(encoding.get("verification") == {
-        "mode": "inline-lossless", "120hz": ticks, "30hz": None,
+        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] == 4 else "inline-lossless",
+        "120hz": ticks, "30hz": None,
     }, "conversion_failed")
     return directory
 

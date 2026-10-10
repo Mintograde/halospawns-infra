@@ -36,11 +36,16 @@ VIEWER_CONTRACT_PINS = {
         "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a",
         "361094bfdbacb4ef25b86051e194d2bec5bd4a0b8a64bb5a709737f91274ee87",
     ),
+    4: (
+        "9bc4684bc901fb9b16cb50a2d6e6cd3ee7aac58a2b4b91f713204888292159d7",
+        "cf5623d7f8ce380b7940eab20500eddaffb48f802b000e6dc31f640570765e4e",
+    ),
 }
 VIEWER_PROJECTION_SHA256, VIEWER_MANIFEST_SCHEMA_SHA256 = VIEWER_CONTRACT_PINS[
     VIEWER_PROFILE_REVISION
 ]
 VIEWER_ENCODING_SHA256 = "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb"
+VIEWER_POSE_ENCODING_SHA256 = "9e5d0e7d0bccd7bf217eb889921b8936a08b3c9936dd75e25779f0b404bcf49c"
 VIEWER_MEDIA_TYPE = "application/vnd.halospawns.replay-delta"
 VIEWER_OUTER_COMPRESSION = "identity"
 VIEWER_KEYFRAME_INTERVAL = 2048
@@ -109,6 +114,10 @@ class PinnedViewerContract:
     schema: dict[str, Any]
     encoding: dict[str, Any]
     manifest_schema: dict[str, Any]
+
+    @property
+    def encoding_sha256(self) -> str:
+        return VIEWER_POSE_ENCODING_SHA256 if self.revision == 4 else VIEWER_ENCODING_SHA256
 
     @property
     def revision(self) -> int:
@@ -203,7 +212,7 @@ def load_pinned_contract(
     return _load_pinned_contract(revision)
 
 
-@lru_cache(maxsize=3)
+@lru_cache(maxsize=4)
 def _load_pinned_contract(revision: int) -> PinnedViewerContract:
     directory = Path(__file__).resolve().parent / "contracts" / "replays"
     registry = _load_json_object(directory / "supported-contracts.json")
@@ -230,7 +239,7 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
         raise ViewerDeltaError("Viewer manifest encoding is unsupported")
     projection = _load_json_object(directory / entry["projection_file"])
     schema = _load_json_object(directory / entry["schema_file"])
-    encoding = _load_json_object(directory / "viewer-delta.v1.encoding.json")
+    encoding = _load_json_object(directory / encoding_entry["encoding_file"])
     manifest_schema = _load_json_object(
         directory / encoding_entry["manifest_schema_file"]
     )
@@ -274,13 +283,18 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
         "media_type": VIEWER_MEDIA_TYPE,
         "outer_compression": VIEWER_OUTER_COMPRESSION,
     }
+    if revision == 4:
+        expected_supported_encoding.update(
+            format="halospawns.viewerReplayDelta.v2", container_version=2,
+            encoding_sha256=VIEWER_POSE_ENCODING_SHA256,
+        )
     if {
         key: encoding_entry.get(key) for key in expected_supported_encoding
     } != expected_supported_encoding:
         raise ViewerDeltaError("Viewer encoding registry identity is invalid")
     if projection_hash != projection_pin:
         raise ViewerDeltaError("Pinned viewer projection hash mismatch")
-    if encoding_hash != VIEWER_ENCODING_SHA256:
+    if encoding_hash != expected_supported_encoding["encoding_sha256"]:
         raise ViewerDeltaError("Pinned viewer delta encoding hash mismatch")
     if manifest_hash != manifest_pin:
         raise ViewerDeltaError("Pinned viewer manifest schema hash mismatch")
@@ -370,6 +384,13 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
             },
         },
     }
+    if revision == 4:
+        expected_runtime_encoding["container"].update(magic_ascii="HSRDC002", version=2)
+        expected_runtime_encoding["container"]["manifest_compression"]["level"] = 6
+        expected_runtime_encoding["chunk"].update(
+            magic_ascii="PC01", value_tags=None, delta_tags=None, float32_modes=None,
+        )
+        expected_runtime_encoding["chunk"]["compression"]["level"] = 6
     if runtime_encoding != expected_runtime_encoding:
         raise ViewerDeltaError("Pinned viewer encoding constants do not match runtime")
     return PinnedViewerContract(
@@ -389,7 +410,7 @@ def resolve_source_contract(source: Any) -> PinnedViewerContract:
     return contract
 
 
-@lru_cache(maxsize=6)
+@lru_cache(maxsize=12)
 def _schema_validator(revision: int, kind: str) -> Draft202012Validator:
     contract = load_pinned_contract(revision)
     if kind == "manifest":
@@ -1999,7 +2020,7 @@ def _native_chunk_manifests(parts: ViewerParts) -> list[dict[str, Any]] | None:
                 "rawBytes": chunk.raw_bytes,
                 "compressedBytes": chunk.compressed_bytes,
                 "compressedSha256": chunk.compressed_sha256,
-                "tickSha256": chunk.tick_sha256,
+                ("rawSha256" if parts.profile_revision == 4 else "tickSha256"): chunk.tick_sha256,
             }
         )
         offset += chunk.compressed_bytes
@@ -2014,7 +2035,7 @@ def _viewer_manifest(
     recorded_at: str,
 ) -> dict[str, Any]:
     return {
-        "format": VIEWER_DELTA_FORMAT,
+        "format": load_pinned_contract(parts.profile_revision).encoding["format"],
         "sourceContract": {
             **load_pinned_contract(parts.profile_revision).source_contract,
             "tick_count": parts.tick_count,
@@ -2162,6 +2183,8 @@ def assemble_viewer_container(
             recorded_at=recorded_at,
         )
     compression_started = time.perf_counter()
+    if parts.profile_revision == 4:
+        raise ViewerDeltaError("Pose revision requires verified H1 native parts")
     compressor = zstandard.ZstdCompressor(
         level=19,
         write_checksum=True,
@@ -2306,7 +2329,11 @@ def assemble_viewer_container(
     )
 
 
-def validate_viewer_container(path: Path) -> dict[str, Any]:
+def validate_viewer_container(
+    path: Path, *, pose_encoder_path: Path | None = None,
+) -> dict[str, Any]:
+    if path.stat().st_size > VIEWER_MAX_ARTIFACT_BYTES:
+        raise ViewerDeltaError("Viewer container exceeds its size limit")
     value = path.read_bytes()
     if len(value) < VIEWER_CONTAINER_HEADER_BYTES:
         raise ViewerDeltaError("Viewer container header is truncated")
@@ -2321,9 +2348,8 @@ def validate_viewer_container(path: Path) -> dict[str, Any]:
         reserved,
     ) = struct.unpack("<8sHHIIIII", value[:VIEWER_CONTAINER_HEADER_BYTES])
     if (
-        magic != VIEWER_CONTAINER_MAGIC
+        (magic, version) not in ((VIEWER_CONTAINER_MAGIC, 1), (b"HSRDC002", 2))
         or header_bytes != VIEWER_CONTAINER_HEADER_BYTES
-        or version != VIEWER_CONTAINER_VERSION
         or manifest_compression != 1
         or reserved != 0
         or container_bytes != len(value)
@@ -2331,6 +2357,10 @@ def validate_viewer_container(path: Path) -> dict[str, Any]:
         raise ViewerDeltaError("Viewer container header is invalid")
     manifest_start = header_bytes
     manifest_end = manifest_start + manifest_compressed_bytes
+    if not (0 < manifest_raw_bytes <= 64 * 1024 * 1024) or not (
+        0 < manifest_compressed_bytes <= 16 * 1024 * 1024
+    ) or manifest_end > len(value):
+        raise ViewerDeltaError("Viewer manifest exceeds its size limit")
     try:
         manifest_raw = zstandard.ZstdDecompressor().decompress(
             value[manifest_start:manifest_end], max_output_size=manifest_raw_bytes
@@ -2343,13 +2373,34 @@ def validate_viewer_container(path: Path) -> dict[str, Any]:
         manifest = json.loads(manifest_raw)
     except json.JSONDecodeError as error:
         raise ViewerDeltaError("Viewer manifest JSON is invalid") from error
-    if not isinstance(manifest, dict) or manifest.get("format") != VIEWER_DELTA_FORMAT:
+    if not isinstance(manifest, dict):
         raise ViewerDeltaError("Viewer manifest format is invalid")
     contract = resolve_source_contract(manifest.get("sourceContract"))
+    if manifest.get("format") != contract.encoding["format"] or version != contract.encoding["container"]["version"]:
+        raise ViewerDeltaError("Viewer container encoding does not match its contract")
     validate_projected(manifest, contract.revision, "manifest")
     validate_projected(manifest["replay"], contract.revision, "replay")
     if manifest["sourceContract"]["tick_count"] != manifest["tickCount"]:
         raise ViewerDeltaError("Viewer source contract tick count is invalid")
+    if version == 2:
+        # Keep the H1 numeric implementation authoritative; never silently perform
+        # only a framing check while claiming to validate reconstructed poses.
+        if pose_encoder_path is None or not pose_encoder_path.is_file():
+            raise ViewerDeltaError("Pose readback requires an H1 encoder via pose_encoder_path")
+        result = subprocess.run(
+            [str(pose_encoder_path), "validate", str(path)],
+            capture_output=True, text=True, check=False, timeout=600,
+        )
+        try:
+            report = json.loads(result.stdout) if result.returncode == 0 else {}
+        except json.JSONDecodeError as error:
+            raise ViewerDeltaError("Pose native validation response is invalid") from error
+        if report != {
+            "status": "verified", "sha256": hashlib.sha256(value).hexdigest(),
+            "tick_count": manifest["tickCount"], "size_bytes": len(value),
+        }:
+            raise ViewerDeltaError("Pose native readback failed")
+        return manifest
     decoded_ticks = 0
     chunk_offset = 0
     uncompressed_bytes = VIEWER_CONTAINER_HEADER_BYTES + manifest_raw_bytes

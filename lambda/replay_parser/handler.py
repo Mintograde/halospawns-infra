@@ -30,9 +30,9 @@ import zstandard
 from botocore.exceptions import BotoCoreError, ClientError
 from viewer_delta import (
     VIEWER_ARTIFACT_KIND,
-    VIEWER_CONTAINER_VERSION,
-    VIEWER_DELTA_FORMAT,
-    VIEWER_ENCODING_SHA256,
+    VIEWER_CONTAINER_VERSION as VIEWER_CONTAINER_VERSION,
+    VIEWER_DELTA_FORMAT as VIEWER_DELTA_FORMAT,
+    VIEWER_ENCODING_SHA256 as VIEWER_ENCODING_SHA256,
     VIEWER_MAX_UNCOMPRESSED_BYTES,
     VIEWER_MEDIA_TYPE,
     VIEWER_OUTER_COMPRESSION,
@@ -952,10 +952,10 @@ def _viewer_request_from_payload(
         raise NonRetryableReplayError("Replay viewer target revision is unsupported") from error
     expected = {
         "artifact_kind": VIEWER_ARTIFACT_KIND,
-        "format": VIEWER_DELTA_FORMAT,
-        "container_version": VIEWER_CONTAINER_VERSION,
+        "format": contract.encoding["format"],
+        "container_version": contract.encoding["container"]["version"],
         "manifest_schema_sha256": contract.manifest_sha256,
-        "encoding_sha256": VIEWER_ENCODING_SHA256,
+        "encoding_sha256": contract.encoding_sha256,
         "schema_name": VIEWER_SCHEMA,
         "profile": VIEWER_PROFILE,
         "profile_revision": contract.revision,
@@ -3017,7 +3017,7 @@ def _viewer_artifact_key(
     prefix = _settings()["viewer_artifact_prefix"]
     filename = (
         f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{profile_revision}."
-        f"{artifact_sha256}.viewer-delta.v1.hsrv"
+        f"{artifact_sha256}.viewer-delta.v{2 if profile_revision == 4 else 1}.hsrv"
     )
     return f"{prefix}{upload_id}/generations/{generation_token}/{filename}"
 
@@ -3057,9 +3057,9 @@ def _write_viewer_artifact(
         sha256=container.sha256,
         metadata={
             "artifact-kind": VIEWER_ARTIFACT_KIND,
-            "container-version": str(VIEWER_CONTAINER_VERSION),
-            "encoding-sha256": VIEWER_ENCODING_SHA256,
-            "format": VIEWER_DELTA_FORMAT,
+            "container-version": str(contract.encoding["container"]["version"]),
+            "encoding-sha256": contract.encoding_sha256,
+            "format": contract.encoding["format"],
             "generation-token": request.generation_token,
             "manifest-schema-sha256": contract.manifest_sha256,
             "profile": VIEWER_PROFILE,
@@ -3079,10 +3079,10 @@ def _write_viewer_artifact(
     }
     artifact = {
         "artifact_kind": VIEWER_ARTIFACT_KIND,
-        "format": VIEWER_DELTA_FORMAT,
-        "container_version": VIEWER_CONTAINER_VERSION,
+        "format": contract.encoding["format"],
+        "container_version": contract.encoding["container"]["version"],
         "manifest_schema_sha256": contract.manifest_sha256,
-        "encoding_sha256": VIEWER_ENCODING_SHA256,
+        "encoding_sha256": contract.encoding_sha256,
         "schema": VIEWER_SCHEMA,
         "profile": VIEWER_PROFILE,
         "profile_revision": contract.revision,
@@ -3384,8 +3384,6 @@ def _validate_completion_manifest(
         or viewer_artifact.get("generation_token") != generation_token
         or viewer_artifact.get("source_replay_sha256")
         != value.get("source_replay_sha256")
-        or viewer_artifact.get("format") != VIEWER_DELTA_FORMAT
-        or viewer_artifact.get("encoding_sha256") != VIEWER_ENCODING_SHA256
     ):
         raise ReplayProcessingError("Persisted replay completion payload is invalid")
     try:
@@ -3399,7 +3397,9 @@ def _validate_completion_manifest(
             )
             or viewer_artifact.get("manifest_schema_sha256") != contract.manifest_sha256
             or viewer_artifact.get("artifact_kind") != VIEWER_ARTIFACT_KIND
-            or viewer_artifact.get("container_version") != VIEWER_CONTAINER_VERSION
+            or viewer_artifact.get("container_version") != contract.encoding["container"]["version"]
+            or viewer_artifact.get("format") != contract.encoding["format"]
+            or viewer_artifact.get("encoding_sha256") != contract.encoding_sha256
         ):
             raise ViewerDeltaError("Persisted viewer encoding does not match its contract")
     except ViewerDeltaError as error:

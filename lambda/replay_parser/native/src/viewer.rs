@@ -25,9 +25,12 @@ const VIEWER_PROJECTION_V2_SHA256: &str =
     "f7c75eea05440a35e7c846549ad32efa1c7a4f3e01297afb621b1f31b023c530";
 const VIEWER_PROJECTION_V3_SHA256: &str =
     "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a";
+const VIEWER_PROJECTION_V4_SHA256: &str =
+    "9bc4684bc901fb9b16cb50a2d6e6cd3ee7aac58a2b4b91f713204888292159d7";
 const PARTS_SCHEMA: &str = "halospawns.viewerReplayDeltaParts.v1";
 const CONTAINER_RESULT_SCHEMA: &str = "halospawns.viewerReplayDeltaContainer.v1";
 const VIEWER_DELTA_FORMAT: &str = "halospawns.viewerReplayDelta.v1";
+const VIEWER_POSE_FORMAT: &str = "halospawns.viewerReplayDelta.v2";
 const CONTAINER_MAGIC: &[u8; 8] = b"HSRDC001";
 const CONTAINER_HEADER_BYTES: usize = 32;
 const CONTAINER_VERSION: u16 = 1;
@@ -144,6 +147,11 @@ impl Projection {
                 include_str!("../../contracts/replays/frontend-default.v3.projection.json"),
                 include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"),
                 VIEWER_PROJECTION_V3_SHA256,
+            ),
+            4 => (
+                include_str!("../../contracts/replays/frontend-default.v4.projection.json"),
+                include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v4.schema.json"),
+                VIEWER_PROJECTION_V4_SHA256,
             ),
             _ => return Err("unsupported viewer replay profile revision".into()),
         };
@@ -2958,6 +2966,9 @@ fn writer() -> &'static Mutex<Option<ViewerWriter>> {
 }
 
 pub fn configure(directory: &Path, revision: u32) -> Result<(), Box<dyn Error>> {
+    if revision == 4 {
+        return Err("pose revision requires the H1 encoder".into());
+    }
     PROFILE_REVISION
         .set(revision)
         .map_err(|_| "viewer revision was already initialized")?;
@@ -3027,6 +3038,7 @@ impl SourceContract {
                 (1, VIEWER_PROJECTION_V1_SHA256)
                     | (2, VIEWER_PROJECTION_V2_SHA256)
                     | (3, VIEWER_PROJECTION_V3_SHA256)
+                    | (4, VIEWER_PROJECTION_V4_SHA256)
             )
             || self.tick_count != tick_count
         {
@@ -3084,6 +3096,7 @@ struct ManifestChunk {
     raw_bytes: usize,
     compressed_bytes: usize,
     compressed_sha256: String,
+    #[serde(alias = "rawSha256")]
     tick_sha256: String,
 }
 
@@ -3199,7 +3212,7 @@ fn validate_manifest(
     manifest: &ViewerManifest,
     parts: &PartsDescriptor,
 ) -> Result<(), Box<dyn Error>> {
-    if manifest.format != VIEWER_DELTA_FORMAT
+    if manifest.format != viewer_format(parts.source_contract.profile_revision)
         || manifest.replay_id.trim().is_empty()
         || manifest.recorded_at.trim().is_empty()
         || manifest.keyframe_interval != KEYFRAME_INTERVAL
@@ -3252,6 +3265,20 @@ fn container_header(
     Ok(header)
 }
 
+fn viewer_format(revision: u32) -> &'static str {
+    if revision == 4 { VIEWER_POSE_FORMAT } else { VIEWER_DELTA_FORMAT }
+}
+
+fn manifest_schema_json(revision: u32) -> Result<&'static str, Box<dyn Error>> {
+    Ok(match revision {
+        1 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v1.manifest.schema.json"),
+        2 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"),
+        3 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v3.manifest.schema.json"),
+        4 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v2.frontend-default.v4.manifest.schema.json"),
+        _ => return Err("unsupported viewer manifest revision".into()),
+    })
+}
+
 pub fn finalize_container(
     directory: &Path,
     manifest_path: &Path,
@@ -3263,20 +3290,7 @@ pub fn finalize_container(
     let (raw_chunk_bytes, compressed_chunk_bytes) = validate_parts(&parts, directory)?;
     let manifest_raw = fs::read(manifest_path)?;
     let manifest_value: Value = serde_json::from_slice(&manifest_raw)?;
-    let manifest_schema: Value = serde_json::from_str(
-        match parts.source_contract.profile_revision {
-            1 => include_str!(
-                "../../contracts/replays/halospawns.viewerReplayDelta.v1.manifest.schema.json"
-            ),
-            2 => include_str!(
-                "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"
-            ),
-            3 => include_str!(
-                "../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v3.manifest.schema.json"
-            ),
-            _ => return Err("unsupported viewer manifest revision".into()),
-        },
-    )?;
+    let manifest_schema: Value = serde_json::from_str(manifest_schema_json(parts.source_contract.profile_revision)?)?;
     if !jsonschema::validator_for(&manifest_schema)?.is_valid(&manifest_value) {
         return Err("viewer manifest violates its closed schema".into());
     }
@@ -3284,7 +3298,7 @@ pub fn finalize_container(
     validate_manifest(&manifest, &parts)?;
 
     let compression_started = Instant::now();
-    let mut compressor = zstd::bulk::Compressor::new(ZSTD_LEVEL)?;
+    let mut compressor = zstd::bulk::Compressor::new(if parts.source_contract.profile_revision == 4 { 6 } else { ZSTD_LEVEL })?;
     compressor.include_checksum(true)?;
     compressor.include_contentsize(true)?;
     let manifest_compressed = compressor.compress(&manifest_raw)?;
@@ -3304,7 +3318,11 @@ pub fn finalize_container(
     if size_bytes > MAX_ARTIFACT_BYTES || uncompressed_size_bytes > MAX_UNCOMPRESSED_BYTES {
         return Err("viewer container exceeds its pinned size limit".into());
     }
-    let header = container_header(manifest_compressed.len(), manifest_raw.len(), size_bytes)?;
+    let mut header = container_header(manifest_compressed.len(), manifest_raw.len(), size_bytes)?;
+    if parts.source_contract.profile_revision == 4 {
+        header[..8].copy_from_slice(b"HSRDC002");
+        header[10..12].copy_from_slice(&2u16.to_le_bytes());
+    }
 
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
@@ -3476,7 +3494,8 @@ mod tests {
             format!("{:x}", Sha256::digest(&raw)),
             golden["sha256"].as_str().unwrap()
         );
-        assert!(Projection::load_revision(4).is_err());
+        assert!(Projection::load_revision(4).is_ok());
+        assert!(Projection::load_revision(5).is_err());
     }
 
     #[test]

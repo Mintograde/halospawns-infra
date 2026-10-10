@@ -43,6 +43,9 @@ impl Validator {
             3 => include_str!(
                 "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v3.schema.json"
             ),
+            4 => include_str!(
+                "../../../replay_parser/contracts/replays/halospawns.viewerReplay.v1.frontend-default.v4.schema.json"
+            ),
             _ => return Err("unsupported viewer schema revision".into()),
         })?;
         Self::compile(&document["$defs"]["tick"], &document, 0)

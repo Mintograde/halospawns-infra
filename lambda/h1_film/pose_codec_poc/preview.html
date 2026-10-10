@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H1 Pose Comparison</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eeeeef;color:#202124;font:14px system-ui;letter-spacing:0}
+header{height:60px;display:flex;align-items:center;gap:20px;padding:0 20px;border-bottom:1px solid #c7c8ca;background:#fafafa}
+h1{font-size:17px;margin:0;white-space:nowrap}label{display:flex;align-items:center;gap:8px}select,button{font:inherit;padding:6px;background:#fff;border:1px solid #999;border-radius:3px}
+main{height:calc(100dvh - 112px);display:grid;grid-template-columns:1fr 1fr}.view{min-width:0;min-height:0;position:relative}.view+ .view{border-left:1px solid #c7c8ca}.label{position:absolute;top:16px;left:20px;font-weight:600;pointer-events:none}.label small{font-weight:400;display:block;margin-top:4px;color:#50545a}canvas{width:100%;height:100%;display:block}footer{height:52px;display:flex;align-items:center;gap:15px;padding:0 20px;background:#fafafa;border-top:1px solid #c7c8ca}input[type=range]{flex:1;min-width:50px;accent-color:#087d64}output{font-variant-numeric:tabular-nums;min-width:75px;text-align:right}#status{font-size:12px;margin-left:auto;max-width:38%;text-align:right}
+@media(max-width:600px){header{height:82px;padding:10px 12px;gap:10px;flex-wrap:wrap}h1{font-size:15px}.view .label{left:12px;font-size:12px}main{height:calc(100dvh - 134px);grid-template-columns:1fr;grid-template-rows:repeat(2,minmax(0,1fr))}.view+.view{border-left:0;border-top:1px solid #c7c8ca}footer{padding:0 12px;gap:8px}#status{max-width:55%;margin-left:0}label{font-size:12px}}
+</style>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/","fzstd":"/fzstd.mjs"}}</script></head>
+<body><header><h1>H1 Pose Comparison</h1><label>Frames <select id="mode"><option value="clip">Playback</option><option value="worst">Largest errors</option></select></label><span id="status">Loading model</span></header>
+<main><div class="view" id="source"><div class="label">Original<small>Full matrices</small></div></div><div class="view" id="decoded"><div class="label">Compressed<small>Reconstructed pose</small></div></div></main>
+<footer><button id="play" title="Pause" aria-label="Pause">&#10074;&#10074;</button><input id="frame" type="range" min="0" max="1" value="0" aria-label="Frame"><output id="tick">0</output></footer>
+<script type="module" src="/preview-client.mjs"></script></body></html>

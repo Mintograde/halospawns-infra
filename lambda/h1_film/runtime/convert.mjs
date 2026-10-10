@@ -83,8 +83,8 @@ export async function convertFilm(options) {
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
   request.analytics_revision = analyticsRevision;
-  request.viewer_profile_revision = Number(values['viewer-revision'] ?? 2);
-  assert.ok([1, 2, 3].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
+  request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
+  assert.ok([1, 2, 3, 4].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
   if (values.analytics) {
     request.analytics_context = { engine_profile: profile.id, gametype: native.envelope.gametype,
@@ -212,7 +212,7 @@ export async function convertFilm(options) {
       if (!values['source-viewer-only']) rates.push(['30hz', Math.ceil(native.envelope.ticks / 4)]);
       if (values['source-viewer-only']) {
         assert.equal(encoding['30hz'], null);
-        assert.deepEqual(encoding.verification, { mode: 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
+        assert.deepEqual(encoding.verification, { mode: request.viewer_profile_revision === 4 ? 'inline-bounded-poses' : 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
       }
       for (const [rate, count] of rates) {
         const replay = join(stage, 'candidate', `replay.${rate}.hsrdc`);

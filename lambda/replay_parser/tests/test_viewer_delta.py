@@ -37,7 +37,7 @@ class ViewerDeltaCodecTests(unittest.TestCase):
         )
 
     def test_retained_revisions_are_pinned_and_unknown_tuples_are_rejected(self) -> None:
-        for revision in (1, 2, 3):
+        for revision in (1, 2, 3, 4):
             contract = viewer_delta.load_pinned_contract(revision)
             self.assertEqual(
                 viewer_delta.resolve_source_contract(contract.source_contract), contract
@@ -46,7 +46,7 @@ class ViewerDeltaCodecTests(unittest.TestCase):
                 viewer_delta.resolve_source_contract(
                     {**contract.source_contract, "projection_sha256": "0" * 64}
                 )
-        for revision in (0, 4, True, "2", None, [], {}):
+        for revision in (0, 5, True, "2", None, [], {}):
             with (
                 self.subTest(revision=revision),
                 self.assertRaises(viewer_delta.ViewerDeltaError),

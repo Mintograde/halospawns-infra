@@ -1,0 +1,141 @@
+{
+  "$schema": "halospawns.viewerReplayDelta.encoding.v1",
+  "format": "halospawns.viewerReplayDelta.v2",
+  "artifact_kind": "viewer_replay_delta",
+  "media_type": "application/vnd.halospawns.replay-delta",
+  "outer_compression": "identity",
+  "range_requests_required": true,
+  "initial_range_bytes": 65536,
+  "fetch_concurrency": 4,
+  "keyframe_interval": 2048,
+  "container": {
+    "magic_ascii": "HSRDC002",
+    "header_bytes": 32,
+    "version": 2,
+    "byte_order": "little_endian",
+    "manifest_compression": {
+      "code": 1,
+      "name": "zstd",
+      "level": 6,
+      "checksum": true
+    },
+    "fields": [
+      {
+        "offset": 0,
+        "bytes": 8,
+        "name": "magic"
+      },
+      {
+        "offset": 8,
+        "bytes": 2,
+        "name": "header_bytes",
+        "type": "uint16"
+      },
+      {
+        "offset": 10,
+        "bytes": 2,
+        "name": "version",
+        "type": "uint16"
+      },
+      {
+        "offset": 12,
+        "bytes": 4,
+        "name": "manifest_compression",
+        "type": "uint32"
+      },
+      {
+        "offset": 16,
+        "bytes": 4,
+        "name": "manifest_compressed_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 20,
+        "bytes": 4,
+        "name": "manifest_raw_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 24,
+        "bytes": 4,
+        "name": "container_bytes",
+        "type": "uint32"
+      },
+      {
+        "offset": 28,
+        "bytes": 4,
+        "name": "reserved_zero",
+        "type": "uint32"
+      }
+    ],
+    "layout": [
+      "header",
+      "zstd_manifest",
+      "concatenated_zstd_chunks"
+    ]
+  },
+  "chunk": {
+    "magic_ascii": "PC01",
+    "version": 1,
+    "byte_order": "little_endian",
+    "compression": {
+      "name": "zstd",
+      "level": 6,
+      "checksum": true,
+      "independent_frames": true
+    },
+    "header": [
+      "magic:4",
+      "base_raw_bytes:uint32",
+      "base_compressed_bytes:uint32",
+      "poses_raw_bytes:uint32",
+      "poses_compressed_bytes:uint32"
+    ],
+    "layout": [
+      "header",
+      "zstd_lossless_base",
+      "zstd_pose_runs"
+    ],
+    "base_encoding_sha256": "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb",
+    "raw_sha256": "sha256_of_decompressed_PC01_bytes",
+    "limits": {
+      "ticks": 2048,
+      "players": 4,
+      "nodes_per_coded_pose": 64,
+      "inner_raw_bytes": 67108864
+    },
+    "poses": {
+      "codec": "local3-fine-v1",
+      "space": "original_parent_local",
+      "root_origin": "player_object_data.xyz_or_zero",
+      "translation_step": "1/65536",
+      "scale_step": "1/65536",
+      "quaternion_levels": 131071,
+      "quaternion": "largest_absolute_component_nonnegative_smallest_three",
+      "quaternion_quantum": "1/(131071*sqrt(2))",
+      "output_numbers": "float32",
+      "channels": [
+        "translation_x",
+        "translation_y",
+        "translation_z",
+        "scale",
+        "quaternion_a",
+        "quaternion_b",
+        "quaternion_c",
+        "quaternion_omitted_index"
+      ],
+      "tracks": [
+        "constant_int32",
+        "first_difference_zigzag_varint",
+        "second_difference_zigzag_varint"
+      ],
+      "framing": "uint16_run_count; each_run(uint16_start,uint8_player,uint16_frames,uint8_bones,uint8_parent_plus_one[bones],bone_major_channel_tracks,uint16_raw_count,(uint16_frame,float64_nodes[bones][13])[raw_count])",
+      "track_framing": "uint8_mode,int32_first,zigzag_varint_deltas[mode==0?0:frames-1]",
+      "error_metric": "translation_distance + radius * frobenius_scaled_basis_difference_after_float32",
+      "point_radius": 1,
+      "point_error_limit": 0.0002,
+      "fallback": "entire_raw_float64_pose_if_bound_exceeded; unknown_models_retained_in_base",
+      "exactness": "all_non_pose_fields_exact_numeric_bits_and_array_order; object_key_order_not_significant"
+    }
+  }
+}

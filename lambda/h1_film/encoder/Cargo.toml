@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+h1-pose-codec = { path = "../pose_codec" }
 ahash = "0.8"
 indexmap = "2.14"
 jsonschema = { version = "0.58.1", default-features = false }

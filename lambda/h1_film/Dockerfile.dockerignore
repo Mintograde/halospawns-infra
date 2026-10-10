@@ -9,6 +9,7 @@
 !lambda/h1_film/runtime/**
 !lambda/h1_film/profiles/**
 !lambda/h1_film/encoder/**
+!lambda/h1_film/pose_codec/**
 lambda/h1_film/encoder/target/**
 !lambda/h1_film/tools/
 !lambda/h1_film/tools/check-release.mjs

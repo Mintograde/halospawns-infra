@@ -7,6 +7,11 @@ The user enabled the single-user dev preview on 2026-10-09: concurrency one,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
 
+New H1 conversions select [bounded pose compression](POSE_COMPRESSION.md),
+viewer revision 4 / `HSRDC002`. The fine candidate preserves every tick and all
+non-pose data, with measured artifacts about 4.3x smaller. Old contracts and
+explicit jobs remain supported; see deployment notes for the dev rollout.
+
 ## Layout
 
 | Path | Responsibility |
@@ -20,6 +25,7 @@ prod activation remain pending; Xbox uploads are unchanged.
 | `profiles/registry.json` | Shared Node/Python engine identities, ABI and artifact pins |
 | `engines/beta3/` | Beta 3 exporter, WASM compatibility port and native reference integration |
 | `encoder/` | Bounded tick-stream encoder; reuses `../replay_parser` codecs/contracts |
+| `pose_codec/` | Shared bounded pose math, temporal tracks and exact fallbacks |
 | `analytics.py`, `registry.py`, `recorded.py` | Verified native products, retained profiles, recorded rules/events and replay-parser adaptation |
 | `tools/` | Candidate builds, engine staging/auditing, catalogs and offline reconciliation |
 | `tests/` | Profile retention, multi-version dispatch, intake/retry, integrity and analytics tests |

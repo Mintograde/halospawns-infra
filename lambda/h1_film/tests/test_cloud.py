@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from h1_film import cloud, worker
-from h1_film.registry import select_exporter, load_registry
-from replay_parser.viewer_delta import VIEWER_CONTRACT_PINS
+from h1_film.registry import load_registry, select_exporter
+from replay_parser.viewer_delta import VIEWER_CONTRACT_PINS, load_pinned_contract
 
 FIXTURES = Path(__file__).with_name("fixtures")
 ENV = {
@@ -93,6 +93,22 @@ class CloudTests(unittest.TestCase):
                 self.assertRaises(cloud.FilmError),
             ):
                 cloud.validate_job(self.job)
+
+    def test_pose_revision_requires_the_exact_container_and_encoding_tuple(self):
+        contract = load_pinned_contract(4)
+        target = self.job["viewer_artifact_target"]
+        target.update(
+            profile_revision=4, projection_sha256=contract.source_contract["projection_sha256"],
+            manifest_schema_sha256=contract.manifest_sha256, format=contract.encoding["format"],
+            container_version=2, encoding_sha256=contract.encoding_sha256,
+        )
+        self.assertEqual(cloud.validate_job(self.job).profile_revision, 4)
+        for key, value in (("container_version", 1), ("format", "halospawns.viewerReplayDelta.v1"),
+                           ("encoding_sha256", "0" * 64), ("profile_revision", 3)):
+            invalid = copy.deepcopy(self.job)
+            invalid["viewer_artifact_target"][key] = value
+            with self.assertRaises((cloud.FilmError, self.shared.NonRetryableReplayError)):
+                cloud.validate_job(invalid)
 
     def test_conversion_requires_inline_lossless_evidence_without_second_readback(self):
         ticks = self.job["conversion"]["film"]["source_tick_count"]

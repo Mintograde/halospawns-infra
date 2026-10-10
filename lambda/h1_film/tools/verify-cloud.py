@@ -101,7 +101,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3), default=3)
     parser.add_argument("--exporter-revision", type=int, choices=(1, 2), default=1)
-    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3), default=2)
+    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4), default=4)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     logging.basicConfig(level=logging.INFO)
@@ -138,6 +138,11 @@ def main():
         profile_revision=args.viewer_revision,
         projection_sha256=projection_sha,
         manifest_schema_sha256=manifest_sha,
+    )
+    contract = viewer_delta.load_pinned_contract(args.viewer_revision)
+    job["viewer_artifact_target"].update(
+        format=contract.encoding["format"], container_version=contract.encoding["container"]["version"],
+        encoding_sha256=contract.encoding_sha256,
     )
     source = job["conversion"]["source"]
     source.update(
