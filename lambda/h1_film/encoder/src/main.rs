@@ -255,7 +255,7 @@ impl Observations {
             if ordinal == 0 {
                 self.initial_counters.insert(id, counters.clone());
             }
-            let before = self.previous.get(&id).cloned();
+            let before = self.previous.remove(&id);
             let name = player["name"]
                 .as_str()
                 .map(str::to_owned)
@@ -458,7 +458,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             analytics.observe(&tick, count)?;
         }
         let sample = (low.is_some() && count.is_multiple_of(4)).then(|| tick.clone());
-        high.push(&tick)?;
+        high.push_source(&mut tick)?;
         spare = tick;
         if let Some(mut sample) = sample {
             sampling::normalize(&mut sample, count, 4, &request.map)?;

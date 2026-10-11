@@ -4,10 +4,11 @@ param(
     [Parameter(Mandatory)][string]$Map,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$CandidateEncoder,
+    [string]$CandidateEngineRoot,
     [string]$NativeModule,
     [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3,
-    [ValidateSet(1, 2)][int]$ExporterRevision = 1,
-    [ValidateSet(1, 2, 3)][int]$ViewerRevision = 2
+    [ValidateRange(1, 256)][int]$ExporterRevision = 1,
+    [ValidateSet(1, 2, 3, 4)][int]$ViewerRevision = 2
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
@@ -18,6 +19,7 @@ $outputPath = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $outputPath) { throw 'Benchmark output must be a new directory.' }
 $encoderPath = if ($CandidateEncoder) { (Resolve-Path -LiteralPath $CandidateEncoder).Path }
 $nativePath = if ($NativeModule) { (Resolve-Path -LiteralPath $NativeModule).Path }
+$enginePath = if ($CandidateEngineRoot) { (Resolve-Path -LiteralPath $CandidateEngineRoot).Path }
 New-Item -ItemType Directory -Path $outputPath | Out-Null
 $arguments = @(
     'run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000',
@@ -40,6 +42,13 @@ if ($encoderPath) {
     )
 }
 $harness = '/harness.py'
+if ($enginePath) {
+    $arguments += @(
+        '--mount', "type=bind,source=$enginePath,target=/var/task/engines,readonly",
+        '--mount', "type=bind,source=$repo/lambda/h1_film/profiles,target=/var/task/profiles,readonly",
+        '--mount', "type=bind,source=$repo/lambda/h1_film/profiles,target=/var/task/h1_film/profiles,readonly"
+    )
+}
 if ($nativePath) {
     $arguments += @(
         '--mount', "type=bind,source=$nativePath,target=/native/engine.node,readonly",
@@ -60,6 +69,7 @@ $completion = Get-Content -LiteralPath (Join-Path $outputPath 'worker/finalizati
     status = $verification.status
     image = $Image
     encoder_override = [bool]$encoderPath
+    engine_override = [bool]$enginePath
     execution_variant = if ($nativePath) { $report.offline_execution_variant } else { 'registered_wasm' }
     encoder_sha256 = $report.provenance.encoder_sha256
     film_sha256 = $report.provenance.film_sha256

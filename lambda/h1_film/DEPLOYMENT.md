@@ -14,6 +14,14 @@ only reference/benchmark tooling and historical notes. See [README.md](README.md
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
 
+An **undeployed** runtime candidate was measured on 2026-10-11: nine-map offline
+conversion time fell 17.84%, whole harness time 15.89%, with byte-identical
+replays. This is not the requested 3x speedup or a Lambda latency measurement.
+It adds optional retained exporter 3, but intake/default pins remain unchanged.
+API registration and coordinated release are tracked by
+`20261011-infra-api-h1film-runtime-exporter3`; see
+[the performance report](PERFORMANCE.md#runtime-candidate-2026-10-11).
+
 ## Pose Default Deployed 2026-10-10
 
 The user authorized the new standard format and reconversion of existing dev

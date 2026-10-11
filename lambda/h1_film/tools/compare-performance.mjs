@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({ options: {
   baseline: { type: 'string' }, candidate: { type: 'string' }, output: { type: 'string' },
+  'baseline-engine': { type: 'string' }, 'candidate-engine': { type: 'string' },
 } });
 assert.ok(values.baseline && values.candidate);
 const load = async (directory, name) => JSON.parse(await readFile(join(directory, name), 'utf8'));
@@ -13,11 +14,31 @@ const after = await load(values.candidate, 'report.json');
 for (const field of ['envelope', 'simulation', 'engine_profile', 'map_binding']) {
   assert.deepEqual(after[field], before[field], field);
 }
-for (const field of ['film_sha256', 'map_sha256', 'wasm_sha256', 'glue_sha256']) {
+const changedExporter = values['baseline-engine'] !== undefined || values['candidate-engine'] !== undefined;
+if (changedExporter) {
+  assert.ok(values['baseline-engine'] && values['candidate-engine'], 'Both full-export proofs are required');
+  const proofs = await Promise.all(['baseline-engine', 'candidate-engine'].map(async key =>
+    JSON.parse(await readFile(values[key], 'utf8'))));
+  for (const [i, report] of [before, after].entries()) {
+    for (const key of ['film_sha256', 'map_sha256', 'wasm_sha256', 'glue_sha256']) {
+      assert.equal(proofs[i][key], report.provenance[key], `Engine proof ${key}`);
+    }
+    assert.equal(proofs[i].exporter_revision, report.exporter_revision);
+    assert.deepEqual(proofs[i].simulation, report.simulation);
+    assert.ok(!proofs[i].aot_module_sha256, 'Proof must use the registered WASM');
+    assert.match(proofs[i].transport_sha256, /^[a-f0-9]{64}$/);
+    assert.equal(proofs[i].transport_bytes, report.encoding.transport_bytes);
+    assert.ok(proofs[i].transport_bytes > 0);
+  }
+  assert.equal(proofs[0].transport_sha256, proofs[1].transport_sha256, 'Unprojected engine stream changed');
+  assert.equal(proofs[0].transport_bytes, proofs[1].transport_bytes);
+}
+for (const field of changedExporter ? ['film_sha256', 'map_sha256']
+  : ['film_sha256', 'map_sha256', 'wasm_sha256', 'glue_sha256']) {
   assert.equal(after.provenance[field], before.provenance[field], field);
 }
 
-function stableCallback(value) {
+function stableCallback(value, report) {
   const result = structuredClone(value);
   const metrics = result.viewer_artifact?.metadata?.metrics;
   for (const field of [
@@ -29,12 +50,18 @@ function stableCallback(value) {
     if (metrics) delete metrics[field];
   }
   if (result.spatial_artifact?.metadata) delete result.spatial_artifact.metadata.process_peak_rss_kib;
+  if (changedExporter) {
+    for (const key of ['wasm_sha256', 'glue_sha256', 'exporter_revision']) {
+      assert.equal(result.h1film[key], key === 'exporter_revision' ? report[key] : report.provenance[key]);
+      delete result.h1film[key];
+    }
+  }
   return result;
 }
 
 for (const name of ['finalization.json', 'full-reparse-completion.json', 'viewer-rebuild-completion.json']) {
-  assert.deepEqual(stableCallback(await load(values.candidate, name)),
-    stableCallback(await load(values.baseline, name)), name);
+  assert.deepEqual(stableCallback(await load(values.candidate, name), after),
+    stableCallback(await load(values.baseline, name), before), name);
 }
 const baseline = await load(values.baseline, 'verification.json');
 const candidate = await load(values.candidate, 'verification.json');
@@ -43,7 +70,9 @@ for (const field of ['status', 'aws_access', 'api_access', 'film_sha256', 'sourc
   assert.deepEqual(candidate[field], baseline[field], field);
 }
 const summary = {
-  status: 'identical_products_except_operational_metrics', film_sha256: candidate.film_sha256,
+  status: changedExporter ? 'identical_products_with_verified_exporter_change'
+    : 'identical_products_except_operational_metrics', film_sha256: candidate.film_sha256,
+  full_export_parity: changedExporter,
   source_ticks: candidate.source_ticks, hash_checks: candidate.hash_checks,
   baseline_conversion_seconds: before.timing.total_seconds,
   candidate_conversion_seconds: after.timing.total_seconds,

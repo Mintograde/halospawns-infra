@@ -88,11 +88,15 @@ impl CompiledProjection {
                         field.node.project_reusing(value, target)?;
                     }
                 } else {
+                    let mut previous = std::mem::take(target);
                     let mut output = Map::with_capacity(count);
                     for (field, value) in selected() {
-                        let mut target = Value::Null;
+                        let (key, mut target) = previous
+                            .as_object_mut()
+                            .and_then(|old| old.swap_remove_entry(&field.output_key))
+                            .unwrap_or_else(|| (field.output_key.clone(), Value::Null));
                         field.node.project_reusing(value, &mut target)?;
-                        output.insert(field.output_key.clone(), target);
+                        output.insert(key, target);
                     }
                     *target = Value::Object(output);
                 }
@@ -275,6 +279,7 @@ struct IncrementalChunk {
     decoded_before: Option<DecodedValue>,
     decoded_strings: Vec<Arc<str>>,
     tick_hash: tick_hash::CachedTickHasher,
+    hash_ticks: bool,
     encode_duration: Duration,
     validation_duration: Duration,
     hash_duration: Duration,
@@ -294,6 +299,7 @@ impl IncrementalChunk {
             decoded_before: None,
             decoded_strings: Vec::new(),
             tick_hash: tick_hash::CachedTickHasher::new(),
+            hash_ticks: true,
             encode_duration: Duration::ZERO,
             validation_duration: Duration::ZERO,
             hash_duration: Duration::ZERO,
@@ -328,7 +334,9 @@ impl IncrementalChunk {
         )?;
         self.validation_duration += started.elapsed();
         let started = Instant::now();
-        self.tick_hash.update(&decoded)?;
+        if self.hash_ticks {
+            self.tick_hash.update(&decoded)?;
+        }
         self.hash_duration += started.elapsed();
         self.decoded_before = self.decoded.replace(decoded);
         let spare = self.before_previous.take().unwrap_or(Value::Null);
@@ -481,6 +489,62 @@ mod pose_tests {
     }
 
     #[test]
+    fn borrowed_pose_projection_preserves_source_and_batch_bytes() {
+        let projection = Projection::load_revision(4).unwrap();
+        let mut ticks = source();
+        let mut wide = ticks[0].clone();
+        wide["players"][0]["model_nodes"][0]
+            .as_array_mut()
+            .unwrap()
+            .push(Value::from(99));
+        ticks.push(wide);
+        ticks = ticks
+            .iter()
+            .cycle()
+            .take(ticks.len() * 3)
+            .cloned()
+            .collect();
+        let projected: Vec<_> = ticks
+            .iter()
+            .map(|tick| projection.tick.project(tick).unwrap())
+            .collect();
+        let expected = pack_poses(&projected, 0).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "h1-borrowed-poses-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut stream = StreamingExport::new(&root, ticks.len(), 6).unwrap();
+        stream.pose_codec = true;
+        stream.validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        for source in ticks {
+            let mut tick = source.clone();
+            stream
+                .push_source_with_projection(&mut tick, &projection)
+                .unwrap();
+            assert!(deep_exact_equal(&tick, &source));
+        }
+        stream.sender.take();
+        for handle in stream.collector.worker_handles.drain(..) {
+            handle.join().unwrap();
+        }
+        let raw = zstd::bulk::decompress(
+            &fs::read(root.join("chunk-00000.hsrd.zst")).unwrap(),
+            LOCAL_CHUNK_RAW_LIMIT,
+        )
+        .unwrap();
+        assert_eq!(raw, expected);
+        let (_, mut decoded) =
+            h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec).unwrap();
+        h1_pose_codec::verify(&projected, &mut decoded).unwrap();
+        drop(stream);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn fine_pose_wire_roundtrip_lifecycle_fallback_and_golden() {
         let ticks = source();
         let raw = pack_poses(&ticks, 0).unwrap();
@@ -494,8 +558,18 @@ mod pose_tests {
         )
         .unwrap();
         let mut base = IncrementalChunk::new(0, ticks.len()).unwrap();
-        for mut tick in ticks.clone() {
-            poses.push(&mut tick).unwrap();
+        base.hash_ticks = false;
+        for (frame, mut tick) in ticks.clone().into_iter().enumerate() {
+            let removed = poses.push_recycling(&mut tick).unwrap();
+            if matches!(frame, 3 | 4 | 14) {
+                assert!(removed.iter().all(Option::is_none));
+            } else {
+                assert_eq!(
+                    removed[0].as_ref(),
+                    ticks[frame]["players"][0].get("model_nodes")
+                );
+                assert!(tick["players"][0].get("model_nodes").is_none());
+            }
             base.push(tick).unwrap();
         }
         assert_eq!(poses.finish(&base.binary.bytes).unwrap().0, raw);
@@ -661,6 +735,8 @@ pub struct StreamingExport {
     chunk_ticks: usize,
     expected: usize,
     spare: Value,
+    pose_spares: [Option<Value>; 4],
+    pose_models: Vec<h1_pose_codec::pose::Skeleton>,
     validator: crate::fast_schema::Validator,
 }
 impl StreamingExport {
@@ -679,18 +755,117 @@ impl StreamingExport {
             chunk_ticks: 0,
             expected,
             spare: Value::Null,
+            pose_spares: [None, None, None, None],
+            pose_models: h1_pose_codec::skeletons(),
             validator: crate::fast_schema::Validator::for_revision(projection()?.revision)?,
         })
     }
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
+        self.push_with_projection(source, projection()?)
+    }
+
+    fn push_with_projection(
+        &mut self,
+        source: &Value,
+        projection: &Projection,
+    ) -> Result<(), Box<dyn Error>> {
         let started = Instant::now();
         validate_json_safety(source, 3)?;
         let mut projected = std::mem::take(&mut self.spare);
-        projection()?.tick.project_reusing(source, &mut projected)?;
+        // Pose extraction removes these arrays from the delta history. Return
+        // their storage to the next projection instead of allocating every tick.
+        if let Some(players) = projected.get_mut("players").and_then(Value::as_array_mut) {
+            for (player, nodes) in players.iter_mut().zip(&mut self.pose_spares) {
+                if let (Some(player), Some(nodes)) = (player.as_object_mut(), nodes.take()) {
+                    player.insert("model_nodes".into(), nodes);
+                }
+            }
+        }
+        projection.tick.project_reusing(source, &mut projected)?;
         if !self.validator.is_valid(&projected) {
             return Err("viewer tick violates its closed schema".into());
         }
         self.spare = self.push_projected(projected, started.elapsed())?;
+        Ok(())
+    }
+
+    pub fn push_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
+        self.push_source_with_projection(source, projection()?)
+    }
+
+    fn push_source_with_projection(
+        &mut self,
+        source: &mut Value,
+        projection: &Projection,
+    ) -> Result<(), Box<dyn Error>> {
+        if !self.pose_codec {
+            return self.push_with_projection(source, projection);
+        }
+        let mut borrowed = [false; 4];
+        if let Some(players) = source.get("players").and_then(Value::as_array) {
+            for (player, borrow) in players.iter().zip(&mut borrowed) {
+                let tag = player["player_object_data"]["tag_name"].as_str();
+                if let Some(nodes) = player.get("model_nodes").and_then(Value::as_array) {
+                    *borrow = self.pose_models.iter().any(|rig| {
+                        Some(rig.tag.as_str()) == tag && rig.parents.len() == nodes.len()
+                    }) && nodes.iter().all(|node| {
+                        node.as_array()
+                            .is_some_and(|v| v.len() == 13 && v.iter().all(Value::is_number))
+                    });
+                }
+            }
+        }
+        if !borrowed.iter().any(|v| *v) {
+            return self.push_with_projection(source, projection);
+        }
+        let started = Instant::now();
+        validate_json_safety(source, 3)?;
+        let mut nodes = [None, None, None, None];
+        for (i, player) in source["players"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .take(4)
+            .enumerate()
+        {
+            if borrowed[i] {
+                nodes[i] = Some(std::mem::replace(
+                    &mut player["model_nodes"],
+                    Value::Array(Vec::new()),
+                ));
+            }
+        }
+        let mut projected = std::mem::take(&mut self.spare);
+        projection.tick.project_reusing(source, &mut projected)?;
+        for (i, player) in projected["players"]
+            .as_array_mut()
+            .ok_or("missing projected players")?
+            .iter_mut()
+            .enumerate()
+        {
+            if let Some(nodes) = nodes[i].take() {
+                player["model_nodes"] = nodes;
+            }
+        }
+        // Only canonical, untruncated matrices are lent. Validate the complete
+        // projection before extraction, and return their storage to transport.
+        if !self.validator.is_valid(&projected) {
+            return Err("viewer tick violates its closed schema".into());
+        }
+        self.spare = self.push_projected(projected, started.elapsed())?;
+        for (i, player) in source["players"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .take(4)
+            .enumerate()
+        {
+            if borrowed[i] {
+                player["model_nodes"] = self.pose_spares[i]
+                    .take()
+                    .ok_or("borrowed pose was not extracted")?;
+            }
+        }
         Ok(())
     }
     pub fn push_owned(&mut self, source: Value) -> Result<(), Box<dyn Error>> {
@@ -721,6 +896,8 @@ impl StreamingExport {
                 KEYFRAME_INTERVAL.min(self.expected - first),
             )?);
             if self.pose_codec {
+                // Revision 4 authenticates the raw PC01 block, not reconstructed JSON.
+                self.chunk.as_mut().unwrap().hash_ticks = false;
                 self.poses = Some(h1_pose_codec::wire::Encoder::new(
                     &h1_pose_codec::settings(),
                     &h1_pose_codec::skeletons(),
@@ -730,7 +907,7 @@ impl StreamingExport {
         }
         if let Some(poses) = &mut self.poses {
             let started = Instant::now();
-            poses.push(&mut projected)?;
+            self.pose_spares = poses.push_recycling(&mut projected)?;
             self.pose_duration += started.elapsed();
         }
         let spare = self.chunk.as_mut().unwrap().push(projected)?;
@@ -834,6 +1011,10 @@ impl EncodingWorker {
 
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
         self.push_owned(source.clone())
+    }
+
+    pub fn push_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
+        self.push(source)
     }
 
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
@@ -1280,7 +1461,7 @@ mod incremental_tests {
             serde_json::json!({"players":vec![serde_json::json!({});65]}),
             Value::Null,
         ]);
-        for revision in [1, 2] {
+        for revision in [1, 2, 3, 4] {
             let projection = Projection::load_revision(revision).unwrap();
             let mut recycled = Value::Null;
             for input in inputs.iter().cycle().take(inputs.len() * 3) {

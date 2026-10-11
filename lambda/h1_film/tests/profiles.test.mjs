@@ -19,7 +19,12 @@ test('exporter revisions retain the simulation identity and reject unknown or re
   }
   assert.notEqual(current.wasm_sha256, profile.wasm_sha256);
   assert.equal(selectExporter(profile, 1).wasm_sha256, profile.wasm_sha256);
-  for (const revision of [0, 3, true, '2']) assert.throws(() => selectExporter(profile, revision));
+  const optimized = selectExporter(profile, 3);
+  assert.notEqual(optimized.wasm_sha256, current.wasm_sha256);
+  for (const key of ['id', 'format', 'protocol_revision', 'tick_rate', 'build']) {
+    assert.equal(optimized[key], profile[key]);
+  }
+  for (const revision of [0, 999, true, '2']) assert.throws(() => selectExporter(profile, revision));
   assertRetainedExporters(ENGINE_EXPORTERS, ENGINE_EXPORTERS);
   assert.throws(() => assertRetainedExporters([], ENGINE_EXPORTERS));
   assert.throws(() => validateExporters({ exporters: [...ENGINE_EXPORTERS, ...ENGINE_EXPORTERS] }));

@@ -8,6 +8,9 @@
  * Simulation and export still use the original engine implementations. */
 void blampc_d3d_decide_window_background(int scripted) { (void)scripted; }
 void blampc_install_crash_handler(void) { }
+/* The HUD probability table has no exported fields. New builds require a new
+ * exporter pin and full transport/hash parity before adoption. */
+void hs_unused_spawn_odds_tick(void) { }
 void blampc_priority_apply(int player_session) { if (player_session) abort(); }
 const char *blampc_exe_basename(void) { return "headless-wasm"; }
 void blampc_devkit_root_set(const char *root) { if (root && *root) abort(); }

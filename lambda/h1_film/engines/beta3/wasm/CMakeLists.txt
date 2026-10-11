@@ -188,7 +188,11 @@ add_executable(h1-film ${host_sources} "${CMAKE_CURRENT_BINARY_DIR}/film_sequent
     "${CMAKE_CURRENT_BINARY_DIR}/snapshot.c"
     "${CMAKE_CURRENT_BINARY_DIR}/rollback.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../export.c" platform.c headless.c cache-io.c wide-format.c)
-set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/main_headless.c" APPEND PROPERTY COMPILE_DEFINITIONS blampc_state_dump=hs_export_tick)
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/main_headless.c" APPEND PROPERTY COMPILE_DEFINITIONS
+    blampc_state_dump=hs_export_tick blampc_spawn_odds_tick=hs_unused_spawn_odds_tick)
+# The exporter is new portable code, so its bounded memcpy/strlen calls can
+# use compiler intrinsics. Keep the decompiled engine's CRT policy unchanged.
+set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../export.c" APPEND PROPERTY COMPILE_OPTIONS -fbuiltin)
 target_link_libraries(h1-film PRIVATE blam)
 # The reference map contains absolute tag addresses at 0x40440000. Keep all
 # compiler-owned data above that region until a separately verified relocation port.

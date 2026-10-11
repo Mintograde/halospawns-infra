@@ -1,5 +1,5 @@
-// Measure the pinned simulator without encoder backpressure. Run offline in the
-// same two-CPU container as benchmark.ps1; this is a floor, not worker latency.
+// Isolate simulator/export cost without encoder backpressure. Hashing and CPU
+// profiling add diagnostic work; these timings are not worker latency.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { readEnvelope, adapterFor } from '../runtime/film.mjs';
-import { selectProfile } from '../runtime/profiles.mjs';
+import { selectProfile, selectExporter } from '../runtime/profiles.mjs';
 import { resolveEngine, sha256 } from '../runtime/engine-store.mjs';
 
 const { values } = parseArgs({ options: {
@@ -19,11 +19,12 @@ const { values } = parseArgs({ options: {
   'cpu-profile': { type: 'boolean', default: false },
   'aot-module': { type: 'string' },
   'hash-export': { type: 'boolean', default: false },
+  'exporter-revision': { type: 'string', default: '1' },
 } });
 assert.ok(values.film && values.map && values.output);
 assert.equal(process.platform, 'linux');
 const envelope = await readEnvelope(values.film);
-const profile = selectProfile(envelope);
+const profile = selectExporter(selectProfile(envelope), Number(values['exporter-revision']));
 const engine = await resolveEngine(profile, process.env.H1_ENGINE_ROOT);
 assert.match(envelope.map, /^[a-z0-9_-]+$/i);
 assert.equal((await stat(values.map)).size, envelope.map_bytes, 'Map size differs from recorded cache');
@@ -68,7 +69,7 @@ try {
   const elapsed = (performance.now() - started) / 1000;
   assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Staged film changed');
   assert.equal(await sha256(join(work, 'maps', `${envelope.map}.map`)), mapHash, 'Staged map changed');
-  const report = { wall_seconds: elapsed, flags,
+  const report = { wall_seconds: elapsed, flags, exporter_revision: profile.exporter_revision,
     simulation: adapterFor(profile).verifyPlayback(await readFile(join(work, 'playback.log'), 'utf8'), envelope),
     resources: JSON.parse(await readFile(join(work, 'metrics.json'), 'utf8')),
     film_sha256: filmHash, map_sha256: mapHash, ...engine.hashes,

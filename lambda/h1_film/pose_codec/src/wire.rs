@@ -188,6 +188,11 @@ impl Encoder {
     }
 
     pub fn push(&mut self, t: &mut Value) -> Result<()> {
+        self.push_recycling(t).map(|_| ())
+    }
+
+    pub fn push_recycling(&mut self, t: &mut Value) -> Result<[Option<Value>; 4]> {
+        let mut removed = [None, None, None, None];
         if self.tick_count >= 2048 {
             return Err("too many pose chunk ticks".into());
         }
@@ -210,7 +215,12 @@ impl Encoder {
             }
             let pose = pose::read_pose(&p["model_nodes"])?;
             let tag = p["player_object_data"]["tag_name"].as_str().unwrap_or("");
-            if self.preserve_unknown_models && pose::parents(tag, pose.len(), s, rigs).is_err() {
+            let known = latest[pi]
+                .is_some_and(|i| runs[i].tag == tag && runs[i].parents.len() == pose.len());
+            if self.preserve_unknown_models
+                && !known
+                && pose::parents(tag, pose.len(), s, rigs).is_err()
+            {
                 continue;
             }
             let identity =
@@ -261,12 +271,13 @@ impl Encoder {
                 }
             };
             r.frames.push(frame);
-            p.as_object_mut()
+            removed[pi] = p
+                .as_object_mut()
                 .ok_or("player not object")?
                 .shift_remove("model_nodes");
         }
         self.tick_count += 1;
-        Ok(())
+        Ok(removed)
     }
 
     // The caller verifies the lossless base stream before passing it here.

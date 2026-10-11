@@ -100,7 +100,7 @@ def main():
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3), default=3)
-    parser.add_argument("--exporter-revision", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--exporter-revision", type=int, default=1)
     parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4), default=4)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
