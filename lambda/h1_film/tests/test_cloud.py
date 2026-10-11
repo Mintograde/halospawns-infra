@@ -193,10 +193,23 @@ class CloudTests(unittest.TestCase):
         source = self.job["conversion"]["source"]
         evidence = self.job["conversion"]["film"]
         item = {"upload_id": self.job["upload_id"], "source": source}
-        for retained in (False, True):
+        for retained in (None, 1, 2):
             job = copy.deepcopy(self.job)
-            if not retained:
+            if retained != 1:
                 job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
+                profile = load_registry()[evidence["engine_profile"]]
+                selected = select_exporter(profile, retained or 3)
+                job["conversion"]["engine"].update({key: selected[key] for key in (
+                    "wasm_sha256", "glue_sha256", "exporter_revision"
+                )})
+                contract = load_pinned_contract(4)
+                job["viewer_artifact_target"].update(
+                    profile_revision=4,
+                    projection_sha256=contract.source_contract["projection_sha256"],
+                    manifest_schema_sha256=contract.manifest_sha256,
+                    format=contract.encoding["format"], container_version=2,
+                    encoding_sha256=contract.encoding_sha256,
+                )
             responses = [{"data": {"job": job}}]
             if retained:
                 responses.insert(0, cloud.FilmError("identity_conflict"))
@@ -210,7 +223,8 @@ class CloudTests(unittest.TestCase):
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute(item, context)
                 self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 3)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 2)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 3)
+                self.assertEqual(api.call_count, 2 if retained else 1)
                 if retained:
                     self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])
                     self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])

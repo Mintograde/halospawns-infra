@@ -1,8 +1,8 @@
 # H1 film Lambda integration
 
-Status on 2026-10-10: dev defaults to bounded pose compression, viewer revision 4
-and `HSRDC002`, with retained exporter 2 and analytics 3. Worker
-`pose4-20261010-r1`, API `live=179` and compatible frontend readers are deployed.
+Status on 2026-10-11: dev defaults to retained runtime exporter 3, analytics 3
+and bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
+`runtime-20261011-r2`, API `live=180` and compatible frontend readers are deployed.
 Both H1 flags remain true, the batch-one queue remains enabled, and reserved
 concurrency remains 5. All 32 frozen dev H1 replays succeeded and selected the
 new format. Source/map pins and old explicit jobs/retries are retained.
@@ -14,13 +14,95 @@ only reference/benchmark tooling and historical notes. See [README.md](README.md
 for the current entry points and [COMPATIBILITY.md](COMPATIBILITY.md) for retained
 engine bundles, source-isolated builds and append-only profile registration.
 
-An **undeployed** runtime candidate was measured on 2026-10-11: nine-map offline
+The runtime candidate deployed on 2026-10-11 was measured offline: nine-map
 conversion time fell 17.84%, whole harness time 15.89%, with byte-identical
 replays. This is not the requested 3x speedup or a Lambda latency measurement.
-It adds optional retained exporter 3, but intake/default pins remain unchanged.
-API registration and coordinated release are tracked by
-`20261011-infra-api-h1film-runtime-exporter3`; see
+It adds retained exporter 3, now selected by new intake and admin reprocess jobs.
+Existing conversions, jobs, retries and artifacts retain their original pins.
+Completed coordination: `20261011-infra-api-h1film-runtime-exporter3`; see
 [the performance report](PERFORMANCE.md#runtime-candidate-2026-10-11).
+
+## Runtime Exporter 3 Deployed 2026-10-11
+
+The user authorized dev deployment of the measured candidate. Compatibility
+preceded default promotion, without toggling consumers or submitting film jobs:
+
+1. Published and applied compatibility worker `runtime-20261011-r1`, retaining
+   intake exporter 2 while supporting exact exporters 1/2/3. Its local image ID
+   matches the benchmarked `runtime-candidate-20261011-r2`. ECR digest:
+   `sha256:b21fb7c620fe7ebbc8baa0499d9d60239fa11068dc237c3ca8da10197d51f1da`.
+2. API `acdc9cc635fa4521b79d5e7d2dc2b4ae0cefd2cb`, successful Linux/native build
+   and dev publish run `38142632342`, registered exporter 3 and selected it for
+   new admin reprocess attempts. Normal artifact/code-updater promotion reached
+   `live=180`; no direct API code or alias writes. Live code SHA-256 matches S3
+   artifact `de6a95a40192f5b3d566efc3ef6da2ca1cdfaec7865df5f8df807668c63fe45c`.
+   Artifact key: `releases/dev-38142632342/acdc9cc635fa4521b79d5e7d2dc2b4ae0cefd2cb.zip`.
+3. Published and applied final worker `runtime-20261011-r2`, changing new intake
+   selection to exporter 3. ECR digest:
+   `sha256:79126d941e825f71570a7c09a74ad985747774aa4f6d399e388514825e4f4471`.
+   Live encoder SHA-256:
+   `a98bf58f5298994db0ab37694f89a6f5d6404d52c82a0a738ec3259bb98b6046`.
+
+Exporter 3 WASM is
+`54bd3169d31a1fe27d62214f4cd610fbef2fde5ddd1ea5956091f9427fc3fe61`;
+glue is `f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc`.
+The simulation profile, map approvals and original exporter-1/2 binaries remain
+unchanged. Old bootstrap notifications recover the persisted job after an
+explicit-default conflict, without repinning or weakening source validation.
+
+Each focused/full pre-apply plan contained **0 adds / 1 update / 0 destroys**:
+only `aws_lambda_function.h1_film[0].image_uri` and computed `last_modified`.
+Applied the exact reviewed saved plans, SHA-256:
+
+- Compatibility: `e9f0a13d251bdbcbf937b6ba7f5c80302c9d0e48fa741ce8466c1ed941e55a18`.
+- Final: `a45306cea50f3ddcca93afb868949ffed939b3ef686ef1fad8d4b9763c6b63e3`.
+
+Both focused post-apply plans are no-op; the final full dev plan has zero resource
+actions and only the unapplied API version output refresh. Initial planning observed unrelated
+renderer computed-version drift `254 -> 255`, refreshed without changing its
+resources. The existing API output-only refresh was `173 -> 179` before the API
+release and is now `173 -> 180`; no app-api Terraform apply was needed.
+
+Live worker health verifies all retained exporter hashes and the encoder hash;
+Lambda is Active/Successful. Memory 3,008 MiB, timeout 900 s, temporary storage
+8,192 MiB, concurrency 5, enabled batch-one mapping, both API H1 flags, provisional
+limits, IAM and other consumers are unchanged. Queue and DLQ depths are zero.
+API public health passes. No AWS/profile/session blocker remains
+(`halospawns-dev`, account `283279960672`, `us-east-1`).
+
+Validation: 39 H1 Python tests and 14 Node tests pass. API full local suite:
+1,349 passed / 60 opt-in skips; focused unit and isolated PostgreSQL tests:
+168 passed / two optional private-corpus skips; Ruff and release CI pass.
+The final complete image, without overlays, converts Prisoner offline with all
+70,582 ticks / 589 hashes, all completion modes and persisted retries. Its
+22,864,581-byte replay and all non-operational callback products exactly match
+the nine-map tested candidate. The API's actual pure builders accept both the
+candidate and release callbacks, including reparse and viewer-only modes.
+
+No cloud film conversion or reparse was submitted, no existing generation was
+replaced, and no migration, frontend, Xbox or prod change was made. Actual Lambda
+conversion latency for exporter 3 remains unmeasured; the 17.84% conversion /
+15.89% whole-harness improvements are offline results, not a 3x result.
+Do not roll back to API/worker versions lacking exporter 3 once its jobs or
+completion retries exist. Viewer-4 reader compatibility remains mandatory.
+
+Commands from infra root, with evidence under
+`L:/tmp/halospawns-h1-runtime-release-20261011`:
+
+```powershell
+.\scripts\publish-h1-film.ps1 dev -Tag runtime-20261011-r1 -EngineRoot L:/tmp/halospawns-h1-runtime-20261011/engines -PreviousRegistry L:/tmp/halospawns-h1-runtime-release-20261011/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-runtime-release-20261011/compatibility.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+# API main commit acdc9cc was published by its normal push workflow here.
+.\scripts\publish-h1-film.ps1 dev -Tag runtime-20261011-r2 -EngineRoot L:/tmp/halospawns-h1-runtime-20261011/engines -PreviousRegistry L:/tmp/halospawns-h1-runtime-release-20261011/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-runtime-release-20261011/final.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
 
 ## Pose Default Deployed 2026-10-10
 
