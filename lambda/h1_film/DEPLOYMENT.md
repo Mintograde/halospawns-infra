@@ -1,8 +1,11 @@
 # H1 film Lambda integration
 
-Status on 2026-10-11: dev defaults to retained runtime exporter 3, analytics 3
+Status on 2026-10-14: dev defaults to retained runtime exporter 3, analytics 3
 and bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
-`runtime-20261011-r2`, API `live=180` and compatible frontend readers are deployed.
+`typed-20261014-r1`, API `live=181` and compatible frontend readers are deployed.
+The compatibility worker includes the measured typed-transport optimizations and
+retained exporters 1/2/3/4, but new intake remains exporter 3 pending API promotion.
+Final worker `typed-20261014-r2` is published and verified, not yet applied.
 Both H1 flags remain true, the batch-one queue remains enabled, and reserved
 concurrency remains 5. All 32 frozen dev H1 replays succeeded and selected the
 new format. Source/map pins and old explicit jobs/retries are retained.
@@ -21,6 +24,93 @@ It adds retained exporter 3, now selected by new intake and admin reprocess jobs
 Existing conversions, jobs, retries and artifacts retain their original pins.
 Completed coordination: `20261011-infra-api-h1film-runtime-exporter3`; see
 [the performance report](PERFORMANCE.md#runtime-candidate-2026-10-11).
+
+## Typed Exporter 4 Rollout 2026-10-14
+
+The user authorized applying the measured performance candidate to dev. The
+compatibility stage is deployed. Full default promotion remains gated on the
+API registration/default release under `20261014-infra-api-h1film-typed-exporter4`.
+Committing/pushing that scoped API change requires the user's pending approval;
+do not bypass its normal Linux/native CI and artifact/code-updater release path.
+
+- Live compatibility worker: `typed-20261014-r1`, digest
+  `sha256:9cd7689c1fdf6f97051fa07d7490f8bcdb7ecbb420e73b24973fc3c3f3b27d62`.
+  Local image ID exactly matches the nine-map benchmarked
+  `typed-candidate-20261014-r2`: intake stays exporter 3, all four exporters work.
+- Prepared final worker: `typed-20261014-r2`, digest
+  `sha256:9d8942b2bb3f0118a37e18910f8dec2e6d04f4d5eb672125db3cc8eaf0c39ff2`.
+  Only the new-upload default changes to exporter 4; existing prepares recover
+  their persisted jobs unchanged. Do not pin/apply it before API support is live.
+- Both encoder hashes:
+  `336121540c23af6e1f5096e20bb9e58df00998c4b8870d611c0b9b5400b837e7`.
+  Exporter-4 WASM:
+  `fab1791bf6de4eb10862e1bdd468c4ce62de24f0cb86aa012293a346912c28bd`;
+  glue: `f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc`.
+  Original exporter-1/2/3 hashes and logical `HSFT0001` remain unchanged.
+
+Focused/full pre-apply plans contained **0 adds / 1 update / 0 destroys**, solely
+`aws_lambda_function.h1_film[0].image_uri` and computed `last_modified`.
+Applied the reviewed saved compatibility plan, SHA-256
+`47d1808adb166980dc616ad9e817ea6404b7c2d729c76be938a1b3fd9e977243`.
+Focused post-apply plan is no-op; the full post-apply dev plan has zero resource
+actions and only unapplied API output refresh `173 -> 181`. Preplanning observed unrelated renderer
+computed-version drift `255 -> 259`, refreshed without changing renderer
+resources, and existing unapplied API output refresh `173 -> 181`.
+
+Worker is Active/Successful and retained-hash/encoder health passes. The first
+cold health request exceeded its 20-second child-process timeout; the next
+requests passed in 11.386 s and 0.479 s. No health timeout was relaxed. This is
+an inventory probe, not a hosted conversion measurement. API public health
+passes; its live alias remains 181 with both H1 flags true. Queue and DLQ are
+empty. Concurrency 5,
+3,008 MiB memory, 900 s timeout, 8,192 MiB temporary storage, enabled batch-one
+mapping, source/map checks, provisional limits, IAM and other consumers remain.
+
+Validation: 40 worker Python tests and 16 Node tests pass. API focused unit and
+isolated PostgreSQL tests: 157 passed / two optional private-product skips.
+Full local API suite: 1,353 passed / 68 opt-in skips; Ruff passes. PyCharm does
+not include the sibling API module, so API checks use its existing verified
+Python 3.12 virtual environment per its repository instructions. The complete
+final image passes read-only/non-root health and fail-closed tests, and converts
+Prisoner offline: 70,582 ticks / 589 hashes, all completion modes and retries,
+22,864,581 replay bytes with SHA-256
+`dc66bead6f89f2058d16d257c0f6378d52a69e7b0ef75dbea68457517e6c6462`.
+All products match the benchmarked candidate. Actual API pure builders accept
+both candidate and final-image callbacks, including reparse/viewer-only modes.
+The prior Rust/whole-corpus validation and 18.23% offline result are unchanged.
+
+No film job or reparse was submitted, no existing generation was replaced, and
+no migration, frontend, Xbox, gate, limit or prod change was made. No AWS session
+blocker (`halospawns-dev`, `283279960672`, `us-east-1`). Once exporter-4 jobs or
+completions exist, rollback must retain exporter-4 API/worker support and all
+viewer-4 readers. No bulk reconversion is needed for byte-identical artifacts.
+
+Commands from infra root; evidence: `L:/tmp/halospawns-h1-typed-release-20261014`:
+
+```powershell
+.\scripts\publish-h1-film.ps1 dev -Tag typed-20261014-r1 -EngineRoot L:/tmp/halospawns-h1-typed-20261014/engines -PreviousRegistry L:/tmp/halospawns-h1-typed-release-20261014/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-typed-release-20261014/compatibility.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\publish-h1-film.ps1 dev -Tag typed-20261014-r2 -EngineRoot L:/tmp/halospawns-h1-typed-20261014/engines -PreviousRegistry L:/tmp/halospawns-h1-typed-release-20261014/previous-registry.json
+.\scripts\plan.ps1 dev
+```
+
+Next: with commit/push approval, publish the tested API change through CI; verify
+its new `live` code hash, unchanged flags and public health. Then pin the already
+published final worker, review focused/full plans and apply only its image
+update. Verify live retained hashes, queue/DLQ depths and post-apply plans; update
+both handoffs. Do not republish immutable tags or submit replay jobs as a probe.
+
+Changed files for this rollout: infra `stacks/dev.yaml`,
+`lambda/h1_film/cloud.py`, `lambda/h1_film/tests/test_cloud.py`, H1 README,
+compatibility/deployment/performance/typed-transport docs, root `AGENTS.md`,
+`HANDOFFS.md` and `ATMOS_MIGRATION_PLAN.md`; API `h1film_contract.py`,
+`services/admin_replay_reprocess.py`, unit/integration H1 tests,
+`docs/h1film-runtime-exporter.md`, `AGENTS.md`, `HANDOFFS.md` and `ROADMAP.md`.
+Terraform ownership: only `map-processing`; ECR receives immutable images but
+no ECR resource configuration changes. No changes were committed or pushed.
 
 ## Runtime Exporter 3 Deployed 2026-10-11
 

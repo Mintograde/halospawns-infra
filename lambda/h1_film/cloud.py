@@ -820,7 +820,7 @@ def execute(work_item, context):
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
             try:
                 result = api("POST", "/v1/ingest/h1films/prepare", {
-                    **prepare, "analytics_revision": 3, "exporter_revision": 3,
+                    **prepare, "analytics_revision": 3, "exporter_revision": 4,
                 })
             except FilmError as error:
                 if error.reason != "identity_conflict":

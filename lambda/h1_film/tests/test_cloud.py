@@ -193,12 +193,12 @@ class CloudTests(unittest.TestCase):
         source = self.job["conversion"]["source"]
         evidence = self.job["conversion"]["film"]
         item = {"upload_id": self.job["upload_id"], "source": source}
-        for retained in (None, 1, 2):
+        for retained in (None, 1, 2, 3):
             job = copy.deepcopy(self.job)
             if retained != 1:
                 job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
                 profile = load_registry()[evidence["engine_profile"]]
-                selected = select_exporter(profile, retained or 3)
+                selected = select_exporter(profile, retained or 4)
                 job["conversion"]["engine"].update({key: selected[key] for key in (
                     "wasm_sha256", "glue_sha256", "exporter_revision"
                 )})
@@ -223,7 +223,7 @@ class CloudTests(unittest.TestCase):
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute(item, context)
                 self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 3)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 3)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 4)
                 self.assertEqual(api.call_count, 2 if retained else 1)
                 if retained:
                     self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])

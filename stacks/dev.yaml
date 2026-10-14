@@ -156,7 +156,7 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: runtime-20261011-r2
+          image_tag: typed-20261014-r1
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true
