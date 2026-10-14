@@ -8,7 +8,7 @@
 
 #define HS_FRAME_LIMIT (4u * 1024u * 1024u)
 enum { HS_NULL, HS_FALSE, HS_TRUE, HS_I32, HS_U32, HS_F32, HS_F64,
-       HS_STRING, HS_ARRAY, HS_OBJECT };
+       HS_STRING, HS_ARRAY, HS_OBJECT, HS_WORLD_OBJECT, HS_SPAWN, HS_MATRIX };
 static unsigned char hs_buffer[HS_FRAME_LIMIT];
 static uint32_t hs_used, hs_depth;
 static struct { uint32_t offset, count; int object; } hs_stack[32];
@@ -84,6 +84,14 @@ static void hs_string(const char *key, const char *value)
     hs_item(key); hs_byte(HS_STRING); hs_text(value ? value : "");
 }
 
+static void hs_raw_floats(const float *values, uint32_t count)
+{
+    uint32_t index;
+    for (index = 0; index < count; ++index)
+        if (!isfinite(values[index])) hs_fail("non-finite simulation value");
+    hs_bytes(values, count * 4);
+}
+
 static void hs_flush_frame(FILE *diagnostic)
 {
     if (hs_depth) hs_fail("unfinished transport container");
@@ -91,7 +99,7 @@ static void hs_flush_frame(FILE *diagnostic)
     extern void hs_wasm_emit(const void *data, uint32_t size);
     static int started;
     (void)diagnostic;
-    if (!started) { hs_wasm_emit("HSFT0001", 8); started = 1; }
+    if (!started) { hs_wasm_emit("HSFT0002", 8); started = 1; }
     hs_wasm_emit(&hs_used, 4);
     hs_wasm_emit(hs_buffer, hs_used);
 #else
@@ -110,8 +118,8 @@ static void hs_flush_frame(FILE *diagnostic)
             hs_copy = fopen(copy, "wbx");
             if (!hs_copy) hs_fail("cannot create tick capture (must not exist)");
         }
-        if (fwrite("HSFT0001", 1, 8, hs_output) != 8) hs_fail("pipe header write failed");
-        if (hs_copy && fwrite("HSFT0001", 1, 8, hs_copy) != 8) hs_fail("capture header write failed");
+        if (fwrite("HSFT0002", 1, 8, hs_output) != 8) hs_fail("pipe header write failed");
+        if (hs_copy && fwrite("HSFT0002", 1, 8, hs_copy) != 8) hs_fail("capture header write failed");
     }
     if (fwrite(&hs_used, 4, 1, hs_output) != 1 || fwrite(hs_buffer, 1, hs_used, hs_output) != hs_used)
         hs_fail("encoder pipe closed or output write failed");

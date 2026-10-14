@@ -24,14 +24,27 @@ if (changedExporter) {
       assert.equal(proofs[i][key], report.provenance[key], `Engine proof ${key}`);
     }
     assert.equal(proofs[i].exporter_revision, report.exporter_revision);
+    assert.equal(proofs[i].transport_contract ?? 'HSFT0001', report.encoding.transport_contract ?? 'HSFT0001');
     assert.deepEqual(proofs[i].simulation, report.simulation);
     assert.ok(!proofs[i].aot_module_sha256, 'Proof must use the registered WASM');
     assert.match(proofs[i].transport_sha256, /^[a-f0-9]{64}$/);
     assert.equal(proofs[i].transport_bytes, report.encoding.transport_bytes);
     assert.ok(proofs[i].transport_bytes > 0);
   }
-  assert.equal(proofs[0].transport_sha256, proofs[1].transport_sha256, 'Unprojected engine stream changed');
-  assert.equal(proofs[0].transport_bytes, proofs[1].transport_bytes);
+  for (const proof of proofs) {
+    if (proof.transport_contract === 'HSFT0002') {
+      assert.match(proof.canonical_sha256, /^[a-f0-9]{64}$/);
+      assert.ok(Number.isSafeInteger(proof.canonical_bytes) && proof.canonical_bytes > 8);
+    } else {
+      assert.ok(proof.transport_contract === undefined || proof.transport_contract === 'HSFT0001');
+      if (proof.canonical_sha256 !== undefined) assert.equal(proof.canonical_sha256, proof.transport_sha256);
+      if (proof.canonical_bytes !== undefined) assert.equal(proof.canonical_bytes, proof.transport_bytes);
+    }
+  }
+  assert.equal(proofs[0].canonical_sha256 ?? proofs[0].transport_sha256,
+    proofs[1].canonical_sha256 ?? proofs[1].transport_sha256, 'Unprojected engine stream changed');
+  assert.equal(proofs[0].canonical_bytes ?? proofs[0].transport_bytes,
+    proofs[1].canonical_bytes ?? proofs[1].transport_bytes);
 }
 for (const field of changedExporter ? ['film_sha256', 'map_sha256']
   : ['film_sha256', 'map_sha256', 'wasm_sha256', 'glue_sha256']) {

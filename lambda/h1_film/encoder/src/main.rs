@@ -29,6 +29,8 @@ struct Request {
     source_tick_rate: u32,
     #[serde(default = "default_export_contract")]
     export_contract: String,
+    #[serde(default = "default_export_contract")]
+    transport_contract: String,
     #[serde(default = "default_analytics_revision")]
     analytics_revision: u8,
     #[serde(default = "default_viewer_revision")]
@@ -61,6 +63,9 @@ impl Request {
         // or rate needs an explicit encoder adapter, not silent reinterpretation.
         if self.source_tick_rate != 120 || self.export_contract != "HSFT0001" {
             return Err("unsupported engine rate or export contract".into());
+        }
+        if !matches!(self.transport_contract.as_str(), "HSFT0001" | "HSFT0002") {
+            return Err("unsupported engine transport contract".into());
         }
         if !(1..=3).contains(&self.analytics_revision) {
             return Err("unsupported analytics revision".into());
@@ -427,7 +432,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let input = io::stdin();
-    let mut source = transport::Stream::new(BufReader::with_capacity(64 * 1024, input.lock()))?;
+    let mut source = transport::Stream::with_contract(
+        BufReader::with_capacity(64 * 1024, input.lock()),
+        &request.transport_contract,
+    )?;
     let mut observations = Observations {
         legacy_analytics: request.analytics_revision == 1,
         ..Default::default()
@@ -458,7 +466,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             analytics.observe(&tick, count)?;
         }
         let sample = (low.is_some() && count.is_multiple_of(4)).then(|| tick.clone());
-        high.push_source(&mut tick)?;
+        high.push_transport_source(&mut tick)?;
         spare = tick;
         if let Some(mut sample) = sample {
             sampling::normalize(&mut sample, count, 4, &request.map)?;
@@ -511,7 +519,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
         "verification":{"mode":if request.viewer_profile_revision == 4 { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
             "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
-        "export_contract":request.export_contract,
+        "export_contract":request.export_contract, "transport_contract":request.transport_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,
         "viewer_profile_revision":request.viewer_profile_revision,
         "native_analytics":native.map(|native| native.product()),
@@ -557,14 +565,18 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(())
         }
-        Some("inspect-ticks") if args.len() == 3 => {
-            let mut input = transport::Stream::new(BufReader::new(File::open(&args[1])?))?;
+        Some("inspect-ticks") if matches!(args.len(), 3 | 4) => {
+            let reader = BufReader::new(File::open(&args[1])?);
+            let mut input = match args.get(3) {
+                Some(contract) => transport::Stream::with_contract(reader, contract),
+                None => transport::Stream::new(reader),
+            }?;
             let mut output = BufWriter::new(File::options().write(true).create_new(true).open(&args[2])?);
             while let Some(tick) = input.next()? { serde_json::to_writer(&mut output, &tick)?; output.write_all(b"\n")?; }
             output.flush()?;
             Ok(())
         }
-        _ => Err("usage: h1-film-encoder encode <request.json> <new-output-dir> (binary stdin)\n       h1-film-encoder verify <120hz.hsrdc> <30hz.hsrdc>\n       h1-film-encoder inspect-ticks <capture.hsft> <new-output.ndjson>".into()),
+        _ => Err("usage: h1-film-encoder encode <request.json> <new-output-dir> (binary stdin)\n       h1-film-encoder verify <120hz.hsrdc> <30hz.hsrdc>\n       h1-film-encoder inspect-ticks <capture.hsft> <new-output.ndjson> [HSFT0001|HSFT0002]".into()),
     }
 }
 fn main() {
@@ -583,9 +595,16 @@ mod observation_tests {
             "replay_id":"legacy","recorded_at":"2026-10-03T00:00:00Z"});
         let legacy: Request = serde_json::from_value(value.clone()).unwrap();
         legacy.validate().unwrap();
+        assert_eq!(legacy.transport_contract, "HSFT0001");
+        let mut packed = value.clone();
+        packed["transport_contract"] = json!("HSFT0002");
+        let packed: Request = serde_json::from_value(packed).unwrap();
+        packed.validate().unwrap();
+        assert_eq!(packed.export_contract, "HSFT0001");
         for (key, wrong) in [
             ("source_tick_rate", json!(60)),
             ("export_contract", json!("HSFT0002")),
+            ("transport_contract", json!("HSFT0003")),
         ] {
             let mut unsupported = value.clone();
             unsupported[key] = wrong;
@@ -667,6 +686,7 @@ mod observation_tests {
             zstd_level: 6,
             source_tick_rate: 120,
             export_contract: default_export_contract(),
+            transport_contract: default_export_contract(),
         };
         let low = observations.metadata(&request, 4).unwrap();
         for (counter, metric) in sampling::METRICS {
@@ -901,6 +921,7 @@ mod observation_tests {
                 zstd_level: 1,
                 source_tick_rate: 120,
                 export_contract: default_export_contract(),
+                transport_contract: default_export_contract(),
             };
             let mut high =
                 artifact::StreamingExport::new(&directory.join("parts-120"), 12, 1).unwrap();

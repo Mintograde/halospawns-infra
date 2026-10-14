@@ -49,6 +49,8 @@ export function validateExporters(document, profiles = ENGINE_PROFILES) {
     assert.ok(!ids.has(id), 'Duplicate exporter revision');
     ids.add(id);
     for (const key of ['wasm_sha256', 'glue_sha256']) assert.match(entry[key], /^[0-9a-f]{64}$/);
+    assert.ok(entry.transport_contract === undefined || ['HSFT0001', 'HSFT0002'].includes(entry.transport_contract),
+      'Unsupported exporter transport');
     return Object.freeze({ ...entry });
   }));
 }
@@ -62,6 +64,7 @@ export function selectExporter(profile, revision, exporters = ENGINE_EXPORTERS) 
   const exporter = exporters.find(entry => entry.engine_profile === profile.id && entry.revision === revision);
   assert.ok(exporter, 'Unknown exporter revision');
   return Object.freeze({ ...profile, exporter_revision: revision,
+    ...(exporter.transport_contract ? { transport_contract: exporter.transport_contract } : {}),
     wasm_sha256: exporter.wasm_sha256, glue_sha256: exporter.glue_sha256 });
 }
 

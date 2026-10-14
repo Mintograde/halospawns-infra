@@ -90,16 +90,19 @@ static void vector(const char *x, const char *y, const char *z, const float *v)
 static void object(int slot, const object_header_datum *header)
 {
     const _object_datum *body = &header->datum->object;
-    hs_begin(NULL, 1);
-    hs_uint("object_id", object_handle(slot, header));
-    hs_int("object_type", header->type);
-    tag("tag_name", header->datum->definition_index);
-    vector("x", "y", "z", body->position.n);
-    vector("forward_x", "forward_y", "forward_z", body->forward.n);
-    vector("up_x", "up_y", "up_z", body->up.n);
-    reference("parent_ref", body->parent_object_index);
-    reference("owner_object_ref", body->owner_object_index);
-    hs_end();
+    const int definition = header->datum->definition_index;
+    const char *tag_name = global_tag_instances && definition != -1
+        ? global_tag_instances[(unsigned short)definition].name : NULL;
+    hs_item(NULL);
+    hs_byte(HS_WORLD_OBJECT);
+    hs_u32(object_handle(slot, header));
+    hs_u32((uint32_t)header->type);
+    hs_text(tag_name ? tag_name : "");
+    hs_raw_floats(body->position.n, 3);
+    hs_raw_floats(body->forward.n, 3);
+    hs_raw_floats(body->up.n, 3);
+    hs_u32((uint32_t)body->parent_object_index);
+    hs_u32((uint32_t)body->owner_object_index);
 }
 
 static void weapon(int reference)
@@ -197,13 +200,11 @@ static void player(int slot, const player_datum *p)
                 hs_fail("invalid model node block");
             hs_begin("model_nodes", 0);
             for (i = 0; i < (int)count; ++i) {
-                int j;
-                hs_begin(NULL, 0);
-                /* Viewer node layout: position, scale, then the three basis vectors. */
-                for (j = 0; j < 3; ++j) hs_float(NULL, nodes[i].position.n[j]);
-                hs_float(NULL, nodes[i].scale);
-                for (j = 0; j < 9; ++j) hs_float(NULL, nodes[i].n[j / 3][j % 3]);
-                hs_end();
+                hs_item(NULL);
+                hs_byte(HS_MATRIX);
+                hs_raw_floats(nodes[i].position.n, 3);
+                hs_raw_floats(&nodes[i].scale, 1);
+                hs_raw_floats(&nodes[i].n[0][0], 9);
             }
             hs_end();
         }
@@ -259,14 +260,13 @@ static void spawns(void)
             hs_fail("invalid scenario spawn block");
         for (i = 0; i < block->count; ++i) {
             int j;
-            hs_begin(NULL, 1);
-            hs_int("spawn_index", i);
-            vector("x", "y", "z", spawn[i].position.n);
-            hs_float("facing", spawn[i].facing);
-            hs_int("team", spawn[i].team_index);
-            hs_begin("gametypes", 0);
-            for (j = 0; j < 4; ++j) hs_int(NULL, spawn[i].game_type[j]);
-            hs_end(); hs_end();
+            hs_item(NULL);
+            hs_byte(HS_SPAWN);
+            hs_u32((uint32_t)i);
+            hs_raw_floats(spawn[i].position.n, 3);
+            hs_raw_floats(&spawn[i].facing, 1);
+            hs_u32((uint32_t)spawn[i].team_index);
+            for (j = 0; j < 4; ++j) hs_u32((uint32_t)spawn[i].game_type[j]);
         }
     }
     hs_end();

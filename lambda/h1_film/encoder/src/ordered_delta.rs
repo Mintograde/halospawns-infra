@@ -28,10 +28,21 @@ pub(super) fn write(
     next: &Value,
     before: Option<&Value>,
 ) -> Result<(), Box<dyn Error>> {
+    write_inner(writer, previous, next, before, false)
+}
+
+fn write_inner(
+    writer: &mut BinaryWriter,
+    previous: Option<&Value>,
+    next: &Value,
+    before: Option<&Value>,
+    changed_known: bool,
+) -> Result<(), Box<dyn Error>> {
     if float_delta::write(writer, previous, next, before)? {
         return Ok(());
     }
-    if let Some(previous) = previous
+    if !changed_known
+        && let Some(previous) = previous
         && same(previous, next)
     {
         writer.byte(DELTA_SAME);
@@ -55,7 +66,7 @@ pub(super) fn write(
         for (i, ((key, b), a)) in b.iter().zip(a.values()).enumerate() {
             if changed & (1 << i) != 0 {
                 writer.string(key)?;
-                write(writer, Some(a), b, history.and_then(|v| v.get(key)))?;
+                write_inner(writer, Some(a), b, history.and_then(|v| v.get(key)), true)?;
             }
         }
         return Ok(());
@@ -75,8 +86,14 @@ pub(super) fn write(
         let history = before.and_then(Value::as_array);
         if a.len() == b.len() && changed.len() > b.len() / 2 {
             writer.byte(DELTA_DENSE_ARRAY);
+            let mut changed = changed.into_iter().peekable();
             for (i, b) in b.iter().enumerate() {
-                write(writer, a.get(i), b, history.and_then(|v| v.get(i)))?;
+                if changed.peek() == Some(&i) {
+                    changed.next();
+                    write_inner(writer, a.get(i), b, history.and_then(|v| v.get(i)), true)?;
+                } else {
+                    writer.byte(DELTA_SAME);
+                }
             }
         } else {
             writer.byte(DELTA_ARRAY);
@@ -84,7 +101,13 @@ pub(super) fn write(
             writer.varuint(changed.len() as u64)?;
             for i in changed {
                 writer.varuint(i as u64)?;
-                write(writer, a.get(i), &b[i], history.and_then(|v| v.get(i)))?;
+                write_inner(
+                    writer,
+                    a.get(i),
+                    &b[i],
+                    history.and_then(|v| v.get(i)),
+                    true,
+                )?;
             }
         }
         return Ok(());

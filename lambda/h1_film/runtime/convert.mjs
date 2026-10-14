@@ -82,6 +82,7 @@ export async function convertFilm(options) {
   const request = JSON.parse(await readFile(requestPath, 'utf8'));
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
+  request.transport_contract = profile.transport_contract ?? profile.export_contract;
   request.analytics_revision = analyticsRevision;
   request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
   assert.ok([1, 2, 3, 4].includes(request.viewer_profile_revision), 'Unsupported viewer revision');

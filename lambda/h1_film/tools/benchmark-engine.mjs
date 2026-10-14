@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import { hashCanonicalStream } from './canonical-transport.mjs';
 import { readEnvelope, adapterFor } from '../runtime/film.mjs';
 import { selectProfile, selectExporter } from '../runtime/profiles.mjs';
 import { resolveEngine, sha256 } from '../runtime/engine-store.mjs';
@@ -55,17 +55,16 @@ try {
       H1_EXPORT_METRICS: join(work, 'metrics.json'),
       ...(values['aot-module'] ? { H1_AOT_MODULE: values['aot-module'], H1_AOT_OFFLINE: '1' } : {}) },
   });
-  const digest = createHash('sha256');
-  let transportBytes = 0;
-  const drained = values['hash-export'] ? (async () => {
-    for await (const bytes of child.stdio[3]) { digest.update(bytes); transportBytes += bytes.length; }
-  })() : Promise.resolve();
+  const drained = values['hash-export']
+    ? hashCanonicalStream(child.stdio[3], profile.transport_contract ?? profile.export_contract)
+    : Promise.resolve({});
+  drained.catch(() => child.kill('SIGKILL'));
   const code = await new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('close', resolve);
   });
   assert.equal(code, 0, await readFile(join(work, 'playback.log'), 'utf8'));
-  await drained;
+  const proof = await drained;
   const elapsed = (performance.now() - started) / 1000;
   assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Staged film changed');
   assert.equal(await sha256(join(work, 'maps', `${envelope.map}.map`)), mapHash, 'Staged map changed');
@@ -75,8 +74,7 @@ try {
     film_sha256: filmHash, map_sha256: mapHash, ...engine.hashes,
     ...(values['aot-module'] ? { execution_runtime: 'offline-wasm2c-experiment',
       aot_module_sha256: await sha256(values['aot-module']) } : {}),
-    ...(values['hash-export'] ? { transport_bytes: transportBytes,
-      transport_sha256: digest.digest('hex') } : {}) };
+    ...proof };
   await writeFile(values.output, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
   if (values['cpu-profile']) await copyFile(join(work, 'engine.cpuprofile'), values.output + '.cpuprofile');
   console.log(JSON.stringify(report));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +48,19 @@ test('exporter performance comparisons require full stream parity and unchanged 
       assert.throws(() => run(), /Command failed/);
     }
     await save('candidate-engine.json', proofs[1]);
+    const packedReport = JSON.parse(await readFile(join(root, 'candidate/report.json'), 'utf8'));
+    packedReport.encoding = { transport_bytes: 60, transport_contract: 'HSFT0002' };
+    await save('candidate/report.json', packedReport);
+    const packedProof = { ...proofs[1], transport_contract: 'HSFT0002', transport_bytes: 60,
+      transport_sha256: hash('7'), canonical_bytes: 100, canonical_sha256: hash('1') };
+    await save('candidate-engine.json', packedProof);
+    assert.equal(JSON.parse(run()).full_export_parity, true);
+    for (const wrong of [{ canonical_sha256: hash('8') }, { canonical_bytes: 101 },
+      { canonical_sha256: undefined }, { transport_contract: 'HSFT0001' }, { transport_bytes: 61 }]) {
+      await save('candidate-engine.json', { ...packedProof, ...wrong });
+      assert.throws(() => run(), /Command failed/);
+    }
+    await save('candidate-engine.json', packedProof);
     await save('candidate/finalization.json', { h1film: { exporter_revision: 3,
       wasm_sha256: proofs[1].wasm_sha256, glue_sha256: proofs[1].glue_sha256 },
       viewer_artifact: { sha256: hash('9'), size_bytes: 50 } });

@@ -5,7 +5,25 @@ use std::io::Read;
 pub const MAX_FRAME: usize = 4 * 1024 * 1024;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-struct Cursor<'a>(&'a [u8]);
+const OBJECT_FIELDS: &[&str] = &[
+    "object_id",
+    "object_type",
+    "tag_name",
+    "x",
+    "y",
+    "z",
+    "forward_x",
+    "forward_y",
+    "forward_z",
+    "up_x",
+    "up_y",
+    "up_z",
+    "parent_ref",
+    "owner_object_ref",
+];
+const SPAWN_FIELDS: &[&str] = &["spawn_index", "x", "y", "z", "facing", "team", "gametypes"];
+
+struct Cursor<'a>(&'a [u8], bool, usize);
 impl<'a> Cursor<'a> {
     fn take(&mut self, size: usize) -> Result<&'a [u8]> {
         if size > self.0.len() {
@@ -27,6 +45,96 @@ impl<'a> Cursor<'a> {
             return Err("engine string exceeds limit".into());
         }
         Ok(std::str::from_utf8(self.take(length)?)?)
+    }
+    fn float(&mut self) -> Result<Value> {
+        let value = f32::from_le_bytes(self.take(4)?.try_into()?) as f64;
+        Ok(Value::Number(
+            Number::from_f64(value).ok_or("non-finite engine value")?,
+        ))
+    }
+    fn packed(&mut self, tag: u8, target: &mut Value, depth: usize) -> Result<()> {
+        self.2 += match tag {
+            10 => 170,
+            11 => 80,
+            _ => 17,
+        };
+        if self.2 > MAX_FRAME {
+            return Err("expanded engine frame exceeds limit".into());
+        }
+        if !self.1 || depth + if tag == 11 { 2 } else { 1 } >= 32 {
+            return Err("unsupported or overnested packed engine record".into());
+        }
+        if tag == 12 {
+            if !target.is_array() {
+                *target = Value::Array(Vec::new());
+            }
+            let values = target.as_array_mut().unwrap();
+            values.resize_with(13, || Value::Null);
+            for value in values {
+                *value = self.float()?;
+            }
+            return Ok(());
+        }
+        let fields = if tag == 10 {
+            OBJECT_FIELDS
+        } else {
+            SPAWN_FIELDS
+        };
+        if !target.as_object().is_some_and(|values| {
+            values.len() == fields.len()
+                && values.keys().map(String::as_str).eq(fields.iter().copied())
+        }) {
+            *target = Value::Object(
+                fields
+                    .iter()
+                    .map(|key| ((*key).into(), Value::Null))
+                    .collect(),
+            );
+        }
+        for (index, value) in target.as_object_mut().unwrap().values_mut().enumerate() {
+            if tag == 10 {
+                match index {
+                    0 => *value = Value::from(self.u32()?),
+                    1 => *value = Value::from(self.u32()? as i32),
+                    2 => {
+                        let text = self.text_ref()?;
+                        if let Value::String(previous) = value {
+                            if previous != text {
+                                previous.clear();
+                                previous.push_str(text);
+                            }
+                        } else {
+                            *value = Value::String(text.to_owned());
+                        }
+                    }
+                    3..=11 => *value = self.float()?,
+                    _ => {
+                        let reference = self.u32()?;
+                        *value = if reference == u32::MAX {
+                            Value::from(-1)
+                        } else {
+                            Value::from(reference)
+                        };
+                    }
+                }
+            } else {
+                match index {
+                    0 | 5 => *value = Value::from(self.u32()? as i32),
+                    1..=4 => *value = self.float()?,
+                    _ => {
+                        if !value.is_array() {
+                            *value = Value::Array(Vec::new());
+                        }
+                        let values = value.as_array_mut().unwrap();
+                        values.resize_with(4, || Value::Null);
+                        for value in values {
+                            *value = Value::from(self.u32()? as i32);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
     #[inline]
     fn scalar(&mut self, tag: u8) -> Result<Value> {
@@ -90,6 +198,11 @@ impl<'a> Cursor<'a> {
                     Value::Object(values)
                 }
             }
+            10..=12 => {
+                let mut value = Value::Null;
+                self.packed(tag, &mut value, depth)?;
+                value
+            }
             _ => return Err("unknown engine transport tag".into()),
         })
     }
@@ -99,6 +212,10 @@ impl<'a> Cursor<'a> {
             return Err("engine record exceeds nesting limit".into());
         }
         let tag = *self.0.first().ok_or("truncated engine record")?;
+        if (10..=12).contains(&tag) {
+            self.take(1)?;
+            return self.packed(tag, target, depth);
+        }
         if tag == 7
             && let Value::String(text) = target
         {
@@ -139,7 +256,7 @@ impl<'a> Cursor<'a> {
             if count > 65536 || count > self.0.len() / 5 {
                 return Err("invalid engine collection length".into());
             }
-            let start = self.0;
+            let start = (self.0, self.2);
             if values.len() == count {
                 let mut matched = true;
                 for (key, value) in values.iter_mut() {
@@ -154,7 +271,7 @@ impl<'a> Cursor<'a> {
                     // this record has no duplicate keys, without a second set.
                     return Ok(());
                 }
-                self.0 = start;
+                (self.0, self.2) = start;
             }
             let mut old = std::mem::take(values);
             *values = Map::with_capacity(count);
@@ -179,18 +296,26 @@ pub struct Stream<R> {
     input: R,
     buffer: Vec<u8>,
     pub bytes: u64,
+    packed: bool,
 }
 impl<R: Read> Stream<R> {
-    pub fn new(mut input: R) -> Result<Self> {
+    pub fn new(input: R) -> Result<Self> {
+        Self::with_contract(input, "HSFT0001")
+    }
+    pub fn with_contract(mut input: R, contract: &str) -> Result<Self> {
+        if !matches!(contract, "HSFT0001" | "HSFT0002") {
+            return Err("unsupported engine transport contract".into());
+        }
         let mut magic = [0; 8];
         input.read_exact(&mut magic)?;
-        if &magic != b"HSFT0001" {
+        if magic != contract.as_bytes() {
             return Err("not an H1 binary tick stream".into());
         }
         Ok(Self {
             input,
             buffer: Vec::new(),
             bytes: 8,
+            packed: contract == "HSFT0002",
         })
     }
     pub fn next(&mut self) -> Result<Option<Value>> {
@@ -209,7 +334,7 @@ impl<R: Read> Stream<R> {
         self.buffer.resize(size, 0);
         self.input.read_exact(&mut self.buffer)?;
         self.bytes += 4 + size as u64;
-        let mut cursor = Cursor(&self.buffer);
+        let mut cursor = Cursor(&self.buffer, self.packed, size);
         cursor.reuse(&mut value, 0)?;
         if !cursor.0.is_empty() || !value.is_object() {
             return Err("invalid engine frame root or trailing data".into());
@@ -221,6 +346,104 @@ impl<R: Read> Stream<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packed_expansion_budget_is_restored_when_recycled_object_shape_changes() {
+        let mut bytes = vec![9, 2, 0, 0, 0, 6, 0, 0, 0];
+        bytes.extend_from_slice(b"matrix");
+        bytes.push(12);
+        bytes.extend_from_slice(&[0; 13 * 4]);
+        bytes.extend_from_slice(&[4, 0, 0, 0]);
+        bytes.extend_from_slice(b"next");
+        bytes.push(0);
+        let mut recycled = serde_json::json!({"matrix":[],"previous":null});
+        let mut cursor = Cursor(&bytes, true, MAX_FRAME - 17);
+        cursor.reuse(&mut recycled, 0).unwrap();
+        assert_eq!(cursor.2, MAX_FRAME);
+        assert!(cursor.0.is_empty());
+        assert_eq!(recycled["matrix"].as_array().unwrap().len(), 13);
+        assert!(recycled.get("next").is_some());
+        assert!(recycled.get("previous").is_none());
+        assert!(Cursor(&bytes, true, MAX_FRAME - 16).value(0).is_err());
+    }
+
+    #[test]
+    fn packed_records_preserve_fields_bits_and_recycled_shapes() {
+        let mut object = vec![10];
+        object.extend_from_slice(&0x80000001u32.to_le_bytes());
+        object.extend_from_slice(&(-3i32).to_le_bytes());
+        object.extend_from_slice(&2u32.to_le_bytes());
+        object.extend_from_slice("é".as_bytes());
+        let coordinates = [-0.0f32, 1.25, -2.5, 1.0, 0.0, -0.0, 0.0, 0.0, 1.0];
+        for number in coordinates {
+            object.extend_from_slice(&number.to_le_bytes());
+        }
+        object.extend_from_slice(&u32::MAX.to_le_bytes());
+        object.extend_from_slice(&0x80000002u32.to_le_bytes());
+        let mut invalid_text = object.clone();
+        invalid_text[13] = 0xff;
+        assert!(
+            Cursor(&invalid_text, true, invalid_text.len())
+                .value(0)
+                .is_err()
+        );
+        let expected_object = serde_json::json!({"object_id":2147483649u32, "object_type":-3,
+            "tag_name":"é", "x":-0.0,"y":1.25,"z":-2.5,"forward_x":1.0,"forward_y":0.0,
+            "forward_z":-0.0,"up_x":0.0,"up_y":0.0,"up_z":1.0,"parent_ref":-1,"owner_object_ref":2147483650u32});
+        let mut spawn = vec![11];
+        spawn.extend_from_slice(&7i32.to_le_bytes());
+        for number in [-0.0f32, 2.5, 3.0, -1.5] {
+            spawn.extend_from_slice(&number.to_le_bytes());
+        }
+        for number in [-1i32, 0, 1, -1, 32767] {
+            spawn.extend_from_slice(&number.to_le_bytes());
+        }
+        let expected_spawn = serde_json::json!({"spawn_index":7,"x":-0.0,"y":2.5,"z":3.0,
+            "facing":-1.5,"team":-1,"gametypes":[0,1,-1,32767]});
+        let mut matrix = vec![12];
+        let components: Vec<f32> = (0..13)
+            .map(|index| if index == 0 { -0.0 } else { index as f32 / 8.0 })
+            .collect();
+        for number in &components {
+            matrix.extend_from_slice(&number.to_le_bytes());
+        }
+        let expected_matrix = serde_json::to_value(&components).unwrap();
+        for (bytes, expected) in [
+            (object, expected_object),
+            (spawn, expected_spawn),
+            (matrix, expected_matrix),
+        ] {
+            for mut target in [
+                Value::Null,
+                expected.clone(),
+                serde_json::json!({"wrong":[]} ),
+                serde_json::json!([false]),
+            ] {
+                let mut cursor = Cursor(&bytes, true, bytes.len());
+                cursor.reuse(&mut target, 0).unwrap();
+                assert!(cursor.0.is_empty());
+                assert_eq!(
+                    serde_json::to_vec(&target).unwrap(),
+                    serde_json::to_vec(&expected).unwrap()
+                );
+            }
+            assert!(Cursor(&bytes, false, bytes.len()).value(0).is_err());
+            for length in 0..bytes.len() {
+                assert!(Cursor(&bytes[..length], true, length).value(0).is_err());
+            }
+            assert!(Cursor(&bytes, true, bytes.len()).value(31).is_err());
+        }
+        for invalid in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            let mut matrix = vec![12];
+            for number in [invalid; 13] {
+                matrix.extend_from_slice(&number.to_le_bytes());
+            }
+            assert!(Cursor(&matrix, true, matrix.len()).value(0).is_err());
+        }
+        assert!(Stream::with_contract(&b"HSFT0002"[..], "HSFT0001").is_err());
+        assert!(Stream::with_contract(&b"HSFT0001"[..], "HSFT0002").is_err());
+        assert!(Stream::with_contract(&b"HSFT0003"[..], "HSFT0003").is_err());
+    }
 
     fn encode(value: &Value, bytes: &mut Vec<u8>) {
         fn text(value: &str, bytes: &mut Vec<u8>) {
@@ -274,8 +497,8 @@ mod tests {
         for case in cases.into_iter().cycle().take(36) {
             let mut bytes = Vec::new();
             encode(&serde_json::from_str(case).unwrap(), &mut bytes);
-            let fresh = Cursor(&bytes).value(0).unwrap();
-            let mut cursor = Cursor(&bytes);
+            let fresh = Cursor(&bytes, false, bytes.len()).value(0).unwrap();
+            let mut cursor = Cursor(&bytes, false, bytes.len());
             cursor.reuse(&mut reused, 0).unwrap();
             assert!(cursor.0.is_empty());
             assert_eq!(
@@ -304,14 +527,18 @@ mod tests {
             too_deep,
         ];
         for bytes in invalid {
-            assert!(Cursor(&bytes).value(0).is_err());
+            assert!(Cursor(&bytes, false, bytes.len()).value(0).is_err());
             for mut target in [
                 Value::Null,
                 serde_json::json!("old"),
                 serde_json::json!([1]),
                 serde_json::json!({"a": 1, "b": 2}),
             ] {
-                assert!(Cursor(&bytes).reuse(&mut target, 0).is_err());
+                assert!(
+                    Cursor(&bytes, false, bytes.len())
+                        .reuse(&mut target, 0)
+                        .is_err()
+                );
             }
         }
         for frame in [vec![8, 0, 0, 0, 0], vec![9, 0, 0, 0, 0, 0]] {
@@ -340,9 +567,9 @@ mod tests {
         let mut bytes = vec![8, 7, 0, 0, 0];
         bytes.extend_from_slice(&scalars);
         for depth in [0, 30] {
-            let expected = Cursor(&bytes).value(depth).unwrap();
+            let expected = Cursor(&bytes, false, bytes.len()).value(depth).unwrap();
             let mut target = serde_json::json!([{"old": 1}]);
-            let mut cursor = Cursor(&bytes);
+            let mut cursor = Cursor(&bytes, false, bytes.len());
             cursor.reuse(&mut target, depth).unwrap();
             assert!(cursor.0.is_empty());
             assert_eq!(
@@ -351,16 +578,28 @@ mod tests {
             );
         }
         let mut target = serde_json::json!([1]);
-        assert!(Cursor(&bytes).reuse(&mut target, 31).is_err());
+        assert!(
+            Cursor(&bytes, false, bytes.len())
+                .reuse(&mut target, 31)
+                .is_err()
+        );
         for length in 0..bytes.len() {
             let mut target = serde_json::json!([1]);
-            assert!(Cursor(&bytes[..length]).reuse(&mut target, 0).is_err());
+            assert!(
+                Cursor(&bytes[..length], false, length)
+                    .reuse(&mut target, 0)
+                    .is_err()
+            );
         }
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             let mut bytes = vec![8, 1, 0, 0, 0, 6];
             bytes.extend_from_slice(&value.to_le_bytes());
             let mut target = serde_json::json!([1]);
-            assert!(Cursor(&bytes).reuse(&mut target, 0).is_err());
+            assert!(
+                Cursor(&bytes, false, bytes.len())
+                    .reuse(&mut target, 0)
+                    .is_err()
+            );
         }
     }
 
@@ -372,7 +611,7 @@ mod tests {
         raw.extend_from_slice(&[1, 0, 0, 0, b'h', 4]);
         raw.extend_from_slice(&0xfedc0001_u32.to_le_bytes());
         raw.extend_from_slice(&[1, 0, 0, 0, b'n', 7, 2, 0, 0, 0, 0xc3, 0xa9]);
-        let value = Cursor(&raw).value(0).unwrap();
+        let value = Cursor(&raw, false, raw.len()).value(0).unwrap();
         assert_eq!(value["x"].as_f64().unwrap().to_bits(), (-0.0_f64).to_bits());
         assert_eq!(value["h"], 0xfedc0001_u32);
         assert_eq!(value["n"], "\u{e9}");
@@ -386,7 +625,7 @@ mod tests {
             &[5, 0, 0, 128, 127],
             &[9, 1, 0, 0, 0],
         ] {
-            assert!(Cursor(input).value(0).is_err());
+            assert!(Cursor(input, false, input.len()).value(0).is_err());
         }
     }
     #[test]

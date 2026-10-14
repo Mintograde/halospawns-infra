@@ -28,6 +28,13 @@
       "revision": 3,
       "wasm_sha256": "54bd3169d31a1fe27d62214f4cd610fbef2fde5ddd1ea5956091f9427fc3fe61",
       "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 4,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "fab1791bf6de4eb10862e1bdd468c4ce62de24f0cb86aa012293a346912c28bd",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
     }
   ]
 }

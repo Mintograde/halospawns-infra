@@ -6,10 +6,30 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report
+from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report, select_exporter
 
 
 class RegistryTests(unittest.TestCase):
+    def test_transport_selection_retains_legacy_and_rejects_unknown_contracts(self):
+        document = json.loads(REGISTRY_PATH.read_text())
+        profile = document["profiles"][0]
+        self.assertEqual(select_exporter(profile, None), profile)
+        self.assertEqual(select_exporter(profile, 1)["wasm_sha256"], profile["wasm_sha256"])
+        exporter = next(entry for entry in document["exporters"] if entry["revision"] == 4)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "registry.json"
+            for transport in ("HSFT0001", "HSFT0002", "HSFT9999"):
+                path.write_text(json.dumps({**document, "exporters": [
+                    {**exporter, "transport_contract": transport}
+                ]}))
+                if transport == "HSFT9999":
+                    with self.assertRaisesRegex(ValueError, "transport"):
+                        select_exporter(profile, 4, path)
+                else:
+                    selected = select_exporter(profile, 4, path)
+                    self.assertEqual(selected["wasm_sha256"], exporter["wasm_sha256"])
+                    self.assertEqual(selected["export_contract"], "HSFT0001")
+
     def test_initial_supported_profile_is_retained_without_rewriting(self):
         retained = load_registry(
             Path(__file__).with_name("fixtures") / "retained-profiles.json"

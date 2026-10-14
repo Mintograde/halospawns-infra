@@ -83,6 +83,8 @@ def select_exporter(profile: dict, revision: int | None, path: Path = REGISTRY_P
     if len(matches) != 1:
         raise ValueError("Unsupported exporter revision")
     exporter = matches[0]
+    if exporter.get("transport_contract", "HSFT0001") not in ("HSFT0001", "HSFT0002"):
+        raise ValueError("Unsupported exporter transport")
     if any(not isinstance(exporter.get(key), str)
            or not re.fullmatch(r"[0-9a-f]{64}", exporter[key])
            for key in ("wasm_sha256", "glue_sha256")):

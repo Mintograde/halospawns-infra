@@ -21,6 +21,12 @@ test('exporter revisions retain the simulation identity and reject unknown or re
   assert.equal(selectExporter(profile, 1).wasm_sha256, profile.wasm_sha256);
   const optimized = selectExporter(profile, 3);
   assert.notEqual(optimized.wasm_sha256, current.wasm_sha256);
+  const packed = selectExporter(profile, 4);
+  assert.equal(packed.transport_contract, 'HSFT0002');
+  assert.equal(packed.export_contract, profile.export_contract);
+  assert.equal(optimized.transport_contract, undefined);
+  assert.equal(validateExporters({ exporters: [{ ...ENGINE_EXPORTERS[0], transport_contract: 'HSFT0001' }] })[0].transport_contract, 'HSFT0001');
+  assert.throws(() => validateExporters({ exporters: [{ ...ENGINE_EXPORTERS.at(-1), transport_contract: 'HSFT9999' }] }));
   for (const key of ['id', 'format', 'protocol_revision', 'tick_rate', 'build']) {
     assert.equal(optimized[key], profile[key]);
   }

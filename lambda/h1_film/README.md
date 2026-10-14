@@ -2,7 +2,7 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `pose4-20261010-r1`, with dedicated queue/API wiring and scoped data access.
+to `runtime-20261011-r2`, with dedicated queue/API wiring and scoped data access.
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
@@ -44,6 +44,10 @@ measurements for the pose release; the native-engine experiment is not deployed.
 The [third local performance pass](PERFORMANCE.md#third-local-candidate) compares
 numeric-array optimizations and a full-worker native experiment against R2.
 The native engine experiment is not deployed; the current dev pin above remains authoritative.
+
+The [typed transport candidate](TYPED_TRANSPORT.md) is a newer, undeployed pass
+against the current runtime release. It reduces internal serialization and
+copying while preserving the complete logical export and public replay bytes.
 
 ## Dev Deployment
 

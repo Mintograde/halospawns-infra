@@ -19,6 +19,14 @@
 The Lambda software release is a bundle of these capabilities, not a single
 game version. Updating that bundle must preserve old profile IDs and adapters.
 
+The local exporter-4 candidate uses private physical transport `HSFT0002` while
+preserving the normalized `HSFT0001` export contract. The retained exporter entry
+selects this wire format explicitly; older entries default to `HSFT0001` and keep
+their original binaries. This is not a new simulation profile or public viewer
+contract. Full-source canonical parity and rollout requirements are documented in
+[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). The candidate is not deployed and does
+not change the exporter-3 intake default.
+
 ## Registry and Engine Store
 
 `profiles/registry.json` is the single source read by Node and Python. Each entry

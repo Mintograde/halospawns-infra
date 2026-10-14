@@ -4,8 +4,12 @@ include!("../../../replay_parser/native/src/viewer.rs");
 
 #[path = "float_delta.rs"]
 mod float_delta;
+#[path = "object_transfer.rs"]
+mod object_transfer;
 #[path = "ordered_delta.rs"]
 mod ordered_delta;
+#[path = "projection_plan.rs"]
+mod projection_plan;
 #[path = "tick_hash.rs"]
 mod tick_hash;
 
@@ -545,6 +549,64 @@ mod pose_tests {
     }
 
     #[test]
+    fn transferred_objects_match_independent_packer_through_shape_changes() {
+        let projection = Projection::load_revision(4).unwrap();
+        let mut ticks: Vec<_> = source().into_iter().cycle().take(64).collect();
+        for (index, tick) in ticks.iter_mut().enumerate() {
+            let mut objects = Vec::new();
+            for object in 0..index % 5 {
+                let mut value = serde_json::json!({"object_id":object,"object_type":2,"tag_name":"weapons\\pistol\\pistol",
+                    "x":index as f64 * 0.125,"y":-0.0,"z":1.0,"forward_x":1.0,"forward_y":0.0,"forward_z":0.0,
+                    "up_x":0.0,"up_y":0.0,"up_z":1.0,"parent_ref":-1,"owner_object_ref":-1});
+                if index % 7 == 0 {
+                    value["unused"] = serde_json::json!([1, 2]);
+                }
+                if index % 11 == 0 {
+                    value.as_object_mut().unwrap().sort_keys();
+                }
+                objects.push(value);
+            }
+            tick["objects"] = Value::Array(objects);
+        }
+        let projected: Vec<_> = ticks
+            .iter()
+            .map(|tick| projection.tick.project(tick).unwrap())
+            .collect();
+        let expected = pack_poses(&projected, 0).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "h1-object-transfer-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut stream = StreamingExport::new(&root, ticks.len(), 6).unwrap();
+        stream.pose_codec = true;
+        stream.validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        stream.object_transfer = object_transfer::Layout::compile(&projection.tick);
+        assert!(stream.object_transfer.is_some());
+        stream.consume_objects = true;
+        for mut tick in ticks {
+            stream
+                .push_source_with_projection(&mut tick, &projection)
+                .unwrap();
+        }
+        stream.sender.take();
+        for handle in stream.collector.worker_handles.drain(..) {
+            handle.join().unwrap();
+        }
+        let raw = zstd::bulk::decompress(
+            &fs::read(root.join("chunk-00000.hsrd.zst")).unwrap(),
+            LOCAL_CHUNK_RAW_LIMIT,
+        )
+        .unwrap();
+        assert_eq!(raw, expected);
+        drop(stream);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn fine_pose_wire_roundtrip_lifecycle_fallback_and_golden() {
         let ticks = source();
         let raw = pack_poses(&ticks, 0).unwrap();
@@ -738,6 +800,9 @@ pub struct StreamingExport {
     pose_spares: [Option<Value>; 4],
     pose_models: Vec<h1_pose_codec::pose::Skeleton>,
     validator: crate::fast_schema::Validator,
+    projection_plan: projection_plan::Plan,
+    object_transfer: Option<object_transfer::Layout>,
+    consume_objects: bool,
 }
 impl StreamingExport {
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
@@ -758,6 +823,9 @@ impl StreamingExport {
             pose_spares: [None, None, None, None],
             pose_models: h1_pose_codec::skeletons(),
             validator: crate::fast_schema::Validator::for_revision(projection()?.revision)?,
+            projection_plan: projection_plan::Plan::default(),
+            object_transfer: object_transfer::Layout::compile(&projection()?.tick),
+            consume_objects: false,
         })
     }
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
@@ -781,7 +849,8 @@ impl StreamingExport {
                 }
             }
         }
-        projection.tick.project_reusing(source, &mut projected)?;
+        self.projection_plan
+            .project(&projection.tick, source, &mut projected)?;
         if !self.validator.is_valid(&projected) {
             return Err("viewer tick violates its closed schema".into());
         }
@@ -791,6 +860,13 @@ impl StreamingExport {
 
     pub fn push_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
         self.push_source_with_projection(source, projection()?)
+    }
+
+    pub fn push_transport_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
+        self.consume_objects = true;
+        let result = self.push_source_with_projection(source, projection()?);
+        self.consume_objects = false;
+        result
     }
 
     fn push_source_with_projection(
@@ -836,7 +912,20 @@ impl StreamingExport {
             }
         }
         let mut projected = std::mem::take(&mut self.spare);
-        projection.tick.project_reusing(source, &mut projected)?;
+        let transferred = self
+            .consume_objects
+            .then(|| {
+                self.object_transfer
+                    .as_ref()
+                    .and_then(|layout| layout.take(source, &mut projected))
+            })
+            .flatten();
+        self.projection_plan
+            .project(&projection.tick, source, &mut projected)?;
+        if let Some((objects, spare)) = transferred {
+            projected["objects"] = objects;
+            source["objects"] = spare;
+        }
         for (i, player) in projected["players"]
             .as_array_mut()
             .ok_or("missing projected players")?
@@ -1015,6 +1104,10 @@ impl EncodingWorker {
 
     pub fn push_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
         self.push(source)
+    }
+
+    pub fn push_transport_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
+        self.push_source(source)
     }
 
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
