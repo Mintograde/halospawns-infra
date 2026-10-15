@@ -102,6 +102,10 @@ def main():
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
     parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4), default=4)
+    state_mode = parser.add_mutually_exclusive_group()
+    state_mode.add_argument("--generic-state", action="store_true")
+    state_mode.add_argument("--verify-incremental-state", action="store_true")
+    parser.add_argument("--generic-poses", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     logging.basicConfig(level=logging.INFO)
@@ -164,6 +168,17 @@ def main():
     failures = []
     real_convert, real_execute = cloud.convert, cloud.execute
     real_products = cloud.build_products
+    real_run_bounded = cloud.run_bounded
+
+    def run_bounded(command, *values, **options):
+        if len(command) > 1 and command[1].endswith("convert.mjs"):
+            if args.generic_state:
+                command = [*command, "--generic-state"]
+            if args.generic_poses:
+                command = [*command, "--generic-poses"]
+            if args.verify_incremental_state:
+                command = [*command, "--verify-incremental-state"]
+        return real_run_bounded(command, *values, **options)
 
     def api(method, path, payload):
         assert method == "POST"
@@ -199,6 +214,18 @@ def main():
         shutil.copyfile(
             directory / "candidate/encoding.json", args.output / "encoding.json"
         )
+        if args.generic_state or args.generic_poses or args.verify_incremental_state:
+            encoding = json.loads((args.output / "encoding.json").read_text())
+            state = encoding["state_reuse"]
+            if args.generic_state:
+                assert state["enabled"] is False
+            if args.verify_incremental_state:
+                assert state["enabled"] is True
+                assert state["verified_source_ticks"] == encoding["source_ticks"]
+            if args.generic_poses:
+                assert state["typed_poses"] is False
+                assert state["poses_decoded"] == 0
+                assert state["pose_nodes_decoded"] == 0
         return directory
 
     def execute(*values):
@@ -287,6 +314,7 @@ def main():
         patch.object(shared, "S3", storage),
         patch.object(cloud, "api", api),
         patch.object(cloud, "convert", convert),
+        patch.object(cloud, "run_bounded", run_bounded),
         patch.object(cloud, "execute", execute),
         patch.object(cloud, "build_products", products),
     ):

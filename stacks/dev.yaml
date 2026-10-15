@@ -156,7 +156,7 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: typed-20261014-r1
+          image_tag: typed-poses-20261014-r2
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

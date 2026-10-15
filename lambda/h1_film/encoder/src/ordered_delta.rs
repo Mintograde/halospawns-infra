@@ -1,6 +1,6 @@
 use super::*;
 
-fn same(previous: &Value, next: &Value) -> bool {
+pub(super) fn same(previous: &Value, next: &Value) -> bool {
     match (previous, next) {
         (Value::Object(a), Value::Object(b)) => {
             a.len() == b.len()

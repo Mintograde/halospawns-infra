@@ -37,6 +37,12 @@ struct Request {
     viewer_profile_revision: u32,
     #[serde(default)]
     source_viewer_only: bool,
+    #[serde(default = "default_incremental_state")]
+    incremental_state: bool,
+    #[serde(default = "default_incremental_state")]
+    typed_poses: bool,
+    #[serde(default)]
+    verify_incremental_state: bool,
 }
 fn default_analytics_revision() -> u8 {
     2
@@ -52,6 +58,9 @@ fn default_source_tick_rate() -> u32 {
 }
 fn default_export_contract() -> String {
     "HSFT0001".into()
+}
+fn default_incremental_state() -> bool {
+    true
 }
 
 impl Request {
@@ -170,11 +179,22 @@ impl Observations {
         Ok(())
     }
 
+    #[cfg(test)]
     fn observe(
         &mut self,
         tick: &mut Value,
         ordinal: usize,
         seats: usize,
+    ) -> Result<(), Box<dyn Error>> {
+        self.observe_state(tick, ordinal, seats, None)
+    }
+
+    fn observe_state(
+        &mut self,
+        tick: &mut Value,
+        ordinal: usize,
+        seats: usize,
+        objects: Option<&transport::ObjectState>,
     ) -> Result<(), Box<dyn Error>> {
         let clock = tick["current_tick"].as_u64().ok_or("missing engine tick")?;
         if self.last_clock.is_some_and(|last| clock != last + 1) {
@@ -349,14 +369,20 @@ impl Observations {
             }
             self.previous.insert(id, counters);
         }
-        let objects = tick["objects"].as_array().ok_or("missing objects")?;
-        self.max_objects = self.max_objects.max(objects.len());
-        for object in objects {
-            self.object_types.insert(
-                object["object_type"]
-                    .as_u64()
-                    .ok_or("invalid object type")?,
-            );
+        if let Some(objects) = objects {
+            self.max_objects = self.max_objects.max(objects.records().len());
+            self.object_types
+                .extend(objects.records().iter().map(|record| record.object_type()));
+        } else {
+            let objects = tick["objects"].as_array().ok_or("missing objects")?;
+            self.max_objects = self.max_objects.max(objects.len());
+            for object in objects {
+                self.object_types.insert(
+                    object["object_type"]
+                        .as_u64()
+                        .ok_or("invalid object type")?,
+                );
+            }
         }
         if !postgame && let Some(meta) = tick["game_meta"].as_object() {
             self.final_meta = meta.clone();
@@ -453,20 +479,56 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let mut spare = Value::Null;
-    while let Some(mut tick) = source.next_reusing(spare)? {
+    let incremental = request.incremental_state
+        && request.transport_contract == "HSFT0002"
+        && high.supports_incremental();
+    let typed_poses = incremental && request.typed_poses && high.supports_typed_poses();
+    if request.verify_incremental_state && !incremental {
+        return Err("full-source verification requires incremental state".into());
+    }
+    while let Some(mut tick) = if incremental {
+        source.next_incremental_with_poses(spare, typed_poses)?
+    } else {
+        source.next_reusing(spare)?
+    } {
         if count >= request.ticks {
             return Err("engine exported more ticks than the film".into());
+        }
+        if request.verify_incremental_state {
+            source.verify_incremental_source(&tick)?;
         }
         if let Some(native) = &mut native {
             native.observe(&tick, count)?;
         }
-        observations.observe(&mut tick, count, request.players)?;
+        observations.observe_state(
+            &mut tick,
+            count,
+            request.players,
+            incremental.then_some(&source.objects),
+        )?;
         sampling::normalize(&mut tick, count, 1, &request.map)?;
         if let Some(analytics) = &mut analytics {
             analytics.observe(&tick, count)?;
         }
-        let sample = (low.is_some() && count.is_multiple_of(4)).then(|| tick.clone());
-        high.push_transport_source(&mut tick)?;
+        let sample = if low.is_some() && count.is_multiple_of(4) {
+            let mut sample = tick.clone();
+            if incremental {
+                sample["objects"] = source.objects.materialize();
+                source.poses.materialize(&mut sample)?;
+            }
+            Some(sample)
+        } else {
+            None
+        };
+        if incremental {
+            high.push_incremental_source(
+                &mut tick,
+                &source.objects,
+                typed_poses.then_some(&source.poses),
+            )?;
+        } else {
+            high.push_transport_source(&mut tick)?;
+        }
         spare = tick;
         if let Some(mut sample) = sample {
             sampling::normalize(&mut sample, count, 4, &request.map)?;
@@ -523,6 +585,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         "analytics":analytics, "analytics_revision":request.analytics_revision,
         "viewer_profile_revision":request.viewer_profile_revision,
         "native_analytics":native.map(|native| native.product()),
+        "state_reuse":{"enabled":incremental,"objects_decoded":source.objects.decoded,"objects_reused":source.objects.reused,
+            "typed_poses":typed_poses,"poses_decoded":source.poses.decoded,"pose_nodes_decoded":source.poses.nodes_decoded,
+            "verified_source_ticks":if request.verify_incremental_state {count} else {0}},
         "source_first_clock":observations.first_clock, "source_last_clock":observations.last_clock,
         "source_hz":120, "sampling":{"120hz":{"stride":1,"phase":0}, "30hz":{"stride":4,"phase":0}},
         "field_units":{"respawn_timer":"output-rate ticks, positive remainder rounded up", "reload_time":"output-rate ticks, positive remainder rounded up",
@@ -676,6 +741,9 @@ mod observation_tests {
         let request = Request {
             viewer_profile_revision: 2,
             source_viewer_only: false,
+            incremental_state: true,
+            typed_poses: true,
+            verify_incremental_state: false,
             analytics_revision: 2,
             ticks: 5,
             players: 1,
@@ -911,6 +979,9 @@ mod observation_tests {
             let request = Request {
                 viewer_profile_revision: 2,
                 source_viewer_only: false,
+                incremental_state: true,
+                typed_poses: true,
+                verify_incremental_state: false,
                 analytics_revision: 2,
                 ticks: 12,
                 players: 1,

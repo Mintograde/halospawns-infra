@@ -272,78 +272,123 @@ pub fn point_bound(a: &Node, b: &Node, radius: f64) -> f64 {
 }
 
 pub fn quantize(
-    pose: &Pose,
+    pose: &[Node],
     parents: &[i32],
     origin: DVec3,
     s: &Settings,
     previous: &mut Vec<DQuat>,
 ) -> Option<Vec<[i32; 8]>> {
-    let base = Transform {
-        p: origin,
-        q: DQuat::IDENTITY,
-        s: 1.,
-    };
-    let mut decoded = vec![base; pose.len()];
-    let mut values = vec![[0; 8]; pose.len()];
-    if previous.len() != pose.len() {
-        *previous = vec![DQuat::IDENTITY; pose.len()];
+    Quantizer::new(parents)
+        .ok()?
+        .quantize(pose, origin, s, previous)
+}
+
+pub(crate) struct Quantizer {
+    parents: Vec<i32>,
+    order: Vec<usize>,
+    decoded: Vec<Transform>,
+    source: Vec<Transform>,
+}
+
+impl Quantizer {
+    pub(crate) fn new(parents: &[i32]) -> Result<Self> {
+        let base = Transform {
+            p: DVec3::ZERO,
+            q: DQuat::IDENTITY,
+            s: 1.,
+        };
+        Ok(Self {
+            parents: parents.to_vec(),
+            order: order(parents)?,
+            decoded: vec![base; parents.len()],
+            source: vec![base; parents.len()],
+        })
     }
-    for i in order(parents).ok()? {
-        let target = Transform::from_node(&pose[i])?;
-        let parent = if parents[i] < 0 {
-            base
-        } else {
-            decoded[parents[i] as usize]
-        };
-        let reference = if s.closed_loop || parents[i] < 0 {
-            parent
-        } else {
-            Transform::from_node(&pose[parents[i] as usize])?
-        };
-        if parent.s.abs() < 1e-10 {
+
+    pub(crate) fn quantize(
+        &mut self,
+        pose: &[Node],
+        origin: DVec3,
+        settings: &Settings,
+        previous: &mut Vec<DQuat>,
+    ) -> Option<Vec<[i32; 8]>> {
+        if pose.len() != self.parents.len() || !origin.is_finite() {
             return None;
         }
-        // Predict from the selected parent, but check error against the reconstructed hierarchy.
-        let local_p = reference.q.conjugate() * (target.p - reference.p) / reference.s;
-        let mut local_q = (reference.q.conjugate() * target.q).normalize();
-        if local_q.dot(previous[i]) < 0. {
-            local_q = -local_q;
+        let base = Transform {
+            p: origin,
+            q: DQuat::IDENTITY,
+            s: 1.,
+        };
+        let mut values = vec![[0; 8]; pose.len()];
+        if previous.len() != pose.len() {
+            *previous = vec![DQuat::IDENTITY; pose.len()];
         }
-        let local_s = target.s / reference.s;
-        let a = local_p.to_array();
-        let q = local_q.to_array();
-        for j in 0..3 {
-            values[i][j] = quant(a[j], s.translation_step)?;
-        }
-        values[i][3] = quant(local_s, s.scale_step)?;
-        if s.smallest_three {
-            let omitted = (0..4).max_by(|a, b| q[*a].abs().total_cmp(&q[*b].abs()))?;
-            let sign = if q[omitted] < 0. { -1. } else { 1. };
-            let mut k = 4;
-            for (j, v) in q.iter().enumerate() {
-                if j != omitted {
-                    values[i][k] = quant(
-                        v * sign,
-                        1. / (s.quaternion_levels * std::f64::consts::SQRT_2),
-                    )?;
-                    k += 1;
+        for &index in &self.order {
+            let target = Transform::from_node(&pose[index])?;
+            self.source[index] = target;
+            let parent_index = self.parents[index];
+            let parent = if parent_index < 0 {
+                base
+            } else {
+                self.decoded[parent_index as usize]
+            };
+            let reference = if settings.closed_loop || parent_index < 0 {
+                parent
+            } else {
+                self.source[parent_index as usize]
+            };
+            if parent.s.abs() < 1e-10 {
+                return None;
+            }
+            let local_position = reference.q.conjugate() * (target.p - reference.p) / reference.s;
+            let mut local_rotation = (reference.q.conjugate() * target.q).normalize();
+            if local_rotation.dot(previous[index]) < 0. {
+                local_rotation = -local_rotation;
+            }
+            let local_scale = target.s / reference.s;
+            let position = local_position.to_array();
+            let rotation = local_rotation.to_array();
+            for axis in 0..3 {
+                values[index][axis] = quant(position[axis], settings.translation_step)?;
+            }
+            values[index][3] = quant(local_scale, settings.scale_step)?;
+            if settings.smallest_three {
+                let omitted = (0..4).max_by(|left, right| {
+                    rotation[*left].abs().total_cmp(&rotation[*right].abs())
+                })?;
+                let sign = if rotation[omitted] < 0. { -1. } else { 1. };
+                let mut channel = 4;
+                for (axis, value) in rotation.iter().enumerate() {
+                    if axis != omitted {
+                        values[index][channel] = quant(
+                            value * sign,
+                            1. / (settings.quaternion_levels * std::f64::consts::SQRT_2),
+                        )?;
+                        channel += 1;
+                    }
+                }
+                values[index][7] = omitted as i32;
+            } else {
+                for axis in 0..4 {
+                    values[index][4 + axis] =
+                        quant(rotation[axis], 1. / settings.quaternion_levels)?;
                 }
             }
-            values[i][7] = omitted as i32;
-        } else {
-            for j in 0..4 {
-                values[i][4 + j] = quant(q[j], 1. / s.quaternion_levels)?;
+            let local = local_decode(&values[index], settings)?;
+            self.decoded[index] = compose(local, parent);
+            let bound = point_bound(
+                &pose[index],
+                &self.decoded[index].node(),
+                settings.point_radius,
+            );
+            if !bound.is_finite() || bound > settings.point_error_limit {
+                return None;
             }
+            previous[index] = local_rotation;
         }
-        let local = local_decode(&values[i], s)?;
-        decoded[i] = compose(local, parent);
-        let bound = point_bound(&pose[i], &decoded[i].node(), s.point_radius);
-        if !bound.is_finite() || bound > s.point_error_limit {
-            return None;
-        }
-        previous[i] = local_q;
+        Some(values)
     }
-    Some(values)
 }
 
 #[derive(Default, Serialize)]
@@ -388,6 +433,71 @@ impl ErrorStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reused_quantizer_matches_fresh_state_after_fallbacks_and_origin_changes() {
+        for preset in [
+            "local3-fine",
+            "hierarchy-balanced",
+            "root3-tight",
+            "world-small",
+        ] {
+            let settings = Settings::preset(preset).unwrap();
+            let parents = [-1, 2, 0, 2];
+            let mut quantizer = Quantizer::new(&parents).unwrap();
+            let mut previous = Vec::new();
+            let mut reference_previous = Vec::new();
+            for frame in 0..128 {
+                let origin = DVec3::new(frame as f64 / 16., -2., 3.);
+                let mut source: Pose = (0..4)
+                    .map(|index| {
+                        Transform {
+                            p: origin + DVec3::new(index as f64 / 8., 0., 0.125),
+                            q: DQuat::from_rotation_z((frame + index) as f64 / 10.),
+                            s: if frame % 13 == 0 { 0.8 } else { 1. },
+                        }
+                        .node()
+                    })
+                    .collect();
+                if frame % 7 == 0 {
+                    source[1][5] += 0.5;
+                }
+                if frame % 11 == 0 {
+                    source[2][3] = 0.;
+                }
+                let expected = quantize(
+                    &source,
+                    &parents,
+                    origin,
+                    &settings,
+                    &mut reference_previous,
+                );
+                let actual = quantizer.quantize(&source, origin, &settings, &mut previous);
+                assert_eq!(actual, expected);
+                assert_eq!(previous, reference_previous);
+                if actual.is_none() {
+                    previous.clear();
+                    reference_previous.clear();
+                } else {
+                    let decoded =
+                        reconstruct(&actual.unwrap(), &parents, origin, &settings).unwrap();
+                    assert!(
+                        source
+                            .iter()
+                            .zip(&decoded)
+                            .all(|(before, after)| point_bound(
+                                before,
+                                after,
+                                settings.point_radius
+                            ) <= settings.point_error_limit)
+                    );
+                }
+            }
+        }
+        assert!(Quantizer::new(&[1, 0]).is_err());
+        assert!(Quantizer::new(&[-1, 4]).is_err());
+        assert!(Quantizer::new(&[]).is_err());
+    }
     #[test]
     fn reconstruction_rejects_mismatched_and_nonfinite_output() {
         let s = Settings::preset("local3-fine").unwrap();

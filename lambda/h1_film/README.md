@@ -2,9 +2,9 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `typed-20261014-r1`, with dedicated queue/API wiring and scoped data access.
-This compatibility release retains intake exporter 3 while supporting exporter 4;
-final promotion awaits the coordinated API release. See [deployment](DEPLOYMENT.md).
+to `typed-poses-20261014-r2`, with dedicated queue/API wiring and scoped data access.
+New intake and admin reprocess attempts select exporter 4 / analytics 3 / viewer 4
+after API `live=182` promotion. Old exporter pins remain supported. See [deployment](DEPLOYMENT.md).
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
@@ -49,9 +49,24 @@ The native engine experiment is not deployed; the current dev pin above remains 
 
 The [typed transport pass](TYPED_TRANSPORT.md) reduces internal serialization
 and copying while preserving complete logical exports and public replay bytes.
-Its compatibility image is deployed; exporter-4 default promotion still requires
-the API release. The measured 18.23% improvement is against `runtime-20261011-r2`
+Exporter 4 is the dev default after the coordinated API/worker release.
+The measured 18.23% improvement is against `runtime-20261011-r2`
 in the offline corpus, not a hosted Lambda measurement.
+
+The [incremental-state pass](TYPED_TRANSPORT.md#retained-world-objects)
+retains unchanged world objects through decoding, validation and delta encoding.
+It reduces the nine-map offline runtime another 16.24% against the typed
+exporter-4 worker, with identical artifacts. It is deployed and enabled for new
+exporter-4 conversions; persisted older jobs keep their original paths.
+See [measurements](PERFORMANCE.md#incremental-state-candidate-2026-10-14).
+
+The next [typed-pose slice](TYPED_TRANSPORT.md#typed-player-poses) feeds matrices
+directly into the codec and reuses bounded topology/transform workspaces. It cuts
+another 6.71% from the nine-map offline runtime against that incremental-state
+candidate, with identical products. Player metadata remains generic. This is
+included in the deployed default image, not a hosted Lambda timing claim.
+Retained exporter-3 jobs benefit only from shared codec improvements; new jobs use
+the full typed path after [the coordinated switch-over](DEPLOYMENT.md#fully-switching-new-conversions).
 
 ## Dev Deployment
 

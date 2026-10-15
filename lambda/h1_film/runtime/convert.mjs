@@ -87,6 +87,11 @@ export async function convertFilm(options) {
   request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
   assert.ok([1, 2, 3, 4].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
+  request.incremental_state = !values['generic-state'];
+  request.typed_poses = !values['generic-poses'];
+  request.verify_incremental_state = Boolean(values['verify-incremental-state']);
+  assert.ok(!request.verify_incremental_state || request.incremental_state,
+    '--verify-incremental-state requires incremental state');
   if (values.analytics) {
     request.analytics_context = { engine_profile: profile.id, gametype: native.envelope.gametype,
       map: native.envelope.map, map_sha256: mapHash, film_sha256: filmHash,

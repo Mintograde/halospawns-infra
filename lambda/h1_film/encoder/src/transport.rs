@@ -1,9 +1,95 @@
 use serde_json::{Map, Number, Value};
 use std::error::Error;
 use std::io::Read;
+use std::sync::Arc;
 
 pub const MAX_FRAME: usize = 4 * 1024 * 1024;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+#[cfg(test)]
+#[path = "transport_pose_tests.rs"]
+mod pose_tests;
+
+pub struct ObjectRecord {
+    wire: Box<[u8]>,
+    expansion: usize,
+    source: Value,
+    object_type: u64,
+    packed: bool,
+}
+
+impl ObjectRecord {
+    pub fn source(&self) -> &Value {
+        &self.source
+    }
+
+    pub fn object_type(&self) -> u64 {
+        self.object_type
+    }
+}
+
+#[derive(Default)]
+pub struct ObjectState {
+    records: Vec<Arc<ObjectRecord>>,
+    pub decoded: u64,
+    pub reused: u64,
+}
+
+impl ObjectState {
+    pub fn records(&self) -> &[Arc<ObjectRecord>] {
+        &self.records
+    }
+
+    pub fn materialize(&self) -> Value {
+        Value::Array(
+            self.records
+                .iter()
+                .map(|record| record.source.clone())
+                .collect(),
+        )
+    }
+}
+
+pub struct PoseState {
+    poses: [h1_pose_codec::pose::Pose; 4],
+    active: [bool; 4],
+    rigs: Vec<h1_pose_codec::pose::Skeleton>,
+    pub decoded: u64,
+    pub nodes_decoded: u64,
+}
+
+impl Default for PoseState {
+    fn default() -> Self {
+        Self {
+            poses: std::array::from_fn(|_| Vec::new()),
+            active: [false; 4],
+            rigs: h1_pose_codec::skeletons(),
+            decoded: 0,
+            nodes_decoded: 0,
+        }
+    }
+}
+
+impl PoseState {
+    pub fn slices(&self) -> [Option<&[h1_pose_codec::pose::Node]>; 4] {
+        std::array::from_fn(|slot| self.active[slot].then_some(self.poses[slot].as_slice()))
+    }
+
+    pub fn materialize(&self, source: &mut Value) -> Result<()> {
+        for (slot, pose) in self.slices().into_iter().enumerate() {
+            if let Some(pose) = pose {
+                let target = source
+                    .get_mut("players")
+                    .and_then(Value::as_array_mut)
+                    .and_then(|players| players.get_mut(slot))
+                    .and_then(|player| player.get_mut("model_nodes"))
+                    .ok_or("missing typed pose placeholder")?;
+                *target = serde_json::to_value(pose)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 const OBJECT_FIELDS: &[&str] = &[
     "object_id",
@@ -290,6 +376,225 @@ impl<'a> Cursor<'a> {
         *target = self.value(depth)?;
         Ok(())
     }
+
+    fn objects(&mut self, state: &mut ObjectState) -> Result<()> {
+        if self.take(1)?[0] != 8 {
+            return Err("missing objects".into());
+        }
+        let count = self.u32()? as usize;
+        if count > 65536 || count > self.0.len() {
+            return Err("invalid engine collection length".into());
+        }
+        for index in 0..count {
+            if let Some(previous) = state.records.get(index)
+                && previous.packed == self.1
+                && self.0.starts_with(&previous.wire)
+            {
+                self.take(previous.wire.len())?;
+                self.2 += previous.expansion;
+                if self.2 > MAX_FRAME {
+                    return Err("expanded engine frame exceeds limit".into());
+                }
+                state.reused += 1;
+                continue;
+            }
+            let start = self.0;
+            let expansion = self.2;
+            let source = self.value(2)?;
+            let object_type = source
+                .get("object_type")
+                .and_then(Value::as_u64)
+                .ok_or("invalid object type")?;
+            let record = Arc::new(ObjectRecord {
+                wire: start[..start.len() - self.0.len()].into(),
+                expansion: self.2 - expansion,
+                source,
+                object_type,
+                packed: self.1,
+            });
+            if let Some(previous) = state.records.get_mut(index) {
+                *previous = record;
+            } else {
+                state.records.push(record);
+            }
+            state.decoded += 1;
+        }
+        state.records.truncate(count);
+        Ok(())
+    }
+
+    fn pose(&mut self, target: &mut h1_pose_codec::pose::Pose) -> Result<bool> {
+        if !self.1 || self.0.len() < 5 || self.0[0] != 8 {
+            return Ok(false);
+        }
+        let count = u32::from_le_bytes(self.0[1..5].try_into()?) as usize;
+        if !(1..=256).contains(&count)
+            || self.0.len() < 5 + count * 53
+            || (0..count).any(|index| self.0[5 + index * 53] != 12)
+        {
+            return Ok(false);
+        }
+        self.2 += count * 17;
+        if self.2 > MAX_FRAME {
+            return Err("expanded engine frame exceeds limit".into());
+        }
+        self.take(5)?;
+        target.resize(count, [0.; 13]);
+        for node in target {
+            self.take(1)?;
+            for component in node {
+                *component = f32::from_le_bytes(self.take(4)?.try_into()?) as f64;
+                if !component.is_finite() {
+                    return Err("non-finite engine value".into());
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    fn player_field(
+        &mut self,
+        key: &str,
+        value: &mut Value,
+        pose: &mut h1_pose_codec::pose::Pose,
+        active: &mut bool,
+    ) -> Result<()> {
+        if key == "model_nodes" {
+            *active = self.pose(pose)?;
+            if *active {
+                if let Value::Array(nodes) = value {
+                    nodes.clear();
+                } else {
+                    *value = Value::Array(Vec::new());
+                }
+                return Ok(());
+            }
+        }
+        self.reuse(value, 3)
+    }
+
+    fn player(
+        &mut self,
+        target: &mut Value,
+        pose: &mut h1_pose_codec::pose::Pose,
+        active: &mut bool,
+    ) -> Result<()> {
+        if self.0.first() != Some(&9) {
+            return self.reuse(target, 2);
+        }
+        self.take(1)?;
+        let count = self.u32()? as usize;
+        if count > 65536 || count > self.0.len() / 5 {
+            return Err("invalid engine collection length".into());
+        }
+        let start = (self.0, self.2);
+        if let Some(values) = target.as_object_mut()
+            && values.len() == count
+        {
+            let mut matched = true;
+            for (key, value) in values.iter_mut() {
+                if self.text_ref()? != key {
+                    matched = false;
+                    break;
+                }
+                self.player_field(key, value, pose, active)?;
+            }
+            if matched {
+                return Ok(());
+            }
+            (self.0, self.2) = start;
+            *active = false;
+        }
+        let mut previous = target.take();
+        let mut output = Map::with_capacity(count);
+        for _ in 0..count {
+            let key = self.text_ref()?;
+            let (key, mut value) = previous
+                .as_object_mut()
+                .and_then(|previous| previous.swap_remove_entry(key))
+                .unwrap_or_else(|| (key.to_owned(), Value::Null));
+            self.player_field(&key, &mut value, pose, active)?;
+            if output.insert(key, value).is_some() {
+                return Err("duplicate engine object key".into());
+            }
+        }
+        *target = Value::Object(output);
+        Ok(())
+    }
+
+    fn players(&mut self, target: &mut Value, state: &mut PoseState) -> Result<()> {
+        if self.0.len() < 5 || self.0[0] != 8 {
+            return self.reuse(target, 1);
+        }
+        let count = u32::from_le_bytes(self.0[1..5].try_into()?) as usize;
+        if count > 4 {
+            return self.reuse(target, 1);
+        }
+        self.take(5)?;
+        if !target.is_array() {
+            *target = Value::Array(Vec::new());
+        }
+        let players = target.as_array_mut().unwrap();
+        players.resize_with(count, || Value::Null);
+        for (slot, player) in players.iter_mut().enumerate() {
+            self.player(player, &mut state.poses[slot], &mut state.active[slot])?;
+            if state.active[slot] {
+                let tag = player["player_object_data"]["tag_name"].as_str();
+                if state.rigs.iter().any(|rig| {
+                    Some(rig.tag.as_str()) == tag && rig.parents.len() == state.poses[slot].len()
+                }) {
+                    state.decoded += 1;
+                    state.nodes_decoded += state.poses[slot].len() as u64;
+                } else {
+                    player["model_nodes"] = serde_json::to_value(&state.poses[slot])?;
+                    state.active[slot] = false;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn incremental_root(
+        &mut self,
+        target: &mut Value,
+        state: &mut ObjectState,
+        mut poses: Option<&mut PoseState>,
+    ) -> Result<()> {
+        if self.take(1)?[0] != 9 {
+            return Err("invalid engine frame root".into());
+        }
+        let count = self.u32()? as usize;
+        if count > 65536 || count > self.0.len() / 5 {
+            return Err("invalid engine collection length".into());
+        }
+        let mut previous = target.take();
+        let mut output = Map::with_capacity(count);
+        let mut found_objects = false;
+        for _ in 0..count {
+            let key = self.text_ref()?;
+            let (key, mut value) = previous
+                .as_object_mut()
+                .and_then(|previous| previous.swap_remove_entry(key))
+                .unwrap_or_else(|| (key.to_owned(), Value::Null));
+            if key == "objects" {
+                self.objects(state)?;
+                value = Value::Array(Vec::new());
+                found_objects = true;
+            } else if key == "players" && poses.is_some() {
+                self.players(&mut value, poses.as_deref_mut().unwrap())?;
+            } else {
+                self.reuse(&mut value, 1)?;
+            }
+            if output.insert(key, value).is_some() {
+                return Err("duplicate engine object key".into());
+            }
+        }
+        if !found_objects {
+            return Err("missing objects".into());
+        }
+        *target = Value::Object(output);
+        Ok(())
+    }
 }
 
 pub struct Stream<R> {
@@ -297,6 +602,8 @@ pub struct Stream<R> {
     buffer: Vec<u8>,
     pub bytes: u64,
     packed: bool,
+    pub objects: ObjectState,
+    pub poses: PoseState,
 }
 impl<R: Read> Stream<R> {
     pub fn new(input: R) -> Result<Self> {
@@ -316,15 +623,65 @@ impl<R: Read> Stream<R> {
             buffer: Vec::new(),
             bytes: 8,
             packed: contract == "HSFT0002",
+            objects: ObjectState::default(),
+            poses: PoseState::default(),
         })
     }
     pub fn next(&mut self) -> Result<Option<Value>> {
         self.next_reusing(Value::Null)
     }
     pub fn next_reusing(&mut self, mut value: Value) -> Result<Option<Value>> {
+        if !self.read_frame()? {
+            return Ok(None);
+        }
+        let mut cursor = Cursor(&self.buffer, self.packed, self.buffer.len());
+        cursor.reuse(&mut value, 0)?;
+        if !cursor.0.is_empty() || !value.is_object() {
+            return Err("invalid engine frame root or trailing data".into());
+        }
+        Ok(Some(value))
+    }
+
+    pub fn next_incremental(&mut self, value: Value) -> Result<Option<Value>> {
+        self.next_incremental_with_poses(value, false)
+    }
+
+    pub fn next_incremental_with_poses(
+        &mut self,
+        mut value: Value,
+        typed_poses: bool,
+    ) -> Result<Option<Value>> {
+        if !self.read_frame()? {
+            return Ok(None);
+        }
+        self.poses.active.fill(false);
+        let mut cursor = Cursor(&self.buffer, self.packed, self.buffer.len());
+        cursor.incremental_root(
+            &mut value,
+            &mut self.objects,
+            typed_poses.then_some(&mut self.poses),
+        )?;
+        if !cursor.0.is_empty() {
+            return Err("invalid engine frame root or trailing data".into());
+        }
+        Ok(Some(value))
+    }
+
+    pub fn verify_incremental_source(&self, value: &Value) -> Result<()> {
+        let expected = Cursor(&self.buffer, self.packed, self.buffer.len()).value(0)?;
+        let mut actual = value.clone();
+        actual["objects"] = self.objects.materialize();
+        self.poses.materialize(&mut actual)?;
+        if serde_json::to_vec(&actual)? != serde_json::to_vec(&expected)? {
+            return Err("incremental state differs from complete generic source".into());
+        }
+        Ok(())
+    }
+
+    fn read_frame(&mut self) -> Result<bool> {
         let mut length = [0; 4];
         if self.input.read(&mut length[..1])? == 0 {
-            return Ok(None);
+            return Ok(false);
         }
         self.input.read_exact(&mut length[1..])?;
         let size = u32::from_le_bytes(length) as usize;
@@ -334,18 +691,167 @@ impl<R: Read> Stream<R> {
         self.buffer.resize(size, 0);
         self.input.read_exact(&mut self.buffer)?;
         self.bytes += 4 + size as u64;
-        let mut cursor = Cursor(&self.buffer, self.packed, size);
-        cursor.reuse(&mut value, 0)?;
-        if !cursor.0.is_empty() || !value.is_object() {
-            return Err("invalid engine frame root or trailing data".into());
-        }
-        Ok(Some(value))
+        Ok(true)
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    pub(crate) fn stream(ticks: &[Value]) -> Vec<u8> {
+        let mut stream = b"HSFT0002".to_vec();
+        for tick in ticks {
+            let mut frame = Vec::new();
+            encode(tick, &mut frame);
+            stream.extend_from_slice(&(frame.len() as u32).to_le_bytes());
+            stream.extend_from_slice(&frame);
+        }
+        stream
+    }
+
+    #[test]
+    fn incremental_records_preserve_full_source_across_lifecycle_and_wire_changes() {
+        let first = serde_json::json!({"object_id":0x80000001u32,"object_type":2,"tag_name":"\u{e9}","x":-0.0,"ignored":{"value":[1,2]}});
+        let second = serde_json::json!({"object_id":2,"object_type":0,"x":1.0});
+        let mut changed = first.clone();
+        changed["object_id"] = Value::from(0x80010001u32);
+        changed["x"] = Value::from(0.0);
+        let mut reordered = changed.clone();
+        reordered.as_object_mut().unwrap().sort_keys();
+        let objects = vec![
+            vec![first.clone(), second.clone()],
+            vec![first.clone(), second.clone()],
+            vec![second.clone(), first.clone()],
+            vec![second.clone()],
+            vec![],
+            vec![changed.clone()],
+            vec![changed.clone()],
+            vec![reordered],
+            vec![first],
+        ];
+        let ticks: Vec<_> = objects.into_iter().enumerate().map(|(index, objects)|
+            serde_json::json!({"current_tick":index,"objects":objects,"unknown":{"nested":[1,null,false]}})).collect();
+        let bytes = stream(&ticks);
+        let mut reference = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        let mut incremental = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        let mut spare = Value::Null;
+        let mut retained = None;
+        for index in 0..ticks.len() {
+            let expected = reference.next().unwrap().unwrap();
+            let mut actual = incremental.next_incremental(spare).unwrap().unwrap();
+            incremental.verify_incremental_source(&actual).unwrap();
+            let mut corrupt = actual.clone();
+            corrupt["unknown"] = Value::Null;
+            assert!(incremental.verify_incremental_source(&corrupt).is_err());
+            assert!(actual["objects"].as_array().unwrap().is_empty());
+            if index == 0 {
+                retained = Some(incremental.objects.records()[0].clone());
+            }
+            if index == 1 {
+                assert!(Arc::ptr_eq(
+                    retained.as_ref().unwrap(),
+                    &incremental.objects.records()[0]
+                ));
+            }
+            if index == 5 {
+                assert!(!Arc::ptr_eq(
+                    retained.as_ref().unwrap(),
+                    &incremental.objects.records()[0]
+                ));
+            }
+            actual["objects"] = incremental.objects.materialize();
+            assert_eq!(
+                serde_json::to_vec(&actual).unwrap(),
+                serde_json::to_vec(&expected).unwrap()
+            );
+            actual["objects"] = serde_json::json!([]);
+            spare = actual;
+        }
+        assert!(incremental.objects.reused >= 3);
+        assert_eq!(
+            retained.unwrap().source()["x"].as_f64().unwrap().to_bits(),
+            (-0.0f64).to_bits()
+        );
+        assert!(incremental.next_incremental(spare).unwrap().is_none());
+    }
+
+    #[test]
+    fn cached_records_still_enforce_expanded_budget_and_truncation() {
+        let mut packed = vec![10];
+        packed.extend_from_slice(&1u32.to_le_bytes());
+        packed.extend_from_slice(&2u32.to_le_bytes());
+        packed.extend_from_slice(&0u32.to_le_bytes());
+        packed.extend_from_slice(&[0; 36]);
+        packed.extend_from_slice(&[255; 8]);
+        let mut array = vec![8, 1, 0, 0, 0];
+        array.extend_from_slice(&packed);
+        let mut state = ObjectState::default();
+        Cursor(&array, true, array.len())
+            .objects(&mut state)
+            .unwrap();
+        let record = state.records()[0].clone();
+        let mut cursor = Cursor(&array, true, MAX_FRAME - 170);
+        cursor.objects(&mut state).unwrap();
+        assert_eq!(cursor.2, MAX_FRAME);
+        assert!(Arc::ptr_eq(&record, &state.records()[0]));
+        assert!(
+            Cursor(&array, false, array.len())
+                .objects(&mut state)
+                .is_err()
+        );
+        assert!(
+            Cursor(&array, true, MAX_FRAME - 169)
+                .objects(&mut state)
+                .is_err()
+        );
+        for length in 0..array.len() {
+            assert!(
+                Cursor(&array[..length], true, length)
+                    .objects(&mut state)
+                    .is_err()
+            );
+        }
+        for invalid in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            let mut changed = array.clone();
+            changed[18..22].copy_from_slice(&invalid.to_le_bytes());
+            assert!(
+                Cursor(&changed, true, changed.len())
+                    .objects(&mut state)
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn incremental_root_rejects_missing_duplicate_and_invalid_records() {
+        for tick in [
+            serde_json::json!({}),
+            serde_json::json!({"objects":null}),
+            serde_json::json!({"objects":[{"object_type":-1}]}),
+            serde_json::json!({"objects":[{"object_type":"2"}]}),
+            serde_json::json!({"objects":[null]}),
+        ] {
+            let bytes = stream(&[tick]);
+            assert!(
+                Stream::with_contract(&bytes[..], "HSFT0002")
+                    .unwrap()
+                    .next_incremental(Value::Null)
+                    .is_err()
+            );
+        }
+        let mut frame = vec![9, 2, 0, 0, 0];
+        for _ in 0..2 {
+            frame.extend_from_slice(&7u32.to_le_bytes());
+            frame.extend_from_slice(b"objects");
+            frame.extend_from_slice(&[8, 0, 0, 0, 0]);
+        }
+        assert!(
+            Cursor(&frame, true, frame.len())
+                .incremental_root(&mut Value::Null, &mut ObjectState::default(), None)
+                .is_err()
+        );
+    }
 
     #[test]
     fn packed_expansion_budget_is_restored_when_recycled_object_shape_changes() {
@@ -446,6 +952,21 @@ mod tests {
     }
 
     fn encode(value: &Value, bytes: &mut Vec<u8>) {
+        encode_with_poses(value, bytes, false);
+    }
+
+    pub fn packed_stream(ticks: &[Value]) -> Vec<u8> {
+        let mut bytes = b"HSFT0002".to_vec();
+        for tick in ticks {
+            let mut frame = Vec::new();
+            encode_with_poses(tick, &mut frame, true);
+            bytes.extend_from_slice(&(frame.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&frame);
+        }
+        bytes
+    }
+
+    fn encode_with_poses(value: &Value, bytes: &mut Vec<u8>, packed: bool) {
         fn text(value: &str, bytes: &mut Vec<u8>) {
             bytes.extend_from_slice(&(value.len() as u32).to_le_bytes());
             bytes.extend_from_slice(value.as_bytes());
@@ -458,18 +979,35 @@ mod tests {
                 bytes.extend_from_slice(&value.as_f64().unwrap().to_le_bytes());
             }
             Value::Number(value) => {
-                bytes.push(3);
-                bytes.extend_from_slice(&(value.as_i64().unwrap() as i32).to_le_bytes());
+                if let Some(value) = value.as_u64() {
+                    bytes.push(4);
+                    bytes.extend_from_slice(&u32::try_from(value).unwrap().to_le_bytes());
+                } else {
+                    bytes.push(3);
+                    bytes.extend_from_slice(
+                        &i32::try_from(value.as_i64().unwrap())
+                            .unwrap()
+                            .to_le_bytes(),
+                    );
+                }
             }
             Value::String(value) => {
                 bytes.push(7);
                 text(value, bytes);
             }
+            Value::Array(values)
+                if packed && values.len() == 13 && values.iter().all(Value::is_number) =>
+            {
+                bytes.push(12);
+                for value in values {
+                    bytes.extend_from_slice(&(value.as_f64().unwrap() as f32).to_le_bytes());
+                }
+            }
             Value::Array(values) => {
                 bytes.push(8);
                 bytes.extend_from_slice(&(values.len() as u32).to_le_bytes());
                 for value in values {
-                    encode(value, bytes);
+                    encode_with_poses(value, bytes, packed);
                 }
             }
             Value::Object(values) => {
@@ -477,7 +1015,7 @@ mod tests {
                 bytes.extend_from_slice(&(values.len() as u32).to_le_bytes());
                 for (key, value) in values {
                     text(key, bytes);
-                    encode(value, bytes);
+                    encode_with_poses(value, bytes, packed);
                 }
             }
         }

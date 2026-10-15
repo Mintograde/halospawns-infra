@@ -24,10 +24,23 @@ preserving the normalized `HSFT0001` export contract. The retained exporter entr
 selects this wire format explicitly; older entries default to `HSFT0001` and keep
 their original binaries. This is not a new simulation profile or public viewer
 contract. Full-source canonical parity and rollout requirements are documented in
-[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev compatibility worker
-`typed-20261014-r1` supports exporter 4 but keeps intake at 3. API registration
-and final default promotion are pending; never remove exporter-4 support once
-its hosted jobs/completions exist.
+[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev worker `typed-poses-20261014-r2`
+and API `live=182` select exporter 4 for new intake/admin attempts. Persisted jobs
+and retries keep their pins. Retain exporter-4 API/worker support during rollback,
+alongside the original exporters and viewer-4 readers.
+
+The deployed incremental-state consumer keeps those exact exporter pins
+and both transport contracts. It reuses immutable world-object records without
+changing engine output or public products; it does not require another exporter
+revision or API registration. The generic path remains available for older
+transports/viewers and explicit `--generic-state` comparisons. Its typed path
+requires exporter 4, now selected by default for new dev conversions.
+
+The deployed typed-pose slice consumes the same packed matrices directly
+in bounded numeric buffers and caches pose-run topology/scratch state. It retains
+the generic decoder, schema ranges, raw pose fallback and independent error-bound
+verification. `--generic-poses` isolates the transport change for offline ablation;
+no new exporter, public format, quality setting or API contract is introduced.
 
 ## Registry and Engine Store
 

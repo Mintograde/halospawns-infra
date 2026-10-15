@@ -11,6 +11,10 @@ param(
     [ValidateRange(1, 256)][int]$BaselineExporterRevision = 1,
     [ValidateRange(1, 256)][int]$CandidateExporterRevision = 1,
     [ValidateSet(1, 2, 3, 4)][int]$ViewerRevision = 2,
+    [switch]$BaselineGenericState,
+    [switch]$CandidateGenericState,
+    [switch]$BaselineGenericPoses,
+    [switch]$CandidateGenericPoses,
     [switch]$AllFilms
 )
 $ErrorActionPreference = 'Stop'
@@ -60,6 +64,10 @@ for ($i = 0; $i -lt $films.Count; $i++) {
         Write-Host "[$($i + 1)/$($films.Count)] $name $side"
         try {
             $overrides = @{}
+            if (($side -eq 'baseline' -and $BaselineGenericState) -or
+                ($side -eq 'candidate' -and $CandidateGenericState)) { $overrides.GenericState = $true }
+            if (($side -eq 'baseline' -and $BaselineGenericPoses) -or
+                ($side -eq 'candidate' -and $CandidateGenericPoses)) { $overrides.GenericPoses = $true }
             if ($side -eq 'candidate') {
                 if ($CandidateEncoder) { $overrides.CandidateEncoder = $CandidateEncoder }
                 if ($NativeModule) { $overrides.NativeModule = $NativeModule }

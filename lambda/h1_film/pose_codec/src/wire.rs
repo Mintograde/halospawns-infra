@@ -133,7 +133,7 @@ struct Frame {
 struct Run {
     first: usize,
     player: usize,
-    identity: Value,
+    identity: [Value; 3],
     tag: String,
     parents: Vec<i32>,
     frames: Vec<Frame>,
@@ -169,6 +169,7 @@ pub struct Encoder {
     preserve_unknown_models: bool,
     runs: Vec<Run>,
     latest: [Option<usize>; 4],
+    quantizers: [Option<pose::Quantizer>; 4],
     counts: Counts,
     tick_count: usize,
 }
@@ -182,6 +183,7 @@ impl Encoder {
             preserve_unknown_models,
             runs: Vec::new(),
             latest: [None; 4],
+            quantizers: [None, None, None, None],
             counts: Counts::default(),
             tick_count: 0,
         })
@@ -192,6 +194,14 @@ impl Encoder {
     }
 
     pub fn push_recycling(&mut self, t: &mut Value) -> Result<[Option<Value>; 4]> {
+        self.push_typed_recycling(t, [None; 4])
+    }
+
+    pub fn push_typed_recycling(
+        &mut self,
+        source: &mut Value,
+        typed: [Option<&[pose::Node]>; 4],
+    ) -> Result<[Option<Value>; 4]> {
         let mut removed = [None, None, None, None];
         if self.tick_count >= 2048 {
             return Err("too many pose chunk ticks".into());
@@ -201,19 +211,41 @@ impl Encoder {
         let rigs = &self.rigs;
         let runs = &mut self.runs;
         let latest = &mut self.latest;
+        let quantizers = &mut self.quantizers;
         let counts = &mut self.counts;
-        let players = t["players"].as_array_mut().ok_or("players missing")?;
+        let players = source["players"].as_array_mut().ok_or("players missing")?;
         if players.len() > 4 {
             return Err("pose codec supports at most four players".into());
         }
+        if typed[players.len()..].iter().any(Option::is_some) {
+            return Err("typed pose has no player".into());
+        }
         for (pi, p) in players.iter_mut().enumerate() {
+            if typed[pi].is_some()
+                && !p
+                    .get("model_nodes")
+                    .and_then(Value::as_array)
+                    .is_some_and(Vec::is_empty)
+            {
+                return Err("typed pose requires an empty placeholder".into());
+            }
             let Some(nodes) = p.get("model_nodes").and_then(Value::as_array) else {
                 continue;
             };
-            if nodes.is_empty() {
+            if nodes.is_empty() && typed[pi].is_none() {
                 continue;
             }
-            let pose = pose::read_pose(&p["model_nodes"])?;
+            let pose = if let Some(pose) = typed[pi] {
+                if pose.is_empty()
+                    || pose.len() > 256
+                    || pose.iter().flatten().any(|value| !value.is_finite())
+                {
+                    return Err("invalid typed pose".into());
+                }
+                std::borrow::Cow::Borrowed(pose)
+            } else {
+                std::borrow::Cow::Owned(pose::read_pose(&p["model_nodes"])?)
+            };
             let tag = p["player_object_data"]["tag_name"].as_str().unwrap_or("");
             let known = latest[pi]
                 .is_some_and(|i| runs[i].tag == tag && runs[i].parents.len() == pose.len());
@@ -221,14 +253,19 @@ impl Encoder {
                 && !known
                 && pose::parents(tag, pose.len(), s, rigs).is_err()
             {
+                if typed[pi].is_some() {
+                    return Err("typed pose has an unknown skeleton".into());
+                }
                 continue;
             }
-            let identity =
-                serde_json::json!([p["player_index"], p["player_object_id"], p["object_ref"]]);
+            let identity = [&p["player_index"], &p["player_object_id"], &p["object_ref"]];
             let previous = latest[pi].filter(|i: &usize| {
                 let r = &runs[*i];
                 r.first + r.frames.len() == tick
-                    && r.identity == identity
+                    && r.identity
+                        .iter()
+                        .zip(identity)
+                        .all(|(previous, next)| previous == next)
                     && r.tag == tag
                     && r.parents.len() == pose.len()
             });
@@ -237,11 +274,11 @@ impl Encoder {
             } else {
                 let i = runs.len();
                 let parents = pose::parents(tag, pose.len(), s, rigs)?;
-                pose::order(&parents)?;
+                quantizers[pi] = Some(pose::Quantizer::new(&parents)?);
                 runs.push(Run {
                     first: tick,
                     player: pi,
-                    identity,
+                    identity: identity.map(|value| value.clone()),
                     tag: tag.into(),
                     parents,
                     frames: Vec::new(),
@@ -251,7 +288,10 @@ impl Encoder {
                 i
             };
             let r = &mut runs[ri];
-            let values = pose::quantize(&pose, &r.parents, pose::origin(p), s, &mut r.previous);
+            let values = quantizers[pi]
+                .as_mut()
+                .ok_or("pose quantizer missing")?
+                .quantize(&pose, pose::origin(p), s, &mut r.previous);
             counts.poses += 1;
             let frame = if let Some(values) = values {
                 let decoded = pose::reconstruct(&values, &r.parents, pose::origin(p), s)?;
@@ -267,7 +307,7 @@ impl Encoder {
                 r.previous.clear();
                 Frame {
                     values: vec![[0; 8]; pose.len()],
-                    raw: Some(pose),
+                    raw: Some(pose.into_owned()),
                 }
             };
             r.frames.push(frame);
@@ -512,6 +552,45 @@ pub fn unpack(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_pose_api_rejects_missing_placeholders_nonfinite_and_unknown_models() {
+        let mut pose = vec![[0.; 13]; 19];
+        let source = serde_json::json!({"players":[{"model_nodes":[],
+            "player_object_data":{"tag_name":"characters\\cyborg_mp\\cyborg_mp"}}]});
+        let mut invalid = vec![serde_json::json!({"players":[]})];
+        let mut missing = source.clone();
+        missing["players"][0]
+            .as_object_mut()
+            .unwrap()
+            .shift_remove("model_nodes");
+        invalid.push(missing);
+        for nodes in [Value::Null, serde_json::json!([0]), serde_json::json!({})] {
+            let mut changed = source.clone();
+            changed["players"][0]["model_nodes"] = nodes;
+            invalid.push(changed);
+        }
+        let mut unknown = source.clone();
+        unknown["players"][0]["player_object_data"]["tag_name"] = Value::from("unknown");
+        invalid.push(unknown);
+        for mut source in invalid {
+            let mut encoder = Encoder::new(&crate::settings(), &crate::skeletons(), true).unwrap();
+            assert!(
+                encoder
+                    .push_typed_recycling(&mut source, [Some(&pose), None, None, None])
+                    .is_err()
+            );
+        }
+        for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            pose[0][0] = invalid;
+            let mut encoder = Encoder::new(&crate::settings(), &crate::skeletons(), true).unwrap();
+            assert!(
+                encoder
+                    .push_typed_recycling(&mut source.clone(), [Some(&pose), None, None, None])
+                    .is_err()
+            );
+        }
+    }
     #[test]
     fn tracks_roundtrip_and_reject_truncation() {
         for values in [

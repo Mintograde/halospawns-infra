@@ -193,7 +193,7 @@ class CloudTests(unittest.TestCase):
         source = self.job["conversion"]["source"]
         evidence = self.job["conversion"]["film"]
         item = {"upload_id": self.job["upload_id"], "source": source}
-        for retained in (None, 1, 2, 3):
+        for retained in (None, 1, 2, 3, 4):
             job = copy.deepcopy(self.job)
             if retained != 1:
                 job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)

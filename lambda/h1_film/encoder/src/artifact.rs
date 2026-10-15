@@ -4,10 +4,14 @@ include!("../../../replay_parser/native/src/viewer.rs");
 
 #[path = "float_delta.rs"]
 mod float_delta;
+#[path = "object_state.rs"]
+mod object_state;
 #[path = "object_transfer.rs"]
 mod object_transfer;
 #[path = "ordered_delta.rs"]
 mod ordered_delta;
+#[path = "pose_state.rs"]
+mod pose_state;
 #[path = "projection_plan.rs"]
 mod projection_plan;
 #[path = "tick_hash.rs"]
@@ -287,6 +291,8 @@ struct IncrementalChunk {
     encode_duration: Duration,
     validation_duration: Duration,
     hash_duration: Duration,
+    objects_previous: Option<object_state::Records>,
+    objects_before: Option<object_state::Records>,
 }
 impl IncrementalChunk {
     fn new(first_tick: usize, count: usize) -> Result<Self, Box<dyn Error>> {
@@ -307,12 +313,35 @@ impl IncrementalChunk {
             encode_duration: Duration::ZERO,
             validation_duration: Duration::ZERO,
             hash_duration: Duration::ZERO,
+            objects_previous: None,
+            objects_before: None,
         })
     }
     fn push(&mut self, next: Value) -> Result<Value, Box<dyn Error>> {
+        self.push_state(next, None)
+    }
+
+    fn push_state(
+        &mut self,
+        next: Value,
+        objects: Option<object_state::Records>,
+    ) -> Result<Value, Box<dyn Error>> {
         let started = Instant::now();
         let offset = self.binary.bytes.len();
-        if self.previous.is_none() {
+        if self.previous.is_some() && objects.is_some() != self.objects_previous.is_some() {
+            return Err("incremental object mode changed within a chunk".into());
+        }
+        if let Some(objects) = &objects {
+            object_state::write_tick(
+                &mut self.binary,
+                self.previous.as_ref(),
+                &next,
+                self.before_previous.as_ref(),
+                self.objects_previous.as_ref(),
+                objects,
+                self.objects_before.as_ref(),
+            )?;
+        } else if self.previous.is_none() {
             write_value(&mut self.binary, &next)?;
         } else {
             ordered_delta::write(
@@ -329,12 +358,15 @@ impl IncrementalChunk {
         // Compare the decoder's actual values while the source is still alive.
         // This proves losslessness without serializing/hashing both trees.
         let started = Instant::now();
-        let decoded = verify_tick(
+        let decoded = verify_tick_state(
             &self.binary.bytes[offset..],
             &next,
             self.decoded.as_ref(),
             self.decoded_before.as_ref(),
             &mut self.decoded_strings,
+            objects
+                .as_ref()
+                .map(|objects| (objects, self.objects_previous.as_ref())),
         )?;
         self.validation_duration += started.elapsed();
         let started = Instant::now();
@@ -345,6 +377,7 @@ impl IncrementalChunk {
         self.decoded_before = self.decoded.replace(decoded);
         let spare = self.before_previous.take().unwrap_or(Value::Null);
         self.before_previous = self.previous.replace(next);
+        self.objects_before = std::mem::replace(&mut self.objects_previous, objects);
         Ok(spare)
     }
 }
@@ -385,6 +418,17 @@ fn verify_tick(
     before_previous: Option<&DecodedValue>,
     strings: &mut Vec<Arc<str>>,
 ) -> Result<DecodedValue, Box<dyn Error>> {
+    verify_tick_state(bytes, source, previous, before_previous, strings, None)
+}
+
+fn verify_tick_state(
+    bytes: &[u8],
+    source: &Value,
+    previous: Option<&DecodedValue>,
+    before_previous: Option<&DecodedValue>,
+    strings: &mut Vec<Arc<str>>,
+    objects: Option<(&object_state::Records, Option<&object_state::Records>)>,
+) -> Result<DecodedValue, Box<dyn Error>> {
     let mut reader = BinaryReader::new(bytes);
     reader.strings = std::mem::take(strings);
     let decoded = if previous.is_none() {
@@ -392,7 +436,13 @@ fn verify_tick(
     } else {
         read_patched_value(&mut reader, previous, before_previous, 1)?
     };
-    if reader.offset != bytes.len() || !exact_decoded(source, &decoded) {
+    let exact = match objects {
+        Some((objects, prior)) => {
+            object_state::exact_tick(source, objects, &decoded, prior, previous)
+        }
+        None => exact_decoded(source, &decoded),
+    };
+    if reader.offset != bytes.len() || !exact {
         return Err("viewer delta tick failed lossless validation".into());
     }
     *strings = reader.strings;
@@ -472,7 +522,7 @@ mod pose_tests {
     use super::*;
     use h1_pose_codec::BaseCodec;
 
-    fn source() -> Vec<Value> {
+    pub(super) fn source() -> Vec<Value> {
         (0..16).map(|frame| {
             let nodes: Vec<_> = (0..19).map(|bone| {
                 let angle = (frame + bone) as f64 * 0.017;
@@ -603,6 +653,192 @@ mod pose_tests {
         .unwrap();
         assert_eq!(raw, expected);
         drop(stream);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retained_objects_and_borrowed_poses_match_independent_packer_across_chunks() {
+        let projection = Projection::load_revision(4).unwrap();
+        let mut ticks: Vec<_> = source()
+            .into_iter()
+            .cycle()
+            .take(KEYFRAME_INTERVAL + 19)
+            .collect();
+        for (frame, tick) in ticks.iter_mut().enumerate() {
+            let count = if frame % 37 == 0 {
+                0
+            } else {
+                6 - frame / 23 % 3
+            };
+            let objects = (0..count).map(|index| {
+                serde_json::json!({"object_id":index + frame / 101 * 0x10000,"object_type":2,"tag_name":"weapons\\pistol\\pistol",
+                    "x":if index == 0 { frame as f64 / 8.0 } else { 1.0 },"y":-0.0,"z":1.0,
+                    "forward_x":1.0,"forward_y":0.0,"forward_z":0.0,"up_x":0.0,"up_y":0.0,"up_z":1.0,
+                    "parent_ref":-1,"owner_object_ref":-1,"unprojected":frame / 13})
+            }).collect();
+            tick["objects"] = Value::Array(objects);
+            tick["current_tick"] = Value::from(frame);
+        }
+        let projected: Vec<_> = ticks
+            .iter()
+            .map(|tick| projection.tick.project(tick).unwrap())
+            .collect();
+        let bytes = crate::transport::tests::stream(&ticks);
+        let mut input = crate::transport::Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "h1-retained-state-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut export = StreamingExport::new(&root, ticks.len(), 6).unwrap();
+        export.pose_codec = true;
+        export.validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        let mut spare = Value::Null;
+        while let Some(mut tick) = input.next_incremental(spare).unwrap() {
+            input.verify_incremental_source(&tick).unwrap();
+            export
+                .push_incremental_with_projection(&mut tick, &input.objects, None, &projection)
+                .unwrap();
+            input.verify_incremental_source(&tick).unwrap();
+            spare = tick;
+        }
+        export.sender.take();
+        for handle in export.collector.worker_handles.drain(..) {
+            handle.join().unwrap();
+        }
+        for (index, ticks) in projected.chunks(KEYFRAME_INTERVAL).enumerate() {
+            let raw = zstd::bulk::decompress(
+                &fs::read(root.join(format!("chunk-{index:05}.hsrd.zst"))).unwrap(),
+                LOCAL_CHUNK_RAW_LIMIT,
+            )
+            .unwrap();
+            assert_eq!(raw, pack_poses(ticks, index * KEYFRAME_INTERVAL).unwrap());
+            let (_, mut decoded) =
+                h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec)
+                    .unwrap();
+            h1_pose_codec::verify(ticks, &mut decoded).unwrap();
+        }
+        assert!(input.objects.reused > input.objects.decoded);
+        drop(export);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn typed_poses_match_batch_bytes_across_player_lifetimes_and_chunks() {
+        let projection = Projection::load_revision(4).unwrap();
+        let mut ticks: Vec<_> = source()
+            .into_iter()
+            .cycle()
+            .take(KEYFRAME_INTERVAL + 17)
+            .collect();
+        for (frame, tick) in ticks.iter_mut().enumerate() {
+            let original = tick["players"][0].clone();
+            for slot in 1..4 {
+                let mut player = original.clone();
+                player["player_index"] = Value::from(slot);
+                player["object_ref"] = Value::from(slot + frame / 13 * 0x10000);
+                if slot == 1 && frame % 7 == 0 {
+                    player["player_object_data"]["tag_name"] = Value::from("unknown");
+                }
+                if slot == 2
+                    && frame % 11 == 0
+                    && let Some(node) = player["model_nodes"]
+                        .get_mut(0)
+                        .and_then(Value::as_array_mut)
+                {
+                    node.push(Value::from(99));
+                }
+                tick["players"].as_array_mut().unwrap().push(player);
+            }
+            let players = tick["players"].as_array_mut().unwrap();
+            if frame % 9 == 0 {
+                players.swap(0, 3);
+            }
+            if frame % 23 == 0 {
+                players.truncate(1);
+            }
+            if frame % 37 == 0 {
+                players.clear();
+            }
+            for player in players {
+                if frame % 17 == 0 {
+                    player.as_object_mut().unwrap().sort_keys();
+                }
+                player["source_only"] = serde_json::json!({"values":[null,-0.0]});
+            }
+            tick["objects"] =
+                serde_json::json!([{"object_id":65537,"object_type":2,"x":frame / 7}]);
+            tick["current_tick"] = Value::from(frame);
+        }
+        let bytes = crate::transport::tests::packed_stream(&ticks);
+        let mut reference =
+            crate::transport::Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        let mut projected = Vec::new();
+        while let Some(tick) = reference.next().unwrap() {
+            projected.push(projection.tick.project(&tick).unwrap());
+        }
+        let root = std::env::temp_dir().join(format!(
+            "h1-typed-poses-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut export = StreamingExport::new(&root, ticks.len(), 6).unwrap();
+        export.pose_codec = true;
+        export.validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        export.typed_pose_layout = pose_state::Layout::compile(&projection, &export.validator);
+        assert!(export.typed_pose_layout.is_some());
+        let mut input = crate::transport::Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        let mut spare = Value::Null;
+        while let Some(mut tick) = input.next_incremental_with_poses(spare, true).unwrap() {
+            input.verify_incremental_source(&tick).unwrap();
+            if export.collector.tick_count.is_multiple_of(4) {
+                let frame = export.collector.tick_count;
+                let mut sample = tick.clone();
+                sample["objects"] = input.objects.materialize();
+                input.poses.materialize(&mut sample).unwrap();
+                let mut expected = ticks[frame].clone();
+                crate::sampling::normalize(&mut sample, frame, 4, "prisoner").unwrap();
+                crate::sampling::normalize(&mut expected, frame, 4, "prisoner").unwrap();
+                assert_eq!(
+                    serde_json::to_vec(&sample).unwrap(),
+                    serde_json::to_vec(&expected).unwrap()
+                );
+            }
+            export
+                .push_incremental_with_projection(
+                    &mut tick,
+                    &input.objects,
+                    Some(&input.poses),
+                    &projection,
+                )
+                .unwrap();
+            input.verify_incremental_source(&tick).unwrap();
+            spare = tick;
+        }
+        assert!(input.poses.decoded > 4000);
+        export.sender.take();
+        for handle in export.collector.worker_handles.drain(..) {
+            handle.join().unwrap();
+        }
+        for (index, ticks) in projected.chunks(KEYFRAME_INTERVAL).enumerate() {
+            let raw = zstd::bulk::decompress(
+                &fs::read(root.join(format!("chunk-{index:05}.hsrd.zst"))).unwrap(),
+                LOCAL_CHUNK_RAW_LIMIT,
+            )
+            .unwrap();
+            assert_eq!(raw, pack_poses(ticks, index * KEYFRAME_INTERVAL).unwrap());
+            let (_, mut decoded) =
+                h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec)
+                    .unwrap();
+            h1_pose_codec::verify(ticks, &mut decoded).unwrap();
+        }
+        drop(export);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -803,6 +1039,9 @@ pub struct StreamingExport {
     projection_plan: projection_plan::Plan,
     object_transfer: Option<object_transfer::Layout>,
     consume_objects: bool,
+    object_cache: object_state::ProjectionCache,
+    pending_objects: Option<object_state::Records>,
+    typed_pose_layout: Option<pose_state::Layout>,
 }
 impl StreamingExport {
     pub fn new(directory: &Path, expected: usize, level: i32) -> Result<Self, Box<dyn Error>> {
@@ -810,6 +1049,8 @@ impl StreamingExport {
             return Err("invalid tick count or compression level".into());
         }
         let (collector, sender) = local_collector(directory, level)?;
+        let validator = crate::fast_schema::Validator::for_revision(projection()?.revision)?;
+        let typed_pose_layout = pose_state::Layout::compile(projection()?, &validator);
         Ok(Self {
             collector,
             sender: Some(sender),
@@ -822,10 +1063,13 @@ impl StreamingExport {
             spare: Value::Null,
             pose_spares: [None, None, None, None],
             pose_models: h1_pose_codec::skeletons(),
-            validator: crate::fast_schema::Validator::for_revision(projection()?.revision)?,
+            validator,
             projection_plan: projection_plan::Plan::default(),
             object_transfer: object_transfer::Layout::compile(&projection()?.tick),
             consume_objects: false,
+            object_cache: object_state::ProjectionCache::default(),
+            pending_objects: None,
+            typed_pose_layout,
         })
     }
     pub fn push(&mut self, source: &Value) -> Result<(), Box<dyn Error>> {
@@ -867,6 +1111,62 @@ impl StreamingExport {
         let result = self.push_source_with_projection(source, projection()?);
         self.consume_objects = false;
         result
+    }
+
+    pub fn supports_incremental(&self) -> bool {
+        self.pose_codec
+            && projection().is_ok_and(|projection| {
+                object_state::ProjectionCache::layout(projection, &self.validator).is_some()
+            })
+    }
+
+    pub fn supports_typed_poses(&self) -> bool {
+        self.supports_incremental() && self.typed_pose_layout.is_some()
+    }
+
+    pub fn push_incremental_source(
+        &mut self,
+        source: &mut Value,
+        objects: &crate::transport::ObjectState,
+        poses: Option<&crate::transport::PoseState>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.push_incremental_with_projection(source, objects, poses, projection()?)
+    }
+
+    fn push_incremental_with_projection(
+        &mut self,
+        source: &mut Value,
+        objects: &crate::transport::ObjectState,
+        poses: Option<&crate::transport::PoseState>,
+        projection: &Projection,
+    ) -> Result<(), Box<dyn Error>> {
+        let started = Instant::now();
+        self.pending_objects = Some(self.object_cache.project(
+            objects.records(),
+            projection,
+            &self.validator,
+        )?);
+        self.collector.projection_duration += started.elapsed();
+        if let Some(poses) = poses
+            && poses.slices().iter().any(Option::is_some)
+        {
+            let started = Instant::now();
+            self.typed_pose_layout
+                .as_ref()
+                .ok_or("unsupported typed pose layout")?
+                .validate(poses)?;
+            validate_json_safety(source, 3)?;
+            let mut projected = std::mem::take(&mut self.spare);
+            self.projection_plan
+                .project(&projection.tick, source, &mut projected)?;
+            if !self.validator.is_valid(&projected) {
+                return Err("viewer tick violates its closed schema".into());
+            }
+            self.spare =
+                self.push_projected_with_poses(projected, started.elapsed(), poses.slices())?;
+            return Ok(());
+        }
+        self.push_source_with_projection(source, projection)
     }
 
     fn push_source_with_projection(
@@ -971,8 +1271,17 @@ impl StreamingExport {
     }
     fn push_projected(
         &mut self,
+        projected: Value,
+        duration: Duration,
+    ) -> Result<Value, Box<dyn Error>> {
+        self.push_projected_with_poses(projected, duration, [None; 4])
+    }
+
+    fn push_projected_with_poses(
+        &mut self,
         mut projected: Value,
         duration: Duration,
+        typed: [Option<&[h1_pose_codec::pose::Node]>; 4],
     ) -> Result<Value, Box<dyn Error>> {
         if self.collector.tick_count >= self.expected {
             return Err("too many source ticks".into());
@@ -996,10 +1305,14 @@ impl StreamingExport {
         }
         if let Some(poses) = &mut self.poses {
             let started = Instant::now();
-            self.pose_spares = poses.push_recycling(&mut projected)?;
+            self.pose_spares = poses.push_typed_recycling(&mut projected, typed)?;
             self.pose_duration += started.elapsed();
         }
-        let spare = self.chunk.as_mut().unwrap().push(projected)?;
+        let spare = self
+            .chunk
+            .as_mut()
+            .unwrap()
+            .push_state(projected, self.pending_objects.take())?;
         self.chunk_ticks += 1;
         self.collector.tick_count += 1;
         if self.chunk_ticks == KEYFRAME_INTERVAL || self.collector.tick_count == self.expected {
@@ -1107,6 +1420,27 @@ impl EncodingWorker {
     }
 
     pub fn push_transport_source(&mut self, source: &mut Value) -> Result<(), Box<dyn Error>> {
+        self.push_source(source)
+    }
+
+    pub fn supports_incremental(&self) -> bool {
+        false
+    }
+
+    pub fn supports_typed_poses(&self) -> bool {
+        false
+    }
+
+    pub fn push_incremental_source(
+        &mut self,
+        source: &mut Value,
+        objects: &crate::transport::ObjectState,
+        poses: Option<&crate::transport::PoseState>,
+    ) -> Result<(), Box<dyn Error>> {
+        source["objects"] = objects.materialize();
+        if let Some(poses) = poses {
+            poses.materialize(source)?;
+        }
         self.push_source(source)
     }
 

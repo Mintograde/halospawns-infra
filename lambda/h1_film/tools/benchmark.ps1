@@ -8,9 +8,13 @@ param(
     [string]$NativeModule,
     [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3,
     [ValidateRange(1, 256)][int]$ExporterRevision = 1,
-    [ValidateSet(1, 2, 3, 4)][int]$ViewerRevision = 2
+    [ValidateSet(1, 2, 3, 4)][int]$ViewerRevision = 2,
+    [switch]$GenericState,
+    [switch]$GenericPoses,
+    [switch]$VerifyIncrementalState
 )
 $ErrorActionPreference = 'Stop'
+if ($GenericState -and $VerifyIncrementalState) { throw 'Choose generic state or incremental verification, not both.' }
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).Path
 $filmPath = (Resolve-Path -LiteralPath $Film).Path
 $mapPath = (Resolve-Path -LiteralPath $Map).Path
@@ -60,6 +64,9 @@ $arguments += @('--entrypoint', '/var/lang/bin/python3', $Image, $harness,
     '--film', '/input/film.h1film', '--map', "/input/$mapName", '--output', '/out/worker',
     '--analytics-revision', "$AnalyticsRevision",
     '--exporter-revision', "$ExporterRevision", '--viewer-revision', "$ViewerRevision")
+if ($GenericState) { $arguments += '--generic-state' }
+if ($GenericPoses) { $arguments += '--generic-poses' }
+if ($VerifyIncrementalState) { $arguments += '--verify-incremental-state' }
 & docker @arguments *> (Join-Path $outputPath 'worker.log')
 if ($LASTEXITCODE) { throw "Offline worker failed. See $outputPath/worker.log" }
 $report = Get-Content -LiteralPath (Join-Path $outputPath 'worker/report.json') -Raw | ConvertFrom-Json
@@ -76,6 +83,7 @@ $completion = Get-Content -LiteralPath (Join-Path $outputPath 'worker/finalizati
     analytics_revision = $AnalyticsRevision
     exporter_revision = $ExporterRevision
     viewer_revision = $ViewerRevision
+    state_reuse = $report.encoding.state_reuse
     source_ticks = $verification.source_ticks
     hash_checks = $verification.hash_checks
     conversion_seconds = $report.timing.total_seconds
