@@ -1,8 +1,11 @@
 # H1 film Lambda integration
 
-Status on 2026-10-14: dev defaults to typed-transport exporter 4, analytics 3
+Status on 2026-10-15: dev defaults to typed-transport exporter 4, analytics 3
 and bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
-`typed-poses-20261014-r2`, API `live=182` and compatible frontend readers are deployed.
+`h1arena-197bb65c-20261015-r1`, API `live=183` and compatible frontend readers are deployed.
+The new worker retains Beta 3 and adds commit-pinned h1arena simulation. This is
+a worker-only stage: the live API still lacks h1arena registration, and new
+profile-specific raw-map approvals remain required before hosted conversion.
 New intake and admin reprocess attempts select exporter 4 and use typed transport,
 incremental world-object state and typed poses. Exporters 1/2/3/4 remain available;
 persisted jobs/retries retain their original pins and paths.
@@ -24,6 +27,77 @@ It added retained exporter 3, selected by new intake and admin jobs at that rele
 Existing conversions, jobs, retries and artifacts retain their original pins.
 Completed coordination: `20261011-infra-api-h1film-runtime-exporter3`; see
 [the performance report](PERFORMANCE.md#runtime-candidate-2026-10-11).
+
+## h1arena Retained Worker Deployed 2026-10-15
+
+Completed the user-authorized dev worker deployment. h1arena is the renamed
+continuation of Performance Build 2.0 Beta 3, not a separate game/source kind.
+This prerelease snapshot is not a promise of compatibility with the upcoming
+upstream release; follow-up alignment must add another immutable profile.
+
+- Worker tag **`h1arena-197bb65c-20261015-r1`**, ECR digest
+  `sha256:7712122623064e4009cd37d6458cfd8d456cc8da0a97f11a8cbdcb2955b57857`,
+  is Active/Successful. Terraform resolves the immutable tag to that digest.
+- Retained profile `h1arena-197bb65c-p9111-wasm-v1` records full source commit
+  `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, protocol 9111 / format 2 / 120 Hz,
+  build `UNIVERSAL Only - 2026-10-14 - 197bb65c`. Health confirms the source
+  fingerprint and exact WASM/glue hashes. Beta 3 and all four old exporters
+  remain unchanged; h1arena supports its base and exporter-4 pins.
+- All 2,734 packaged application-file hashes match the offline-tested
+  `h1arena-197bb65c-local` image except the append-only release-retention fixture.
+  Release image ID is
+  `sha256:1abfb9d04d19b0a943d639e39894a4231868e77a3db9258b941feb41ec97ab83`.
+  Encoder SHA-256 remains
+  `80c93daea0ca4c8e631d7a7a3a9800fdf2e284430adaa336de58db11f86d2737`.
+  Retention checks use the registry extracted from the actual previous deployed
+  digest, not the candidate checkout. Focused Node tests (6), Python registry
+  tests (5), all engine hash checks and read-only/non-root container health and
+  rejection checks pass. Native/WASM and Linux conversion evidence is recorded
+  in [compatibility](COMPATIBILITY.md#h1arena-snapshot-197bb65c).
+
+Baseline focused plan was no-op. Focused/full preplans contained **0 adds /
+1 update / 0 destroys**, solely the H1 Lambda image and computed `last_modified`.
+Applied the reviewed saved plan, SHA-256
+`fdc823647cef4b110489168f978eb5f101dc60a0c4002043bf509d86810c6c16`.
+Focused postplan is no-op; full postplan has zero resource actions and only
+unapplied API output refresh `173 -> 183`. Only `map-processing` resources
+changed; ECR received the new immutable image. Existing undeclared
+`asset_delivery_mode` plan warnings remain unrelated.
+
+The first cold health inventory hit the existing 20-second child-process
+timeout. Retry and confirmation pass, verifying both profiles, all four
+explicit exporter entries, full h1arena provenance and the encoder
+(20.647 s / 2.118 s client-observed invocation time). No timeout was relaxed;
+these are health checks, not hosted conversion measurements.
+
+API remains `live=183`; its actual deployed ZIP lacks h1arena registration.
+Concurrent sibling API implementation was observed and left untouched. Its
+normal CI release and reviewed, profile-scoped original-map bindings are still
+required. Do not infer new map approval from a Beta 3 name, size or binding.
+The active handoff remains `20261015-infra-api-h1arena-retained-engine`.
+
+API health passes. Queue/DLQ depths are zero. Memory 3,008 MiB, timeout 900 s,
+temporary storage 8,192 MiB, concurrency 5, enabled batch-one mapping, both H1
+flags, limits, IAM and other consumers remain unchanged. No AWS/session blocker
+(`halospawns-dev`, `283279960672`, `us-east-1`). No cloud film/reparse, map review,
+backfill, migration, API code/alias write, frontend, commit/push or prod change
+occurred in this deployment. Keep both profiles and all retained exporters in
+subsequent images; existing jobs/retries must never be repinned.
+
+Evidence: `L:/tmp/halospawns-h1arena-release-20261015`. Commands from infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag h1arena-197bb65c-20261015-r1 -EngineRoot L:/tmp/halospawns-h1arena-197bb65c/engines -PreviousRegistry L:/tmp/halospawns-h1arena-release-20261015/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1arena-release-20261015/final.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Changed `stacks/dev.yaml`, `tests/fixtures/retained-profiles.json`, H1
+README/compatibility/deployment docs, and root `AGENTS.md`, `HANDOFFS.md` and
+`ATMOS_MIGRATION_PLAN.md`. No API files were edited during deployment.
 
 ## Typed Pose Default Promoted 2026-10-14
 

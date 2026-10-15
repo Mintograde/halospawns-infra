@@ -2,7 +2,7 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `typed-poses-20261014-r2`, with dedicated queue/API wiring and scoped data access.
+to `h1arena-197bb65c-20261015-r1`, with dedicated queue/API wiring and scoped data access.
 New intake and admin reprocess attempts select exporter 4 / analytics 3 / viewer 4
 after API `live=182` promotion. Old exporter pins remain supported. See [deployment](DEPLOYMENT.md).
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
@@ -101,7 +101,8 @@ Registered simulations:
 - h1arena snapshot `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, format 2 /
   protocol 9111 / 120 Hz, build `UNIVERSAL Only - 2026-10-14 - 197bb65c`.
   This is the renamed successor of the same project, not a separate game.
-  The new engine is prepared locally, **not deployed**. It does not claim support
+  The retained worker is deployed in dev; **API release and profile-specific map
+  approval remain required** before hosted conversion. It does not claim support
   for an upcoming release or arbitrary later commits. See
   [snapshot provenance and refresh](COMPATIBILITY.md#h1arena-snapshot-197bb65c).
 

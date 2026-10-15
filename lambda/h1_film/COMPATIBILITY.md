@@ -24,8 +24,8 @@ preserving the normalized `HSFT0001` export contract. The retained exporter entr
 selects this wire format explicitly; older entries default to `HSFT0001` and keep
 their original binaries. This is not a new simulation profile or public viewer
 contract. Full-source canonical parity and rollout requirements are documented in
-[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev worker `typed-poses-20261014-r2`
-and API `live=182` select exporter 4 for new intake/admin attempts. Persisted jobs
+[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev worker `h1arena-197bb65c-20261015-r1`
+retains the exporter-4 defaults promoted with API `live=182`. Persisted jobs
 and retries keep their pins. Retain exporter-4 API/worker support during rollback,
 alongside the original exporters and viewer-4 readers.
 
@@ -136,7 +136,7 @@ h1arena is the renamed continuation of Performance Build 2.0 Beta 3. The new
 profile `h1arena-197bb65c-p9111-wasm-v1` targets the exact archived commit
 `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, dated 2026-10-14. It is a prerelease
 snapshot, not a claim about the maintainers' upcoming release. No existing Beta 3
-profile, exporter, job, map review or deployed worker pin is replaced.
+profile, exporter, job or map review is replaced.
 
 Although both recordings say format 2, this snapshot is incompatible with the
 Beta 3 simulator: protocol 9111, a 480-byte header rather than 448, expanded
@@ -208,14 +208,15 @@ The movement recording input is retained in `tests/fixtures/arena-movement.txt`.
 
 Private engine store: `L:\tmp\halospawns-h1arena-197bb65c\engines` (both profiles
 and every retained exporter, verified against the previous release registry).
-Local-only image `halospawns-h1-film:h1arena-197bb65c-local` contains that store.
+Local validation image `halospawns-h1-film:h1arena-197bb65c-local` contains that store.
 Network-disabled, read-only, non-root Linux worker runs pass for the network
 actions fixture, the movement fixture and a real retained Beta 3 Atlas film:
 initial conversion, viewer rebuild, full reparse and three identical retry
 callbacks. The production Node permission boundary is enabled in those runs.
 The retained Atlas viewer artifact is also byte-identical to the previous
 `typed-poses-20261014-r2` image under the same offline harness.
-No AWS/API access occurs; fake map bindings are test evidence, not approvals.
+Those offline runs make no AWS/API calls; fake map bindings are test evidence,
+not approvals.
 Windows Node 24.19 with `--engine-permissions` hits an existing Emscripten
 `ioctl_tiocgwinsz` failure on both old and new engines. Ordinary Windows
 conversion and Linux worker isolation pass; that unrelated Windows-only issue
@@ -228,7 +229,16 @@ snapshot and Beta 3 for existing films/retries. Never retarget this ID to the
 newest checkout. If the observable tuple did not change despite simulation
 changes, reject the ambiguity instead of overwriting a profile. API registration,
 profile-specific raw-map review and a coordinated immutable worker release are
-still required before hosted conversion. No cloud rollout is performed here.
+required before hosted conversion.
+
+The user authorized dev worker deployment on 2026-10-15. Immutable image
+`h1arena-197bb65c-20261015-r1` now retains both profiles and every exporter;
+the retention fixture includes this released snapshot. All 2,734 application
+files match the offline-tested image except that appended fixture. Live health
+verifies the exact hashes and full source commit. API `live=183` still lacks
+the new registration; its separate release and new map reviews remain pending.
+No new film/reparse, map approval or prod action accompanies this worker-only
+stage. See [deployment evidence](DEPLOYMENT.md#h1arena-retained-worker-deployed-2026-10-15).
 
 ## Regression Evidence
 
