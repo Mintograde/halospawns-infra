@@ -130,6 +130,106 @@ Source fingerprints document new build candidates. They do not retroactively
 prove the source provenance of an old binary; the existing Beta 3 binaries retain
 their established SHA-256 pins and real-film parity evidence.
 
+## h1arena Snapshot 197bb65c
+
+h1arena is the renamed continuation of Performance Build 2.0 Beta 3. The new
+profile `h1arena-197bb65c-p9111-wasm-v1` targets the exact archived commit
+`197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, dated 2026-10-14. It is a prerelease
+snapshot, not a claim about the maintainers' upcoming release. No existing Beta 3
+profile, exporter, job, map review or deployed worker pin is replaced.
+
+Although both recordings say format 2, this snapshot is incompatible with the
+Beta 3 simulator: protocol 9111, a 480-byte header rather than 448, expanded
+settings/resolved variants, new movement tuning, and packed FNET v2 effects.
+The exact observable build is `UNIVERSAL Only - 2026-10-14 - 197bb65c`.
+The separate adapter validates sections, roster bounds, MSZIP expansion and
+every recorded network effect. The WASM port retains upstream movement and
+extracts upstream offline transform/damage/team/quit/end handlers at build time;
+live networking, rendering and physical input are not used by conversion.
+The normalized export/analytics/viewer contracts are unchanged. Both this
+profile's base engine and its exporter-4 entry use `HSFT0002`; exporter 4 remains
+the preferred worker pin. Older profiles retain their exact transport defaults.
+
+Each new profile carries `source.project`, the **full** `source.git_commit`,
+`source.git_date`, and a source-tree SHA-256/file count/algorithm. Build manifests,
+health inventories and conversion reports (`provenance.engine_source`) preserve
+that identity. Python finalization rejects absent or differing provenance for
+these profiles. The old Beta 3 profile deliberately has no invented Git commit.
+
+Build from an archive, never from the changing working tree:
+
+```powershell
+node lambda/h1_film/tools/snapshot-source.mjs `
+  --repository 'L:\bens_stuff\projects\h1-arena' `
+  --commit 197bb65ca6e9cef94c126904bf39ecdd1ea5929d `
+  --output '<new private snapshot directory>'
+.\lambda\h1_film\tools\build-engine.ps1 -Port h1arena `
+  -Source '<snapshot directory>\src' -BuildDirectory '<new private build directory>'
+```
+
+The archive excludes dirty/untracked work. Its manifest is checked against all
+build-relevant files, including `src/tools`; the builder supplies the archived
+commit/date to the build label and rejects mutations during compilation. The
+shared Beta 3 exporter/compatibility helpers are also included in the new port
+fingerprint, without modifying the retained Beta 3 port or binaries.
+
+For the native oracle, set `BLAMPC_BUILD_COMMIT=197bb65c` and
+`BLAMPC_BUILD_DATE=2026-10-14`, configure `engines/h1arena/native` with
+`-G 'Visual Studio 17 2022' -A Win32 -DH1_SOURCE=<snapshot src>` and
+`-DBLAMPC_STATIC_CRT=ON`, then build Release. Compare actual recorded films:
+
+```powershell
+node lambda/h1_film/tools/verify-native-parity.mjs `
+  --native '<native build>\engine\Release\h1-film-export.exe' `
+  --engine '<candidate>\h1-film.js' --assets '<matching map root>' `
+  --output '<new private parity directory>' '<film.h1film>'
+```
+
+The verifier requires clean simulation hashes and byte-identical full typed
+exports, not just matching player positions. The diagnostic
+`--candidate-registry <private registry.json>` also allows the full local
+converter to validate an unregistered candidate; it requires explicit `--engine`,
+still verifies hashes/identity, and marks the report as a candidate. Cloud intake
+does not expose this override.
+
+Current local evidence lives under `L:\tmp\halospawns-h1arena-197bb65c`:
+the archived source, native build, fingerprinted `wasm-final` candidate, recorded
+films, parity logs and conversion products. `final-parity/parity.json` records
+14 passing films across nine maps (27,480 source ticks), with byte-identical
+native/WASM exports and clean recording hashes. Fixtures include local death/respawn,
+enabled wall jump/crouch slide, four-player UNIVERSAL loopback and host-driven
+team change/kick/end, plus a closed 2,880-tick joiner's partial copy. Synthetic
+tests cover malformed/capped network sections,
+cross-block MSZIP history, unsupported builds, and old-profile retention.
+This is offline validation, not hosted timing, maximum-size testing or approval
+of any production map binding. The four-player, 512 MiB and 432,000-tick ceilings
+remain; larger upstream rosters fail closed.
+The movement recording input is retained in `tests/fixtures/arena-movement.txt`.
+
+Private engine store: `L:\tmp\halospawns-h1arena-197bb65c\engines` (both profiles
+and every retained exporter, verified against the previous release registry).
+Local-only image `halospawns-h1-film:h1arena-197bb65c-local` contains that store.
+Network-disabled, read-only, non-root Linux worker runs pass for the network
+actions fixture, the movement fixture and a real retained Beta 3 Atlas film:
+initial conversion, viewer rebuild, full reparse and three identical retry
+callbacks. The production Node permission boundary is enabled in those runs.
+The retained Atlas viewer artifact is also byte-identical to the previous
+`typed-poses-20261014-r2` image under the same offline harness.
+No AWS/API access occurs; fake map bindings are test evidence, not approvals.
+Windows Node 24.19 with `--engine-permissions` hits an existing Emscripten
+`ioctl_tiocgwinsz` failure on both old and new engines. Ordinary Windows
+conversion and Linux worker isolation pass; that unrelated Windows-only issue
+is not changed by this integration.
+
+On a follow-up release alignment: archive the newly requested full commit into
+a **new** directory, compare source/format changes, rerun native parity and both
+film corpora, then add a **new immutable profile** and artifact hashes. Keep this
+snapshot and Beta 3 for existing films/retries. Never retarget this ID to the
+newest checkout. If the observable tuple did not change despite simulation
+changes, reject the ambiguity instead of overwriting a profile. API registration,
+profile-specific raw-map review and a coordinated immutable worker release are
+still required before hosted conversion. No cloud rollout is performed here.
+
 ## Regression Evidence
 
 ### Native analytics revision 3

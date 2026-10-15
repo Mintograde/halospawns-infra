@@ -128,15 +128,6 @@ def main():
     job = json.loads(
         (cloud.PACKAGE / "tests/fixtures/api-initial-job.json").read_text()
     )["job"]
-    if args.exporter_revision != 1:
-        engine = job["conversion"]["engine"]
-        selected = select_exporter(
-            load_registry()[job["conversion"]["film"]["engine_profile"]],
-            args.exporter_revision,
-        )
-        engine.update({key: selected[key] for key in (
-            "wasm_sha256", "glue_sha256", "exporter_revision"
-        )})
     projection_sha, manifest_sha = viewer_delta.VIEWER_CONTRACT_PINS[args.viewer_revision]
     job["viewer_artifact_target"].update(
         profile_revision=args.viewer_revision,
@@ -186,6 +177,15 @@ def main():
             assert payload["source"] == source
             assert payload["film"]["scenario"] == binding["scenario"]
             job["conversion"]["film"] = payload["film"]
+            selected = select_exporter(load_registry()[payload["film"]["engine_profile"]],
+                                       args.exporter_revision)
+            engine = {key: selected[key] for key in (
+                "format", "protocol_revision", "tick_rate", "build", "wasm_sha256", "glue_sha256"
+            )}
+            if args.exporter_revision != 1:
+                engine["exporter_revision"] = args.exporter_revision
+            job["conversion"]["engine"] = engine
+            binding.update(engine_profile=selected["id"], game_release_key=f"{selected['port']}_local_test")
             job.update(schema="halospawns.h1film_job.v2", analytics_revision=args.analytics_revision)
             return {"data": {"job": copy.deepcopy(job)}}
         assert path in {

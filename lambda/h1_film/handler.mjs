@@ -9,7 +9,7 @@ async function inventory() {
   const profiles = [];
   for (const profile of ENGINE_PROFILES) {
     const { hashes } = await resolveEngine(profile, root);
-    profiles.push({ id: profile.id, ...hashes });
+    profiles.push({ id: profile.id, ...hashes, ...(profile.source ? { source: profile.source } : {}) });
   }
   const exporters = [];
   for (const entry of ENGINE_EXPORTERS) {

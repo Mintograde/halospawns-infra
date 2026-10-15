@@ -27,9 +27,12 @@ $mounts = @('--rm', '--mount', "type=bind,source=$sourcePath,target=/source,read
 if ($LASTEXITCODE) { throw "Build volume creation failed: $LASTEXITCODE" }
 & docker run @mounts $image mkdir -p $sourceStage $cacheBuild
 if ($LASTEXITCODE) { throw "Cache directory creation failed: $LASTEXITCODE" }
-& docker run @mounts $image cp -a /source/CMakeLists.txt /source/engine /source/host $sourceStage
+$sourceEntries = if ($inputs.port.source_entries) { @($inputs.port.source_entries) } else { @('CMakeLists.txt', 'engine', 'host') }
+$sourceFiles = @($sourceEntries | ForEach-Object { "/source/$_" })
+& docker run @mounts $image cp -a @sourceFiles $sourceStage
 if ($LASTEXITCODE) { throw "Source staging failed: $LASTEXITCODE" }
-& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage"
+$revisionArguments = if ($inputs.source.git_commit) { @("-DH1_SOURCE_COMMIT=$($inputs.source.git_commit)", "-DH1_SOURCE_DATE=$($inputs.source.git_date)") } else { @() }
+& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 & docker run @mounts $image cmake --build $cacheBuild --parallel $Jobs -- -k *> $log

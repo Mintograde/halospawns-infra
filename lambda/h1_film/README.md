@@ -26,6 +26,7 @@ explicit jobs remain supported; see deployment notes for the dev rollout.
 | `runtime/adapters/` | Versioned film readers and simulation verification |
 | `profiles/registry.json` | Shared Node/Python engine identities, ABI and artifact pins |
 | `engines/beta3/` | Beta 3 exporter, WASM compatibility port and native reference integration |
+| `engines/h1arena/` | Commit-pinned successor port, native reference and offline UNIVERSAL replay |
 | `encoder/` | Bounded tick-stream encoder; reuses `../replay_parser` codecs/contracts |
 | `pose_codec/` | Shared bounded pose math, temporal tracks and exact fallbacks |
 | `analytics.py`, `registry.py`, `recorded.py` | Verified native products, retained profiles, recorded rules/events and replay-parser adaptation |
@@ -93,8 +94,16 @@ concurrency or enable API flags merely because the image is deployed.
 
 ## Supported Versions
 
-Currently registered: Performance Build Beta 3, format 2 / protocol 45 / 120 Hz,
-build `2.0 Public Beta 3 - September 28 2026`.
+Registered simulations:
+
+- Performance Build Beta 3, format 2 / protocol 45 / 120 Hz,
+  build `2.0 Public Beta 3 - September 28 2026`, with its original exporter pins.
+- h1arena snapshot `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, format 2 /
+  protocol 9111 / 120 Hz, build `UNIVERSAL Only - 2026-10-14 - 197bb65c`.
+  This is the renamed successor of the same project, not a separate game.
+  The new engine is prepared locally, **not deployed**. It does not claim support
+  for an upcoming release or arbitrary later commits. See
+  [snapshot provenance and refresh](COMPATIBILITY.md#h1arena-snapshot-197bb65c).
 
 New Lambda releases must carry **every retained engine**, not replace a single
 `latest.wasm`. Film identity selects one exact profile and its pinned engine;

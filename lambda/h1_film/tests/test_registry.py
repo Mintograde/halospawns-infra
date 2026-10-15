@@ -3,6 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -10,6 +11,35 @@ from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report, s
 
 
 class RegistryTests(unittest.TestCase):
+    def test_h1arena_requires_full_commit_and_source_fingerprint(self):
+        document = json.loads(REGISTRY_PATH.read_text())
+        original = document["profiles"][0]
+        source = {"project": "h1arena", "git_commit": "1" * 40,
+                  "git_date": "2026-10-14", "algorithm": "halospawns.sourceTreeSha256.v1",
+                  "files": 12339, "sha256": "2" * 64}
+        profile = {**original, "id": "h1arena-fixture", "port": "h1arena",
+                   "adapter": "h1arena-v2-120-v1", "protocol_revision": 9111,
+                   "build": "UNIVERSAL Only - 2026-10-14 - 11111111", "source": source}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "registry.json"
+            path.write_text(json.dumps({**document, "profiles": [original, profile]}))
+            loaded = load_registry(path)
+            self.assertEqual(loaded[original["id"]], original)
+            self.assertEqual(loaded[profile["id"]]["source"], source)
+            report = {"engine_profile": profile["id"], "envelope": profile,
+                      "provenance": {"engine_source": source,
+                                     **{key: profile[key] for key in ("wasm_sha256", "glue_sha256")}}}
+            with patch("h1_film.registry.load_registry", return_value=loaded):
+                self.assertEqual(profile_for_report(report)["source"], source)
+                for invalid in (None, {**source, "git_commit": "3" * 40}):
+                    changed = {**report, "provenance": {**report["provenance"], "engine_source": invalid}}
+                    with self.assertRaisesRegex(ValueError, "source provenance mismatch"):
+                        profile_for_report(changed)
+            for invalid in (None, {**source, "git_commit": "short"}, {**source, "sha256": "wrong"}):
+                path.write_text(json.dumps({**document, "profiles": [{**profile, "source": invalid}]}))
+                with self.assertRaisesRegex(ValueError, "source provenance"):
+                    load_registry(path)
+
     def test_transport_selection_retains_legacy_and_rejects_unknown_contracts(self):
         document = json.loads(REGISTRY_PATH.read_text())
         profile = document["profiles"][0]

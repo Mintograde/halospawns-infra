@@ -55,6 +55,32 @@ try {
         if ($_.Exception.Message -notlike '*inputs changed during compilation*') { throw }
     }
     if (Test-Path -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json')) { throw 'Invalid build received a candidate manifest.' }
+    $h1BuildTestState.mutateSource = $false
+    New-Item -ItemType Directory -Path (Join-Path $source 'tools') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $source 'tools/build.c'), 'source generation input')
+    $fingerprintScript = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../tools/source-fingerprint.mjs')).Path
+    $fingerprint = & node --input-type=module -e 'import {pathToFileURL} from "node:url"; const {fingerprintTree}=await import(pathToFileURL(process.argv[1])); console.log(JSON.stringify(await fingerprintTree(process.argv[2],["CMakeLists.txt","engine","host","tools"])));' $fingerprintScript $source
+    if ($LASTEXITCODE) { throw 'Fixture fingerprint failed.' }
+    $revision = $fingerprint | ConvertFrom-Json -AsHashtable
+    $revision.project = 'h1arena'
+    $revision.git_commit = '197bb65ca6e9cef94c126904bf39ecdd1ea5929d'
+    $revision.git_date = '2026-10-14'
+    $revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
+    $h1BuildTestState.candidate = Join-Path $root 'h1arena'
+    & $builder -Source $source -Port h1arena -BuildDirectory $h1BuildTestState.candidate -Jobs 1
+    $arena = Get-Content -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json') -Raw | ConvertFrom-Json
+    if ($arena.inputs.source.git_commit -ne $revision.git_commit) { throw 'Source commit was lost.' }
+    $arenaConfigure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
+    if ($arenaConfigure -notcontains "-DH1_SOURCE_COMMIT=$($revision.git_commit)" -or
+        $arenaConfigure -notcontains '-DH1_SOURCE_DATE=2026-10-14') { throw 'Observable build identity was not pinned.' }
+    [IO.File]::WriteAllText((Join-Path $source 'tools/build.c'), 'changed after snapshot')
+    try {
+        & $builder -Source $source -Port h1arena -BuildDirectory (Join-Path $root 'changed-snapshot')
+        throw 'Changed Git snapshot was accepted.'
+    } catch {
+        if ($_.Exception.Message -notlike '*Source/port fingerprint failed*') { throw }
+    }
+    $global:LASTEXITCODE = 0
     Write-Output 'Build orchestration passed: isolated snapshots, no overwrite, mutation rejection.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($root)

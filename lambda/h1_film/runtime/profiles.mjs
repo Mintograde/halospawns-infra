@@ -15,13 +15,24 @@ export function validateRegistry(document) {
     const profile = { ...entry };
     assert.match(profile.id, ID, 'Invalid engine profile ID');
     assert.match(profile.port, ID, 'Invalid engine port');
-    assert.equal(profile.adapter, 'film-v2-120-v1', 'Unsupported film adapter');
+    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
+    if (profile.source !== undefined || profile.adapter === 'h1arena-v2-120-v1') {
+      assert.equal(profile.source?.project, 'h1arena', 'Missing source provenance');
+      assert.match(profile.source.git_commit, /^[0-9a-f]{40}$/, 'Invalid source commit');
+      assert.match(profile.source.sha256, /^[0-9a-f]{64}$/, 'Invalid source fingerprint');
+      assert.equal(profile.source.algorithm, 'halospawns.sourceTreeSha256.v1');
+      assert.ok(Number.isSafeInteger(profile.source.files) && profile.source.files > 0);
+      assert.match(profile.source.git_date, /^\d{4}-\d{2}-\d{2}$/);
+      Object.freeze(profile.source);
+    }
     assert.equal(profile.format, 2, 'Adapter requires format 2');
     assert.equal(profile.tick_rate, 120, 'Adapter requires 120 Hz');
     assert.ok(Number.isSafeInteger(profile.protocol_revision) && profile.protocol_revision > 0);
     assert.ok(typeof profile.build === 'string' && profile.build.length > 0
       && Buffer.byteLength(profile.build) < 64 && !profile.build.includes('\0'));
     assert.equal(profile.export_contract, 'HSFT0001', 'Unsupported engine export contract');
+    assert.ok(profile.transport_contract === undefined || ['HSFT0001', 'HSFT0002'].includes(profile.transport_contract),
+      'Unsupported engine transport');
     assert.equal(profile.analytics_contract, 'halospawns.h1AnalyticsSource.v1');
     assert.equal(profile.map_cache_version, 7, 'Unsupported map cache format');
     for (const key of ['wasm_sha256', 'glue_sha256']) assert.match(profile[key], /^[0-9a-f]{64}$/);

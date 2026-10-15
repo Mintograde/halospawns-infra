@@ -4,6 +4,7 @@ import { convertFilm } from './runtime/convert.mjs';
 const { values } = parseArgs({ options: {
   film: { type: 'string' }, assets: { type: 'string' }, engine: { type: 'string' },
   'engine-root': { type: 'string' }, profile: { type: 'string' },
+  'candidate-registry': { type: 'string' },
   'exporter-revision': { type: 'string' }, 'viewer-revision': { type: 'string' },
   encoder: { type: 'string' }, reference: { type: 'string' }, output: { type: 'string' },
   timeout: { type: 'string', default: '1800' },

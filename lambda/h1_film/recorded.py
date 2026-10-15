@@ -1,10 +1,19 @@
-"""Bounded Beta 3 film evidence; never infer player identities from display names."""
+"""Versioned film evidence; never infer player identities from display names."""
 
 from __future__ import annotations
 
 import struct
 from collections import Counter
 from pathlib import Path
+
+
+def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
+    identity = words[:4]
+    if identity == (0x314D4C46, 2, 45, 120):
+        return 448, 57
+    if identity == (0x314D4C46, 2, 9111, 120) and words[16] == 480:
+        return 480, 60
+    raise ValueError("Unsupported recorded evidence adapter")
 
 
 def match_start(report: dict, encoding: dict) -> int | None:
@@ -28,18 +37,17 @@ def resolved_variant(path: Path, *, encoding: dict) -> dict | None:
         if len(header) != 448:
             raise ValueError("Truncated recorded variant header")
         words = struct.unpack_from("<32I", header)
-        if words[:4] != (0x314D4C46, 2, 45, 120):
-            raise ValueError("Unsupported recorded variant adapter")
+        header_size, field_count = recorded_layout(words)
         offset, size = words[21:23]
-        if size != 356:
+        if size != 128 + field_count * 4:
             return None
-        if offset < 448 or offset + size > words[17]:
+        if offset < header_size or offset + size > words[17]:
             raise ValueError("Invalid resolved variant bounds")
         source.seek(offset)
         raw = source.read(size)
     if len(raw) != size:
         raise ValueError("Truncated resolved variant")
-    fields = struct.unpack_from("<57i", raw, 128)
+    fields = struct.unpack_from(f"<{field_count}i", raw, 128)
     mode = {0: (2, "slayer"), 1: (1, "ctf"), 3: (3, "oddball"), 4: (4, "king")}.get(fields[0])
     if mode is None or mode[0] != encoding["game_type"] or type(encoding["has_teams"]) is not bool:
         return None
@@ -72,8 +80,7 @@ def kill_attribution(path: Path, *, report: dict, encoding: dict) -> dict:
         if len(raw) != 448:
             raise ValueError("Truncated recorded film header")
         words = struct.unpack_from("<32I", raw)
-        if words[:4] != (0x314D4C46, 2, 45, 120):
-            raise ValueError("Unsupported recorded event adapter")
+        recorded_layout(words)
         offset, size = words[28:30]
         if not size:
             return unavailable("missing_section")

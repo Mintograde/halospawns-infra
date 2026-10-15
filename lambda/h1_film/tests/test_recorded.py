@@ -10,6 +10,26 @@ from h1_film import recorded
 
 
 class RecordedTests(unittest.TestCase):
+    def test_h1arena_resolved_record_retains_reviewed_offsets(self):
+        words = [0] * 32
+        words[:4] = (0x314D4C46, 2, 9111, 120)
+        words[16], words[17], words[21], words[22] = 480, 848, 480, 368
+        data = bytearray(848)
+        struct.pack_into("<32I", data, 0, *words)
+        for index, value in {0: 0, 1: 50, 18: 5, 19: 5, 21: 1, 30: 1, 57: 1, 58: 1, 59: 2}.items():
+            struct.pack_into("<i", data, 480 + 128 + index * 4, value)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.h1film"
+            path.write_bytes(data)
+            result = recorded.resolved_variant(path, encoding={"game_type": 2, "has_teams": True})
+            self.assertEqual(result["score_to_win"], 50)
+            self.assertEqual(result["respawn_seconds"], 5)
+            self.assertEqual(result["motion_tracker"], "all")
+            struct.pack_into("<I", data, 2 * 4, 9112)
+            path.write_bytes(data)
+            with self.assertRaisesRegex(ValueError, "adapter"):
+                recorded.resolved_variant(path, encoding={"game_type": 2, "has_teams": True})
+
     def setUp(self):
         self.report = {"envelope": {"ticks": 20, "first_update": 0}}
         self.encoding = {"source_first_clock": 0, "source_last_clock": 19, "players": [0, 1],

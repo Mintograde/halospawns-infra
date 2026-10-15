@@ -6,7 +6,7 @@ import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/prom
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adapterFor, readEnvelope } from './film.mjs';
-import { resolveMap, selectProfile, selectExporter } from './profiles.mjs';
+import { resolveMap, selectProfile, selectExporter, validateRegistry, validateExporters } from './profiles.mjs';
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
 
 export async function convertFilm(options) {
@@ -35,8 +35,15 @@ export async function convertFilm(options) {
     assert.equal(native.status, 'verified');
     assert.deepEqual(envelope, native.envelope, 'Film envelope differs from the native baseline');
   }
-  const profile = selectExporter(selectProfile(envelope), values['exporter-revision'] === undefined
-    ? undefined : Number(values['exporter-revision']));
+  let profiles, exporters;
+  if (values['candidate-registry']) {
+    assert.ok(values.engine, 'A candidate registry requires an explicit local engine');
+    const candidate = JSON.parse(await readFile(values['candidate-registry'], 'utf8'));
+    profiles = validateRegistry(candidate);
+    exporters = validateExporters(candidate, profiles);
+  }
+  const profile = selectExporter(selectProfile(envelope, profiles), values['exporter-revision'] === undefined
+    ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
   if (values.profile) assert.equal(values.profile, profile.id, 'Requested profile does not match the film');
   assert.ok(!(values.engine && values['engine-root']), 'Choose --engine or --engine-root, not both');
@@ -125,9 +132,11 @@ export async function convertFilm(options) {
     envelope: native.envelope, reference: values.reference,
     benchmark_mode: values['trusted-local'], timing: { preflight_staging_seconds: stagingSeconds },
     engine_profile: profile.id, export_contract: profile.export_contract,
+    ...(values['candidate-registry'] ? { candidate_registry: true } : {}),
     ...(profile.exporter_revision === undefined ? {} : { exporter_revision: profile.exporter_revision }),
     ...(mapBinding ? { map_binding: mapBinding } : {}),
     provenance: { film_sha256: native.provenance.film_sha256, map_sha256: native.provenance.map_sha256,
+      ...(profile.source ? { engine_source: profile.source } : {}),
       ...engineHashes, encoder_sha256: await sha256(values.encoder), node: process.version } };
   const kill = () => { for (const child of children) if (child.exitCode === null) child.kill('SIGKILL'); };
   const timer = setTimeout(() => { expired = true; kill(); }, timeout);

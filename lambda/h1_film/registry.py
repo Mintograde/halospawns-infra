@@ -29,13 +29,30 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict]:
             ):
                 raise ValueError(f"Invalid engine profile {key}")
         expected = {
-            "adapter": "film-v2-120-v1",
             "format": 2,
             "tick_rate": 120,
             "export_contract": "HSFT0001",
             "analytics_contract": "halospawns.h1AnalyticsSource.v1",
             "map_cache_version": 7,
         }
+        if entry.get("adapter") not in ("film-v2-120-v1", "h1arena-v2-120-v1"):
+            raise ValueError("Unsupported engine adapter contract")
+        if entry.get("transport_contract", "HSFT0001") not in ("HSFT0001", "HSFT0002"):
+            raise ValueError("Unsupported engine transport")
+        if "source" in entry or entry["adapter"] == "h1arena-v2-120-v1":
+            source = entry.get("source")
+            if (
+                not isinstance(source, dict) or source.get("project") != "h1arena"
+                or not isinstance(source.get("git_commit"), str)
+                or not re.fullmatch(r"[0-9a-f]{40}", source["git_commit"])
+                or not isinstance(source.get("sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
+                or source.get("algorithm") != "halospawns.sourceTreeSha256.v1"
+                or type(source.get("files")) is not int or source["files"] <= 0
+                or not isinstance(source.get("git_date"), str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", source["git_date"])
+            ):
+                raise ValueError("Invalid engine source provenance")
         if any(
             type(entry.get(k)) is not type(v) or entry[k] != v
             for k, v in expected.items()
@@ -105,6 +122,8 @@ def profile_for_report(report: dict) -> dict:
     ):
         raise ValueError("H1 engine profile differs from the film identity")
     provenance = report.get("provenance", {})
+    if "source" in profile and provenance.get("engine_source") != profile["source"]:
+        raise ValueError("H1 engine source provenance mismatch")
     if any(provenance.get(k) != profile[k] for k in ("wasm_sha256", "glue_sha256")):
         raise ValueError("H1 engine artifacts differ from the pinned profile")
     # Earlier local reports predate the explicit export_contract field.

@@ -14,6 +14,29 @@
       "map_cache_version": 7,
       "wasm_sha256": "d49d466d263927cd17050af63690525be08e2fb1a0f805322e88d0d8cd1a6e9b",
       "glue_sha256": "21b54e1d321a3e116ecce26de68c17e078e598122c7ad8475fb3ff0eba4a04ab"
+    },
+    {
+      "id": "h1arena-197bb65c-p9111-wasm-v1",
+      "format": 2,
+      "protocol_revision": 9111,
+      "tick_rate": 120,
+      "build": "UNIVERSAL Only - 2026-10-14 - 197bb65c",
+      "adapter": "h1arena-v2-120-v1",
+      "port": "h1arena",
+      "export_contract": "HSFT0001",
+      "transport_contract": "HSFT0002",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "source": {
+        "project": "h1arena",
+        "git_commit": "197bb65ca6e9cef94c126904bf39ecdd1ea5929d",
+        "git_date": "2026-10-14",
+        "algorithm": "halospawns.sourceTreeSha256.v1",
+        "files": 12339,
+        "sha256": "46b2f78ec080c3e9edc71148b677164a809961eb85c638ed874fb936c796d6af"
+      },
+      "wasm_sha256": "f6bbbb1bae6c276bf553875c2fc74f070f1fbcd4dc5d1a61ea6b03112a646367",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
     }
   ],
   "exporters": [
@@ -35,6 +58,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "fab1791bf6de4eb10862e1bdd468c4ce62de24f0cb86aa012293a346912c28bd",
       "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 4,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "f6bbbb1bae6c276bf553875c2fc74f070f1fbcd4dc5d1a61ea6b03112a646367",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
     }
   ]
 }

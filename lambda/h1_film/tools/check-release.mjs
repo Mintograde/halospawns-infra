@@ -21,5 +21,5 @@ for (const profile of [...ENGINE_PROFILES, ...ENGINE_EXPORTERS.map(entry =>
   selectExporter(profileById(entry.engine_profile), entry.revision))]) {
   const engine = await resolveEngine(profile, values['engine-root']);
   console.log(JSON.stringify({ profile: profile.id, exporter_revision: profile.exporter_revision,
-    status: 'verified', ...engine.hashes }));
+    status: 'verified', ...engine.hashes, ...(profile.source ? { source: profile.source } : {}) }));
 }
