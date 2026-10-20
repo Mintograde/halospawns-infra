@@ -86,7 +86,8 @@ def require(condition, reason="validation_failed"):
 
 
 def validate_schema(name, value):
-    schema = analytics._json(PACKAGE / "contracts" / f"h1film-{name}.v1.schema.json")
+    version = 2 if name == "native-analytics" and value.get("schema") == "halospawns.h1NativeAnalytics.v2" else 1
+    schema = analytics._json(PACKAGE / "contracts" / f"h1film-{name}.v{version}.schema.json")
     require(
         Draft202012Validator(schema, format_checker=FormatChecker()).is_valid(value)
     )
@@ -604,7 +605,7 @@ def completion_proof(job, report, encoding):
     }
     if pin["engine"].get("exporter_revision") is not None:
         proof["exporter_revision"] = pin["engine"]["exporter_revision"]
-    if proof["analytics_revision"] == 3:
+    if proof["analytics_revision"] >= 3:
         # The format reader validates the closed trailer separately from simulation.
         require(report["envelope"]["end_reason"] in (1, 2))
         proof["recording_closed"] = True
@@ -750,7 +751,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         spatial_artifact=spatial,
     )
     payload.update(source_kind="h1film", h1film=proof)
-    if proof["analytics_revision"] == 3:
+    if proof["analytics_revision"] >= 3:
         native = encoding["native_analytics"]
         validate_schema("native-analytics", native)
         analytics.validate_native_product(native, encoding=encoding, report=report)
@@ -759,6 +760,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
             "resolved_variant": recorded.resolved_variant(film, encoding=encoding),
         }
         validate_schema("native-analytics", payload["h1film_analytics"])
+        analytics.validate_native_product(payload["h1film_analytics"], encoding=encoding, report=report)
     return "/v1/ingest/replay-uploads", payload
 
 
@@ -820,7 +822,7 @@ def execute(work_item, context):
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
             try:
                 result = api("POST", "/v1/ingest/h1films/prepare", {
-                    **prepare, "analytics_revision": 3, "exporter_revision": 4,
+                    **prepare, "analytics_revision": 4, "exporter_revision": 5,
                 })
             except FilmError as error:
                 if error.reason != "identity_conflict":

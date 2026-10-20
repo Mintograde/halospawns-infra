@@ -65,6 +65,20 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "f6bbbb1bae6c276bf553875c2fc74f070f1fbcd4dc5d1a61ea6b03112a646367",
       "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 5,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "568293bcd6b07ce6cd5df144c30d6eb2a93987ac71e94a93250e994122489790",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 5,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "4f3f794a357026081448d4c2a68c3d638ce9fb3c72ab0f165eeb45e42542c6f5",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
     }
   ]
 }

@@ -2,12 +2,19 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `h1arena-197bb65c-20261015-r1`, with dedicated queue/API wiring and scoped data access.
-New intake and admin reprocess attempts select exporter 4 / analytics 3 / viewer 4
-after API `live=182` promotion. Old exporter pins remain supported. See [deployment](DEPLOYMENT.md).
+to `combat-20261020-r1`, with dedicated queue/API wiring and scoped data access.
+New intake selects exporter 5 / analytics 4 / viewer 4 after verifying API
+`live=188`. Admin reprocess defaults remain exporter 4 / analytics 3; explicit
+5/4 requests work. Old pins remain supported. See [deployment](DEPLOYMENT.md).
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
+
+The deployed [combat analytics implementation](COMBAT_ANALYTICS.md) adds retained
+exporter 5 / analytics revision 4, with discharge lineage, applied damage,
+callback deaths and engine awards. One fenced dev canary passes with unchanged
+viewer bytes, scoreboard, graphs and occupancy. Remaining admin-default
+coordination, bulk backfill and broader hosted acceptance are not implied.
 
 New H1 conversions select [bounded pose compression](POSE_COMPRESSION.md),
 viewer revision 4 / `HSRDC002`. The fine candidate preserves every tick and all
@@ -112,8 +119,8 @@ Registered simulations:
 - h1arena snapshot `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, format 2 /
   protocol 9111 / 120 Hz, build `UNIVERSAL Only - 2026-10-14 - 197bb65c`.
   This is the renamed successor of the same project, not a separate game.
-  The retained worker is deployed in dev; **API release and profile-specific map
-  approval remain required** before hosted conversion. It does not claim support
+  The retained worker and API registration are deployed in dev; **profile-specific
+  map approval remains required** before hosted conversion. It does not claim support
   for an upcoming release or arbitrary later commits. See
   [snapshot provenance and refresh](COMPATIBILITY.md#h1arena-snapshot-197bb65c).
 

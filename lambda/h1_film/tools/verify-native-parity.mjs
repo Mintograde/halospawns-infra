@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { closeSync, createReadStream, openSync } from 'node:fs';
+import { copyFile, mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { readEnvelope } from '../runtime/film.mjs';
 import { sha256 } from '../runtime/engine-store.mjs';
 import { verifyPlayback as verifyBeta3 } from '../runtime/adapters/film-v2-120.mjs';
 import { verifyPlayback as verifyArena } from '../runtime/adapters/h1arena-v2-120.mjs';
+import { hashCanonicalStream } from './canonical-transport.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   native: { type: 'string' }, engine: { type: 'string' }, assets: { type: 'string' }, output: { type: 'string' },
+  'compare-base-export': { type: 'boolean', default: false },
 } });
 for (const key of ['native', 'engine', 'assets', 'output']) {
   assert.ok(values[key], `Missing --${key}`);
@@ -47,7 +49,11 @@ async function replay(kind, cwd, envelope) {
   }
   const verify = envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);
-  return { sha256: await sha256(stream), bytes: (await stat(stream)).size };
+  if (!values['compare-base-export']) return { sha256: await sha256(stream), bytes: (await stat(stream)).size };
+  const handle = await open(stream, 'r');
+  const header = Buffer.alloc(8);
+  try { await handle.read(header, 0, 8, 0); } finally { await handle.close(); }
+  return hashCanonicalStream(createReadStream(stream), header.toString('ascii'), { omitCombat: true });
 }
 
 const results = [];
@@ -61,14 +67,20 @@ for (const [index, input] of positionals.entries()) {
   await copyFile(map, join(cwd, 'maps', `${envelope.map}.map`));
   const native = await replay('native', cwd, envelope);
   const wasm = await replay('wasm', cwd, envelope);
-  assert.deepEqual(wasm, native, `Native/WASM export differs: ${film}`);
+  if (values['compare-base-export']) {
+    assert.equal(wasm.canonical_bytes, native.canonical_bytes, `Base export size differs: ${film}`);
+    assert.equal(wasm.canonical_sha256, native.canonical_sha256, `Base export differs: ${film}`);
+  } else {
+    assert.deepEqual(wasm, native, `Native/WASM export differs: ${film}`);
+  }
   const result = { film: basename(film), film_sha256: await sha256(film), map_sha256: await sha256(map),
-    envelope, stream: native };
+    envelope, stream: native, ...(values['compare-base-export'] ? { wasm_stream: wasm } : {}) };
   results.push(result);
   console.log(JSON.stringify(result));
 }
 await writeFile(join(values.output, 'parity.json'), JSON.stringify({
   schema: 'halospawns.h1NativeParity.v1', native_sha256: await sha256(values.native),
+  comparison: values['compare-base-export'] ? 'canonical_base_export_without_combat' : 'full_export',
   glue_sha256: await sha256(values.engine), wasm_sha256: await sha256(values.engine.replace(/\.js$/, '.wasm')),
   results,
 }, null, 2) + '\n');

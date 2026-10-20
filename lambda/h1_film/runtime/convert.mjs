@@ -14,7 +14,7 @@ export async function convertFilm(options) {
     analytics: false, ...options };
   const totalStarted = performance.now();
   const analyticsRevision = Number(values['analytics-revision'] ?? 2);
-  assert.ok([1, 2, 3].includes(analyticsRevision), 'Unsupported analytics revision');
+  assert.ok([1, 2, 3, 4].includes(analyticsRevision), 'Unsupported analytics revision');
   for (const key of ['film', 'assets', 'encoder', 'output']) {
     assert.ok(values[key], `Missing --${key}`);
     values[key] = resolve(values[key]);
@@ -91,6 +91,7 @@ export async function convertFilm(options) {
   request.export_contract = profile.export_contract;
   request.transport_contract = profile.transport_contract ?? profile.export_contract;
   request.analytics_revision = analyticsRevision;
+  request.combat_network_recording = Boolean(envelope.network?.records);
   request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
   assert.ok([1, 2, 3, 4].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);

@@ -144,7 +144,7 @@ class CloudTests(unittest.TestCase):
         for mutate in (
             lambda j: j.update(analytics_revision=3),
             lambda j: j.update(schema="halospawns.h1film_job.v2"),
-            lambda j: j.update(schema="halospawns.h1film_job.v2", analytics_revision=4),
+            lambda j: j.update(schema="halospawns.h1film_job.v2", analytics_revision=5),
             lambda j: j["conversion"]["engine"].update(exporter_revision=1),
             lambda j: j.update(schema="halospawns.h1film_job.v2", analytics_revision=True),
         ):
@@ -193,12 +193,13 @@ class CloudTests(unittest.TestCase):
         source = self.job["conversion"]["source"]
         evidence = self.job["conversion"]["film"]
         item = {"upload_id": self.job["upload_id"], "source": source}
-        for retained in (None, 1, 2, 3, 4):
+        for retained in (None, 1, 2, 3, 4, 5):
             job = copy.deepcopy(self.job)
             if retained != 1:
-                job.update(schema="halospawns.h1film_job.v2", analytics_revision=3)
+                job.update(schema="halospawns.h1film_job.v2",
+                           analytics_revision=4 if retained in (None, 5) else 3)
                 profile = load_registry()[evidence["engine_profile"]]
-                selected = select_exporter(profile, retained or 4)
+                selected = select_exporter(profile, retained or 5)
                 job["conversion"]["engine"].update({key: selected[key] for key in (
                     "wasm_sha256", "glue_sha256", "exporter_revision"
                 )})
@@ -222,8 +223,8 @@ class CloudTests(unittest.TestCase):
                 context = MagicMock()
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute(item, context)
-                self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 3)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 4)
+                self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 4)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 5)
                 self.assertEqual(api.call_count, 2 if retained else 1)
                 if retained:
                     self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])

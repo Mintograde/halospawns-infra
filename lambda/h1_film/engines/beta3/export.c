@@ -295,6 +295,10 @@ static void network(void)
     hs_end(); hs_end(); hs_end();
 }
 
+#ifdef H1_COMBAT_EXPORT
+#include "combat.h"
+#endif
+
 void hs_export_tick(FILE *out, int frame)
 {
     static int previous = -1, ended = 0;
@@ -345,6 +349,9 @@ void hs_export_tick(FILE *out, int frame)
     }
     hs_end();
     metadata(); spawns(); network();
+#ifdef H1_COMBAT_EXPORT
+    hs_combat_frame(tick);
+#endif
     hs_end();
     hs_flush_frame(out);
 }

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .registry import profile_for_report
+from .combat import participant_counters, validate_combat_product
 
 ANALYTICS_SCHEMA = "halospawns.h1AnalyticsSource.v1"
 KNOWN_GAPS = {
@@ -70,6 +71,13 @@ def validate_native_product(product: dict, *, encoding: dict, report: dict) -> N
             points += len(series)
     if points > 16384:
         raise ValueError("Native timelines exceed combined point budget")
+    if encoding.get("analytics_revision") == 4:
+        if product.get("schema") != "halospawns.h1NativeAnalytics.v2":
+            raise ValueError("Analytics revision 4 requires native schema v2")
+        validate_combat_product(product["combat"], encoding=encoding, report=report,
+                                attribution=product.get("kill_attribution"))
+    elif product.get("schema") != "halospawns.h1NativeAnalytics.v1":
+        raise ValueError("Retained analytics revisions require native schema v1")
 
 
 def _json(path: Path, limit: int = 16 * 1024 * 1024) -> dict[str, Any]:
@@ -125,8 +133,8 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     end = analytics.get("match_end_source_tick")
     if end is not None and (type(end) is not int or not 0 <= end < ticks):
         raise ValueError("Invalid H1 match-end boundary")
-    statistics_ticks = end + 1 if revision in (2, 3) and end is not None else ticks
-    if type(revision) is not int or revision not in (1, 2, 3):
+    statistics_ticks = end + 1 if revision in (2, 3, 4) and end is not None else ticks
+    if type(revision) is not int or revision not in (1, 2, 3, 4):
         raise ValueError("Unsupported H1 analytics revision")
     if analytics.get("analytics_revision", 1) != revision:
         raise ValueError("Inconsistent H1 analytics revision")
@@ -135,7 +143,7 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
         or encoding.get("analytics") != {k: v for k, v in analytics.items() if k != "sha256"}
     ):
         raise ValueError("Inconsistent H1 match-only analytics evidence")
-    if revision == 3 and (
+    if revision >= 3 and (
         not isinstance(encoding.get("native_analytics"), dict)
         or report.get("encoding", {}).get("native_analytics") != encoding["native_analytics"]
     ):
@@ -184,6 +192,7 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
     if parsed.metadata["tick_count"] != report["analytics"]["ticks"]:
         raise ValueError("H1 analytics parser tick count mismatch")
     participants = copy.deepcopy(parsed.participants)
+    normalized = participant_counters(encoding)
     for player in participants:
         counters = encoding["final_counters"][str(player["slot_index"])]
         for field, source in [
@@ -195,6 +204,7 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
         ]:
             if player["stats"][field] != counters.get(source):
                 raise ValueError(f"H1 final counter mismatch: {field}")
+        player["stats"]["betrayals"] = normalized[str(player["slot_index"])].get("team_kills")
         # The common parser's legacy score fallback treats zero as absent.
         if "score" in counters:
             player["stats"]["score"] = counters["score"]
@@ -240,13 +250,19 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             "known_gaps": KNOWN_GAPS,
         },
     }
-    if encoding.get("analytics_revision", 1) == 3:
+    if encoding.get("analytics_revision", 1) >= 3:
         metadata["h1_film"]["known_gaps"] = {
             key: value for key, value in KNOWN_GAPS.items() if key != "powerup_timeline"
         }
         metadata["h1_film"]["known_gaps"].update(
             opponent_matrices="Verified EVT1 can establish recorded kill pairs; damage attribution by opponent is not exported.",
             gametype_settings="Reviewed resolved variant fields may be available; complete runtime settings are not exported.",
+        )
+    if encoding.get("analytics_revision") == 4:
+        metadata["h1_film"]["known_gaps"].update(
+            weapon_shots="Discharge lineage coverage is reported independently in native combat.",
+            opponent_matrices="Applied damage and callback death coverage are reported independently in native combat.",
+            streaks_multikills="Engine award coverage is reported independently in native combat.",
         )
     # A film shorter than four ticks has one occupancy sample carrying its final
     # scores. Preserve the independently captured first-tick graph baseline.

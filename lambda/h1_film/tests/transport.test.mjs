@@ -69,3 +69,24 @@ test('stream hashes are independent of pipe fragmentation and retain wire identi
   await assert.rejects(hashCanonicalStream([current.subarray(0, current.length - 1)], 'HSFT0002'));
   await assert.rejects(hashCanonicalStream([Buffer.from('HSFT0002'), integer(0xffffffff)], 'HSFT0002'));
 });
+
+test('base-export comparison omits only root combat while retaining every other byte', async () => {
+  const base = object([['position', tagged(5, float(-0))],
+    ['nested', object([['combat', tagged(3, integer(9))]])]]);
+  const extra = object([['position', tagged(5, float(-0))],
+    ['combat', object([['damage', tagged(5, float(1.5))]])],
+    ['nested', object([['combat', tagged(3, integer(9))]])]]);
+  assert.deepEqual(expandFrame(extra, undefined, { omitCombat: true }), base);
+  const original = await hashCanonicalStream([stream('HSFT0001', [base])]);
+  const candidate = await hashCanonicalStream([stream('HSFT0002', [extra])],
+    'HSFT0002', { omitCombat: true });
+  assert.equal(candidate.canonical_sha256, original.canonical_sha256);
+  assert.notEqual(candidate.transport_sha256, original.transport_sha256);
+  const changed = Buffer.from(extra);
+  changed[18] ^= 1;
+  const different = await hashCanonicalStream([stream('HSFT0002', [changed])],
+    'HSFT0002', { omitCombat: true });
+  assert.notEqual(different.canonical_sha256, original.canonical_sha256);
+  assert.throws(() => expandFrame(object([['combat', tagged(0)], ['combat', tagged(0)]]),
+    undefined, { omitCombat: true }), /Duplicate combat/);
+});

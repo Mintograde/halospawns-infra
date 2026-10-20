@@ -24,8 +24,8 @@ preserving the normalized `HSFT0001` export contract. The retained exporter entr
 selects this wire format explicitly; older entries default to `HSFT0001` and keep
 their original binaries. This is not a new simulation profile or public viewer
 contract. Full-source canonical parity and rollout requirements are documented in
-[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev worker `h1arena-197bb65c-20261015-r1`
-retains the exporter-4 defaults promoted with API `live=182`. Persisted jobs
+[TYPED_TRANSPORT.md](TYPED_TRANSPORT.md). Dev worker `combat-20261020-r1`
+retains exporter 4 alongside the new exporter-5 intake default. Persisted jobs
 and retries keep their pins. Retain exporter-4 API/worker support during rollback,
 alongside the original exporters and viewer-4 readers.
 
@@ -43,6 +43,17 @@ verification. `--generic-poses` isolates the transport change for offline ablati
 no new exporter, public format, quality setting or API contract is introduced.
 
 ## Registry and Engine Store
+
+Exporter 5 adds opt-in [combat hooks](COMBAT_ANALYTICS.md) for both retained
+families using the same `HSFT0002` transport. Explicit analytics revision 4
+collects native schema v2; old revisions discard the extra internal field.
+Dev `combat-20261020-r1` selects exporter 5 / analytics 4 for new intake after
+verifying API `live=188`; admin defaults remain exporter 4 / analytics 3.
+Both profiles' full callbacks pass the deployed API source. Revision-4 sidecar
+rosters retain departed and between-sample players without invented positions;
+earlier revisions and viewer bytes are unchanged. All prior binary records,
+source identities and retries remain pinned. Retain exporter-5/native-v2 support
+during rollback now that a hosted revision-4 generation exists.
 
 `profiles/registry.json` is the single source read by Node and Python. Each entry
 pins the film tuple, adapter/port, export/analytics contracts, map cache format,

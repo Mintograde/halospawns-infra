@@ -3,6 +3,7 @@ mod counters;
 mod artifact;
 mod fast_schema;
 mod native;
+mod combat;
 mod recycle;
 mod sampling;
 mod text_equal;
@@ -36,6 +37,8 @@ struct Request {
     transport_contract: String,
     #[serde(default = "default_analytics_revision")]
     analytics_revision: u8,
+    #[serde(default)]
+    combat_network_recording: bool,
     #[serde(default = "default_viewer_revision")]
     viewer_profile_revision: u32,
     #[serde(default)]
@@ -79,7 +82,7 @@ impl Request {
         if !matches!(self.transport_contract.as_str(), "HSFT0001" | "HSFT0002") {
             return Err("unsupported engine transport contract".into());
         }
-        if !(1..=3).contains(&self.analytics_revision) {
+        if !(1..=4).contains(&self.analytics_revision) {
             return Err("unsupported analytics revision".into());
         }
         Ok(())
@@ -442,7 +445,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         legacy_analytics: request.analytics_revision == 1,
         ..Default::default()
     };
-    let mut native = (request.analytics_revision == 3).then(native::NativeAnalytics::default);
+    let mut native = (request.analytics_revision >= 3).then(native::NativeAnalytics::default);
+    let mut combat = (request.analytics_revision == 4)
+        .then(|| combat::Combat::new(request.combat_network_recording));
     let mut count = 0;
     let mut analytics = request
         .analytics_context
@@ -478,6 +483,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         if let Some(native) = &mut native {
             native.observe(&tick, count)?;
         }
+        if let Some(combat) = &mut combat {
+            combat.observe(&tick, count)?;
+        }
+        tick.as_object_mut().unwrap().remove("combat");
         observations.observe_state(
             &mut tick,
             count,
@@ -565,13 +574,19 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             )
         })
         .transpose()?;
+    let mut native_product = native.map(|native| native.product());
+    if let Some(combat) = combat {
+        let product = native_product.as_mut().unwrap();
+        product["schema"] = json!("halospawns.h1NativeAnalytics.v2");
+        product["combat"] = combat.product()?;
+    }
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
         "verification":{"mode":if request.viewer_profile_revision == 4 { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
             "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
         "export_contract":request.export_contract, "transport_contract":request.transport_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,
         "viewer_profile_revision":request.viewer_profile_revision,
-        "native_analytics":native.map(|native| native.product()),
+        "native_analytics":native_product,
         "state_reuse":{"enabled":incremental,"objects_decoded":source.objects.decoded,"objects_reused":source.objects.reused,
             "typed_poses":typed_poses,"poses_decoded":source.poses.decoded,"pose_nodes_decoded":source.poses.nodes_decoded,
             "verified_source_ticks":if request.verify_incremental_state {count} else {0}},
@@ -732,6 +747,7 @@ mod observation_tests {
             typed_poses: true,
             verify_incremental_state: false,
             analytics_revision: 2,
+            combat_network_recording: false,
             ticks: 5,
             players: 1,
             map: "downrush".into(),
@@ -970,6 +986,7 @@ mod observation_tests {
                 typed_poses: true,
                 verify_incremental_state: false,
                 analytics_revision: 2,
+                combat_network_recording: false,
                 ticks: 12,
                 players: 1,
                 map: "prisoner".into(),

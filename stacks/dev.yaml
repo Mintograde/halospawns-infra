@@ -156,7 +156,7 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: h1arena-197bb65c-20261015-r1
+          image_tag: combat-20261020-r1
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

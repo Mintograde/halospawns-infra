@@ -1,0 +1,860 @@
+{
+  "$comment": "Generated from API schemas/h1film_combat.py SHA256 89b415b73f751742a504a01dcdc16810ecd87399285f7ee0222f29b971e65952",
+  "$defs": {
+    "H1CombatAnalytics": {
+      "additionalProperties": false,
+      "properties": {
+        "award_coverage": {
+          "$ref": "#/$defs/H1CombatCoverage"
+        },
+        "awards": {
+          "items": {
+            "$ref": "#/$defs/H1CombatAwards"
+          },
+          "maxItems": 4,
+          "title": "Awards",
+          "type": "array"
+        },
+        "coordinate_space": {
+          "const": "halo1.replay_world.v1",
+          "title": "Coordinate Space",
+          "type": "string"
+        },
+        "damage": {
+          "items": {
+            "$ref": "#/$defs/H1DamagePair"
+          },
+          "maxItems": 2048,
+          "title": "Damage",
+          "type": "array"
+        },
+        "damage_coverage": {
+          "$ref": "#/$defs/H1CombatCoverage"
+        },
+        "damage_unit": {
+          "const": "h1_applied_vitality",
+          "title": "Damage Unit",
+          "type": "string"
+        },
+        "death_coverage": {
+          "$ref": "#/$defs/H1CombatCoverage"
+        },
+        "deaths": {
+          "items": {
+            "$ref": "#/$defs/H1DeathEvent"
+          },
+          "maxItems": 8192,
+          "title": "Deaths",
+          "type": "array"
+        },
+        "hit_policy": {
+          "const": "discharge_hit_opponent_once",
+          "title": "Hit Policy",
+          "type": "string"
+        },
+        "position_sample": {
+          "const": "death_callback",
+          "title": "Position Sample",
+          "type": "string"
+        },
+        "provenance": {
+          "const": "simulation_hooks_v1",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "shot_coverage": {
+          "$ref": "#/$defs/H1CombatCoverage"
+        },
+        "shot_unit": {
+          "const": "discharge",
+          "title": "Shot Unit",
+          "type": "string"
+        },
+        "shots": {
+          "items": {
+            "$ref": "#/$defs/H1WeaponShots"
+          },
+          "maxItems": 256,
+          "title": "Shots",
+          "type": "array"
+        },
+        "weapons": {
+          "items": {
+            "$ref": "#/$defs/H1CombatWeapon"
+          },
+          "maxItems": 64,
+          "title": "Weapons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "provenance",
+        "coordinate_space",
+        "damage_unit",
+        "shot_unit",
+        "hit_policy",
+        "position_sample",
+        "weapons",
+        "shot_coverage",
+        "damage_coverage",
+        "death_coverage",
+        "award_coverage",
+        "shots",
+        "damage",
+        "deaths",
+        "awards"
+      ],
+      "title": "H1CombatAnalytics",
+      "type": "object"
+    },
+    "H1CombatAwards": {
+      "additionalProperties": false,
+      "properties": {
+        "double_kills": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Double Kills",
+          "type": "integer"
+        },
+        "longest_kill_streak": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Longest Kill Streak",
+          "type": "integer"
+        },
+        "overkills": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Overkills",
+          "type": "integer"
+        },
+        "slot_index": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        },
+        "triple_kills": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Triple Kills",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot_index",
+        "longest_kill_streak",
+        "double_kills",
+        "triple_kills",
+        "overkills"
+      ],
+      "title": "H1CombatAwards",
+      "type": "object"
+    },
+    "H1CombatCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "unsupported_exporter",
+                "partial_recording",
+                "capped",
+                "missing_evidence"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "H1CombatCoverage",
+      "type": "object"
+    },
+    "H1CombatWeapon": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "weapon",
+            "grenade",
+            "melee",
+            "vehicle",
+            "environment"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "tag_path": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Tag Path",
+          "type": "string"
+        },
+        "weapon_id": {
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Weapon Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "weapon_id",
+        "tag_path",
+        "category"
+      ],
+      "title": "H1CombatWeapon",
+      "type": "object"
+    },
+    "H1CreditedKill": {
+      "additionalProperties": false,
+      "properties": {
+        "killer_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Killer Slot",
+          "type": "integer"
+        },
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "victim_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Victim Slot",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_tick",
+        "killer_slot",
+        "victim_slot"
+      ],
+      "title": "H1CreditedKill",
+      "type": "object"
+    },
+    "H1DamagePair": {
+      "additionalProperties": false,
+      "properties": {
+        "attacker_slot": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Attacker Slot"
+        },
+        "health_damage": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Health Damage"
+        },
+        "relationship": {
+          "enum": [
+            "opponent",
+            "friendly",
+            "self",
+            "environment",
+            "unknown"
+          ],
+          "title": "Relationship",
+          "type": "string"
+        },
+        "shield_damage": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Shield Damage"
+        },
+        "victim_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Victim Slot",
+          "type": "integer"
+        },
+        "weapon_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Weapon Id"
+        }
+      },
+      "required": [
+        "attacker_slot",
+        "victim_slot",
+        "weapon_id",
+        "relationship",
+        "shield_damage",
+        "health_damage"
+      ],
+      "title": "H1DamagePair",
+      "type": "object"
+    },
+    "H1DeathEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Event Index",
+          "type": "integer"
+        },
+        "headshot": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Headshot"
+        },
+        "killer_position": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                },
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                },
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Killer Position"
+        },
+        "killer_slot": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Killer Slot"
+        },
+        "kind": {
+          "enum": [
+            "kill",
+            "betrayal",
+            "suicide",
+            "environment",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "victim_position": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                },
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                },
+                {
+                  "maximum": 1000000.0,
+                  "minimum": -1000000.0,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Victim Position"
+        },
+        "victim_slot": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Victim Slot",
+          "type": "integer"
+        },
+        "weapon_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Weapon Id"
+        }
+      },
+      "required": [
+        "event_index",
+        "source_tick",
+        "killer_slot",
+        "victim_slot",
+        "kind",
+        "weapon_id",
+        "headshot",
+        "killer_position",
+        "victim_position"
+      ],
+      "title": "H1DeathEvent",
+      "type": "object"
+    },
+    "H1KillAttribution": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/H1CreditedKill"
+          },
+          "maxItems": 8192,
+          "title": "Events",
+          "type": "array"
+        },
+        "provenance": {
+          "const": "recorded_evt1",
+          "default": "recorded_evt1",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "missing_section",
+                "capped_section",
+                "unverified_clock",
+                "partial_recording"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "coverage"
+      ],
+      "title": "H1KillAttribution",
+      "type": "object"
+    },
+    "H1NativeMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "series": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/H1NativeMetricPoint"
+              },
+              "maxItems": 4096,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Series"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "H1NativeMetric",
+      "type": "object"
+    },
+    "H1NativeMetricPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "source_tick",
+        "value"
+      ],
+      "title": "H1NativeMetricPoint",
+      "type": "object"
+    },
+    "H1NativePlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/H1NativeMetric"
+          },
+          "maxProperties": 4,
+          "propertyNames": {
+            "enum": [
+              "pgcr_damage_dealt",
+              "vitality_damage_received",
+              "camo_pickups",
+              "overshield_pickups"
+            ]
+          },
+          "title": "Metrics",
+          "type": "object"
+        },
+        "slot_index": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot_index"
+      ],
+      "title": "H1NativePlayer",
+      "type": "object"
+    },
+    "H1ResolvedVariant": {
+      "additionalProperties": false,
+      "properties": {
+        "game_type": {
+          "enum": [
+            "slayer",
+            "ctf",
+            "oddball",
+            "king",
+            "race"
+          ],
+          "title": "Game Type",
+          "type": "string"
+        },
+        "motion_tracker": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "friends",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Motion Tracker"
+        },
+        "provenance": {
+          "const": "recorded_resolved_variant",
+          "default": "recorded_resolved_variant",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "respawn_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Respawn Seconds"
+        },
+        "score_to_win": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score To Win"
+        },
+        "shields_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shields Enabled"
+        },
+        "starting_grenades": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Starting Grenades"
+        },
+        "suicide_penalty_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suicide Penalty Seconds"
+        },
+        "teamplay": {
+          "title": "Teamplay",
+          "type": "boolean"
+        },
+        "time_limit_seconds": {
+          "anyOf": [
+            {
+              "maximum": 86400,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Limit Seconds"
+        }
+      },
+      "required": [
+        "game_type",
+        "teamplay"
+      ],
+      "title": "H1ResolvedVariant",
+      "type": "object"
+    },
+    "H1WeaponShots": {
+      "additionalProperties": false,
+      "properties": {
+        "shots_fired": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Shots Fired",
+          "type": "integer"
+        },
+        "shots_hit": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Shots Hit",
+          "type": "integer"
+        },
+        "slot_index": {
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        },
+        "weapon_id": {
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "title": "Weapon Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot_index",
+        "weapon_id",
+        "shots_fired",
+        "shots_hit"
+      ],
+      "title": "H1WeaponShots",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "combat": {
+      "$ref": "#/$defs/H1CombatAnalytics"
+    },
+    "kill_attribution": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1KillAttribution"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "players": {
+      "items": {
+        "$ref": "#/$defs/H1NativePlayer"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "title": "Players",
+      "type": "array"
+    },
+    "resolved_variant": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1ResolvedVariant"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema": {
+      "const": "halospawns.h1NativeAnalytics.v2",
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "players",
+    "combat"
+  ],
+  "title": "H1NativeAnalyticsV2",
+  "type": "object"
+}

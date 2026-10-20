@@ -12,7 +12,7 @@ const encodedKeys = new Map([...objectFields, ...spawnFields].map(key => {
   return [key, bytes];
 }));
 
-export function expandFrame(input, output = Buffer.alloc(LIMIT)) {
+export function expandFrame(input, output = Buffer.alloc(LIMIT), { omitCombat = false } = {}) {
   let offset = 0, written = 0;
   function take(size) {
     assert.ok(size >= 0 && offset + size <= input.length, 'Truncated packed transport');
@@ -39,7 +39,9 @@ export function expandFrame(input, output = Buffer.alloc(LIMIT)) {
     const length = size.readUInt32LE();
     assert.ok(length <= 65536, 'String exceeds limit');
     put(size);
-    put(take(length));
+    const bytes = take(length);
+    put(bytes);
+    return bytes;
   }
   function scalar(tag) {
     byte(tag);
@@ -56,11 +58,20 @@ export function expandFrame(input, output = Buffer.alloc(LIMIT)) {
     if (tag === 8 || tag === 9) {
       const length = take(4).readUInt32LE();
       assert.ok(length <= 65536, 'Collection exceeds limit');
-      byte(tag); count(length);
+      byte(tag);
+      const countOffset = written;
+      count(length);
+      let omitted = 0;
       for (let index = 0; index < length; index++) {
-        if (tag === 9) text();
+        const memberOffset = written;
+        const key = tag === 9 ? text() : undefined;
         value(depth + 1);
+        if (omitCombat && depth === 0 && key?.equals(Buffer.from('combat'))) {
+          assert.equal(omitted++, 0, 'Duplicate combat source');
+          written = memberOffset;
+        }
       }
+      output.writeUInt32LE(length - omitted, countOffset);
       return;
     }
     assert.ok(tag >= 10 && tag <= 12, 'Unknown packed transport tag');
@@ -98,7 +109,7 @@ export function expandFrame(input, output = Buffer.alloc(LIMIT)) {
   return output.subarray(0, written);
 }
 
-export async function hashCanonicalStream(stream, contract = 'HSFT0001') {
+export async function hashCanonicalStream(stream, contract = 'HSFT0001', options = {}) {
   assert.ok(['HSFT0001', 'HSFT0002'].includes(contract));
   const wireHash = createHash('sha256'), canonicalHash = createHash('sha256');
   let wireBytes = 0, canonicalBytes = 8;
@@ -130,7 +141,8 @@ export async function hashCanonicalStream(stream, contract = 'HSFT0001') {
         frameUsed += copied;
         if (frameUsed === frameSize) {
           const raw = frame.subarray(0, frameSize);
-          const canonical = contract === 'HSFT0002' ? expandFrame(raw, expanded) : raw;
+          const canonical = contract === 'HSFT0002' || options.omitCombat
+            ? expandFrame(raw, expanded, options) : raw;
           length.writeUInt32LE(canonical.length);
           canonicalHash.update(length);
           canonicalHash.update(canonical);

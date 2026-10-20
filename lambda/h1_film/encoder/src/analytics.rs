@@ -110,9 +110,21 @@ impl Export {
         let players = tick["players"]
             .as_array()
             .ok_or("missing analytics players")?;
-        self.final_players.resize_with(players.len(), || Value::Null);
-        for (player, target) in players.iter().zip(&mut self.final_players) {
-            select_player_reusing(player, target);
+        if self.revision >= 4 {
+            for player in players {
+                if let Some(target) = self.final_players.iter_mut()
+                    .find(|previous| previous["player_index"] == player["player_index"])
+                {
+                    select_player_reusing(player, target);
+                } else {
+                    self.final_players.push(selected_player(player));
+                }
+            }
+        } else {
+            self.final_players.resize_with(players.len(), || Value::Null);
+            for (player, target) in players.iter().zip(&mut self.final_players) {
+                select_player_reusing(player, target);
+            }
         }
         self.game_type = tick["game_type"].as_u64();
         self.has_teams = tick["game_engine_has_teams"].as_bool();
@@ -183,6 +195,17 @@ impl Export {
                     .unwrap()
                     .extend(final_player.as_object().unwrap().clone());
             }
+        }
+        if self.revision >= 4 {
+            let players = pending["players"].as_array_mut().unwrap();
+            for final_player in &self.final_players {
+                if !players.iter().any(|player| player["player_index"] == final_player["player_index"]) {
+                    let mut retained = final_player.clone();
+                    retained["player_object_data"] = Value::Null;
+                    players.push(retained);
+                }
+            }
+            players.sort_by_key(|player| player["player_index"].as_u64());
         }
         self.flush_pending()?;
         let statistics_source_ticks = if self.revision == 1 {
@@ -300,6 +323,64 @@ mod tests {
         assert_eq!(value["gametype_settings"]["mode"], "slayer");
         assert_eq!(value["summary"]["game_duration_ingame"], "0:00:00.041667");
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn revision_four_retains_departed_and_unsampled_players_without_adding_positions() {
+        for revision in [3, 4] {
+            for end in [None, Some(5)] {
+                let path = std::env::temp_dir().join(format!(
+                    "h1-roster-{}-{revision}-{end:?}.zst", std::process::id()
+                ));
+                let mut writer = Export::with_revision(&path, revision).unwrap();
+                for ordinal in 0..7 {
+                    let mut players = vec![json!({
+                        "player_index":0,"name":"Stays","kills":ordinal,
+                        "object_ref":1,"player_object_data":{"x":ordinal,"y":1,"z":2}
+                    })];
+                    if ordinal < 3 {
+                        players.push(json!({
+                            "player_index":1,"name":"Leaves","kills":ordinal,
+                            "player_quit":ordinal==2,"object_ref":2,
+                            "player_object_data":{"x":10,"y":1,"z":2}
+                        }));
+                    }
+                    if ordinal == 5 {
+                        players.push(json!({
+                            "player_index":2,"name":"Between samples","kills":3,
+                            "object_ref":3,"player_object_data":{"x":20,"y":1,"z":2}
+                        }));
+                    }
+                    writer.observe(&json!({
+                        "game_type":2,"game_engine_has_teams":false,
+                        "multiplayer_map_name":"dread",
+                        "game_ended_this_tick":end==Some(ordinal),"players":players
+                    }), ordinal).unwrap();
+                }
+                writer.finish(
+                    json!({"summary":{},"game_meta":{},"events":[]}).as_object().unwrap(),
+                    &json!({"gametype":"Slayer"}), 7
+                ).unwrap();
+                let raw = zstd::decode_all(File::open(&path).unwrap()).unwrap();
+                let value: Value = serde_json::from_slice(&raw).unwrap();
+                let ticks = value["ticks"].as_array().unwrap();
+                assert_eq!(ticks.len(), 2);
+                let players = ticks.last().unwrap()["players"].as_array().unwrap();
+                assert_eq!(players[0]["kills"], end.unwrap_or(6));
+                assert_eq!(players[0]["player_object_data"]["x"], 4);
+                assert_eq!(players.len(), if revision == 4 { 3 } else { 1 });
+                if revision == 4 {
+                    assert_eq!(players[1]["name"], "Leaves");
+                    assert_eq!(players[1]["kills"], 2);
+                    assert_eq!(players[1]["player_quit"], true);
+                    assert_eq!(players[2]["name"], "Between samples");
+                    assert_eq!(players[2]["kills"], 3);
+                    assert!(players[1]["player_object_data"].is_null());
+                    assert!(players[2]["player_object_data"].is_null());
+                }
+                std::fs::remove_file(path).unwrap();
+            }
+        }
     }
 
     #[test]

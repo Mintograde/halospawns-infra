@@ -1,19 +1,21 @@
 # H1 film Lambda integration
 
-Status on 2026-10-15: dev defaults to typed-transport exporter 4, analytics 3
-and bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
-`h1arena-197bb65c-20261015-r1`, API `live=183` and compatible frontend readers are deployed.
-The new worker retains Beta 3 and adds commit-pinned h1arena simulation. This is
-a worker-only stage: the live API still lacks h1arena registration, and new
-profile-specific raw-map approvals remain required before hosted conversion.
-New intake and admin reprocess attempts select exporter 4 and use typed transport,
-incremental world-object state and typed poses. Exporters 1/2/3/4 remain available;
+Status on 2026-10-20: dev new intake selects exporter 5 / analytics 4, retaining
+bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
+`combat-20261020-r1` and API `live=188` are deployed; compatible frontend viewer
+readers are unchanged. Both Beta 3 and commit-pinned h1arena exporter-5 records
+are registered. Profile-specific h1arena raw-map approvals and hosted acceptance
+remain required. Admin reprocess defaults remain exporter 4 / analytics 3;
+explicit exporter 5 / analytics 4 is supported and a fenced canary passes.
+New conversions retain typed transport, incremental world-object state and
+typed poses. Exporters 1/2/3/4/5 remain available;
 persisted jobs/retries retain their original pins and paths.
 Both H1 flags remain true, the batch-one queue remains enabled, and reserved
 concurrency remains 5. All 32 frozen dev H1 replays succeeded and selected the
 new format. Source/map pins and old explicit jobs/retries are retained.
-Existing Xbox consumers and prod are unchanged. This is not full semantic parity;
-broader map approval and unrelated parity work remain open.
+Existing Xbox consumers and prod are unchanged. Combat bulk backfill and admin
+default coordination remain. This is not full semantic parity; broader map
+approval and unrelated parity work remain open.
 
 Active code has since been organized under `lambda/h1_film`; experiments retain
 only reference/benchmark tooling and historical notes. See [README.md](README.md)
@@ -27,6 +29,95 @@ It added retained exporter 3, selected by new intake and admin jobs at that rele
 Existing conversions, jobs, retries and artifacts retain their original pins.
 Completed coordination: `20261011-infra-api-h1film-runtime-exporter3`; see
 [the performance report](PERFORMANCE.md#runtime-candidate-2026-10-11).
+
+## Combat Analytics Activated 2026-10-20
+
+Completed the user-authorized dev activation after checking the actual deployed
+API, not merely the sibling checkout. API **`live=188`** ZIP SHA-256
+`272ffeeb6da9321bb006e704f4a2b663c269f927d709ed96689d3f449e97ad6c`
+matches Lambda and registers every retained pin, including exporter 5 for both
+profiles. Analytics 4/native-v2 ingest and public-read code are present; admin
+defaults deliberately remain analytics 3 / exporter 4. No API code/alias write
+was made by this deployment.
+
+- Worker **`combat-20261020-r1`**, digest
+  `sha256:7076d78804c975fa9d3015e7bfe655da39a4f04b2d44c1a945da4ec9815ab792`,
+  is Active/Successful. New intake requests analytics 4 / exporter 5; explicit
+  persisted jobs/retries retain their pins.
+- Published image ID
+  `sha256:5d1262883ccfb6204dbcf4f3a8cac849951150a6972e6be4b2edcffc1df40ca0`
+  exactly matches the tested candidate. Linux encoder SHA-256:
+  `424ae80f779a63d0b3b7bb252fab106acd1e04007e677514d353aa23cf2ab495`.
+  Retention is checked against the registry extracted from the preceding
+  deployed digest. The release fixture adds both new exporter records.
+- Revision-4 analytics now retains departed and between-sample participants'
+  observed identities/counters in its final sidecar roster, without fabricated
+  positions. This fixes the h1arena normalizer rejection without discarding
+  native data, changing old revisions or weakening API checks.
+- 51 Python, 22 Node and 93 Rust tests pass; one existing optional Rust test is
+  ignored. Both profiles pass packaged initial/rebuild/reparse/pinned-retry
+  checks and the actual deployed API's unmodified normalizer/graph/spatial
+  builders. Read-only, non-root container health/rejection checks pass.
+
+Baseline plan and focused postplan are no-op. Focused/full preplans and apply
+contain **0 adds / 1 update / 0 destroys**, only H1 `image_uri` and computed
+`last_modified`. Reviewed saved-plan SHA-256:
+`2b336d856634d832d74f7c213cd252b1e4f4e9d940cf516800fb2ee4d45c8713`.
+The full postplan has zero resource actions; only the existing API output
+refresh `173 -> 188` remains unapplied. Existing undeclared
+`asset_delivery_mode` warnings are unrelated.
+
+Live exact encoder/all-engine inventories pass twice after two cold inventory
+requests hit the unchanged 20-second child timeout. Successful inventory Lambda
+durations were 17.898 s and 0.848 s. No timeout, memory, concurrency, queue,
+IAM or other consumer changes were made.
+
+One audited full-reparse canary succeeded and selected its matching generation:
+replay `55dd6401-0314-4fe8-a896-56f1af8a6dc0`, attempt
+`c0dc5574-bfdc-5129-b4cc-fb1d73047470`, epoch 0 / request sequence 3.
+The dev AWS-SSO operator request uses the deployed API's attempt/selection
+contracts and normal SQS dispatcher; the worker finalized through the real
+HMAC API. No direct selected-artifact mutation or fabricated admin JWT was used.
+All 589 recorded hashes pass over 70,582 ticks. Native-v2 matches the offline
+product exactly: 77 deaths, 16 shot rows, 37 damage pairs, all four sections
+complete. Public service code returns 77 located death/killer positions and
+consistent weapon-filtered heatmaps. Scoreboard, graph series, native timelines,
+variant, EVT1, decoded occupancy and all viewer bytes are unchanged. Viewer hash:
+`7eae439f2e13c7b29ee0992733bcf70e52b314740e6b06ab8454b9def5153dc0`.
+The packaged independent decoder validates all 70,582 downloaded viewer ticks.
+Public read verification executes deployed API service methods against dev data;
+it is not a new HTTP/browser acceptance test.
+
+CloudWatch canary invocation: **55.808 s / 795 MiB**, with worker processing
+51.744 s. This is one observation, not a stress test or controlled speed comparison.
+Old generations/source/map pins and all other 31 selected replays are unchanged.
+No bulk backfill, map approval, h1arena hosted conversion, migration, frontend,
+commit/push or prod action. Admin-default promotion remains API-owned; existing
+replays need explicit 4/5 full-reparse requests or a separately audited backfill.
+Keep exporter-5/native-v2 support during rollback.
+
+Memory 3,008 MiB, timeout 900 s, temporary storage 8,192 MiB, concurrency 5,
+enabled batch-one mapping, both H1 flags and existing limits remain unchanged.
+Final API health passes; the films queue and DLQ are empty.
+No AWS/profile/session blocker (`halospawns-dev`, `283279960672`, `us-east-1`).
+Evidence: `L:/tmp/halospawns-h1-combat-activation-20261020`. Commands from infra root:
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+.\scripts\publish-h1-film.ps1 -Tag combat-20261020-r1 -EngineRoot L:/tmp/halospawns-h1-combat-20261019/engines -PreviousRegistry L:/tmp/halospawns-h1-combat-activation-20261020/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag combat-20261020-r1 -EngineRoot L:/tmp/halospawns-h1-combat-20261019/engines -PreviousRegistry L:/tmp/halospawns-h1-combat-activation-20261020/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=L:/bens_stuff/projects/halospawns-infra/components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-combat-activation-20261020/final.reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Changed `stacks/dev.yaml`, H1 encoder analytics/roster tests, intake default/retry
+tests, retained-profile fixture, H1 README/compatibility/combat/deployment docs,
+root `AGENTS.md`/`HANDOFFS.md`/`ATMOS_MIGRATION_PLAN.md`, and sibling API handoff/
+roadmap documentation. Only `map-processing` resources changed; ECR received
+one immutable image. No Terraform resource definitions changed.
 
 ## h1arena Retained Worker Deployed 2026-10-15
 

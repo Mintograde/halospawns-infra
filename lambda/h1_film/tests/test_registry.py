@@ -11,6 +11,16 @@ from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report, s
 
 
 class RegistryTests(unittest.TestCase):
+    def test_combat_exporters_preserve_both_profile_identities_and_old_pins(self):
+        for profile in load_registry().values():
+            old = select_exporter(profile, 4)
+            combat = select_exporter(profile, 5)
+            self.assertNotEqual(old["wasm_sha256"], combat["wasm_sha256"])
+            self.assertEqual(combat["export_contract"], "HSFT0001")
+            for field in ("id", "build", "format", "protocol_revision", "tick_rate", "source"):
+                self.assertEqual(combat.get(field), profile.get(field))
+            self.assertEqual(select_exporter(profile, None), profile)
+
     def test_h1arena_requires_full_commit_and_source_fingerprint(self):
         document = json.loads(REGISTRY_PATH.read_text())
         original = document["profiles"][0]

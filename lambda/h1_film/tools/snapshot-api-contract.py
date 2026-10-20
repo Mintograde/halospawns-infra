@@ -17,6 +17,7 @@ def main():
     models = runpy.run_path(str(source))
     sys.path.insert(0, str(args.api / "src"))
     from halospawns_api.schemas.h1film_analytics import H1NativeAnalytics
+    from halospawns_api.schemas.h1film_combat import H1NativeAnalyticsV2
     provenance = (
         "Generated from API schemas/h1films.py SHA256 "
         + hashlib.sha256(source.read_bytes()).hexdigest()
@@ -44,6 +45,14 @@ def main():
     ).hexdigest()
     (root / "contracts/h1film-native-analytics.v1.schema.json").write_text(
         json.dumps(native, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    combat = H1NativeAnalyticsV2.model_json_schema(by_alias=True)
+    combat["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    combat["$comment"] = "Generated from API schemas/h1film_combat.py SHA256 " + hashlib.sha256(
+        (source.parent / "h1film_combat.py").read_bytes()
+    ).hexdigest()
+    (root / "contracts/h1film-native-analytics.v2.schema.json").write_text(
+        json.dumps(combat, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     for name in (
         "initial-job",

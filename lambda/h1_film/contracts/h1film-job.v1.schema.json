@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 90ed5f2a53047a98348cebc6999cf86a5fd0f0e8f183ed875d075696abb84740",
+  "$comment": "Generated from API schemas/h1films.py SHA256 df70deb6cbb1e2a627ef60bd27ba991873623525965046c9f8aa05a83d24bd78",
   "$defs": {
     "H1FilmEngine": {
       "additionalProperties": false,
@@ -271,7 +271,8 @@
           "enum": [
             1,
             2,
-            3
+            3,
+            4
           ],
           "type": "integer"
         },

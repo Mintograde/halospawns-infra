@@ -7,6 +7,11 @@ endif()
 
 # Reuse the original simulator and its strict x86 floating-point build settings.
 add_subdirectory("${H1_SOURCE}" engine)
+option(H1_COMBAT_EXPORT "Build candidate combat hooks" OFF)
+if(H1_COMBAT_EXPORT)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../combat.cmake")
+    hs_combat_native()
+endif()
 
 # A sequential converter never uses theater pad displays or seek snapshots.
 # Patch only a generated copy, and refuse an unfamiliar upstream source layout.

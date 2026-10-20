@@ -7,6 +7,11 @@ endif()
 
 # Reuse the original simulator and its strict x86 floating-point build settings.
 add_subdirectory("${H1_SOURCE}" engine)
+option(H1_COMBAT_EXPORT "Build candidate combat hooks" OFF)
+if(H1_COMBAT_EXPORT)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/combat.cmake")
+    hs_combat_native()
+endif()
 
 # A sequential converter never uses theater pad displays or seek snapshots.
 # Patch only a generated copy, and refuse an unfamiliar upstream source layout.
@@ -35,4 +40,3 @@ set_property(SOURCE "${H1_SOURCE}/host/main.c" TARGET_DIRECTORY blampc
 set_property(SOURCE "${H1_SOURCE}/engine/blam/object_cause_damage.c" TARGET_DIRECTORY blampc
     APPEND PROPERTY COMPILE_DEFINITIONS blampc_pgcr_stats_note_damage=hs_note_damage)
 set_target_properties(blampc PROPERTIES OUTPUT_NAME "h1-film-export")
-
