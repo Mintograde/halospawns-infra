@@ -5,7 +5,7 @@ pub(super) fn same(previous: &Value, next: &Value) -> bool {
         (Value::Object(a), Value::Object(b)) => {
             a.len() == b.len()
                 && a.iter().zip(b).all(|((key, a), (other, b_value))| {
-                    if key == other {
+                    if crate::text_equal::equal(key, other) {
                         same(a, b_value)
                     } else {
                         b.get(key).is_some_and(|b| same(a, b))
@@ -51,7 +51,9 @@ fn write_inner(
     if let (Some(Value::Object(a)), Value::Object(b)) = (previous, next)
         && a.len() == b.len()
         && a.len() <= 64
-        && a.keys().eq(b.keys())
+        && a.keys()
+            .zip(b.keys())
+            .all(|(key, other)| crate::text_equal::equal(key, other))
     {
         let mut changed = 0u64;
         for (i, (a, b)) in a.values().zip(b.values()).enumerate() {

@@ -12,6 +12,9 @@ mod object_transfer;
 mod ordered_delta;
 #[path = "pose_state.rs"]
 mod pose_state;
+#[cfg(feature = "native-pipeline")]
+#[path = "pipeline.rs"]
+mod pipeline;
 #[path = "projection_plan.rs"]
 mod projection_plan;
 #[path = "tick_hash.rs"]
@@ -30,8 +33,10 @@ pub fn select_revision(revision: u32) -> Result<(), Box<dyn Error>> {
 // static-glibc build. Windows benefits from the additional bounded pipeline.
 #[cfg(windows)]
 pub type PrimaryExport = EncodingWorker;
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(feature = "native-pipeline")))]
 pub type PrimaryExport = StreamingExport;
+#[cfg(all(not(windows), feature = "native-pipeline"))]
+pub type PrimaryExport = pipeline::IncrementalWorker;
 
 impl CompiledProjection {
     fn project_reusing(&self, source: &Value, target: &mut Value) -> Result<(), Box<dyn Error>> {
@@ -48,7 +53,7 @@ impl CompiledProjection {
                     return Err("viewer projection expected a JSON scalar".into());
                 }
                 if let (Value::String(source), Value::String(target)) = (source, &mut *target) {
-                    if source != target {
+                    if !crate::text_equal::equal(source, target) {
                         target.clone_from(source);
                     }
                 } else {
@@ -90,7 +95,7 @@ impl CompiledProjection {
                     && output
                         .keys()
                         .zip(selected())
-                        .all(|(key, (field, _))| key == &field.output_key)
+                        .all(|(key, (field, _))| crate::text_equal::equal(key, &field.output_key))
                 {
                     for (target, (field, value)) in output.values_mut().zip(selected()) {
                         field.node.project_reusing(value, target)?;
@@ -137,7 +142,7 @@ impl CompiledProjection {
                         if let (Value::String(source), Value::String(target)) =
                             (source, &mut *target)
                         {
-                            if source != target {
+                            if !crate::text_equal::equal(source, target) {
                                 target.clone_from(source);
                             }
                         } else {
@@ -161,7 +166,7 @@ impl CompiledProjection {
                     && output
                         .keys()
                         .zip(selected())
-                        .all(|(key, (other, _))| key == other)
+                        .all(|(key, (other, _))| crate::text_equal::equal(key, other))
                 {
                     for (target, (_, source)) in output.values_mut().zip(selected()) {
                         values.project_reusing(source, target)?;
@@ -389,7 +394,7 @@ fn exact_decoded(source: &Value, decoded: &DecodedValue) -> bool {
         (Value::Number(_), DecodedValue::Number(b)) => {
             number(source).is_some_and(|a| a.to_bits() == b.to_bits())
         }
-        (Value::String(a), DecodedValue::String(b)) => a == b.as_ref(),
+        (Value::String(source), DecodedValue::String(decoded)) => crate::text_equal::equal(source, decoded.as_ref()),
         (Value::Array(a), DecodedValue::Array(b)) => {
             a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| exact_decoded(a, b))
         }
@@ -399,7 +404,7 @@ fn exact_decoded(source: &Value, decoded: &DecodedValue) -> bool {
                     .zip(b.iter())
                     .all(|((key, a), (other_key, b_value))| {
                         // Optional fields can return in a different insertion order.
-                        let value = if key == other_key.as_ref() {
+                        let value = if crate::text_equal::equal(key, other_key.as_ref()) {
                             Some(b_value)
                         } else {
                             b.get(key.as_str())
@@ -1040,6 +1045,7 @@ pub struct StreamingExport {
     object_transfer: Option<object_transfer::Layout>,
     consume_objects: bool,
     object_cache: object_state::ProjectionCache,
+    spawn_cache: object_state::SpawnCache,
     pending_objects: Option<object_state::Records>,
     typed_pose_layout: Option<pose_state::Layout>,
 }
@@ -1068,6 +1074,7 @@ impl StreamingExport {
             object_transfer: object_transfer::Layout::compile(&projection()?.tick),
             consume_objects: false,
             object_cache: object_state::ProjectionCache::default(),
+            spawn_cache: object_state::SpawnCache::default(),
             pending_objects: None,
             typed_pose_layout,
         })
@@ -1124,6 +1131,11 @@ impl StreamingExport {
         self.supports_incremental() && self.typed_pose_layout.is_some()
     }
 
+    pub fn supports_cached_spawns(&self) -> bool {
+        self.supports_incremental() && projection().is_ok_and(|projection|
+            object_state::SpawnCache::supported(projection, &self.validator))
+    }
+
     pub fn push_incremental_source(
         &mut self,
         source: &mut Value,
@@ -1146,6 +1158,9 @@ impl StreamingExport {
             projection,
             &self.validator,
         )?);
+        self.pending_objects.as_mut().unwrap().spawns = self.spawn_cache.project(
+            objects.spawns.as_ref(), projection, &self.validator,
+        )?;
         self.collector.projection_duration += started.elapsed();
         if let Some(poses) = poses
             && poses.slices().iter().any(Option::is_some)

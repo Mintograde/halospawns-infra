@@ -1,0 +1,286 @@
+{
+  "schema": "halospawns.h1LinuxPerformance.v1",
+  "status": "offline-candidate-half-time-target-not-met",
+  "local_experiment_date": "2026-10-19",
+  "upstream_commit": "865d1b3df3e04a92dfa3a89fb5160bfc0a2c9eb5",
+  "native_source_tree": {
+    "algorithm": "halospawns.sourceTreeSha256.v1",
+    "files": 12638,
+    "sha256": "0fd06a6e31b293fa21091bd08cc472a21668e75b7f719ea99e2f07671c05c5f2"
+  },
+  "host": {
+    "cpu": "AMD Ryzen Threadripper PRO 7965WX",
+    "runtime": "Docker Desktop / WSL2",
+    "kernel": "5.15.167.4-microsoft-standard-WSL2"
+  },
+  "benchmark": {
+    "repeats_per_backend": 5,
+    "warmups_per_backend": 1,
+    "order": "alternating paired runs",
+    "cpus": 2,
+    "memory_mib": 3008,
+    "swap": false,
+    "network": false,
+    "read_only_root": true,
+    "runtime_image_id": "sha256:1abfb9d04d19b0a943d639e39894a4231868e77a3db9258b941feb41ec97ab83",
+    "wasm_encoder": "unchanged released encoder; native uses the candidate encoder",
+    "scope": "Offline simulation, full typed export, Rust encoding and analytics; source viewer only. Excludes Python finalization, S3/API, Lambda startup and input staging.",
+    "not_engine_only": true
+  },
+  "native_build": {
+    "architecture": "znver4",
+    "executable_sha256": "ccdea9260aac525f3df8359a0bbe6b18cbdc723c16922993c09d9eaf27cba0d0",
+    "pgo_sha256": "a506bd3c3771eedd48145f3ea510b10fd4eda77b8ad5b52146baf955e7e91d00",
+    "image_id": "sha256:b7167c5025f02cda1fb4716c76b13b646a33c0a77c94dd6e177d5df5e9bb3c49",
+    "generate_pgo": false,
+    "lto": "full",
+    "schema": "halospawns.h1LinuxCandidateBuild.v1",
+    "build_volume": "h1-linux-candidate-36dcb12d652a4e3c91b852129d92cf66",
+    "profile": false,
+    "optimize": true
+  },
+  "encoder_build": {
+    "target_volume": "h1-linux-encoder-pgo-target",
+    "schema": "halospawns.h1LinuxEncoderBuild.v1",
+    "rustflags": "-C target-feature=+crt-static -C target-cpu=znver4 -C profile-use=/out/encoder.profdata",
+    "executable_sha256": "7155e7dc36467afdbd652c56d4d498e03ed8f5aba6c04a0c4d53f2997c1bb711",
+    "source_sha256": "2a5ba5ceb31dba5c22af9c5805b36fe90dd8eda05fe5e53823692015db963837",
+    "features": [
+      "native-cached-spawns"
+    ],
+    "image_id": "sha256:aee668ddbc268852d166c26cb6307da57c236484fcf1513dd81226a2d8b91254",
+    "generate_pgo": false,
+    "pgo_sha256": "fb90b33c4b3e03ba83938df5806805efed2cfe628bf7d3d42f5269777a5812de"
+  },
+  "baseline": {
+    "wasm_sha256": "4039106a13c82d371512f55f8edc10c8c252a0c8e5c056a29ff993a8793eb2e4",
+    "glue_sha256": "e6356243401f1c9fba884eaea4132e12c4080beac38d1b6da0f9ca4c4ea44ba2",
+    "encoder_sha256": "80c93daea0ca4c8e631d7a7a3a9800fdf2e284430adaa336de58db11f86d2737"
+  },
+  "training": {
+    "fixtures": [
+      {
+        "name": "wizard-training",
+        "ticks": 18000,
+        "players": 4,
+        "seed": 113,
+        "film_sha256": "9e0bee75d2f717a167169772b86d9c4a34c80918de62ff689d5dafa70b10fdf7"
+      },
+      {
+        "name": "hangemhigh-training",
+        "ticks": 18000,
+        "players": 4,
+        "seed": 991,
+        "film_sha256": "910259f5eda9a1fc093792a98cc1fe03834f495dc292e5d4f36f9f641f824f9c"
+      }
+    ],
+    "evaluation_films_used_for_training": false,
+    "rust_feature_matched": true
+  },
+  "comparison": {
+    "schema": "halospawns.h1LinuxBenchmarkSummary.v1",
+    "rows": [
+      {
+        "fixture": "prisoner-movement",
+        "ticks": 36000,
+        "players": 2,
+        "native_seconds": {
+          "median": 2.364430283999998,
+          "min": 2.2485747569999983,
+          "max": 2.417600228999996
+        },
+        "wasm_seconds": {
+          "median": 4.499812013000002,
+          "min": 4.413030466,
+          "max": 4.532887326
+        },
+        "native_time_increase_percent": -47.45490973469258,
+        "native_fraction_of_wasm": 0.5254509026530743,
+        "half_time_goal_met": false,
+        "native_engine_rss_mib": {
+          "median": 31.61328125,
+          "min": 31.609375,
+          "max": 31.62109375
+        },
+        "wasm_engine_rss_mib": {
+          "median": 196.3203125,
+          "min": 191.41015625,
+          "max": 197.1484375
+        },
+        "native_encoder_rss_mib": {
+          "median": 22.79296875,
+          "min": 22.52734375,
+          "max": 23.08203125
+        },
+        "wasm_encoder_rss_mib": {
+          "median": 23.94921875,
+          "min": 23.3359375,
+          "max": 24.05859375
+        },
+        "transport_bytes": 429148334,
+        "transport_sha256": "f993ea4259d238e82244c9e0c9fbf3f981cf5cb1c6c6c953700826f988d546df",
+        "observations": {
+          "max_objects": 73,
+          "shots": 1115,
+          "deaths": 8,
+          "body_replacements": 9
+        },
+        "products": {
+          "analytics.30hz.json.zst": {
+            "sha256": "776aa0db42154ab8a2b35e855f1b3e23e71e78780042125ed4c857e2c1c5ac2f",
+            "bytes": 393912
+          },
+          "replay.120hz.hsrdc": {
+            "sha256": "6e23f85648b5c8de312e250c7a215e230b5e09e98e6ab91ff29702f16da89300",
+            "bytes": 2807773
+          }
+        }
+      },
+      {
+        "fixture": "chillout-combat",
+        "ticks": 72000,
+        "players": 4,
+        "native_seconds": {
+          "median": 5.632266897000009,
+          "min": 5.557953172000008,
+          "max": 5.8215800859999876
+        },
+        "wasm_seconds": {
+          "median": 10.254946343999997,
+          "min": 10.100388352000008,
+          "max": 10.431596052000009
+        },
+        "native_time_increase_percent": -45.07755859400125,
+        "native_fraction_of_wasm": 0.5492244140599875,
+        "half_time_goal_met": false,
+        "native_engine_rss_mib": {
+          "median": 31.4140625,
+          "min": 31.41015625,
+          "max": 31.41796875
+        },
+        "wasm_engine_rss_mib": {
+          "median": 197.33984375,
+          "min": 195.12109375,
+          "max": 198.81640625
+        },
+        "native_encoder_rss_mib": {
+          "median": 27.1953125,
+          "min": 26.98046875,
+          "max": 27.30078125
+        },
+        "wasm_encoder_rss_mib": {
+          "median": 29.109375,
+          "min": 28.78515625,
+          "max": 29.19921875
+        },
+        "transport_bytes": 1349916418,
+        "transport_sha256": "134b78ca42eaab8dde54aac814a7b1ef0b5cfa046c18bc46fb6c887e5b882539",
+        "observations": {
+          "max_objects": 93,
+          "shots": 1039,
+          "deaths": 8,
+          "body_replacements": 18
+        },
+        "products": {
+          "analytics.30hz.json.zst": {
+            "sha256": "829b4286b03c6f546c73937aad9a07caa236f88aea0ba64b244cf983e799762b",
+            "bytes": 678349
+          },
+          "replay.120hz.hsrdc": {
+            "sha256": "95818730c1ff2442e3de20865561f9d3d152870ccc4712f953b67c48be9334fb",
+            "bytes": 5010641
+          }
+        }
+      },
+      {
+        "fixture": "dammy-combat",
+        "ticks": 72000,
+        "players": 4,
+        "native_seconds": {
+          "median": 6.855987986000022,
+          "min": 6.311769751000014,
+          "max": 7.115287846999999
+        },
+        "wasm_seconds": {
+          "median": 11.644881641000014,
+          "min": 11.291167699000013,
+          "max": 12.432096492000012
+        },
+        "native_time_increase_percent": -41.12445109050281,
+        "native_fraction_of_wasm": 0.5887554890949719,
+        "half_time_goal_met": false,
+        "native_engine_rss_mib": {
+          "median": 34.2265625,
+          "min": 34.22265625,
+          "max": 34.2265625
+        },
+        "wasm_engine_rss_mib": {
+          "median": 195.33203125,
+          "min": 194.9921875,
+          "max": 196.74609375
+        },
+        "native_encoder_rss_mib": {
+          "median": 29.765625,
+          "min": 29.1953125,
+          "max": 30.0234375
+        },
+        "wasm_encoder_rss_mib": {
+          "median": 30.96875,
+          "min": 30.765625,
+          "max": 32.19921875
+        },
+        "transport_bytes": 1700912353,
+        "transport_sha256": "a385444417078b4cabf819e046ef0c341e300ac9051823215a704b01dc711dfc",
+        "observations": {
+          "max_objects": 154,
+          "shots": 1119,
+          "deaths": 11,
+          "body_replacements": 24
+        },
+        "products": {
+          "analytics.30hz.json.zst": {
+            "sha256": "ab6a66a80369e09e3cb4c5c49fb6c6aee9beb4993b1288f9245863ec0de2c186",
+            "bytes": 583322
+          },
+          "replay.120hz.hsrdc": {
+            "sha256": "04b04d5e37d11acc2c651f45d88324fb2f1c336419c4c56d4f5c41a00892b913",
+            "bytes": 5374760
+          }
+        }
+      }
+    ],
+    "cpus": 2,
+    "memory_mib": 3008,
+    "native_sum_median_seconds": 14.852685167000029,
+    "wasm_sum_median_seconds": 26.399639998000012,
+    "native_time_increase_percent": -43.739061714003526,
+    "native_fraction_of_wasm": 0.5626093828599648,
+    "aggregate_half_time_goal_met": false,
+    "every_fixture_half_time_goal_met": false,
+    "scope": "Offline simulation, full typed export, Rust encoding and analytics; source viewer only. Excludes Python finalization, S3/API, Lambda startup and input staging.",
+    "raw_stream_location": "/bench/performance-final-serial-2cpu"
+  },
+  "verification": {
+    "full_streams_identical": true,
+    "unique_ticks": 180000,
+    "recorded_hash_samples": 1500,
+    "stream_bytes_per_backend": 3479977105,
+    "all_warmup_and_measured_products_identical": true,
+    "full_source_reconstruction_ticks": 180000,
+    "all_full_source_products_identical": true
+  },
+  "tests": {
+    "encoder_default_passed": 84,
+    "encoder_pipeline_and_cached_spawns_passed": 85,
+    "encoder_ignored_per_suite": 1,
+    "pose_codec_passed": 7,
+    "node_passed": 21,
+    "pgo_variant_rejection": true,
+    "powershell_and_node_syntax": true
+  },
+  "historical_original_native_sum_median_seconds": 42.142168806,
+  "native_time_reduction_from_historical_original_percent": 64.75576462290337,
+  "additional_native_time_reduction_needed_percent": 11.128392943199184,
+  "private_evidence_root": "L:/tmp/halospawns-h1-linux-865d1b3d-20261019/performance-results",
+  "raw_volume": "h1-linux-benchmark-865d1b3d"
+}

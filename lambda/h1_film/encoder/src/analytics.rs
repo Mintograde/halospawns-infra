@@ -64,6 +64,20 @@ fn selected_player(player: &Value) -> Value {
     Value::Object(fields)
 }
 
+fn select_player_reusing(player: &Value, target: &mut Value) {
+    if let Some(fields) = target.as_object_mut()
+        && fields.keys().map(String::as_str).eq(
+            PLAYER_FIELDS.iter().copied().filter(|key| player.get(*key).is_some()),
+        )
+    {
+        for (key, value) in fields {
+            crate::recycle::value(value, &player[key]);
+        }
+    } else {
+        *target = selected_player(player);
+    }
+}
+
 impl Export {
     #[cfg(test)]
     pub fn new(path: &Path) -> Result<Self, Box<dyn Error>> {
@@ -96,7 +110,10 @@ impl Export {
         let players = tick["players"]
             .as_array()
             .ok_or("missing analytics players")?;
-        self.final_players = players.iter().map(selected_player).collect();
+        self.final_players.resize_with(players.len(), || Value::Null);
+        for (player, target) in players.iter().zip(&mut self.final_players) {
+            select_player_reusing(player, target);
+        }
         self.game_type = tick["game_type"].as_u64();
         self.has_teams = tick["game_engine_has_teams"].as_bool();
         if tick["game_ended_this_tick"].as_bool() == Some(true) {

@@ -4,13 +4,106 @@ use crate::transport::ObjectRecord;
 pub(super) struct ProjectedRecord {
     source: Arc<ObjectRecord>,
     value: Value,
+    retained_bytes: usize,
 }
 
-pub(super) type Records = Vec<Arc<ProjectedRecord>>;
+#[derive(Clone)]
+pub(super) struct Records {
+    objects: Vec<Arc<ProjectedRecord>>,
+    pub spawns: Option<Arc<ProjectedSpawns>>,
+}
+
+impl std::ops::Deref for Records {
+    type Target = Vec<Arc<ProjectedRecord>>;
+    fn deref(&self) -> &Self::Target {
+        &self.objects
+    }
+}
+
+pub(super) struct ProjectedSpawns {
+    source: Arc<crate::transport::SpawnRecord>,
+    value: Value,
+}
+
+#[derive(Default)]
+pub(super) struct SpawnCache(Option<Arc<ProjectedSpawns>>);
+
+impl SpawnCache {
+    pub(super) fn supported(
+        projection: &Projection,
+        validator: &crate::fast_schema::Validator,
+    ) -> bool {
+        Self::layout(projection, validator).is_some()
+    }
+
+    fn layout<'a>(
+        projection: &'a Projection,
+        validator: &'a crate::fast_schema::Validator,
+    ) -> Option<(&'a CompiledProjection, &'a crate::fast_schema::Validator)> {
+        let CompiledProjection::Object {
+            fields,
+            source_indexes,
+            ..
+        } = &projection.tick
+        else {
+            return None;
+        };
+        let field = fields.get(*source_indexes.get("spawns")?)?;
+        let CompiledProjection::Array { .. } = &field.node else {
+            return None;
+        };
+        if field.output_key != "spawns" {
+            return None;
+        }
+        let crate::fast_schema::Validator::Object { fields, .. } = validator else {
+            return None;
+        };
+        let schema = fields.get("spawns")?;
+        if !matches!(
+            schema,
+            crate::fast_schema::Validator::Array { minimum: 0, .. }
+        ) {
+            return None;
+        }
+        Some((&field.node, schema))
+    }
+
+    pub(super) fn project(
+        &mut self,
+        source: Option<&Arc<crate::transport::SpawnRecord>>,
+        projection: &Projection,
+        validator: &crate::fast_schema::Validator,
+    ) -> Result<Option<Arc<ProjectedSpawns>>, Box<dyn Error>> {
+        let Some(source) = source else {
+            self.0 = None;
+            return Ok(None);
+        };
+        if self
+            .0
+            .as_ref()
+            .is_some_and(|previous| Arc::ptr_eq(&previous.source, source))
+        {
+            return Ok(self.0.clone());
+        }
+        let (plan, schema) =
+            Self::layout(projection, validator).ok_or("unsupported cached spawn layout")?;
+        validate_json_safety(source.source(), 4)?;
+        let value = plan.project(source.source())?;
+        if !schema.is_valid(&value) {
+            return Err("viewer spawns violate their closed schema".into());
+        }
+        self.0 = Some(Arc::new(ProjectedSpawns {
+            source: source.clone(),
+            value,
+        }));
+        Ok(self.0.clone())
+    }
+}
 
 #[derive(Default)]
 pub(super) struct ProjectionCache {
-    records: Records,
+    records: Vec<Arc<ProjectedRecord>>,
+    spares: crate::recycle::Pool<ProjectedRecord>,
 }
 
 impl ProjectionCache {
@@ -81,22 +174,35 @@ impl ProjectionCache {
             if index >= limit {
                 continue;
             }
-            let value = items.project(record.source())?;
-            if !schema.is_valid(&value) {
+            let mut projected = self.spares.take().unwrap_or_else(|| {
+                Arc::new(ProjectedRecord {
+                    source: record.clone(),
+                    value: Value::Null,
+                    retained_bytes: 0,
+                })
+            });
+            let reusable = Arc::get_mut(&mut projected).unwrap();
+            items.project_reusing(record.source(), &mut reusable.value)?;
+            if !schema.is_valid(&reusable.value) {
                 return Err("viewer object violates its closed schema".into());
             }
-            let projected = Arc::new(ProjectedRecord {
-                source: record.clone(),
-                value,
-            });
+            reusable.source = record.clone();
+            reusable.retained_bytes = reusable
+                .retained_bytes
+                .saturating_add(record.retained_bytes());
             if let Some(previous) = self.records.get_mut(index) {
-                *previous = projected;
+                let previous = std::mem::replace(previous, projected);
+                let bytes = previous.retained_bytes;
+                self.spares.retire(previous, bytes);
             } else {
                 self.records.push(projected);
             }
         }
         self.records.truncate(source.len().min(limit));
-        Ok(self.records.clone())
+        Ok(Records {
+            objects: self.records.clone(),
+            spawns: None,
+        })
     }
 }
 
@@ -194,6 +300,14 @@ pub(super) fn write_tick(
     {
         return Err("incremental object placeholder changed".into());
     }
+    if objects.spawns.is_some()
+        && next
+            .get("spawns")
+            .and_then(Value::as_array)
+            .is_none_or(|values| !values.is_empty())
+    {
+        return Err("incremental spawn placeholder changed".into());
+    }
     let Some(previous) = previous.and_then(Value::as_object) else {
         writer.byte(VALUE_OBJECT);
         writer.varuint(next.len() as u64)?;
@@ -202,7 +316,7 @@ pub(super) fn write_tick(
             if key == "objects" {
                 write_records(writer, objects)?;
             } else {
-                write_value(writer, value)?;
+                write_value(writer, field_value(key, value, Some(objects)))?;
             }
         }
         return Ok(());
@@ -217,10 +331,21 @@ pub(super) fn write_tick(
         .filter(|(key, value)| {
             if key.as_str() == "objects" {
                 !same_records(previous_objects, objects)
+            } else if key.as_str() == "spawns"
+                && objects
+                    .spawns
+                    .as_ref()
+                    .zip(previous_objects.spawns.as_ref())
+                    .is_some_and(|(next, previous)| Arc::ptr_eq(next, previous))
+            {
+                false
             } else {
-                previous
-                    .get(*key)
-                    .is_none_or(|previous| !ordered_delta::same(previous, value))
+                previous.get(*key).is_none_or(|previous| {
+                    !ordered_delta::same(
+                        field_value(key, previous, Some(previous_objects)),
+                        field_value(key, value, Some(objects)),
+                    )
+                })
             }
         })
         .collect();
@@ -241,23 +366,38 @@ pub(super) fn write_tick(
                 writer,
                 previous_objects,
                 objects,
-                before_objects.map(Vec::as_slice),
+                before_objects.map(|records| records.as_slice()),
             )?;
         } else {
             ordered_delta::write(
                 writer,
-                previous.get(key),
-                value,
-                before.and_then(|before| before.get(key)),
+                previous
+                    .get(key)
+                    .map(|value| field_value(key, value, Some(previous_objects))),
+                field_value(key, value, Some(objects)),
+                before
+                    .and_then(|before| before.get(key))
+                    .map(|value| field_value(key, value, before_objects)),
             )?;
         }
     }
     Ok(())
 }
 
+fn field_value<'a>(key: &str, value: &'a Value, records: Option<&'a Records>) -> &'a Value {
+    if key == "spawns" {
+        records
+            .and_then(|records| records.spawns.as_ref())
+            .map_or(value, |spawns| &spawns.value)
+    } else {
+        value
+    }
+}
+
 fn shared_decoded(previous: &DecodedValue, next: &DecodedValue) -> bool {
     match (previous, next) {
         (DecodedValue::Object(previous), DecodedValue::Object(next)) => Arc::ptr_eq(previous, next),
+        (DecodedValue::Array(previous), DecodedValue::Array(next)) => Arc::ptr_eq(previous, next),
         _ => false,
     }
 }
@@ -286,6 +426,20 @@ pub(super) fn exact_tick(
             let Some(decoded) = decoded.get(key.as_str()) else {
                 return false;
             };
+            if key == "spawns"
+                && let Some(spawns) = &objects.spawns
+            {
+                let reused = previous_objects
+                    .and_then(|previous| previous.spawns.as_ref())
+                    .is_some_and(|previous| Arc::ptr_eq(previous, spawns))
+                    && previous_decoded
+                        .and_then(|previous| match previous {
+                            DecodedValue::Object(previous) => previous.get("spawns"),
+                            _ => None,
+                        })
+                        .is_some_and(|previous| shared_decoded(previous, decoded));
+                return reused || exact_decoded(&spawns.value, decoded);
+            }
             if key != "objects" {
                 return exact_decoded(value, decoded);
             }
@@ -311,6 +465,120 @@ pub(super) fn exact_tick(
 mod tests {
     use super::*;
     use crate::transport::{ObjectState, Stream, tests::stream};
+
+    #[test]
+    fn cached_spawns_match_generic_bytes_across_changes_absence_and_chunk_boundaries() {
+        let projection = Projection::load_revision(4).unwrap();
+        let validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        let point = serde_json::json!({"spawn_index":0,"x":-0.0,"y":1.0,"z":2.0,"facing":0.0,"team":0,"gametypes":[1,2,0,0]});
+        let ticks: Vec<_> = (0..KEYFRAME_INTERVAL + 17).map(|frame| {
+            let mut tick = serde_json::json!({"current_tick":frame,"players":[],"objects":[],"spawns":[point.clone()]});
+            match frame % 71 {
+                5 => { tick.as_object_mut().unwrap().shift_remove("spawns"); }
+                6 => tick["spawns"] = Value::Null,
+                7 => tick["spawns"] = serde_json::json!([]),
+                8 => tick["spawns"][0]["x"] = Value::from(0.0),
+                9 => tick["spawns"][0].as_object_mut().unwrap().sort_keys(),
+                _ => (),
+            }
+            tick
+        }).collect();
+        let bytes = stream(&ticks);
+        let mut input = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        input.cache_spawns = true;
+        let mut cache = ProjectionCache::default();
+        let mut spawns = SpawnCache::default();
+        let mut spare = Value::Null;
+        for (index, ticks) in ticks.chunks(KEYFRAME_INTERVAL).enumerate() {
+            let mut generic =
+                IncrementalChunk::new(index * KEYFRAME_INTERVAL, ticks.len()).unwrap();
+            let mut cached = IncrementalChunk::new(index * KEYFRAME_INTERVAL, ticks.len()).unwrap();
+            for expected in ticks {
+                let tick = input.next_incremental(spare).unwrap().unwrap();
+                input.verify_incremental_source(&tick).unwrap();
+                let mut records = cache
+                    .project(input.objects.records(), &projection, &validator)
+                    .unwrap();
+                records.spawns = spawns
+                    .project(input.objects.spawns.as_ref(), &projection, &validator)
+                    .unwrap();
+                generic
+                    .push(projection.tick.project(expected).unwrap())
+                    .unwrap();
+                cached
+                    .push_state(projection.tick.project(&tick).unwrap(), Some(records))
+                    .unwrap();
+                assert_eq!(cached.binary.bytes, generic.binary.bytes);
+                spare = tick;
+            }
+            assert_eq!(cached.tick_hash.finish(), generic.tick_hash.finish());
+        }
+    }
+
+    #[test]
+    fn cached_spawns_validate_schema_source_safety_and_decoder_identity() {
+        let projection = Projection::load_revision(4).unwrap();
+        let validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        let point = serde_json::json!({"x":-0.0,"y":1.0,"z":2.0});
+        let mut invalid = point.clone();
+        invalid["x"] = Value::from("bad");
+        let mut unsafe_source = point.clone();
+        let mut nested = Value::Null;
+        for _ in 0..28 {
+            nested = Value::Array(vec![nested]);
+        }
+        unsafe_source["ignored"] = nested;
+        for point in [invalid, unsafe_source] {
+            let bytes = stream(&[serde_json::json!({"objects":[],"spawns":[point]})]);
+            let mut input = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+            input.cache_spawns = true;
+            input.next_incremental(Value::Null).unwrap();
+            assert!(
+                SpawnCache::default()
+                    .project(input.objects.spawns.as_ref(), &projection, &validator)
+                    .is_err()
+            );
+        }
+        let bytes = stream(&[serde_json::json!({"objects":[],"spawns":[point]})]);
+        let mut input = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        input.cache_spawns = true;
+        let tick = input.next_incremental(Value::Null).unwrap().unwrap();
+        let mut records = ProjectionCache::default()
+            .project(input.objects.records(), &projection, &validator)
+            .unwrap();
+        records.spawns = SpawnCache::default()
+            .project(input.objects.spawns.as_ref(), &projection, &validator)
+            .unwrap();
+        let source = projection.tick.project(&tick).unwrap();
+        let mut writer = BinaryWriter::new();
+        write_tick(&mut writer, None, &source, None, None, &records, None).unwrap();
+        let decoded = read_value(&mut BinaryReader::new(&writer.bytes), 1).unwrap();
+        assert!(exact_tick(
+            &source,
+            &records,
+            &decoded,
+            Some(&records),
+            Some(&decoded)
+        ));
+        let mut corrupt = decoded.clone();
+        let DecodedValue::Object(root) = &mut corrupt else {
+            unreachable!()
+        };
+        let DecodedValue::Array(points) = Arc::make_mut(root).get_mut("spawns").unwrap() else {
+            unreachable!()
+        };
+        let DecodedValue::Object(point) = &mut Arc::make_mut(points)[0] else {
+            unreachable!()
+        };
+        *Arc::make_mut(point).get_mut("x").unwrap() = DecodedValue::Number(0.0);
+        assert!(!exact_tick(
+            &source,
+            &records,
+            &corrupt,
+            Some(&records),
+            Some(&decoded)
+        ));
+    }
 
     fn world(handle: u32, position: f64) -> Value {
         serde_json::json!({"object_id":handle,"object_type":2,"tag_name":"weapons\\pistol\\pistol",

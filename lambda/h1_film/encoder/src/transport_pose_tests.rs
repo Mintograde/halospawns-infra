@@ -101,7 +101,12 @@ fn typed_pose_expansion_rolls_back_on_player_key_changes() {
     let mut cursor = Cursor(frame, true, MAX_FRAME - 19 * 17);
     let mut poses = PoseState::default();
     cursor
-        .incremental_root(&mut previous, &mut ObjectState::default(), Some(&mut poses))
+        .incremental_root(
+            &mut previous,
+            &mut ObjectState::default(),
+            Some(&mut poses),
+            false,
+        )
         .unwrap();
     assert!(cursor.0.is_empty());
     assert_eq!(cursor.2, MAX_FRAME);
@@ -113,7 +118,12 @@ fn typed_pose_expansion_rolls_back_on_player_key_changes() {
     );
     assert!(
         Cursor(frame, true, MAX_FRAME - 19 * 17 + 1)
-            .incremental_root(&mut previous, &mut ObjectState::default(), Some(&mut poses))
+            .incremental_root(
+                &mut previous,
+                &mut ObjectState::default(),
+                Some(&mut poses),
+                false
+            )
             .is_err()
     );
 }
@@ -128,7 +138,8 @@ fn typed_pose_reader_rejects_truncation_nonfinite_duplicates_and_nesting() {
                 .incremental_root(
                     &mut Value::Null,
                     &mut ObjectState::default(),
-                    Some(&mut PoseState::default())
+                    Some(&mut PoseState::default()),
+                    false
                 )
                 .is_err()
         );

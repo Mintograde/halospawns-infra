@@ -11,14 +11,30 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 mod pose_tests;
 
 pub struct ObjectRecord {
-    wire: Box<[u8]>,
+    wire: Vec<u8>,
     expansion: usize,
     source: Value,
     object_type: u64,
     packed: bool,
+    retained_bytes: usize,
+}
+
+pub struct SpawnRecord {
+    wire: Vec<u8>,
+    expansion: usize,
+    source: Value,
+}
+
+impl SpawnRecord {
+    pub fn source(&self) -> &Value {
+        &self.source
+    }
 }
 
 impl ObjectRecord {
+    pub fn retained_bytes(&self) -> usize {
+        self.retained_bytes
+    }
     pub fn source(&self) -> &Value {
         &self.source
     }
@@ -31,11 +47,27 @@ impl ObjectRecord {
 #[derive(Default)]
 pub struct ObjectState {
     records: Vec<Arc<ObjectRecord>>,
+    spares: crate::recycle::Pool<ObjectRecord>,
+    pub spawns: Option<Arc<SpawnRecord>>,
     pub decoded: u64,
     pub reused: u64,
 }
 
 impl ObjectState {
+    pub fn snapshot_into(&self, target: &mut Self) {
+        target.records.clone_from(&self.records);
+        target.spawns.clone_from(&self.spawns);
+    }
+
+    pub fn release_snapshot(&mut self) {
+        self.records.clear();
+        self.spawns = None;
+    }
+    fn retire(&mut self, record: Arc<ObjectRecord>) {
+        let bytes = record.retained_bytes;
+        self.spares.retire(record, bytes);
+    }
+
     pub fn records(&self) -> &[Arc<ObjectRecord>] {
         &self.records
     }
@@ -71,6 +103,12 @@ impl Default for PoseState {
 }
 
 impl PoseState {
+    pub fn snapshot_into(&self, target: &mut Self) {
+        target.active = self.active;
+        for (target, source) in target.poses.iter_mut().zip(&self.poses) {
+            target.clone_from(source);
+        }
+    }
     pub fn slices(&self) -> [Option<&[h1_pose_codec::pose::Node]>; 4] {
         std::array::from_fn(|slot| self.active[slot].then_some(self.poses[slot].as_slice()))
     }
@@ -110,6 +148,34 @@ const OBJECT_FIELDS: &[&str] = &[
 const SPAWN_FIELDS: &[&str] = &["spawn_index", "x", "y", "z", "facing", "team", "gametypes"];
 
 struct Cursor<'a>(&'a [u8], bool, usize);
+fn ordered_slot<'value>(
+    output: &'value mut Map<String, Value>,
+    index: usize,
+    key: &str,
+) -> Result<&'value mut Value> {
+    if !output
+        .keys()
+        .nth(index)
+        .is_some_and(|other| crate::text_equal::equal(other, key))
+    {
+        if output.keys().take(index).any(|previous| previous == key) {
+            return Err("duplicate engine object key".into());
+        }
+        let (key, value) = output
+            .shift_remove_entry(key)
+            .unwrap_or_else(|| (key.to_owned(), Value::Null));
+        output.shift_insert(index, key, value);
+    }
+    Ok(output.values_mut().nth(index).unwrap())
+}
+
+fn truncate_object(output: &mut Map<String, Value>, count: usize) {
+    while output.len() > count {
+        let key = output.keys().last().unwrap().clone();
+        output.shift_remove(&key);
+    }
+}
+
 impl<'a> Cursor<'a> {
     fn take(&mut self, size: usize) -> Result<&'a [u8]> {
         if size > self.0.len() {
@@ -168,7 +234,10 @@ impl<'a> Cursor<'a> {
         };
         if !target.as_object().is_some_and(|values| {
             values.len() == fields.len()
-                && values.keys().map(String::as_str).eq(fields.iter().copied())
+                && values
+                    .keys()
+                    .zip(fields)
+                    .all(|(key, other)| crate::text_equal::equal(key, other))
         }) {
             *target = Value::Object(
                 fields
@@ -359,6 +428,14 @@ impl<'a> Cursor<'a> {
                 }
                 (self.0, self.2) = start;
             }
+            if count <= 64 && values.len() <= 64 {
+                for index in 0..count {
+                    let key = self.text_ref()?;
+                    self.reuse(ordered_slot(values, index, key)?, depth + 1)?;
+                }
+                truncate_object(values, count);
+                return Ok(());
+            }
             let mut old = std::mem::take(values);
             *values = Map::with_capacity(count);
             for _ in 0..count {
@@ -400,20 +477,35 @@ impl<'a> Cursor<'a> {
             }
             let start = self.0;
             let expansion = self.2;
-            let source = self.value(2)?;
-            let object_type = source
+            let mut record = state.spares.take().unwrap_or_else(|| {
+                Arc::new(ObjectRecord {
+                    wire: Vec::new(),
+                    expansion: 0,
+                    source: Value::Null,
+                    object_type: 0,
+                    packed: self.1,
+                    retained_bytes: 0,
+                })
+            });
+            let reusable = Arc::get_mut(&mut record).unwrap();
+            self.reuse(&mut reusable.source, 2)?;
+            reusable.object_type = reusable
+                .source
                 .get("object_type")
                 .and_then(Value::as_u64)
                 .ok_or("invalid object type")?;
-            let record = Arc::new(ObjectRecord {
-                wire: start[..start.len() - self.0.len()].into(),
-                expansion: self.2 - expansion,
-                source,
-                object_type,
-                packed: self.1,
-            });
+            reusable.wire.clear();
+            reusable
+                .wire
+                .extend_from_slice(&start[..start.len() - self.0.len()]);
+            reusable.expansion = self.2 - expansion;
+            reusable.packed = self.1;
+            reusable.retained_bytes = reusable
+                .retained_bytes
+                .saturating_add(reusable.wire.len() + reusable.expansion);
             if let Some(previous) = state.records.get_mut(index) {
-                *previous = record;
+                let previous = std::mem::replace(previous, record);
+                state.retire(previous);
             } else {
                 state.records.push(record);
             }
@@ -559,6 +651,7 @@ impl<'a> Cursor<'a> {
         target: &mut Value,
         state: &mut ObjectState,
         mut poses: Option<&mut PoseState>,
+        cache_spawns: bool,
     ) -> Result<()> {
         if self.take(1)?[0] != 9 {
             return Err("invalid engine frame root".into());
@@ -566,6 +659,34 @@ impl<'a> Cursor<'a> {
         let count = self.u32()? as usize;
         if count > 65536 || count > self.0.len() / 5 {
             return Err("invalid engine collection length".into());
+        }
+        let mut spawns = state.spawns.take();
+        if let Some(output) = target.as_object_mut()
+            && count <= 64
+            && output.len() <= 64
+        {
+            let mut found_objects = false;
+            for index in 0..count {
+                let key = self.text_ref()?;
+                let value = ordered_slot(output, index, key)?;
+                if key == "objects" {
+                    self.objects(state)?;
+                    *value = Value::Array(Vec::new());
+                    found_objects = true;
+                } else if key == "players" && poses.is_some() {
+                    self.players(value, poses.as_deref_mut().unwrap())?;
+                } else if cache_spawns && key == "spawns" && self.0.first() == Some(&8) {
+                    self.spawns(value, &mut spawns)?;
+                    state.spawns = spawns.take();
+                } else {
+                    self.reuse(value, 1)?;
+                }
+            }
+            if !found_objects {
+                return Err("missing objects".into());
+            }
+            truncate_object(output, count);
+            return Ok(());
         }
         let mut previous = target.take();
         let mut output = Map::with_capacity(count);
@@ -582,6 +703,9 @@ impl<'a> Cursor<'a> {
                 found_objects = true;
             } else if key == "players" && poses.is_some() {
                 self.players(&mut value, poses.as_deref_mut().unwrap())?;
+            } else if cache_spawns && key == "spawns" && self.0.first() == Some(&8) {
+                self.spawns(&mut value, &mut spawns)?;
+                state.spawns = spawns.take();
             } else {
                 self.reuse(&mut value, 1)?;
             }
@@ -595,6 +719,29 @@ impl<'a> Cursor<'a> {
         *target = Value::Object(output);
         Ok(())
     }
+
+    fn spawns(&mut self, value: &mut Value, record: &mut Option<Arc<SpawnRecord>>) -> Result<()> {
+        if let Some(previous) = record.as_ref()
+            && self.0.starts_with(&previous.wire)
+        {
+            self.take(previous.wire.len())?;
+            self.2 += previous.expansion;
+            if self.2 > MAX_FRAME {
+                return Err("expanded engine frame exceeds limit".into());
+            }
+        } else {
+            let start = self.0;
+            let expansion = self.2;
+            let source = self.value(1)?;
+            *record = Some(Arc::new(SpawnRecord {
+                wire: start[..start.len() - self.0.len()].to_vec(),
+                expansion: self.2 - expansion,
+                source,
+            }));
+        }
+        *value = Value::Array(Vec::new());
+        Ok(())
+    }
 }
 
 pub struct Stream<R> {
@@ -604,6 +751,7 @@ pub struct Stream<R> {
     packed: bool,
     pub objects: ObjectState,
     pub poses: PoseState,
+    pub cache_spawns: bool,
 }
 impl<R: Read> Stream<R> {
     pub fn new(input: R) -> Result<Self> {
@@ -625,6 +773,7 @@ impl<R: Read> Stream<R> {
             packed: contract == "HSFT0002",
             objects: ObjectState::default(),
             poses: PoseState::default(),
+            cache_spawns: false,
         })
     }
     pub fn next(&mut self) -> Result<Option<Value>> {
@@ -660,6 +809,7 @@ impl<R: Read> Stream<R> {
             &mut value,
             &mut self.objects,
             typed_poses.then_some(&mut self.poses),
+            self.cache_spawns,
         )?;
         if !cursor.0.is_empty() {
             return Err("invalid engine frame root or trailing data".into());
@@ -671,6 +821,9 @@ impl<R: Read> Stream<R> {
         let expected = Cursor(&self.buffer, self.packed, self.buffer.len()).value(0)?;
         let mut actual = value.clone();
         actual["objects"] = self.objects.materialize();
+        if let Some(spawns) = &self.objects.spawns {
+            actual["spawns"] = spawns.source.clone();
+        }
         self.poses.materialize(&mut actual)?;
         if serde_json::to_vec(&actual)? != serde_json::to_vec(&expected)? {
             return Err("incremental state differs from complete generic source".into());
@@ -698,6 +851,122 @@ impl<R: Read> Stream<R> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn releasing_consumed_snapshots_unpins_retired_records() {
+        let bytes = stream(&[serde_json::json!({"objects":[{"object_type":2}],"spawns":[]})]);
+        let mut input = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        input.cache_spawns = true;
+        input.next_incremental(Value::Null).unwrap();
+        let mut snapshot = ObjectState::default();
+        input.objects.snapshot_into(&mut snapshot);
+        assert_eq!(Arc::strong_count(&input.objects.records[0]), 2);
+        assert_eq!(Arc::strong_count(input.objects.spawns.as_ref().unwrap()), 2);
+        snapshot.release_snapshot();
+        assert!(snapshot.records.is_empty());
+        assert!(snapshot.spawns.is_none());
+        assert!(Arc::get_mut(&mut input.objects.records[0]).is_some());
+        assert!(Arc::get_mut(input.objects.spawns.as_mut().unwrap()).is_some());
+    }
+
+    #[test]
+    fn cached_spawns_preserve_source_lifecycle_and_reject_truncation() {
+        let point = serde_json::json!({"spawn_index":0,"x":-0.0,"y":1.0,"z":2.0,"team":0,"gametypes":[1,2]});
+        let ticks = [
+            serde_json::json!({"objects":[],"spawns":[point.clone()]}),
+            serde_json::json!({"objects":[],"spawns":[point.clone()]}),
+            serde_json::json!({"spawns":[],"objects":[]}),
+            serde_json::json!({"objects":[]}),
+            serde_json::json!({"objects":[],"spawns":null}),
+            serde_json::json!({"objects":[],"spawns":[point]}),
+        ];
+        let bytes = stream(&ticks);
+        let mut input = Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+        input.cache_spawns = true;
+        let mut spare = Value::Null;
+        let mut first = None;
+        for (index, expected) in ticks.iter().enumerate() {
+            let mut tick = input.next_incremental(spare).unwrap().unwrap();
+            input.verify_incremental_source(&tick).unwrap();
+            assert_eq!(
+                input.objects.spawns.is_some(),
+                expected.get("spawns").is_some_and(Value::is_array)
+            );
+            if index == 0 {
+                first = input.objects.spawns.clone();
+            }
+            if index == 1 {
+                assert!(Arc::ptr_eq(
+                    first.as_ref().unwrap(),
+                    input.objects.spawns.as_ref().unwrap()
+                ));
+            }
+            tick["spawns"] = serde_json::json!(["externally mutated placeholder"]);
+            spare = tick;
+        }
+        for end in 9..bytes.len() {
+            let mut input = Stream::with_contract(&bytes[..end], "HSFT0002").unwrap();
+            input.cache_spawns = true;
+            let mut spare = Value::Null;
+            loop {
+                match input.next_incremental(spare) {
+                    Ok(Some(tick)) => {
+                        input.verify_incremental_source(&tick).unwrap();
+                        spare = tick;
+                    }
+                    Ok(None) | Err(_) => break,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cached_spawns_keep_packed_expansion_and_truncation_limits() {
+        let mut bytes = vec![9, 2, 0, 0, 0];
+        for (key, count) in [("objects", 0u32), ("spawns", 1)] {
+            bytes.extend_from_slice(&(key.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(key.as_bytes());
+            bytes.push(8);
+            bytes.extend_from_slice(&count.to_le_bytes());
+        }
+        bytes.push(11);
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        for number in [-0.0f32, 1.0, 2.0, 0.0] {
+            bytes.extend_from_slice(&number.to_le_bytes());
+        }
+        for number in [0u32, 1, 2, 0, 0] {
+            bytes.extend_from_slice(&number.to_le_bytes());
+        }
+        let frame = &bytes[..];
+        let mut state = ObjectState::default();
+        let mut target = Value::Null;
+        Cursor(frame, true, MAX_FRAME - 80)
+            .incremental_root(&mut target, &mut state, None, true)
+            .unwrap();
+        let original = state.spawns.clone();
+        let mut cached = Cursor(frame, true, MAX_FRAME - 80);
+        cached
+            .incremental_root(&mut target, &mut state, None, true)
+            .unwrap();
+        assert_eq!(cached.2, MAX_FRAME);
+        assert!(Arc::ptr_eq(
+            original.as_ref().unwrap(),
+            state.spawns.as_ref().unwrap()
+        ));
+        assert!(
+            Cursor(frame, true, MAX_FRAME - 79)
+                .incremental_root(&mut target, &mut state, None, true)
+                .is_err()
+        );
+        for end in 0..frame.len() {
+            state.spawns = original.clone();
+            assert!(
+                Cursor(&frame[..end], true, end)
+                    .incremental_root(&mut Value::Null, &mut state, None, true)
+                    .is_err()
+            );
+        }
+    }
 
     pub(crate) fn stream(ticks: &[Value]) -> Vec<u8> {
         let mut stream = b"HSFT0002".to_vec();
@@ -848,7 +1117,7 @@ pub(crate) mod tests {
         }
         assert!(
             Cursor(&frame, true, frame.len())
-                .incremental_root(&mut Value::Null, &mut ObjectState::default(), None)
+                .incremental_root(&mut Value::Null, &mut ObjectState::default(), None, false)
                 .is_err()
         );
     }

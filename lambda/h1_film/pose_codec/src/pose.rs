@@ -271,6 +271,63 @@ pub fn point_bound(a: &Node, b: &Node, radius: f64) -> f64 {
         + radius * d.to_cols_array().iter().map(|x| x * x).sum::<f64>().sqrt()
 }
 
+pub(crate) struct Reconstructor {
+    parents: Vec<i32>,
+    order: Vec<usize>,
+    world: Vec<Transform>,
+    nodes: Pose,
+}
+
+impl Reconstructor {
+    pub(crate) fn new(parents: &[i32]) -> Result<Self> {
+        Ok(Self {
+            parents: parents.to_vec(),
+            order: order(parents)?,
+            world: vec![
+                Transform {
+                    p: DVec3::ZERO,
+                    q: DQuat::IDENTITY,
+                    s: 1.
+                };
+                parents.len()
+            ],
+            nodes: vec![[0.; 13]; parents.len()],
+        })
+    }
+
+    pub(crate) fn reconstruct(
+        &mut self,
+        values: &[[i32; 8]],
+        origin: DVec3,
+        settings: &Settings,
+    ) -> Result<&[Node]> {
+        if values.len() != self.parents.len() || !origin.is_finite() {
+            return Err("invalid pose reconstruction input".into());
+        }
+        let base = Transform {
+            p: origin,
+            q: DQuat::IDENTITY,
+            s: 1.,
+        };
+        for &index in &self.order {
+            let parent = if self.parents[index] < 0 {
+                base
+            } else {
+                self.world[self.parents[index] as usize]
+            };
+            self.world[index] = compose(
+                local_decode(&values[index], settings).ok_or("invalid quantized quaternion")?,
+                parent,
+            );
+            self.nodes[index] = self.world[index].node();
+        }
+        if self.nodes.iter().flatten().any(|value| !value.is_finite()) {
+            return Err("nonfinite reconstructed pose".into());
+        }
+        Ok(&self.nodes)
+    }
+}
+
 pub fn quantize(
     pose: &[Node],
     parents: &[i32],
@@ -445,6 +502,7 @@ mod tests {
             let settings = Settings::preset(preset).unwrap();
             let parents = [-1, 2, 0, 2];
             let mut quantizer = Quantizer::new(&parents).unwrap();
+            let mut reconstructor = Reconstructor::new(&parents).unwrap();
             let mut previous = Vec::new();
             let mut reference_previous = Vec::new();
             for frame in 0..128 {
@@ -479,8 +537,18 @@ mod tests {
                     previous.clear();
                     reference_previous.clear();
                 } else {
-                    let decoded =
-                        reconstruct(&actual.unwrap(), &parents, origin, &settings).unwrap();
+                    let actual = actual.unwrap();
+                    let decoded = reconstruct(&actual, &parents, origin, &settings).unwrap();
+                    let recycled = reconstructor
+                        .reconstruct(&actual, origin, &settings)
+                        .unwrap();
+                    assert!(
+                        decoded
+                            .iter()
+                            .flatten()
+                            .zip(recycled.iter().flatten())
+                            .all(|(reference, recycled)| reference.to_bits() == recycled.to_bits())
+                    );
                     assert!(
                         source
                             .iter()
@@ -505,6 +573,12 @@ mod tests {
         let values = vec![[0, 0, 0, i32::MAX, 0, 0, 0, 3]; 64];
         let parents: Vec<i32> = (0..64).map(|i| i - 1).collect();
         assert!(reconstruct(&values, &parents, DVec3::ZERO, &s).is_err());
+        let mut recycled = Reconstructor::new(&parents).unwrap();
+        assert!(recycled.reconstruct(&values, DVec3::ZERO, &s).is_err());
+        assert!(recycled.reconstruct(&[], DVec3::ZERO, &s).is_err());
+        assert!(recycled.reconstruct(&values, DVec3::NAN, &s).is_err());
+        assert!(Reconstructor::new(&[1, 0]).is_err());
+        assert!(Reconstructor::new(&[-1, 4]).is_err());
     }
     #[test]
     fn hierarchy_rotation_scale_and_translation() {

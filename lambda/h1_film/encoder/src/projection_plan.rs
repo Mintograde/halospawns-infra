@@ -29,7 +29,11 @@ impl Plan {
             ) if fields.len() <= 64 => {
                 if !self.initialized
                     || self.keys.len() != source.len()
-                    || !self.keys.iter().eq(source.keys())
+                    || !self
+                        .keys
+                        .iter()
+                        .zip(source.keys())
+                        .all(|(key, other)| crate::text_equal::equal(key, other))
                 {
                     if required.iter().any(|key| !source.contains_key(key)) {
                         return Err("viewer projection is missing a required object field".into());
@@ -62,37 +66,41 @@ impl Plan {
                         .zip(selected)
                         .filter_map(|(field, value)| value.map(|_| &field.output_key))
                 };
-                if let Value::Object(output) = target
-                    && output.len() == count
-                    && output.keys().eq(selected_keys())
+                if !target.is_object() {
+                    *target = Value::Object(Map::with_capacity(count));
+                }
+                let output = target.as_object_mut().unwrap();
+                if output.len() != count
+                    || !output
+                        .keys()
+                        .zip(selected_keys())
+                        .all(|(key, other)| crate::text_equal::equal(key, other))
                 {
-                    for ((field, plan, source), target) in fields
-                        .iter()
-                        .zip(&mut self.children)
-                        .zip(selected)
-                        .filter_map(|((field, plan), value)| {
-                            value.map(|value| (field, plan, value))
-                        })
-                        .zip(output.values_mut())
-                    {
-                        plan.project(&field.node, source, target)?;
-                    }
-                } else {
-                    let mut previous = std::mem::take(target);
-                    let mut output = Map::with_capacity(count);
-                    for ((field, plan), source) in
-                        fields.iter().zip(&mut self.children).zip(selected)
-                    {
-                        if let Some(source) = source {
-                            let (key, mut target) = previous
-                                .as_object_mut()
-                                .and_then(|old| old.swap_remove_entry(&field.output_key))
-                                .unwrap_or_else(|| (field.output_key.clone(), Value::Null));
-                            plan.project(&field.node, source, &mut target)?;
-                            output.insert(key, target);
+                    for (index, key) in selected_keys().enumerate() {
+                        if !output
+                            .keys()
+                            .nth(index)
+                            .is_some_and(|other| crate::text_equal::equal(key, other))
+                        {
+                            let (key, value) = output
+                                .shift_remove_entry(key)
+                                .unwrap_or_else(|| (key.clone(), Value::Null));
+                            output.shift_insert(index, key, value);
                         }
                     }
-                    *target = Value::Object(output);
+                    while output.len() > count {
+                        let key = output.keys().last().unwrap().clone();
+                        output.shift_remove(&key);
+                    }
+                }
+                for ((field, plan, source), target) in fields
+                    .iter()
+                    .zip(&mut self.children)
+                    .zip(selected)
+                    .filter_map(|((field, plan), value)| value.map(|value| (field, plan, value)))
+                    .zip(output.values_mut())
+                {
+                    plan.project(&field.node, source, target)?;
                 }
                 Ok(())
             }

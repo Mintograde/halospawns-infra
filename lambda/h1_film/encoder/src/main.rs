@@ -1,8 +1,11 @@
 mod analytics;
+mod counters;
 mod artifact;
 mod fast_schema;
 mod native;
+mod recycle;
 mod sampling;
+mod text_equal;
 mod transport;
 
 use serde::Deserialize;
@@ -93,8 +96,8 @@ struct Observations {
     max_objects: usize,
     max_shots: u64,
     max_deaths: u64,
-    previous: BTreeMap<u64, Value>,
-    initial_counters: BTreeMap<u64, Value>,
+    previous: BTreeMap<u64, counters::Counters>,
+    initial_counters: BTreeMap<u64, counters::Counters>,
     last_body: BTreeMap<u64, i64>,
     body_replacements: usize,
     events: Vec<ObservedEvent>,
@@ -246,37 +249,10 @@ impl Observations {
                 continue;
             }
             // Observe counters at 120 Hz before decimation; do not guess killer/victim pairs.
-            let mut counters = Map::new();
-            for key in [
-                "kills",
-                "deaths",
-                "assists",
-                "suicides",
-                "team_kills",
-                "shots_fired",
-                "shots_hit",
-                "score",
-                "ctf_score",
-            ] {
-                if let Some(value) = player.get(key) {
-                    counters.insert(key.into(), value.clone());
-                }
-            }
-            for key in [
-                "damage_dealt",
-                "damage_received",
-                "camo_count",
-                "overshield_count",
-            ] {
-                if let Some(value) = tick["game_meta"]["players"][id.to_string()].get(key) {
-                    counters.insert(key.into(), value.clone());
-                }
-            }
-            counters.insert("unit".into(), player["object_ref"].clone());
-            for key in ["primary_nades", "secondary_nades"] {
-                counters.insert(key.into(), player["player_object_data"][key].clone());
-            }
-            let counters = Value::Object(counters);
+            let counters = counters::Counters::from_player(
+                player,
+                &tick["game_meta"]["players"][id.to_string()],
+            );
             if ordinal == 0 {
                 self.initial_counters.insert(id, counters.clone());
             }
@@ -385,7 +361,7 @@ impl Observations {
             }
         }
         if !postgame && let Some(meta) = tick["game_meta"].as_object() {
-            self.final_meta = meta.clone();
+            recycle::map(&mut self.final_meta, meta);
         }
         if ends_now && !postgame {
             self.event(ordinal, "Game ended".into())?;
@@ -486,6 +462,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     if request.verify_incremental_state && !incremental {
         return Err("full-source verification requires incremental state".into());
     }
+    #[cfg(all(feature = "native-cached-spawns", not(windows)))]
+    { source.cache_spawns = incremental && high.supports_cached_spawns(); }
     while let Some(mut tick) = if incremental {
         source.next_incremental_with_poses(spare, typed_poses)?
     } else {
@@ -508,12 +486,21 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         )?;
         sampling::normalize(&mut tick, count, 1, &request.map)?;
         if let Some(analytics) = &mut analytics {
+            if count == 0 && let Some(spawns) = &source.objects.spawns {
+                tick["spawns"] = spawns.source().clone();
+            }
             analytics.observe(&tick, count)?;
+            if source.objects.spawns.is_some() {
+                tick["spawns"] = Value::Array(Vec::new());
+            }
         }
         let sample = if low.is_some() && count.is_multiple_of(4) {
             let mut sample = tick.clone();
             if incremental {
                 sample["objects"] = source.objects.materialize();
+                if let Some(spawns) = &source.objects.spawns {
+                    sample["spawns"] = spawns.source().clone();
+                }
                 source.poses.materialize(&mut sample)?;
             }
             Some(sample)

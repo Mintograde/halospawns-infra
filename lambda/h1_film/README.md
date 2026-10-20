@@ -69,6 +69,17 @@ included in the deployed default image, not a hosted Lambda timing claim.
 Retained exporter-3 jobs benefit only from shared codec improvements; new jobs use
 the full typed path after [the coordinated switch-over](DEPLOYMENT.md#fully-switching-new-conversions).
 
+The [native Linux candidate](tools/linux-candidate/README.md) builds upstream
+`src/linux_server` from archived h1arena `865d1b3d` and connects the existing
+exporter to the Rust encoder. Full tick streams and replay/analytics artifacts
+match a WASM build of the same source on three fresh synthetic films. After the
+performance pass, native takes **56.26% of the current WASM conversion time**
+(43.74% less), down from the initial native candidate's 156.6%. The requested
+half-time target is **not yet met**. Five paired runs use equal two-CPU limits;
+WASM retains its released encoder while native uses the candidate encoder.
+This remains an offline experiment, not a Lambda measurement or deployment;
+the deployed engines and profile registry are unchanged.
+
 ## Dev Deployment
 
 The immutable image contains every registered engine, the Python source adapter,

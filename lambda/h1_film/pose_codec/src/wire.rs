@@ -170,6 +170,7 @@ pub struct Encoder {
     runs: Vec<Run>,
     latest: [Option<usize>; 4],
     quantizers: [Option<pose::Quantizer>; 4],
+    reconstructors: [Option<pose::Reconstructor>; 4],
     counts: Counts,
     tick_count: usize,
 }
@@ -184,6 +185,7 @@ impl Encoder {
             runs: Vec::new(),
             latest: [None; 4],
             quantizers: [None, None, None, None],
+            reconstructors: [None, None, None, None],
             counts: Counts::default(),
             tick_count: 0,
         })
@@ -275,6 +277,7 @@ impl Encoder {
                 let i = runs.len();
                 let parents = pose::parents(tag, pose.len(), s, rigs)?;
                 quantizers[pi] = Some(pose::Quantizer::new(&parents)?);
+                self.reconstructors[pi] = Some(pose::Reconstructor::new(&parents)?);
                 runs.push(Run {
                     first: tick,
                     player: pi,
@@ -294,8 +297,11 @@ impl Encoder {
                 .quantize(&pose, pose::origin(p), s, &mut r.previous);
             counts.poses += 1;
             let frame = if let Some(values) = values {
-                let decoded = pose::reconstruct(&values, &r.parents, pose::origin(p), s)?;
-                if pose.iter().zip(&decoded).any(|(a, b)| {
+                let decoded = self.reconstructors[pi]
+                    .as_mut()
+                    .ok_or("pose reconstructor missing")?
+                    .reconstruct(&values, pose::origin(p), s)?;
+                if pose.iter().zip(decoded).any(|(a, b)| {
                     let bound = pose::point_bound(a, b, s.point_radius);
                     !bound.is_finite() || bound > s.point_error_limit
                 }) {
