@@ -13,9 +13,13 @@ from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report, s
 class RegistryTests(unittest.TestCase):
     def test_combat_exporters_preserve_both_profile_identities_and_old_pins(self):
         for profile in load_registry().values():
-            old = select_exporter(profile, 4)
             combat = select_exporter(profile, 5)
-            self.assertNotEqual(old["wasm_sha256"], combat["wasm_sha256"])
+            if profile["port"] == "beta4":
+                with self.assertRaisesRegex(ValueError, "exporter"):
+                    select_exporter(profile, 4)
+            else:
+                old = select_exporter(profile, 4)
+                self.assertNotEqual(old["wasm_sha256"], combat["wasm_sha256"])
             self.assertEqual(combat["export_contract"], "HSFT0001")
             for field in ("id", "build", "format", "protocol_revision", "tick_rate", "source"):
                 self.assertEqual(combat.get(field), profile.get(field))

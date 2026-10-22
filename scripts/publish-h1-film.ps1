@@ -1,14 +1,20 @@
 [CmdletBinding()]
 param(
     [ValidateSet('dev')][string]$Stack = 'dev',
-    [Parameter(Mandatory)][ValidatePattern('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')][string]$Tag,
+    [Parameter(Mandatory)]
+    [ValidateLength(11, 128)]
+    [ValidatePattern('\A[0-9]{8}-r[1-9][0-9]*\z', Options = 'None')]
+    [ValidateScript({
+        [void][datetime]::ParseExact($_.Split('-')[0], 'yyyyMMdd', [cultureinfo]::InvariantCulture)
+        $true
+    })]
+    [string]$Tag,
     [Parameter(Mandatory)][string]$EngineRoot,
     [string]$PreviousRegistry,
     [switch]$BuildOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($Tag.ToLowerInvariant() -eq 'latest') { throw 'Use a new immutable release tag.' }
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $engines = (Resolve-Path -LiteralPath $EngineRoot).Path
 $profile = "halospawns-$Stack"

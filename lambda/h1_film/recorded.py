@@ -13,6 +13,8 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
         return 448, 57
     if identity == (0x314D4C46, 2, 9111, 120) and words[16] == 480:
         return 480, 60
+    if identity == (0x314D4C46, 2, 9803, 120) and words[16] == 480:
+        return 480, 61
     raise ValueError("Unsupported recorded evidence adapter")
 
 

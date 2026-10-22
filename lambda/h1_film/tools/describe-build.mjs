@@ -18,6 +18,7 @@ if (port.source_project) {
   const revision = JSON.parse(await readFile(join(values.source, 'source-revision.json'), 'utf8'));
   assert.equal(revision.project, port.source_project);
   assert.match(revision.git_commit, /^[0-9a-f]{40}$/);
+  if (port.source_commit) assert.equal(revision.git_commit, port.source_commit, 'Source commit differs from the pinned port');
   assert.match(revision.git_date, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(revision.algorithm, source.algorithm);
   assert.equal(revision.sha256, source.sha256, 'Snapshot changed since its Git revision was recorded');

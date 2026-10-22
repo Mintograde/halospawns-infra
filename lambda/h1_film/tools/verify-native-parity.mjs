@@ -47,7 +47,7 @@ async function replay(kind, cwd, envelope) {
     closeSync(log);
     if (output !== undefined) closeSync(output);
   }
-  const verify = envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
+  const verify = [9111, 9803].includes(envelope.protocol_revision) ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);
   if (!values['compare-base-export']) return { sha256: await sha256(stream), bytes: (await stat(stream)).size };
   const handle = await open(stream, 'r');

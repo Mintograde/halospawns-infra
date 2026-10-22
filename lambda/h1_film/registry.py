@@ -35,11 +35,11 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict]:
             "analytics_contract": "halospawns.h1AnalyticsSource.v1",
             "map_cache_version": 7,
         }
-        if entry.get("adapter") not in ("film-v2-120-v1", "h1arena-v2-120-v1"):
+        if entry.get("adapter") not in ("film-v2-120-v1", "h1arena-v2-120-v1", "beta4-v2-120-v1"):
             raise ValueError("Unsupported engine adapter contract")
         if entry.get("transport_contract", "HSFT0001") not in ("HSFT0001", "HSFT0002"):
             raise ValueError("Unsupported engine transport")
-        if "source" in entry or entry["adapter"] == "h1arena-v2-120-v1":
+        if "source" in entry or entry["adapter"] in ("h1arena-v2-120-v1", "beta4-v2-120-v1"):
             source = entry.get("source")
             if (
                 not isinstance(source, dict) or source.get("project") != "h1arena"

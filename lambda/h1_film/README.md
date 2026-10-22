@@ -2,7 +2,7 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `combat-20261020-r1`, with dedicated queue/API wiring and scoped data access.
+to `20261022-r1`, with dedicated queue/API wiring and scoped data access.
 New intake selects exporter 5 / analytics 4 / viewer 4 after verifying API
 `live=188`. Admin reprocess defaults remain exporter 4 / analytics 3; explicit
 5/4 requests work. Old pins remain supported. See [deployment](DEPLOYMENT.md).
@@ -33,7 +33,8 @@ explicit jobs remain supported; see deployment notes for the dev rollout.
 | `runtime/adapters/` | Versioned film readers and simulation verification |
 | `profiles/registry.json` | Shared Node/Python engine identities, ABI and artifact pins |
 | `engines/beta3/` | Beta 3 exporter, WASM compatibility port and native reference integration |
-| `engines/h1arena/` | Commit-pinned successor port, native reference and offline UNIVERSAL replay |
+| `engines/h1arena/` | Retained prerelease 197bb65c port and native reference |
+| `engines/beta4/` | Performance Build 2 Beta 4, pinned to e78e4daa; see [Beta 4](BETA4.md) |
 | `encoder/` | Bounded tick-stream encoder; reuses `../replay_parser` codecs/contracts |
 | `pose_codec/` | Shared bounded pose math, temporal tracks and exact fallbacks |
 | `analytics.py`, `registry.py`, `recorded.py` | Verified native products, retained profiles, recorded rules/events and replay-parser adaptation |
@@ -89,6 +90,14 @@ the deployed engines and profile registry are unchanged.
 
 ## Dev Deployment
 
+New H1 image release tags use `YYYYMMDD-rN`, for example `20261022-r1`.
+The date is the UTC release date; `N` starts at 1 each day and increments for
+each new release that day. Tags have no content description and are immutable;
+never reuse or overwrite one. The publisher validates the date and sequence.
+Release notes describe changes. This sequence is independent of engine profiles,
+exporter revisions, analytics revisions and viewer revisions. Existing historical
+tags remain valid for audit and rollback.
+
 The immutable image contains every registered engine, the Python source adapter,
 and the shared replay parser/finalizer. Game maps/source are excluded.
 Foundation mode still accepts only the exact `halospawns.h1FilmHealth.v1`
@@ -97,8 +106,8 @@ as the only configured job entry point; there is no function URL or invoke polic
 The foundation audit below deliberately expects dormant gates, not current dev.
 
 ```powershell
-.\scripts\publish-h1-film.ps1 -Tag '<new-release-tag>' -EngineRoot '<private-engine-store>' -BuildOnly
-.\scripts\verify-h1-film-foundation.ps1 -Tag intake-20261008-r1 -Mode intake
+.\scripts\publish-h1-film.ps1 -Tag '<YYYYMMDD-rN>' -EngineRoot '<private-engine-store>' -BuildOnly
+.\scripts\verify-h1-film-foundation.ps1 -Tag 20261022-r1 -Mode intake
 ```
 
 Omitting `-BuildOnly` publishes to private dev ECR after account, immutability,

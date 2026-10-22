@@ -3,7 +3,23 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { fingerprintTree } from '../tools/source-fingerprint.mjs';
+
+test('beta4 build rejects a different archived commit even with a valid tree fingerprint', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-source-'));
+  try {
+    for (const directory of ['engine', 'host', 'tools']) await mkdir(join(root, directory));
+    await writeFile(join(root, 'CMakeLists.txt'), 'candidate');
+    const tree = await fingerprintTree(root, ['CMakeLists.txt', 'engine', 'host', 'tools']);
+    await writeFile(join(root, 'source-revision.json'), JSON.stringify({ ...tree, project: 'h1arena',
+      git_commit: '197bb65ca6e9cef94c126904bf39ecdd1ea5929d', git_date: '2026-10-14' }));
+    assert.throws(() => execFileSync(process.execPath,
+      [fileURLToPath(new URL('../tools/describe-build.mjs', import.meta.url)), '--port', 'beta4', '--source', root],
+      { stdio: 'pipe' }), /Source commit differs from the pinned port/);
+  } finally { await rm(root, { recursive: true }); }
+});
 
 test('source fingerprints survive relocation but change on content, additions and removals', async () => {
   const root = await mkdtemp(join(tmpdir(), 'h1-source-'));

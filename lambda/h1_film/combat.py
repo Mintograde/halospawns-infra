@@ -81,7 +81,7 @@ def validate_combat_product(combat, *, encoding, report, attribution=None):
             value = row[field]
             if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 2**53 - 1:
                 raise ValueError("Invalid applied damage")
-    counters = {field: Counter() for field in ("kills", "deaths", "suicides", "team_kills")}
+    counters = {field: Counter() for field in ("kills", "deaths", "team_kills")}
     previous_index, previous_tick = -1, -1
     simulated = Counter()
     for event in combat["deaths"]:
@@ -114,10 +114,12 @@ def validate_combat_product(combat, *, encoding, report, attribution=None):
             simulated[tick, killer, victim] += 1
         elif kind == "betrayal":
             counters["team_kills"][killer] += 1
-        elif kind == "suicide":
-            counters["suicides"][victim] += 1
     normalized = participant_counters(encoding, combat)
     for player in slots:
+        suicides = normalized[str(player)].get("suicides")
+        deaths = normalized[str(player)].get("deaths")
+        if suicides is not None and deaths is not None and suicides > deaths:
+            raise ValueError("Native suicide counter exceeds deaths")
         for name, counts in counters.items():
             total = normalized[str(player)].get(name)
             if total is not None and (

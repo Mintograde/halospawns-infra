@@ -1,5 +1,119 @@
 # H1 film Lambda integration
 
+## Suicide validation correction deployed 2026-10-22
+
+Dev worker `20261022-r1` is Active/Successful (originally published as
+`combat-suicide-20261022-r1`; see the naming update below). The user explicitly
+authorized deployment before their API release; API `live=191` was observed and
+was not changed. The matching API validator, regression tests and documentation
+are ready in the sibling checkout. No migration, new job, retry/redrive, map
+approval or prod operation was performed. Nine prior failed attempts remain in
+the DLQ; the processing queue is empty.
+
+- ECR digest:
+  `sha256:c0cb36ef4792ddf8e29d6748b4422783ec45e35e0e13a9f768f2bc3320cf1abb`.
+- Tested/published image ID:
+  `sha256:8fe2fff46fd3032d8cb1b037040b7fa46ee1106176df201fb41f56c00d4ba361`.
+- Built from the previous immutable deployed digest
+  `sha256:7076d78804c975fa9d3015e7bfe655da39a4f04b2d44c1a945da4ec9815ab792`,
+  replacing only `/var/task/h1_film/combat.py`. All other 2,741 application files
+  match by SHA-256; every old engine/exporter and the encoder remain exact.
+  Pending local Beta 4 changes are not deployed. The normal full-build publisher
+  was intentionally not used for this isolated patch; the private evidence
+  directory retains its Dockerfile and account/immutability/image-ID-guarded
+  publisher. This is a normal immutable ECR image pinned/applied by Terraform.
+- Worker full Python suite: 56 passed. Packaged combat regressions: 12 passed.
+  All 32 LAN films pass packaged initial/rebuild/reparse/pinned-retry validation
+  with network disabled: 3,373,727 source ticks and 28,127 recorded hash checks.
+  All 96 callbacks pass the patched API's normalizer or viewer-completion DTO.
+  For the nine original failures, canonical viewer bytes, native combat, final
+  counters and decoded spatial products match the prior image's local outputs.
+- API combat/H1 ingest/reparse tests: 99 passed, two optional legacy private-
+  corpus cases skipped. Six final PostgreSQL persistence cases also pass.
+  Ruff and source-only Lambda packaging pass; the local ZIP is not publishable.
+- Read-only/non-root container health/rejection and engine retention audit pass.
+  Live health also passes with both retained profiles, six explicit exporters
+  and the unchanged encoder hash. No cold-start timeout occurred in this check.
+  Memory 3,008 MiB, timeout 900 s, concurrency 5 and queue wiring stay unchanged.
+
+Baseline focused plan is no-op. Focused and full preplans contain **0 adds /
+1 update / 0 destroys**, solely `aws_lambda_function.h1_film[0].image_uri` and
+computed `last_modified`. Full preplan also has the pre-existing, unapplied API
+output refresh `173 -> 191`. Applied the reviewed focused saved plan, SHA-256
+`44a0f80f9b2b6bcb4422ff3625400adc1021a4ae1084c6715001617b050f4148`.
+Only `map-processing` resources changed; ECR received one immutable image.
+Apply completed with 0 added / 1 changed / 0 destroyed; focused postplan is no-op.
+Final full dev postplan has zero resource actions; only the existing API output
+refresh `173 -> 191` remains unapplied. Existing undeclared `asset_delivery_mode`
+warnings are unrelated. Final live checks retain concurrency 5, enabled batch-one
+mapping, zero processing-queue messages and nine DLQ messages.
+No AWS/profile/session blocker (`halospawns-dev`, `283279960672`, `us-east-1`).
+
+Exact release commands from the infra root (logs retained beside the plan):
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+docker buildx build --platform linux/amd64 --provenance=false --load -f L:/tmp/halospawns-h1-suicide-fix-20261022/Dockerfile -t halospawns-h1-film:combat-suicide-20261022-r1 L:/tmp/halospawns-h1-suicide-fix-20261022
+& L:/tmp/halospawns-h1-suicide-fix-20261022/publish.ps1
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-suicide-fix-20261022/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Changed infra files: `lambda/h1_film/combat.py`,
+`lambda/h1_film/tests/test_combat.py`, `stacks/dev.yaml`, H1 README/combat/deployment
+docs and root AGENTS/HANDOFFS/migration log. API changes: combat service,
+unit/PostgreSQL tests, combat semantics docs, HANDOFFS and ROADMAP.
+Investigation and semantics: [COMBAT_ANALYTICS.md](COMBAT_ANALYTICS.md).
+Private evidence: `L:/tmp/halospawns-h1-suicide-fix-20261022/`.
+
+## Neutral release naming adopted 2026-10-22
+
+At the user's request, new H1 image releases use `YYYYMMDD-rN`: UTC release
+date and a positive daily sequence starting at 1. No content description is
+included. The publisher enforces the format and calendar date; release notes
+carry the description. Existing tags remain immutable and available for rollback.
+
+Added ECR tag `20261022-r1` to the exact manifest originally published as
+`combat-suicide-20261022-r1`, retaining both tags at digest
+`sha256:c0cb36ef4792ddf8e29d6748b4422783ec45e35e0e13a9f768f2bc3320cf1abb`.
+Updated the dev stack pin and current references in infra/API handoff docs.
+No rebuild, Lambda update, API deployment, job action or prod change occurred.
+Live Lambda remains Active/Successful with its original `LastModified`
+`2026-10-22T11:46:25.000+0000` and identical resolved image digest.
+
+Baseline focused plan is no-op. Focused and full preplans have zero resource
+actions; only `map-processing.h1_film_foundation.image_tag` changes for this
+task. The full plan also reports the existing, unapplied API output refresh
+`173 -> 191`. Applied the reviewed focused saved plan (SHA-256
+`182e6a8c1b6bdbfd624f0c87488df339c22ae3d82875fcb4618a7d81f469e878`):
+0 added / 0 changed / 0 destroyed. Focused postplan is no-op. Publisher syntax
+and parameter validation pass four valid and eleven invalid cases. No AWS/profile
+blocker; existing undeclared `asset_delivery_mode` warnings are unrelated.
+
+Exact commands from the infra root, in execution order:
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+& L:/tmp/halospawns-h1-release-naming-20261022/retag.ps1
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+& L:/tmp/halospawns-h1-release-naming-20261022/validate-publisher.ps1
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-release-naming-20261022/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+```
+
+Changed files: `scripts/publish-h1-film.ps1`, `stacks/dev.yaml`, H1 README,
+COMBAT_ANALYTICS and DEPLOYMENT docs, root AGENTS/HANDOFFS/migration log, and
+sibling API HANDOFFS/ROADMAP current release pointers. Component:
+`map-processing` (output only); ECR received an additional immutable tag, with
+no repository configuration change. Logs, guarded retag script, saved plan,
+manifest and verification evidence: `L:/tmp/halospawns-h1-release-naming-20261022/`.
+
+## Previous rollout status, 2026-10-20
+
 Status on 2026-10-20: dev new intake selects exporter 5 / analytics 4, retaining
 bounded pose compression, viewer revision 4 / `HSRDC002`. Worker
 `combat-20261020-r1` and API `live=188` are deployed; compatible frontend viewer

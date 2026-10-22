@@ -143,6 +143,10 @@ their established SHA-256 pins and real-film parity evidence.
 
 ## h1arena Snapshot 197bb65c
 
+The public successor is now the separate [`beta4` port](BETA4.md), pinned to
+release commit `e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad`. The prerelease
+snapshot below remains immutable for existing films and retries.
+
 h1arena is the renamed continuation of Performance Build 2.0 Beta 3. The new
 profile `h1arena-197bb65c-p9111-wasm-v1` targets the exact archived commit
 `197bb65ca6e9cef94c126904bf39ecdd1ea5929d`, dated 2026-10-14. It is a prerelease

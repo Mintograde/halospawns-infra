@@ -15,8 +15,8 @@ export function validateRegistry(document) {
     const profile = { ...entry };
     assert.match(profile.id, ID, 'Invalid engine profile ID');
     assert.match(profile.port, ID, 'Invalid engine port');
-    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
-    if (profile.source !== undefined || profile.adapter === 'h1arena-v2-120-v1') {
+    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1', 'beta4-v2-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
+    if (profile.source !== undefined || ['h1arena-v2-120-v1', 'beta4-v2-120-v1'].includes(profile.adapter)) {
       assert.equal(profile.source?.project, 'h1arena', 'Missing source provenance');
       assert.match(profile.source.git_commit, /^[0-9a-f]{40}$/, 'Invalid source commit');
       assert.match(profile.source.sha256, /^[0-9a-f]{64}$/, 'Invalid source fingerprint');

@@ -10,6 +10,23 @@ from h1_film import recorded
 
 
 class RecordedTests(unittest.TestCase):
+    def test_beta4_resolved_record_uses_61_fields_and_preserves_rule_offsets(self):
+        words = [0] * 32
+        words[:4] = (0x314D4C46, 2, 9803, 120)
+        words[16], words[17], words[21], words[22] = 480, 852, 480, 372
+        data = bytearray(852)
+        struct.pack_into("<32I", data, 0, *words)
+        for index, value in {0: 0, 1: 25, 18: 5, 19: 10, 21: 1, 30: 1, 40: 1, 60: 2}.items():
+            struct.pack_into("<i", data, 480 + 128 + index * 4, value)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.h1film"
+            path.write_bytes(data)
+            result = recorded.resolved_variant(path, encoding={"game_type": 2, "has_teams": True})
+            self.assertEqual(result["score_to_win"], 25)
+            self.assertEqual(result["respawn_seconds"], 5)
+            self.assertEqual(result["suicide_penalty_seconds"], 10)
+            self.assertEqual(result["motion_tracker"], "all")
+
     def test_h1arena_resolved_record_retains_reviewed_offsets(self):
         words = [0] * 32
         words[:4] = (0x314D4C46, 2, 9111, 120)

@@ -69,6 +69,44 @@ class CombatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             analytics.validate_native_product(product(), encoding=self.encoding, report=self.report)
 
+    def test_self_inflicted_death_credited_to_opponent_preserves_both_measurements(self):
+        native = product()
+        self.encoding["final_counters"]["1"]["suicides"] = 1
+        native["kill_attribution"] = {
+            "provenance": "recorded_evt1", "coverage": "complete", "reason": None,
+            "events": [{"source_tick": 5, "killer_slot": 0, "victim_slot": 1}],
+        }
+        original_native, original_encoding = copy.deepcopy(native), copy.deepcopy(self.encoding)
+        self.validate(native)
+        self.assertEqual(native, original_native)
+        self.assertEqual(self.encoding, original_encoding)
+
+    def test_credited_suicide_does_not_imply_original_self_damage(self):
+        native = product()
+        native["combat"]["deaths"][0].update(killer_slot=1, kind="suicide", headshot=None)
+        native["combat"]["awards"][0]["longest_kill_streak"] = 0
+        self.encoding["final_counters"]["0"]["kills"] = 0
+        self.encoding["final_counters"]["1"]["team_kills"] = 1
+        self.validate(native)
+        self.assertEqual(self.encoding["final_counters"]["1"]["suicides"], 0)
+
+    def test_raw_suicide_counter_cannot_exceed_raw_deaths(self):
+        self.encoding["final_counters"]["1"]["suicides"] = 2
+        for coverage in ({"status": "complete"}, {"status": "partial", "reason": "capped"}):
+            native = product()
+            native["combat"]["death_coverage"] = coverage
+            with self.subTest(coverage=coverage), self.assertRaisesRegex(ValueError, "suicide counter"):
+                self.validate(native)
+
+    def test_suicide_credit_fix_keeps_other_counter_checks_strict(self):
+        self.encoding["final_counters"]["1"]["suicides"] = 1
+        for field in ("kills", "deaths", "team_kills"):
+            native = product()
+            self.encoding["final_counters"]["1"][field] += 1
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.validate(native)
+            self.encoding["final_counters"]["1"][field] -= 1
+
     def test_invalid_order_slots_counts_relationships_and_missing_evidence_fail(self):
         for mutate in (
             lambda combat: combat["shots"][0].update(shots_fired=True),
