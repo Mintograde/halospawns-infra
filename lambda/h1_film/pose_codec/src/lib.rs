@@ -1,6 +1,8 @@
 pub mod pose;
 pub mod wire;
 
+pub const MAX_PLAYERS: usize = 16;
+
 use serde_json::Value;
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

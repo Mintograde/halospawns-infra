@@ -1,5 +1,155 @@
 # H1 film Lambda integration
 
+## Beta 4 / Sixteen Participants Deployed 2026-10-22
+
+The user authorized the dev worker release independently of their API release.
+`halospawns-h1-film-dev` now pins **20261022-r2**, Active/Successful, with
+`H1_MAX_PLAYERS=16`. ECR digest:
+`sha256:ba537f69bc040ead2f16e6ce80f4a6757780f16801e75f7cd9fb377a5d1c45aa`.
+Tested/published image ID:
+`sha256:58b3755e4da84677b16621f4c87438ace788777c13690f9a5d11db49e71c8b2f`.
+Packaged encoder SHA-256:
+`7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+
+The full bundle adds Beta 4 exporter 6 / analytics 4 / viewer 5, remote-player
+replay, stable distinct identities through physical slot reuse, sixteen-player
+analytics/pose support and append-only viewer contracts. All three profiles,
+eight explicit exporters and old pins are retained. The retention audit uses
+the actual previous deployed registry; its new Beta 4 entries were appended
+to the repository retention floor after release. Exact limits and simulation
+evidence are in [BETA4.md](BETA4.md).
+
+The supplied Dread film passes all 195 recorded hashes and full native/WASM
+byte parity. Final read-only/non-root/network-disabled packaged initial,
+viewer-rebuild, full-reparse and pinned-retry checks pass. Actual frontend
+decoding retains eight distinct participants/seven concurrent players, all
+23,345 ticks and three cold chunks. Sixteen-player synthetic/DB boundaries
+pass; this is not a sixteen-concurrent or maximum-size performance claim.
+Worker tests: 57 Python, 26 Node, 94 encoder/one ignored and seven pose-codec.
+API: 1,501 unit and seven isolated PostgreSQL tests; Ruff and source-only ZIP
+packaging pass (that ZIP is not publishable). Viewer: 1,574 tests; standalone
+and site builds pass with existing bundle-size warnings. Retained Beta 3 and
+prerelease films preserve all 42 chunk descriptors/hashes, native analytics
+and final counters.
+
+### Applied Scope and Remaining Release Steps
+
+Only `map-processing` was applied: **0 added / 1 changed / 0 destroyed**,
+changing the H1 image digest and `H1_MAX_PLAYERS` from 4 to 16. The reviewed
+saved plan SHA-256 is
+`41c7a5f35528f04f70bf588278a82cf8a36b9647f75101c07ce79e59ff485eed`.
+Memory 3,008 MiB, timeout 900 seconds, reserved concurrency 5 and the enabled
+batch-one films SQS mapping remain unchanged. ECR received one immutable
+image; no queue message, upload retry, map approval or prod action occurred.
+Processing queue and DLQ both have zero visible/in-flight messages afterward.
+
+The initial Lambda health-only invocation hit its existing 20-second child
+timeout during cold startup; a repeat succeeds with all three profiles/eight
+exporters and the exact encoder hash. No film was submitted to probe health.
+Focused postplan is no-op. Full dev plans leave only the intentional `app-api`
+configuration pending: **1 add / 3 updates / 1 destroy**, for configuration-
+promotion invocation replacement, contract data, API player-limit env and
+code-updater expected hash. Other components have no resource changes.
+The pre-existing map-renderer version drift (264 to 266) is refresh-only, not
+a planned deployment. Existing undeclared `asset_delivery_mode` warnings remain.
+No AWS/profile/session blocker: `halospawns-dev`, `283279960672`, `us-east-1`.
+
+**Do not apply `app-api` before the user releases compatible API code.**
+Observed live API remains version **192**, `H1FILM_MAX_PLAYERS=4`; its old
+configuration validator rejects 16. API changes and frontend revision-5
+support are ready in their sibling checkouts but neither was deployed here.
+After the user's API release, review/apply `app-api` to activate 16; release
+the frontend, review Dread specifically for the Beta 4 profile, then authorize
+recovery/hosted acceptance separately. No approval inheritance is implied.
+Upload `d695cd7c-4a17-42b6-8e65-27e9d5b016a9` was not retried.
+
+Exact infra commands from the repository root (private evidence/logs under
+`L:/tmp/halospawns-h1-16-players-20261022/`):
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev app-api
+.\scripts\publish-h1-film.ps1 -Tag 20261022-r2 -EngineRoot L:/tmp/halospawns-h1-16-players-20261022/engines -PreviousRegistry L:/tmp/halospawns-h1-16-players-20261022/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261022-r2 -EngineRoot L:/tmp/halospawns-h1-16-players-20261022/engines -PreviousRegistry L:/tmp/halospawns-h1-16-players-20261022/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan '-no-color' '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-16-players-20261022/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-16-players-20261022/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Before the release pin, focused worker plan was 0/1/0 (limit only); API plan
+was 1/3/1 and remains unapplied. Release worker plan was 0/1/0 (image and
+limit). The first saved-plan command had unquoted PowerShell option values
+and exited with an argument error before planning; the quoted command above
+succeeded and its parsed plan was checked for exactly the two intended changes.
+Terraform formatting and all three repositories' whitespace checks pass.
+
+Infra files changed: `stacks/dev.yaml`,
+`components/terraform/map-processing/h1-film.tf`,
+`components/terraform/app-api/h1-film.tf`,
+`scripts/verify-h1-film-foundation.ps1`; H1 engine/adapters/registry, encoder,
+pose codec, Python validator/analytics/cloud code, contract snapshots and tests;
+shared replay-parser viewer contracts/validation/finalization; H1 docs and root
+AGENTS/HANDOFFS/migration log. API changes include profile/target registration,
+limits/DTOs/ingest/reparse, contract copies and tests/docs. Svelte changes include
+contract copies, pose/range/cold-chunk decoding, tests and handoff/audit docs.
+
+## Authorized nine-job recovery, 2026-10-22
+
+The user authorized recovery of exactly the nine original failed attempts, not
+new upgrades for the ten never-submitted films. Before writes, verified dev
+account `283279960672`, region `us-east-1`, actual API `live=192` ZIP SHA-256
+and combat-validator source, worker digest `c0cb36ef4792ddf8e29d6748b4422783ec45e35e0e13a9f768f2bc3320cf1abb`,
+enabled batch-one mapping, empty processing queue and nine DLQ messages.
+
+At 12:29:25-27 UTC, bounded `ReceiveMessage` calls held exactly nine messages.
+Validated each original SQS message ID against DB dispatch evidence, full job
+schema, attempt/replay/upload/game/generation IDs, unchanged conversion identity,
+5/4/4 pins and current epoch 0 / sequence 3. DB connections were read-only.
+Targeted `SendMessage` calls copied the original bodies and attributes unchanged
+to `films-processing-queue`, with SDK send retries disabled. Each matching MD5
+acknowledgement preceded `DeleteMessage` of its DLQ copy. Nine sends and nine
+deletions were confirmed. No queue-wide redrive, new attempt, direct DB repair,
+repinning, visibility-policy change, deployment, Terraform or prod action.
+
+All nine original attempts succeeded and activated; verification at 12:32:24 UTC
+matched selected viewer and statistics generations, exact registered pins,
+request fences and native/scoreboard/graph/occupancy logical product hashes:
+
+| Original attempt | Replay |
+| --- | --- |
+| `13ec7436-30e1-4ded-abab-cac77b60bfd5` | `b4280542-0088-4f5c-a912-08a0ffb6d6bd` |
+| `1e9ac5e5-ffb4-4786-8d72-df748bbef731` | `68127d50-959b-4b11-b3ff-9db32d99420e` |
+| `20dcde23-ec6a-41d1-8c9e-65a33e44f62d` | `bb3c3963-5064-4c31-9415-1144d47f7cd1` |
+| `31d39b8f-a63c-4092-ae2e-18121f6f213f` | `94df2008-1118-43eb-a83a-47b9d962ab40` |
+| `84d018fb-f665-48cd-bf62-292844818558` | `7042222a-99e0-4db7-99e4-e84d1d0bd44b` |
+| `c19758ff-7376-4b2b-ae33-8bc5422f1972` | `733a6352-ec10-469c-9346-3a95db5318b2` |
+| `cbe0678c-95f4-4ece-bb88-8ba76fabf21f` | `e3d22c65-33aa-4733-8b04-b27579352eee` |
+| `e24d3b6b-33e8-445f-bd90-fac118cc4c4e` | `84e16ec5-a556-43b7-b840-6fa906b0d02a` |
+| `e2c47e71-b3c0-4b80-9193-9def479bae20` | `6bbc40b5-b1e2-4023-892d-0200cee6af64` |
+
+Inventory has 22 current exporter-5 selections: 21 provenance-verified upgrades
+plus the historical canary without a generation receipt. Zero active DB attempts
+remain; the ten exporter-2 films were not submitted. Frontend recovery fixes are
+local in the Svelte repo, with 544 passing site tests and successful builds;
+release still belongs to the frontend workflow.
+
+### Outstanding acknowledgement, not a failed upgrade
+
+Eight callbacks returned 201 in 15-18 seconds and logged worker completion.
+Attempt `13ec7436-30e1-4ded-abab-cac77b60bfd5` committed at 12:31:01.876 UTC,
+but API request `712d22f3-2628-4189-a9d8-423b17d9225c` timed out at 12:31:31.245
+after 30,000 ms. The worker returned retryable `retry_pending` at 12:31:31.251.
+Its selected generation and all four product hashes are nevertheless verified.
+DLQ is empty; processing has one in-flight delivery, message
+`728ad1d0-1c00-4909-b346-4359fc938a97`. Leave it for normal idempotent completion
+retry after the existing 5,400-second visibility window, approximately 13:59 UTC.
+Do not create a new attempt, resend its payload, purge the queue or change queue
+visibility globally. Confirm acknowledgement after redelivery and investigate
+API post-commit response latency through the owning API handoff.
+
 ## Suicide validation correction deployed 2026-10-22
 
 Dev worker `20261022-r1` is Active/Successful (originally published as

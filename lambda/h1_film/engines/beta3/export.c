@@ -29,15 +29,15 @@ extern data_array *player_data;
 extern game_time_globals_struct *game_time_globals;
 extern void first_person_camera_for_unit_and_vector(int, const real_vector3d *, observer_command *);
 
-static double damage_received[4];
+#include "roster.h"
 
 /* Observe actual vitality removed, including self/environment damage. The original
  * PGCR hook still runs unchanged; a converter process plays exactly one match. */
 void hs_note_damage(int attacker, int victim, int category, int part, float damage, const char *tag_name)
 {
-    int slot = victim == -1 ? -1 : (unsigned short)victim;
+    int slot = hs_participant(victim);
     blampc_pgcr_stats_note_damage(attacker, victim, category, part, damage, tag_name);
-    if (slot >= 0 && slot < 4 && damage > 0.0f) damage_received[slot] += damage;
+    if (slot >= 0 && slot < H1_EXPORT_MAX_PLAYERS && damage > 0.0f) damage_received[slot] += damage;
 }
 
 static void reference(const char *key, int value)
@@ -128,7 +128,9 @@ static void player(int slot, const player_datum *p)
     const biped_datum *b = header ? (const biped_datum *)header->datum : NULL;
     int i, player_handle = ((unsigned int)(unsigned short)p->identifier << 16) | slot;
     hs_begin(NULL, 1);
-    hs_int("player_index", slot);
+    int participant = hs_participant(player_handle);
+    if (participant < 0) hs_fail("unknown player identity");
+    hs_int("player_index", participant);
     name("name", p->name);
     hs_int("team", p->team_index);
     hs_int("local_player", p->local_player_index);
@@ -138,8 +140,8 @@ static void player(int slot, const player_datum *p)
     hs_int("assists", p->statistics.assists[0]);
     hs_int("team_kills", p->statistics.friendly_fire_kills);
     hs_int("suicides", p->statistics.suicides);
-    hs_int("shots_fired", blampc_pgcr_stats_shots_fired(slot));
-    hs_int("shots_hit", blampc_pgcr_stats_shots_hit(slot));
+    hs_int("shots_fired", hs_pgcr_value(participant, 0, blampc_pgcr_stats_shots_fired(slot)));
+    hs_int("shots_hit", hs_pgcr_value(participant, 1, blampc_pgcr_stats_shots_hit(slot)));
     reference("object_ref", p->unit_index);
     reference("player_object_id", header ? body_reference : -1);
     if (game_engine && game_engine->get_score)
@@ -235,14 +237,16 @@ static void metadata(void)
             char key[16];
             const player_datum *p = DATA_ARRAY_ELEMENT(player_data, player_datum, i);
             if (!p->identifier) continue;
-            sprintf_s(key, sizeof key, "%d", i);
+            int participant = hs_participant(((unsigned int)(unsigned short)p->identifier << 16) | i);
+            if (participant < 0) hs_fail("unknown player identity");
+            sprintf_s(key, sizeof key, "%d", participant);
             hs_begin(key, 1);
             name("name", p->name);
             hs_int("team", p->team_index);
-            hs_int("damage_dealt", blampc_pgcr_stats_damage_given_points(i));
-            hs_double("damage_received", i < 4 ? damage_received[i] : 0);
-            hs_int("camo_count", blampc_pgcr_stats_camo_pickups(i));
-            hs_int("overshield_count", blampc_pgcr_stats_overshield_pickups(i));
+            hs_int("damage_dealt", hs_pgcr_value(participant, 2, blampc_pgcr_stats_damage_given_points(i)));
+            hs_double("damage_received", damage_received[participant]);
+            hs_int("camo_count", hs_pgcr_value(participant, 3, blampc_pgcr_stats_camo_pickups(i)));
+            hs_int("overshield_count", hs_pgcr_value(participant, 4, blampc_pgcr_stats_overshield_pickups(i)));
             hs_end();
         }
     }

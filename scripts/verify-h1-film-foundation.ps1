@@ -49,7 +49,7 @@ if ($Mode -eq 'intake' -and (
     $vars.REPLAY_EXTRACTOR_MODE -ne 'native' -or
     [int]$vars.H1_MAX_SIZE_BYTES -le 0 -or [int]$vars.H1_MAX_SIZE_BYTES -gt 536870912 -or
     [int]$vars.H1_MAX_SOURCE_TICKS -le 0 -or [int]$vars.H1_MAX_SOURCE_TICKS -gt 432000 -or
-    [int]$vars.H1_MAX_PLAYERS -le 0 -or [int]$vars.H1_MAX_PLAYERS -gt 4
+    [int]$vars.H1_MAX_PLAYERS -le 0 -or [int]$vars.H1_MAX_PLAYERS -gt 16
 )) { throw 'Unexpected H1 intake environment contract.' }
 $concurrency = Read-Aws @('lambda', 'get-function-concurrency', '--function-name', $function)
 if ($concurrency.ReservedConcurrentExecutions -ne 0) { throw 'H1 concurrency must be zero.' }

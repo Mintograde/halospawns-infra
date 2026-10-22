@@ -40,12 +40,17 @@ VIEWER_CONTRACT_PINS = {
         "9bc4684bc901fb9b16cb50a2d6e6cd3ee7aac58a2b4b91f713204888292159d7",
         "cf5623d7f8ce380b7940eab20500eddaffb48f802b000e6dc31f640570765e4e",
     ),
+    5: (
+        "210416ff3b889875b957258c96c4703bbf332a021d35447fb4c61128f965502c",
+        "8aee94b8e95564d9baf34d6b72b003372ecdf991d5ee6e139611f3f684fd37ee",
+    ),
 }
 VIEWER_PROJECTION_SHA256, VIEWER_MANIFEST_SCHEMA_SHA256 = VIEWER_CONTRACT_PINS[
     VIEWER_PROFILE_REVISION
 ]
 VIEWER_ENCODING_SHA256 = "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb"
 VIEWER_POSE_ENCODING_SHA256 = "9e5d0e7d0bccd7bf217eb889921b8936a08b3c9936dd75e25779f0b404bcf49c"
+VIEWER_POSE_16_ENCODING_SHA256 = "5518df313953e7158cd66afc04e7ef6345bec94f9ea05bfeabe4d83d6524a723"
 VIEWER_MEDIA_TYPE = "application/vnd.halospawns.replay-delta"
 VIEWER_OUTER_COMPRESSION = "identity"
 VIEWER_KEYFRAME_INTERVAL = 2048
@@ -117,6 +122,8 @@ class PinnedViewerContract:
 
     @property
     def encoding_sha256(self) -> str:
+        if self.revision == 5:
+            return VIEWER_POSE_16_ENCODING_SHA256
         return VIEWER_POSE_ENCODING_SHA256 if self.revision == 4 else VIEWER_ENCODING_SHA256
 
     @property
@@ -212,7 +219,7 @@ def load_pinned_contract(
     return _load_pinned_contract(revision)
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=5)
 def _load_pinned_contract(revision: int) -> PinnedViewerContract:
     directory = Path(__file__).resolve().parent / "contracts" / "replays"
     registry = _load_json_object(directory / "supported-contracts.json")
@@ -283,10 +290,10 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
         "media_type": VIEWER_MEDIA_TYPE,
         "outer_compression": VIEWER_OUTER_COMPRESSION,
     }
-    if revision == 4:
+    if revision in (4, 5):
         expected_supported_encoding.update(
             format="halospawns.viewerReplayDelta.v2", container_version=2,
-            encoding_sha256=VIEWER_POSE_ENCODING_SHA256,
+            encoding_sha256=VIEWER_POSE_16_ENCODING_SHA256 if revision == 5 else VIEWER_POSE_ENCODING_SHA256,
         )
     if {
         key: encoding_entry.get(key) for key in expected_supported_encoding
@@ -384,7 +391,7 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
             },
         },
     }
-    if revision == 4:
+    if revision in (4, 5):
         expected_runtime_encoding["container"].update(magic_ascii="HSRDC002", version=2)
         expected_runtime_encoding["container"]["manifest_compression"]["level"] = 6
         expected_runtime_encoding["chunk"].update(
@@ -2020,7 +2027,7 @@ def _native_chunk_manifests(parts: ViewerParts) -> list[dict[str, Any]] | None:
                 "rawBytes": chunk.raw_bytes,
                 "compressedBytes": chunk.compressed_bytes,
                 "compressedSha256": chunk.compressed_sha256,
-                ("rawSha256" if parts.profile_revision == 4 else "tickSha256"): chunk.tick_sha256,
+                ("rawSha256" if parts.profile_revision in (4, 5) else "tickSha256"): chunk.tick_sha256,
             }
         )
         offset += chunk.compressed_bytes
@@ -2183,7 +2190,7 @@ def assemble_viewer_container(
             recorded_at=recorded_at,
         )
     compression_started = time.perf_counter()
-    if parts.profile_revision == 4:
+    if parts.profile_revision in (4, 5):
         raise ViewerDeltaError("Pose revision requires verified H1 native parts")
     compressor = zstandard.ZstdCompressor(
         level=19,

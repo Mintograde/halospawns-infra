@@ -42,7 +42,7 @@ def validate_combat_product(combat, *, encoding, report, attribution=None):
         if type(value) is not int or not 0 <= value <= 2**31 - 1:
             raise ValueError("Invalid combat counter")
 
-    for section, limit in (("shots", 256), ("damage", 2048), ("deaths", 8192), ("awards", 4)):
+    for section, limit in (("shots", 256), ("damage", 2048), ("deaths", 8192), ("awards", 16)):
         coverage = combat[{"shots": "shot", "damage": "damage", "deaths": "death", "awards": "award"}[section] + "_coverage"]
         if (
             len(combat[section]) > limit

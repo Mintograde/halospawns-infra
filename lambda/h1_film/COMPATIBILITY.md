@@ -1,5 +1,18 @@
 # H1 Film Compatibility
 
+## Beta 4 Sixteen-Participant Extension
+
+Beta 4 exporter 6 targets analytics 4 and the append-only viewer revision 5.
+It supports sixteen distinct participant identities, with separate counters
+when physical slots are reused. Base/exporter-5 Beta 4 and both older engine
+families retain their exact binaries and four-player compatibility. Do not
+repin old jobs. Revision 5 uses new projection/manifest/encoding hashes; the
+revision-4 four-player contract and Xbox revision-2 default remain immutable.
+The source producer's eight-initial-player metadata ceiling still fails closed;
+late joins can occupy all sixteen slots. See [BETA4.md](BETA4.md) for limits,
+parity evidence and deployment prerequisites. Rollback must retain exporter 6
+and viewer 5 once their jobs/artifacts exist.
+
 ## Three Independent Versions
 
 1. **Simulation profile:** the exact film format, protocol, tick rate and build

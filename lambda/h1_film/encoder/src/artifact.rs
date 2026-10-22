@@ -848,6 +848,34 @@ mod pose_tests {
     }
 
     #[test]
+    fn sixteen_player_poses_roundtrip_and_reject_a_seventeenth() {
+        let mut ticks = source();
+        for tick in &mut ticks {
+            let prototype = tick["players"][0].clone();
+            tick["players"] = Value::Array((0..16).map(|slot| {
+                let mut player = prototype.clone();
+                player["player_index"] = Value::from(slot);
+                player
+            }).collect());
+        }
+        let raw = pack_poses(&ticks, 0).unwrap();
+        let (_, mut decoded) = h1_pose_codec::wire::unpack(
+            &raw, &h1_pose_codec::settings(), &PoseBaseCodec,
+        ).unwrap();
+        assert_eq!(decoded[0]["players"].as_array().unwrap().len(), 16);
+        assert_eq!(decoded[1]["players"][15]["model_nodes"].as_array().unwrap().len(), 19);
+        assert!(h1_pose_codec::verify(&ticks, &mut decoded).is_ok());
+        let projection = Projection::load_revision(5).unwrap();
+        assert!(projection.tick.project(&ticks[0]).is_ok());
+        assert!(crate::fast_schema::Validator::for_revision(5).unwrap().is_valid(&ticks[0]));
+        assert!(Projection::load_revision(4).unwrap().tick.project(&ticks[0]).is_err());
+        let extra = ticks[0]["players"][0].clone();
+        ticks[0]["players"].as_array_mut().unwrap().push(extra);
+        assert!(pack_poses(&ticks, 0).is_err());
+        assert!(projection.tick.project(&ticks[0]).is_err());
+    }
+
+    #[test]
     fn fine_pose_wire_roundtrip_lifecycle_fallback_and_golden() {
         let ticks = source();
         let raw = pack_poses(&ticks, 0).unwrap();
@@ -1038,7 +1066,7 @@ pub struct StreamingExport {
     chunk_ticks: usize,
     expected: usize,
     spare: Value,
-    pose_spares: [Option<Value>; 4],
+    pose_spares: [Option<Value>; h1_pose_codec::MAX_PLAYERS],
     pose_models: Vec<h1_pose_codec::pose::Skeleton>,
     validator: crate::fast_schema::Validator,
     projection_plan: projection_plan::Plan,
@@ -1063,11 +1091,11 @@ impl StreamingExport {
             chunk: None,
             poses: None,
             pose_duration: Duration::ZERO,
-            pose_codec: projection()?.revision == 4,
+            pose_codec: (4..=5).contains(&projection()?.revision),
             chunk_ticks: 0,
             expected,
             spare: Value::Null,
-            pose_spares: [None, None, None, None],
+            pose_spares: std::array::from_fn(|_| None),
             pose_models: h1_pose_codec::skeletons(),
             validator,
             projection_plan: projection_plan::Plan::default(),
@@ -1192,7 +1220,7 @@ impl StreamingExport {
         if !self.pose_codec {
             return self.push_with_projection(source, projection);
         }
-        let mut borrowed = [false; 4];
+        let mut borrowed = [false; h1_pose_codec::MAX_PLAYERS];
         if let Some(players) = source.get("players").and_then(Value::as_array) {
             for (player, borrow) in players.iter().zip(&mut borrowed) {
                 let tag = player["player_object_data"]["tag_name"].as_str();
@@ -1211,12 +1239,12 @@ impl StreamingExport {
         }
         let started = Instant::now();
         validate_json_safety(source, 3)?;
-        let mut nodes = [None, None, None, None];
+        let mut nodes: [Option<Value>; h1_pose_codec::MAX_PLAYERS] = std::array::from_fn(|_| None);
         for (i, player) in source["players"]
             .as_array_mut()
             .unwrap()
             .iter_mut()
-            .take(4)
+            .take(h1_pose_codec::MAX_PLAYERS)
             .enumerate()
         {
             if borrowed[i] {
@@ -1261,7 +1289,7 @@ impl StreamingExport {
             .as_array_mut()
             .unwrap()
             .iter_mut()
-            .take(4)
+            .take(h1_pose_codec::MAX_PLAYERS)
             .enumerate()
         {
             if borrowed[i] {
@@ -1289,14 +1317,14 @@ impl StreamingExport {
         projected: Value,
         duration: Duration,
     ) -> Result<Value, Box<dyn Error>> {
-        self.push_projected_with_poses(projected, duration, [None; 4])
+        self.push_projected_with_poses(projected, duration, [None; h1_pose_codec::MAX_PLAYERS])
     }
 
     fn push_projected_with_poses(
         &mut self,
         mut projected: Value,
         duration: Duration,
-        typed: [Option<&[h1_pose_codec::pose::Node]>; 4],
+        typed: [Option<&[h1_pose_codec::pose::Node]>; h1_pose_codec::MAX_PLAYERS],
     ) -> Result<Value, Box<dyn Error>> {
         if self.collector.tick_count >= self.expected {
             return Err("too many source ticks".into());
@@ -1659,7 +1687,7 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
             .as_u64()
             .ok_or("missing revision")?,
     )?;
-    if pose_codec != (revision == 4) {
+    if pose_codec != (4..=5).contains(&revision) {
         return Err("container/contract version mismatch".into());
     }
     let selected_projection = Projection::load_revision(revision)?;
@@ -1903,7 +1931,7 @@ mod incremental_tests {
             serde_json::json!({"players":vec![serde_json::json!({});65]}),
             Value::Null,
         ]);
-        for revision in [1, 2, 3, 4] {
+        for revision in [1, 2, 3, 4, 5] {
             let projection = Projection::load_revision(revision).unwrap();
             let mut recycled = Value::Null;
             for input in inputs.iter().cycle().take(inputs.len() * 3) {

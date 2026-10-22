@@ -69,6 +69,23 @@ class CombatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             analytics.validate_native_product(product(), encoding=self.encoding, report=self.report)
 
+    def test_sixteen_participant_awards_and_slot_fifteen_are_valid(self):
+        native = product()
+        for player_slot in range(2, 16):
+            native["players"].append({"slot_index": player_slot, "metrics": {}})
+            native["combat"]["awards"].append({
+                "slot_index": player_slot, "longest_kill_streak": 0,
+                "double_kills": 0, "triple_kills": 0, "overkills": 0,
+            })
+            self.encoding["players"].append(player_slot)
+            self.encoding["final_counters"][str(player_slot)] = {
+                "kills": 0, "deaths": 0, "suicides": 0, "team_kills": 0,
+            }
+        self.validate(native)
+        native["players"].append({"slot_index": 16, "metrics": {}})
+        with self.assertRaises(cloud.FilmError):
+            self.validate(native)
+
     def test_self_inflicted_death_credited_to_opponent_preserves_both_measurements(self):
         native = product()
         self.encoding["final_counters"]["1"]["suicides"] = 1

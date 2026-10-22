@@ -37,6 +37,29 @@
       },
       "wasm_sha256": "f6bbbb1bae6c276bf553875c2fc74f070f1fbcd4dc5d1a61ea6b03112a646367",
       "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "id": "h1-performance-beta4-p9803-wasm-v1",
+      "format": 2,
+      "protocol_revision": 9803,
+      "tick_rate": 120,
+      "build": "2026-10-20 - BETA 4 - e78e4daa",
+      "adapter": "beta4-v2-120-v1",
+      "port": "beta4",
+      "export_contract": "HSFT0001",
+      "transport_contract": "HSFT0002",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "source": {
+        "project": "h1arena",
+        "git_commit": "e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad",
+        "git_date": "2026-10-20",
+        "algorithm": "halospawns.sourceTreeSha256.v1",
+        "files": 12473,
+        "sha256": "886e74eeff42729d2bf549d757dd42063648d4ce0ff09b1b3d680b321a8d9c15"
+      },
+      "wasm_sha256": "6d85adc3181566b4100c811b33ced38525baf1b842c84642adc7cad60013df66",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
     }
   ],
   "exporters": [
@@ -79,6 +102,20 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "4f3f794a357026081448d4c2a68c3d638ce9fb3c72ab0f165eeb45e42542c6f5",
       "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 5,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "6d85adc3181566b4100c811b33ced38525baf1b842c84642adc7cad60013df66",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 6,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "2983dd37c4750416d5ef0097a7726173d061f6869f3e4f44b4f0d8b8e5de5c84",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
     }
   ]
 }

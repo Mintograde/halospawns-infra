@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn changing_shapes_nulls_and_recycled_outputs_match_reference() {
-        for revision in 1..=4 {
+        for revision in 1..=5 {
             let projection = Projection::load_revision(revision).unwrap();
             let mut plan = Plan::default();
             let mut recycled = Value::Null;

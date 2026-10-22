@@ -15,7 +15,7 @@ variable "h1_film" {
       !var.h1_film.processing_enabled || (var.h1_film.enabled && try(
         var.h1_film.max_size_bytes > 0 && var.h1_film.max_size_bytes <= 536870912 &&
         var.h1_film.max_source_ticks > 0 && var.h1_film.max_source_ticks <= 432000 &&
-        var.h1_film.max_players > 0 && var.h1_film.max_players <= 4 &&
+        var.h1_film.max_players > 0 && var.h1_film.max_players <= 16 &&
         floor(var.h1_film.max_size_bytes) == var.h1_film.max_size_bytes &&
         floor(var.h1_film.max_source_ticks) == var.h1_film.max_source_ticks &&
         floor(var.h1_film.max_players) == var.h1_film.max_players,

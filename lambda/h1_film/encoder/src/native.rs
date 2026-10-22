@@ -40,7 +40,7 @@ impl NativeAnalytics {
         for player in players {
             let slot = player["player_index"]
                 .as_u64()
-                .filter(|slot| *slot < 4)
+                .filter(|slot| *slot < h1_pose_codec::MAX_PLAYERS as u64)
                 .ok_or("invalid native slot")?;
             let metrics = self.players.entry(slot).or_insert_with(|| {
                 METRICS

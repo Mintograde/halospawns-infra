@@ -2,6 +2,7 @@ use crate::{
     legacy::{self, Result},
     pose::{self, Pose, Settings, Skeleton},
 };
+use crate::MAX_PLAYERS;
 use glam::DQuat;
 use serde::Serialize;
 use serde_json::Value;
@@ -168,9 +169,9 @@ pub struct Encoder {
     rigs: Vec<Skeleton>,
     preserve_unknown_models: bool,
     runs: Vec<Run>,
-    latest: [Option<usize>; 4],
-    quantizers: [Option<pose::Quantizer>; 4],
-    reconstructors: [Option<pose::Reconstructor>; 4],
+    latest: [Option<usize>; MAX_PLAYERS],
+    quantizers: [Option<pose::Quantizer>; MAX_PLAYERS],
+    reconstructors: [Option<pose::Reconstructor>; MAX_PLAYERS],
     counts: Counts,
     tick_count: usize,
 }
@@ -183,9 +184,9 @@ impl Encoder {
             rigs: rigs.to_vec(),
             preserve_unknown_models,
             runs: Vec::new(),
-            latest: [None; 4],
-            quantizers: [None, None, None, None],
-            reconstructors: [None, None, None, None],
+            latest: [None; MAX_PLAYERS],
+            quantizers: std::array::from_fn(|_| None),
+            reconstructors: std::array::from_fn(|_| None),
             counts: Counts::default(),
             tick_count: 0,
         })
@@ -195,16 +196,16 @@ impl Encoder {
         self.push_recycling(t).map(|_| ())
     }
 
-    pub fn push_recycling(&mut self, t: &mut Value) -> Result<[Option<Value>; 4]> {
-        self.push_typed_recycling(t, [None; 4])
+    pub fn push_recycling(&mut self, t: &mut Value) -> Result<[Option<Value>; MAX_PLAYERS]> {
+        self.push_typed_recycling(t, [None; MAX_PLAYERS])
     }
 
     pub fn push_typed_recycling(
         &mut self,
         source: &mut Value,
-        typed: [Option<&[pose::Node]>; 4],
-    ) -> Result<[Option<Value>; 4]> {
-        let mut removed = [None, None, None, None];
+        typed: [Option<&[pose::Node]>; MAX_PLAYERS],
+    ) -> Result<[Option<Value>; MAX_PLAYERS]> {
+        let mut removed = std::array::from_fn(|_| None);
         if self.tick_count >= 2048 {
             return Err("too many pose chunk ticks".into());
         }
@@ -216,8 +217,8 @@ impl Encoder {
         let quantizers = &mut self.quantizers;
         let counts = &mut self.counts;
         let players = source["players"].as_array_mut().ok_or("players missing")?;
-        if players.len() > 4 {
-            return Err("pose codec supports at most four players".into());
+        if players.len() > MAX_PLAYERS {
+            return Err("pose codec supports at most sixteen players".into());
         }
         if typed[players.len()..].iter().any(Option::is_some) {
             return Err("typed pose has no player".into());
@@ -477,23 +478,26 @@ pub fn unpack(
     if ticks.is_empty() || ticks.len() > 2048 {
         return Err("invalid pose chunk tick count".into());
     }
+    if ticks.iter().any(|tick| tick["players"].as_array().is_none_or(|players| players.len() > MAX_PLAYERS)) {
+        return Err("invalid pose player count".into());
+    }
     let mut r = Reader::new(&poses);
     let count = r.u16()?;
-    if count > ticks.len() * 4 {
+    if count > ticks.len() * MAX_PLAYERS {
         return Err("too many pose runs".into());
     }
-    let mut seen = vec![[false; 4]; ticks.len()];
+    let mut seen = vec![[false; MAX_PLAYERS]; ticks.len()];
     let mut pose_count = 0usize;
     for _ in 0..count {
         let start = r.u16()?;
         let pi = r.u8()? as usize;
         let n = r.u16()?;
         let bones = r.u8()? as usize;
-        if n == 0 || start + n > ticks.len() || pi >= 4 || bones == 0 || bones > 64 {
+        if n == 0 || start + n > ticks.len() || pi >= MAX_PLAYERS || bones == 0 || bones > 64 {
             return Err("invalid pose run bounds".into());
         }
         pose_count += n;
-        if pose_count > ticks.len() * 4 {
+        if pose_count > ticks.len() * MAX_PLAYERS {
             return Err("too many poses".into());
         }
         let parents = (0..bones)
@@ -583,7 +587,7 @@ mod tests {
             let mut encoder = Encoder::new(&crate::settings(), &crate::skeletons(), true).unwrap();
             assert!(
                 encoder
-                    .push_typed_recycling(&mut source, [Some(&pose), None, None, None])
+                    .push_typed_recycling(&mut source, std::array::from_fn(|index| (index == 0).then_some(pose.as_slice())))
                     .is_err()
             );
         }
@@ -592,7 +596,7 @@ mod tests {
             let mut encoder = Encoder::new(&crate::settings(), &crate::skeletons(), true).unwrap();
             assert!(
                 encoder
-                    .push_typed_recycling(&mut source.clone(), [Some(&pose), None, None, None])
+                    .push_typed_recycling(&mut source.clone(), std::array::from_fn(|index| (index == 0).then_some(pose.as_slice())))
                     .is_err()
             );
         }

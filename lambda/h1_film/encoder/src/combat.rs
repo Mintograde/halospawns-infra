@@ -104,7 +104,7 @@ impl Combat {
             self.partial_recording = tick["current_tick"].as_u64().is_some_and(|clock| clock != 0);
         }
         for player in tick["players"].as_array().ok_or("missing combat roster")? {
-            let slot = player["player_index"].as_u64().filter(|slot| *slot < 4)
+            let slot = player["player_index"].as_u64().filter(|slot| *slot < h1_pose_codec::MAX_PLAYERS as u64)
                 .ok_or("invalid combat roster")? as u8;
             self.slots.insert(slot);
         }
@@ -123,7 +123,7 @@ impl Combat {
         if frame.schema != "halospawns.h1CombatSource.v1"
             || frame.coverage.iter().any(|value| *value > 2)
             || frame.weapons.len() > 64 || frame.shots.len() > 256
-            || frame.damage.len() > 1024 || frame.deaths.len() > 64 || frame.awards.len() > 4 {
+            || frame.damage.len() > 1024 || frame.deaths.len() > 64 || frame.awards.len() > h1_pose_codec::MAX_PLAYERS {
             return Err("invalid combat source envelope".into());
         }
         self.seen = true;

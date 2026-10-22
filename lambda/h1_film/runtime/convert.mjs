@@ -45,6 +45,10 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles), values['exporter-revision'] === undefined
     ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
+  if (profile.port === 'beta4' && (envelope.players > 4 || envelope.network?.max_player_slot >= 4
+    || envelope.network?.participant_count > 4)) {
+    assert.ok(profile.exporter_revision >= 6, 'This Beta 4 roster requires exporter revision 6 or later');
+  }
   if (values.profile) assert.equal(values.profile, profile.id, 'Requested profile does not match the film');
   assert.ok(!(values.engine && values['engine-root']), 'Choose --engine or --engine-root, not both');
   const engine = values.engine ? await inspectEngine(profile, values.engine)
@@ -93,7 +97,7 @@ export async function convertFilm(options) {
   request.analytics_revision = analyticsRevision;
   request.combat_network_recording = Boolean(envelope.network?.records);
   request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
-  assert.ok([1, 2, 3, 4].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
+  assert.ok([1, 2, 3, 4, 5].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
@@ -228,7 +232,7 @@ export async function convertFilm(options) {
       if (!values['source-viewer-only']) rates.push(['30hz', Math.ceil(native.envelope.ticks / 4)]);
       if (values['source-viewer-only']) {
         assert.equal(encoding['30hz'], null);
-        assert.deepEqual(encoding.verification, { mode: request.viewer_profile_revision === 4 ? 'inline-bounded-poses' : 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
+        assert.deepEqual(encoding.verification, { mode: [4, 5].includes(request.viewer_profile_revision) ? 'inline-bounded-poses' : 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
       }
       for (const [rate, count] of rates) {
         const replay = join(stage, 'candidate', `replay.${rate}.hsrdc`);

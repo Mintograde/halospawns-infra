@@ -83,8 +83,8 @@ impl ObjectState {
 }
 
 pub struct PoseState {
-    poses: [h1_pose_codec::pose::Pose; 4],
-    active: [bool; 4],
+    poses: [h1_pose_codec::pose::Pose; h1_pose_codec::MAX_PLAYERS],
+    active: [bool; h1_pose_codec::MAX_PLAYERS],
     rigs: Vec<h1_pose_codec::pose::Skeleton>,
     pub decoded: u64,
     pub nodes_decoded: u64,
@@ -94,7 +94,7 @@ impl Default for PoseState {
     fn default() -> Self {
         Self {
             poses: std::array::from_fn(|_| Vec::new()),
-            active: [false; 4],
+            active: [false; h1_pose_codec::MAX_PLAYERS],
             rigs: h1_pose_codec::skeletons(),
             decoded: 0,
             nodes_decoded: 0,
@@ -109,7 +109,7 @@ impl PoseState {
             target.clone_from(source);
         }
     }
-    pub fn slices(&self) -> [Option<&[h1_pose_codec::pose::Node]>; 4] {
+    pub fn slices(&self) -> [Option<&[h1_pose_codec::pose::Node]>; h1_pose_codec::MAX_PLAYERS] {
         std::array::from_fn(|slot| self.active[slot].then_some(self.poses[slot].as_slice()))
     }
 
@@ -619,7 +619,7 @@ impl<'a> Cursor<'a> {
             return self.reuse(target, 1);
         }
         let count = u32::from_le_bytes(self.0[1..5].try_into()?) as usize;
-        if count > 4 {
+        if count > h1_pose_codec::MAX_PLAYERS {
             return self.reuse(target, 1);
         }
         self.take(5)?;

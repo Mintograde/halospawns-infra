@@ -98,7 +98,7 @@ def limits():
     for name, ceiling in (
         ("SIZE_BYTES", 536870912),
         ("SOURCE_TICKS", 432000),
-        ("PLAYERS", 4),
+        ("PLAYERS", 16),
     ):
         value = int(os.environ[f"H1_MAX_{name}"])
         require(0 < value <= ceiling)
@@ -208,7 +208,7 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    require(request.profile_revision in (1, 2, 3, 4), "unsupported_build")
+    require(request.profile_revision in (1, 2, 3, 4, 5), "unsupported_build")
     return request
 
 
@@ -506,7 +506,7 @@ def inspect_film(path, work, deadline):
         "scenario": env["map"],
         "map_size_bytes": env["map_bytes"],
         "source_tick_count": env["ticks"],
-        "player_count": env["players"],
+        "player_count": env.get("network", {}).get("participant_count", env["players"]),
         "hash_sample_count": env["hash_samples"],
     }
 
@@ -575,7 +575,7 @@ def convert(job, film, work, deadline):
     ticks = job["conversion"]["film"]["source_tick_count"]
     encoding = analytics._json(directory / "candidate/encoding.json")
     require(encoding.get("verification") == {
-        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] == 4 else "inline-lossless",
+        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5) else "inline-lossless",
         "120hz": ticks, "30hz": None,
     }, "conversion_failed")
     return directory
@@ -822,7 +822,8 @@ def execute(work_item, context):
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
             try:
                 result = api("POST", "/v1/ingest/h1films/prepare", {
-                    **prepare, "analytics_revision": 4, "exporter_revision": 5,
+                    **prepare, "analytics_revision": 4,
+                    "exporter_revision": 6 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
                 })
             except FilmError as error:
                 if error.reason != "identity_conflict":

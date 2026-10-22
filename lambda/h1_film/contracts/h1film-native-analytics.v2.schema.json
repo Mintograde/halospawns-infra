@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_combat.py SHA256 89b415b73f751742a504a01dcdc16810ecd87399285f7ee0222f29b971e65952",
+  "$comment": "Generated from API schemas/h1film_combat.py SHA256 31a1adbc49f44495b64fdd37dbb7394a931238b210ad1a8ca0495a345657a15a",
   "$defs": {
     "H1CombatAnalytics": {
       "additionalProperties": false,
@@ -11,7 +11,7 @@
           "items": {
             "$ref": "#/$defs/H1CombatAwards"
           },
-          "maxItems": 4,
+          "maxItems": 16,
           "title": "Awards",
           "type": "array"
         },
@@ -129,7 +129,7 @@
           "type": "integer"
         },
         "slot_index": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Slot Index",
           "type": "integer"
@@ -226,7 +226,7 @@
       "additionalProperties": false,
       "properties": {
         "killer_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Killer Slot",
           "type": "integer"
@@ -238,7 +238,7 @@
           "type": "integer"
         },
         "victim_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Victim Slot",
           "type": "integer"
@@ -258,7 +258,7 @@
         "attacker_slot": {
           "anyOf": [
             {
-              "maximum": 3,
+              "maximum": 15,
               "minimum": 0,
               "type": "integer"
             },
@@ -310,7 +310,7 @@
           "title": "Shield Damage"
         },
         "victim_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Victim Slot",
           "type": "integer"
@@ -392,7 +392,7 @@
         "killer_slot": {
           "anyOf": [
             {
-              "maximum": 3,
+              "maximum": 15,
               "minimum": 0,
               "type": "integer"
             },
@@ -450,7 +450,7 @@
           "title": "Victim Position"
         },
         "victim_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Victim Slot",
           "type": "integer"
@@ -627,7 +627,7 @@
           "type": "object"
         },
         "slot_index": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Slot Index",
           "type": "integer"
@@ -786,7 +786,7 @@
           "type": "integer"
         },
         "slot_index": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Slot Index",
           "type": "integer"
@@ -828,7 +828,7 @@
       "items": {
         "$ref": "#/$defs/H1NativePlayer"
       },
-      "maxItems": 4,
+      "maxItems": 16,
       "minItems": 1,
       "title": "Players",
       "type": "array"

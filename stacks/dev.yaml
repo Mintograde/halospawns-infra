@@ -60,7 +60,7 @@ components:
           # User-authorized dev preview; existing worker ceilings, not measured limits.
           max_size_bytes: 536870912
           max_source_ticks: 432000
-          max_players: 4
+          max_players: 16
         dependencies:
           state_bucket: halospawns-tfstate-283279960672
           state_keys:
@@ -156,7 +156,7 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: 20261022-r1
+          image_tag: 20261022-r2
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

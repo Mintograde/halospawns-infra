@@ -43,7 +43,7 @@ static hs_damage hs_damages[1024];
 static hs_death hs_deaths[64];
 static unsigned int hs_next_shot;
 static int hs_weapon_count, hs_weapon_sent, hs_shot_count, hs_damage_count, hs_death_count;
-static int hs_coverage[4], hs_awards[4][4], hs_award_eligible[4];
+static int hs_coverage[4], hs_awards[H1_EXPORT_MAX_PLAYERS][4], hs_award_eligible[H1_EXPORT_MAX_PLAYERS];
 static int hs_headshot_target = -1, hs_aftermath_target = -1, hs_aftermath_headshot = -1;
 static int hs_scoring_death;
 static const damage_data *hs_aftermath_damage;
@@ -60,9 +60,9 @@ static int hs_active(void)
 static int hs_slot(int handle)
 {
     player_datum *value;
-    if (handle == -1 || (unsigned short)handle >= 4 || !player_data) return -1;
+    if (handle == -1 || (unsigned short)handle >= H1_EXPORT_MAX_PLAYERS || !player_data) return -1;
     value = datum_try_and_get(player_data, handle);
-    return value ? (unsigned short)handle : -1;
+    return value ? hs_participant(handle) : -1;
 }
 
 static void hs_missing(int section)
@@ -234,7 +234,7 @@ void hs_combat_applied(const void *event, int object, int actual,
     else if (attacker == victim) relationship = 2;
     else if (attacker >= 0) {
         const player_datum *player = datum_try_and_get(player_data, damage->owner_player_index);
-        const player_datum *target = DATA_ARRAY_ELEMENT(player_data, player_datum, victim);
+        const player_datum *target = datum_try_and_get(player_data, player_index_from_unit_index(object));
         relationship = game_team_is_enemy(player->team_index, target->team_index) ? 0 : 1;
     }
     if (relationship == 0 && lineage.weapon < 0) hs_missing(0);
@@ -393,15 +393,18 @@ static void hs_combat_frame(int clock)
     hs_end();
     hs_begin("awards", 0);
     if (player_data && player_data->data)
-        for (index = 0; index < player_data->count && index < 4; ++index) {
+        for (index = 0; index < player_data->count && index < H1_EXPORT_MAX_PLAYERS; ++index) {
             const player_datum *player = DATA_ARRAY_ELEMENT(player_data, player_datum, index);
+            int participant;
             if (!player->identifier) continue;
+            participant = hs_slot(((unsigned int)(unsigned short)player->identifier << 16) | index);
+            if (participant < 0) hs_fail("unknown combat player identity");
             hs_begin(NULL, 1);
-            hs_int("slot_index", index);
-            hs_int("longest_kill_streak", hs_awards[index][0]);
-            hs_int("double_kills", hs_awards[index][1]);
-            hs_int("triple_kills", hs_awards[index][2]);
-            hs_int("overkills", hs_awards[index][3]);
+            hs_int("slot_index", participant);
+            hs_int("longest_kill_streak", hs_awards[participant][0]);
+            hs_int("double_kills", hs_awards[participant][1]);
+            hs_int("triple_kills", hs_awards[participant][2]);
+            hs_int("overkills", hs_awards[participant][3]);
             hs_end();
         }
     hs_end();

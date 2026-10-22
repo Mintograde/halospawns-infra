@@ -27,6 +27,8 @@ const VIEWER_PROJECTION_V3_SHA256: &str =
     "fdfe6e6e7c89f295cadbc13f219683d424719c7577173371d48432634888019a";
 const VIEWER_PROJECTION_V4_SHA256: &str =
     "9bc4684bc901fb9b16cb50a2d6e6cd3ee7aac58a2b4b91f713204888292159d7";
+const VIEWER_PROJECTION_V5_SHA256: &str =
+    "210416ff3b889875b957258c96c4703bbf332a021d35447fb4c61128f965502c";
 const PARTS_SCHEMA: &str = "halospawns.viewerReplayDeltaParts.v1";
 const CONTAINER_RESULT_SCHEMA: &str = "halospawns.viewerReplayDeltaContainer.v1";
 const VIEWER_DELTA_FORMAT: &str = "halospawns.viewerReplayDelta.v1";
@@ -152,6 +154,11 @@ impl Projection {
                 include_str!("../../contracts/replays/frontend-default.v4.projection.json"),
                 include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v4.schema.json"),
                 VIEWER_PROJECTION_V4_SHA256,
+            ),
+            5 => (
+                include_str!("../../contracts/replays/frontend-default.v5.projection.json"),
+                include_str!("../../contracts/replays/halospawns.viewerReplay.v1.frontend-default.v5.schema.json"),
+                VIEWER_PROJECTION_V5_SHA256,
             ),
             _ => return Err("unsupported viewer replay profile revision".into()),
         };
@@ -2966,7 +2973,7 @@ fn writer() -> &'static Mutex<Option<ViewerWriter>> {
 }
 
 pub fn configure(directory: &Path, revision: u32) -> Result<(), Box<dyn Error>> {
-    if revision == 4 {
+    if (4..=5).contains(&revision) {
         return Err("pose revision requires the H1 encoder".into());
     }
     PROFILE_REVISION
@@ -3039,6 +3046,7 @@ impl SourceContract {
                     | (2, VIEWER_PROJECTION_V2_SHA256)
                     | (3, VIEWER_PROJECTION_V3_SHA256)
                     | (4, VIEWER_PROJECTION_V4_SHA256)
+                    | (5, VIEWER_PROJECTION_V5_SHA256)
             )
             || self.tick_count != tick_count
         {
@@ -3266,7 +3274,7 @@ fn container_header(
 }
 
 fn viewer_format(revision: u32) -> &'static str {
-    if revision == 4 { VIEWER_POSE_FORMAT } else { VIEWER_DELTA_FORMAT }
+    if (4..=5).contains(&revision) { VIEWER_POSE_FORMAT } else { VIEWER_DELTA_FORMAT }
 }
 
 fn manifest_schema_json(revision: u32) -> Result<&'static str, Box<dyn Error>> {
@@ -3275,6 +3283,7 @@ fn manifest_schema_json(revision: u32) -> Result<&'static str, Box<dyn Error>> {
         2 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v2.manifest.schema.json"),
         3 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v1.frontend-default.v3.manifest.schema.json"),
         4 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v2.frontend-default.v4.manifest.schema.json"),
+        5 => include_str!("../../contracts/replays/halospawns.viewerReplayDelta.v2.frontend-default.v5.manifest.schema.json"),
         _ => return Err("unsupported viewer manifest revision".into()),
     })
 }
@@ -3298,7 +3307,7 @@ pub fn finalize_container(
     validate_manifest(&manifest, &parts)?;
 
     let compression_started = Instant::now();
-    let mut compressor = zstd::bulk::Compressor::new(if parts.source_contract.profile_revision == 4 { 6 } else { ZSTD_LEVEL })?;
+    let mut compressor = zstd::bulk::Compressor::new(if (4..=5).contains(&parts.source_contract.profile_revision) { 6 } else { ZSTD_LEVEL })?;
     compressor.include_checksum(true)?;
     compressor.include_contentsize(true)?;
     let manifest_compressed = compressor.compress(&manifest_raw)?;
@@ -3319,7 +3328,7 @@ pub fn finalize_container(
         return Err("viewer container exceeds its pinned size limit".into());
     }
     let mut header = container_header(manifest_compressed.len(), manifest_raw.len(), size_bytes)?;
-    if parts.source_contract.profile_revision == 4 {
+    if (4..=5).contains(&parts.source_contract.profile_revision) {
         header[..8].copy_from_slice(b"HSRDC002");
         header[10..12].copy_from_slice(&2u16.to_le_bytes());
     }
@@ -3495,7 +3504,7 @@ mod tests {
             golden["sha256"].as_str().unwrap()
         );
         assert!(Projection::load_revision(4).is_ok());
-        assert!(Projection::load_revision(5).is_err());
+        assert!(Projection::load_revision(6).is_err());
     }
 
     #[test]

@@ -8,6 +8,7 @@ import { readEnvelope } from '../runtime/film.mjs';
 import { sha256 } from '../runtime/engine-store.mjs';
 import { verifyPlayback as verifyBeta3 } from '../runtime/adapters/film-v2-120.mjs';
 import { verifyPlayback as verifyArena } from '../runtime/adapters/h1arena-v2-120.mjs';
+import { verifyPlayback as verifyBeta4 } from '../runtime/adapters/beta4-v2-120.mjs';
 import { hashCanonicalStream } from './canonical-transport.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -47,7 +48,8 @@ async function replay(kind, cwd, envelope) {
     closeSync(log);
     if (output !== undefined) closeSync(output);
   }
-  const verify = [9111, 9803].includes(envelope.protocol_revision) ? verifyArena : verifyBeta3;
+  const verify = envelope.protocol_revision === 9803 ? verifyBeta4
+    : envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);
   if (!values['compare-base-export']) return { sha256: await sha256(stream), bytes: (await stat(stream)).size };
   const handle = await open(stream, 'r');

@@ -20,29 +20,56 @@ test('beta4 selects its exact release identity and exporter without repinning th
   assert.equal(selectProfile(retained), retained);
 });
 
-function fixture() {
+function fixture({ players = 2, joins = [2] } = {}) {
   const shift = 12376 - 32;
-  const film = Buffer.alloc(650 + shift);
+  const film = Buffer.alloc(606 + shift + joins.length * 44);
   const fields = { 0: 0x314d4c46, 1: 2, 2: 9803, 3: 120, 4: 12376, 5: 32, 6: 4, 7: 10,
     11: 1, 12: 526 + shift, 13: 120, 14: 2, 15: 100, 16: 480, 17: 516 + shift, 18: 480, 19: 512 + shift, 20: 4, 25: 1,
-    31: 2 };
+    31: players };
   for (const [word, value] of Object.entries(fields)) film.writeUInt32LE(value, Number(word) * 4);
   film.write('dread', 128);
   film.write('2026-10-20 - BETA 4 - e78e4daa', 384);
   film.writeBigUInt64LE(1792540800n, 464);
   film.writeUInt32LE(550 + shift, 448);
-  film.writeUInt32LE(100, 452);
+  film.writeUInt32LE(56 + joins.length * 44, 452);
   film.writeUInt32LE(0x314c5254, 526 + shift);
   film.writeUInt32LE(1, 530 + shift);
-  for (const [index, value] of [0x54454e46, 2, 32, 1, 44, 0, 1, 68, 44, 44, 0, 0, 1, 0].entries()) {
+  for (const [index, value] of [0x54454e46, 2, 32, joins.length, joins.length * 44, 0, 1, 24 + joins.length * 44,
+    joins.length * 44, joins.length * 44, 0, 0, joins.length, 0].entries()) {
     film.writeUInt32LE(value, 550 + shift + index * 4);
   }
-  film.writeUInt16LE(7, 610 + shift);
-  film.writeUInt16LE(36, 612 + shift);
-  film.writeUInt32LE(2, 614 + shift);
-  film.writeInt32LE(360, 622 + shift);
+  for (const [index, handle] of joins.entries()) {
+    film.writeUInt16LE(7, 610 + shift + index * 44);
+    film.writeUInt16LE(36, 612 + shift + index * 44);
+    film.writeUInt32LE(handle, 614 + shift + index * 44);
+    film.writeInt32LE(360, 622 + shift + index * 44);
+  }
   return film;
 }
+
+test('beta4 admits sixteen participants and bounds slots, replacements and initial metadata', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-roster-'));
+  const path = join(root, 'input.h1film');
+  const joins = Array.from({ length: 14 }, (_, index) => 65536 + index + 2);
+  try {
+    await writeFile(path, fixture({ joins }));
+    const envelope = await readEnvelope(path);
+    assert.equal(envelope.players, 2);
+    assert.equal(envelope.network.participant_count, 16);
+    assert.equal(envelope.network.max_player_slot, 15);
+    for (const changes of [
+      { joins: [...joins, 131074] }, { joins: [65552] }, { joins: [65538, 65538] },
+      { players: 9 }, { players: 17 },
+    ]) {
+      await writeFile(path, fixture(changes));
+      await assert.rejects(readEnvelope(path));
+    }
+    await writeFile(path, fixture({ joins: [65538, 131074] }));
+    assert.equal((await readEnvelope(path)).network.participant_count, 4);
+    await writeFile(path, fixture({ players: 8, joins: [65544] }));
+    assert.equal((await readEnvelope(path)).network.participant_count, 9);
+  } finally { await rm(root, { recursive: true }); }
+});
 
 test('beta4 routes timestamp and join records without relaxing the retained arena reader', async () => {
   const root = await mkdtemp(join(tmpdir(), 'beta4-film-'));
@@ -52,10 +79,10 @@ test('beta4 routes timestamp and join records without relaxing the retained aren
     const envelope = await readEnvelope(path);
     assert.equal(envelope.protocol_revision, 9803);
     assert.equal(envelope.build, '2026-10-20 - BETA 4 - e78e4daa');
-    assert.deepEqual(envelope.network, { records: 1, applications: 1, blocks: 1 });
+    assert.deepEqual(envelope.network, { records: 1, applications: 1, blocks: 1, participant_count: 3, max_player_slot: 2 });
     assert.equal(adapterFor({ adapter: 'beta4-v2-120-v1' }), beta4);
     await assert.rejects(readArena(path), /header extension/);
-    for (const [offset, value] of [[12, 30], [16, 12380], [472, 1], [124, 5], [12958, 4], [12966, 0xffffffff]]) {
+    for (const [offset, value] of [[12, 30], [16, 12380], [472, 1], [124, 17], [12958, 16], [12966, 0xffffffff]]) {
       const invalid = fixture();
       invalid.writeUInt32LE(value, offset);
       await writeFile(path, invalid);

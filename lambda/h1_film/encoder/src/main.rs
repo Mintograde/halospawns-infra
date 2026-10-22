@@ -71,7 +71,7 @@ fn default_incremental_state() -> bool {
 
 impl Request {
     fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if !(1..=432_000).contains(&self.ticks) || !(1..=4).contains(&self.players) {
+        if !(1..=432_000).contains(&self.ticks) || !(1..=h1_pose_codec::MAX_PLAYERS).contains(&self.players) {
             return Err("invalid request tick or player count".into());
         }
         // Keep the original adapter's timer/score semantics. A future source ABI
@@ -220,7 +220,7 @@ impl Observations {
             self.freeze_statistics(tick, postgame);
         }
         let players = tick["players"].as_array().ok_or("missing players")?;
-        if players.len() > 4 || (ordinal == 0 && players.len() != seats) {
+        if players.len() > h1_pose_codec::MAX_PLAYERS || (ordinal == 0 && players.len() != seats) {
             return Err("film roster does not match engine export".into());
         }
         let mut ids = BTreeSet::new();
@@ -581,7 +581,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         product["combat"] = combat.product()?;
     }
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
-        "verification":{"mode":if request.viewer_profile_revision == 4 { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
+        "verification":{"mode":if (4..=5).contains(&request.viewer_profile_revision) { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
             "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
         "export_contract":request.export_contract, "transport_contract":request.transport_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,

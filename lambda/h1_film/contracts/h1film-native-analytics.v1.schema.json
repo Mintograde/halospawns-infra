@@ -1,11 +1,11 @@
 {
-  "$comment": "Generated from API schemas/h1film_analytics.py SHA256 dfa01bc3d41460a8c544a48b96579060dc4fb539ed44a3f28a864d325213e1b3",
+  "$comment": "Generated from API schemas/h1film_analytics.py SHA256 d385cab058493e10262e20c74b42a38f7d96133b87869e17779c016ce27f440e",
   "$defs": {
     "H1CreditedKill": {
       "additionalProperties": false,
       "properties": {
         "killer_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Killer Slot",
           "type": "integer"
@@ -17,7 +17,7 @@
           "type": "integer"
         },
         "victim_slot": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Victim Slot",
           "type": "integer"
@@ -176,7 +176,7 @@
           "type": "object"
         },
         "slot_index": {
-          "maximum": 3,
+          "maximum": 15,
           "minimum": 0,
           "title": "Slot Index",
           "type": "integer"
@@ -338,7 +338,7 @@
       "items": {
         "$ref": "#/$defs/H1NativePlayer"
       },
-      "maxItems": 4,
+      "maxItems": 16,
       "minItems": 1,
       "title": "Players",
       "type": "array"

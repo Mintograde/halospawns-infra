@@ -12,7 +12,7 @@ variable "h1_film" {
     reserved_concurrency = optional(number, 0)
     max_size_bytes       = optional(number, 536870912)
     max_source_ticks     = optional(number, 432000)
-    max_players          = optional(number, 4)
+    max_players          = optional(number, 16)
   })
   default = {}
 
@@ -30,7 +30,7 @@ variable "h1_film" {
     condition = (
       var.h1_film.max_size_bytes > 0 && var.h1_film.max_size_bytes <= 536870912 &&
       var.h1_film.max_source_ticks > 0 && var.h1_film.max_source_ticks <= 432000 &&
-      var.h1_film.max_players > 0 && var.h1_film.max_players <= 4 &&
+      var.h1_film.max_players > 0 && var.h1_film.max_players <= 16 &&
       floor(var.h1_film.max_size_bytes) == var.h1_film.max_size_bytes &&
       floor(var.h1_film.max_source_ticks) == var.h1_film.max_source_ticks &&
       floor(var.h1_film.max_players) == var.h1_film.max_players

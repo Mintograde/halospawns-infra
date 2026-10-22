@@ -2,10 +2,13 @@
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `20261022-r1`, with dedicated queue/API wiring and scoped data access.
-New intake selects exporter 5 / analytics 4 / viewer 4 after verifying API
-`live=188`. Admin reprocess defaults remain exporter 4 / analytics 3; explicit
-5/4 requests work. Old pins remain supported. See [deployment](DEPLOYMENT.md).
+to `20261022-r2`, with dedicated queue/API wiring and scoped data access.
+Beta 4 selects exporter 6 / analytics 4 / viewer 5 and supports sixteen distinct
+participants. Retained families keep exporter 5 / analytics 4 / viewer 4.
+API code/frontend support are ready locally but await release; API `live=192`
+still limits intake to four. Release API code before applying its limit of 16.
+Old pins remain supported. See [deployment](DEPLOYMENT.md) and [Beta 4](BETA4.md),
+including its upstream eight-initial-player metadata limitation.
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
@@ -17,7 +20,7 @@ viewer bytes, scoreboard, graphs and occupancy. Remaining admin-default
 coordination, bulk backfill and broader hosted acceptance are not implied.
 
 New H1 conversions select [bounded pose compression](POSE_COMPRESSION.md),
-viewer revision 4 / `HSRDC002`. The fine candidate preserves every tick and all
+viewer revision 4 (5 for Beta 4 exporter 6) / `HSRDC002`. The fine candidate preserves every tick and all
 non-pose data, with measured artifacts about 4.3x smaller. Old contracts and
 explicit jobs remain supported; see deployment notes for the dev rollout.
 
@@ -107,7 +110,7 @@ The foundation audit below deliberately expects dormant gates, not current dev.
 
 ```powershell
 .\scripts\publish-h1-film.ps1 -Tag '<YYYYMMDD-rN>' -EngineRoot '<private-engine-store>' -BuildOnly
-.\scripts\verify-h1-film-foundation.ps1 -Tag 20261022-r1 -Mode intake
+.\scripts\verify-h1-film-foundation.ps1 -Tag 20261022-r2 -Mode intake
 ```
 
 Omitting `-BuildOnly` publishes to private dev ECR after account, immutability,

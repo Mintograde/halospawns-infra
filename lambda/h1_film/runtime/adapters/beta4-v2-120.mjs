@@ -52,6 +52,8 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
   assert.equal(words[7], size - 32, 'Invalid FNET packed size');
   assert.ok(words[6] <= Math.floor(words[7] / 24), 'Invalid FNET block count');
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
+  const joined = new Set();
+  let maxPlayerSlot = players - 1;
   const sizes = new Map([[1, 68], [2, 108], [3, 4], [4, 8], [5, 0], [6, 8], [7, 36]]);
   for (let block = 0; block < words[6]; block++) {
     assert.ok(cursor + 24 <= size, 'Truncated FNET block');
@@ -72,9 +74,14 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
         'Invalid FNET record bounds or time');
       if (record === 0) assert.equal(tick, first, 'FNET first tick mismatch');
       if (record === records - 1) assert.equal(tick, last, 'FNET last tick mismatch');
-      if (type === 3) assert.equal(raw.readUInt32LE(position + 8) >>> 4, 0, 'FNET drop mask exceeds converter limit');
+      if (type === 3) assert.equal(raw.readUInt32LE(position + 8) >>> 16, 0, 'FNET drop mask exceeds converter limit');
       if (type === 7) {
-        assert.ok((raw.readUInt32LE(position + 8) & 65535) < 4, 'Joined player exceeds converter limit');
+        const handle = raw.readUInt32LE(position + 8), slot = handle & 65535;
+        assert.ok(slot < 16, 'Joined player exceeds converter limit');
+        assert.ok(!joined.has(handle), 'Duplicate joined player identity');
+        joined.add(handle);
+        maxPlayerSlot = Math.max(maxPlayerSlot, slot);
+        assert.ok(players + joined.size <= 16, 'Participant roster exceeds converter limit');
         assert.ok(raw.readInt32LE(position + 16) >= 0, 'Invalid join respawn timer');
       }
       if (type !== 3 && tick < firstTick + ticks) applications++;
@@ -90,7 +97,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
   assert.equal(cursor, size, 'Trailing FNET blocks');
   assert.equal(count, words[3], 'FNET record count mismatch');
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
-  return { records: count, applications, blocks: words[6] };
+  return { records: count, applications, blocks: words[6], participant_count: players + joined.size, max_player_slot: maxPlayerSlot };
 }
 
 export async function readEnvelope(path) {
@@ -108,7 +115,8 @@ export async function readEnvelope(path) {
     assert.equal(flags & ~11, 0, 'Unknown film flags');
     assert.equal(network, universal, 'Network film requires UNIVERSAL world changes');
     const players = network ? words[31] & 255 : words[25];
-    assert.ok(players > 0 && players <= 4, 'Network roster exceeds four-player converter limit');
+    assert.ok(players > 0 && players <= 16, 'Network roster exceeds sixteen-player converter limit');
+    assert.ok(players <= 8, 'Beta 4 initial roster lacks recorded names and teams beyond eight players');
     const stream = words[17], trailer = words[12];
     assert.ok(stream >= 480 && stream < trailer && trailer <= size - 8 && [1, 2].includes(words[14]),
       'A closed film with a trailer is required');

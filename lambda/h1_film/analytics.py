@@ -160,7 +160,7 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     ]
     if "30hz" in encoding and encoding["30hz"] is None:
         if report.get("reference") or encoding.get("verification") != {
-            "mode": "inline-bounded-poses" if encoding.get("viewer_profile_revision") == 4 else "inline-lossless",
+            "mode": "inline-bounded-poses" if encoding.get("viewer_profile_revision") in (4, 5) else "inline-lossless",
             "120hz": ticks, "30hz": None,
         }:
             raise ValueError("Missing source-rate viewer verification")

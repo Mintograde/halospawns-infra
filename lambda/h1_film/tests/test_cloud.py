@@ -83,10 +83,13 @@ class CloudTests(unittest.TestCase):
                 cloud.validate_job(value)
 
     def test_limits_require_explicit_configuration(self):
+        with patch.dict(os.environ, {"H1_MAX_PLAYERS": "16"}):
+            self.assertEqual(cloud.limits()["PLAYERS"], 16)
+            cloud.validate_job(self.job)
         for key, value in (
             ("H1_MAX_SIZE_BYTES", "536870913"),
             ("H1_MAX_SOURCE_TICKS", "0"),
-            ("H1_MAX_PLAYERS", "5"),
+            ("H1_MAX_PLAYERS", "17"),
         ):
             with (
                 patch.dict(os.environ, {key: value}),
