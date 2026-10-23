@@ -508,6 +508,40 @@ class CloudTests(unittest.TestCase):
                 cloud.replay_completion(self.job)
             api.assert_called_once()
 
+    def test_timestamp_completion_keeps_original_job_identity_and_legacy_receipts(self):
+        job = copy.deepcopy(self.job)
+        profile = load_registry()["h1-performance-beta4-p9803-wasm-v1"]
+        pin = job["conversion"]
+        pin["film"].update(engine_profile=profile["id"], **{
+            key: profile[key] for key in ("format", "protocol_revision", "tick_rate", "build")
+        })
+        pin["engine"].update(**{key: profile[key] for key in (
+            "format", "protocol_revision", "tick_rate", "build", "wasm_sha256", "glue_sha256"
+        )})
+        report = {
+            "engine_profile": profile["id"],
+            "envelope": {"created_utc": 1792540800},
+            "map_binding": pin["map_binding"],
+            "simulation": {"played_ticks": pin["film"]["source_tick_count"],
+                           "hash_checks": pin["film"]["hash_sample_count"],
+                           "hash_mismatches": 0, "seed_mismatches": 0},
+            "provenance": {"wasm_sha256": profile["wasm_sha256"],
+                           "glue_sha256": profile["glue_sha256"],
+                           "map_sha256": pin["map_binding"]["raw_source"]["sha256"]},
+        }
+        original = copy.deepcopy(pin)
+        encoding = {"analytics": {"match_end_source_tick": 60}}
+        proof = cloud.completion_proof(job, report, encoding)
+        self.assertEqual(proof["created_utc"], 1792540800)
+        self.assertEqual(pin, original)
+        report["envelope"].pop("created_utc")
+        legacy = cloud.completion_proof(job, report, encoding)
+        self.assertNotIn("created_utc", legacy)
+        cloud.validate_proof(pin, legacy)
+        pin["film"]["engine_profile"] = self.job["conversion"]["film"]["engine_profile"]
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_proof(pin, proof)
+
 
 if __name__ == "__main__":
     unittest.main()

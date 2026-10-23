@@ -193,6 +193,30 @@ class Parsed:
 
 
 class H1AdaptationTests(unittest.TestCase):
+    def test_recorded_utc_sets_only_observed_match_boundaries(self):
+        parsed = Parsed(metadata={"tick_count": 2}, participants=[], game={}, facts={})
+        report = {
+            "analytics": {"ticks": 2},
+            "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+            "envelope": {"created_utc": 1792540800, "first_update": 0},
+            "provenance": {"film_sha256": "a" * 64, "map_sha256": "b" * 64},
+        }
+        encoding = {"analytics_revision": 3, "source_first_clock": 0,
+                    "analytics": {"match_end_source_tick": 121}}
+        result = h1_film.adapt_parsed_replay(parsed, report=report, encoding=encoding)
+        self.assertEqual(result.game["started_at"], "2026-10-21T00:00:00Z")
+        self.assertEqual(result.game["ended_at"], "2026-10-21T00:00:01.008333Z")
+        self.assertNotIn("recorded_at", result.metadata["h1_film"]["known_gaps"])
+        self.assertIn("recorded_at", h1_film.KNOWN_GAPS)
+        report["envelope"]["first_update"] = 600
+        encoding["source_first_clock"] = 600
+        encoding["analytics"]["match_end_source_tick"] = None
+        result = h1_film.adapt_parsed_replay(parsed, report=report, encoding=encoding)
+        self.assertIsNone(result.game["started_at"])
+        self.assertIsNone(result.game["ended_at"])
+        self.assertEqual(result.metadata["h1_film"]["recorded_at"], "2026-10-21T00:00:00Z")
+        self.assertEqual(parsed.game, {})
+
     def test_one_sample_graph_baseline_is_not_replaced_with_final_score(self):
         parsed = Parsed(
             metadata={

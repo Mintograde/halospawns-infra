@@ -1,5 +1,116 @@
 # H1 film Lambda integration
 
+## Recorded UTC Support Deployed, 2026-10-23
+
+At the user's request after their API release, verified **API live=200**, then
+published and applied dev worker **20261023-r2**. Beta 4 container `created_utc`
+now flows through conversion, viewer manifests, completion evidence, observed
+game dates and API recording-time provenance. See
+[BETA4.md](BETA4.md#recorded-utc-support-deployed-2026-10-23) for semantics and
+compatibility. Zero/older timestamps remain unknown; there is no filename,
+filesystem or upload-time fallback. All binary/exporter/viewer pins are unchanged.
+
+The downloaded API ZIP SHA-256 is
+`318b8f9b56a7d4ddf99a2e25ec3a5a6456ca1b98c449624a5dbee914092e7804`.
+Its completion schema, ingestion normalizer, H1 contract and analytics modules
+match tested source byte-for-byte. The packaged worker's initial/rebuild/reparse
+callbacks also pass the actual deployed API's Linux dependencies and pure
+builders offline. HTTPS health passes; both H1 flags and limit 16 remain intact.
+No direct API or alias write was performed.
+
+Immutable ECR manifest digest:
+`sha256:c1709ce2b3deee718afca2be5564beebf4133bdf372c5d1a62ab97855c5519a4`
+(376,180,194 compressed bytes). Tested and published local image ID:
+`sha256:78f78c578db61cf7c1ead3ca44d8954f51771ab4bd9f4f0fb669bd64076b8b8c`.
+The engine bundle is unchanged from `L:/tmp/halospawns-h1-bots-20261023/engines`;
+the previous registry snapshot and all release evidence are under
+`L:/tmp/halospawns-h1-utc-20261023/release-r2/`.
+
+Exact release commands from the infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261023-r2 `
+  -EngineRoot L:/tmp/halospawns-h1-bots-20261023/engines `
+  -PreviousRegistry L:/tmp/halospawns-h1-utc-20261023/release-r2/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261023-r2 `
+  -EngineRoot L:/tmp/halospawns-h1-bots-20261023/engines `
+  -PreviousRegistry L:/tmp/halospawns-h1-utc-20261023/release-r2/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan '-no-color' '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-utc-20261023/release-r2/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-h1-utc-20261023/release-r2/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-utc-20261023/release-r2/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused, aggregate and saved preplans contain one resource action: the H1 image
+update in place. JSON review confirms only `image_uri` and computed
+`last_modified` change; apply completes **0 added / 1 changed / 0 destroyed**.
+Saved plan SHA-256:
+`182311329b2e261ee63d38c071e6f28415870b10a728f61ef9ca96aa2ea3611d`.
+Renderer version drift (267 to 269) is refresh-only, not a renderer update.
+The aggregate preplan also observes the API's state-only version-output change
+from 194 to 200; no API resource action or separate component apply is needed.
+The focused postplan is no-op. The full dev postplan has no resource actions:
+only that same unapplied API version-output refresh remains; all other
+components are no-op. Existing undeclared `asset_delivery_mode` warnings
+remain. Dev profile `halospawns-dev`, account `283279960672`,
+`us-east-1`, has no session blocker.
+
+The worker is Active/Successful at the published digest. The first live health
+request verifies all three profiles, nine explicit exporters and the unchanged
+encoder hash `7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+Environment hash, IAM role, architecture, memory 3,008 MiB, timeout 900 s,
+temporary storage 8,192 MiB, concurrency 5 and enabled batch-1 SQS mapping
+match the pre-apply baseline. Existing intake gates and limits are unchanged.
+This is live health verification, not a hosted timestamp conversion canary.
+
+The actual release image (no worker/runtime source overrides) passes the real
+eight-participant film's initial conversion, viewer rebuild, full reparse and
+three identical retry callbacks with networking disabled. All 645 source hashes,
+API products (681 spatial events), 77,354 browser-decoded ticks and three cold
+chunks pass. UTC is `2026-10-22T23:19:56Z`; compressed replay chunks remain
+byte-identical to r1. Read-only/non-root container gates and all 28 Node / 61
+worker Python tests pass again. Offline timings are not Lambda throughput claims.
+
+No upload/retry, backfill, map approval, database migration, frontend deployment
+or prod action was performed. The only infrastructure configuration change is
+`stacks/dev.yaml` in `map-processing`. Do not overwrite `20261023-r2`; retain
+exporter 7 / viewer 5 and API timestamp parsing during rollback.
+Existing completed films need separately requested full reparses to populate
+game dates; saved callbacks and old attempt pins remain immutable. API rollback
+must keep the optional timestamp contract once its completions exist.
+
+Validation commands, from their respective repositories:
+
+- Infra: `node --test lambda/h1_film/tests/*.test.mjs` (28 passed) and
+  `.venv/Scripts/python.exe -m unittest discover -s lambda/h1_film/tests -p 'test_*.py'`
+  (61 passed).
+- API: `.venv/Scripts/python.exe -m pytest tests/unit -q` (1,578 passed).
+  With `HALOSPAWNS_TEST_POSTGRES=1`, the H1 PostgreSQL suite filtered by
+  `-k 'recorded_utc or reprocess_fences_pin_and_viewer_projection'` passed the
+  22 existing reparse cases; after correcting new test fixtures, the focused
+  `-k 'recorded_utc or beta4-utc' --tb=short` run passed all three new cases.
+  Ruff on the four modified API modules and the two modified/new test files
+  passes; the worker completion JSON schema equals the generated API schema.
+- API: `scripts/build-lambda.ps1 -SkipDependencyInstall -OutputPath L:/tmp/halospawns-h1-utc-20261023/api-source-only.zip`
+  passes. This source-only ZIP is not a publishable Linux/native release.
+- Viewer workspace: `node node_modules/vitest/vitest.mjs run src/tests/analyticsAvailability.test.js`
+  (nine passed). Direct installed Vitest avoids the local pnpm invocation's
+  attempted production dependency refresh; dependencies were not changed.
+- The network-disabled local worker harness, real API product validation and
+  full browser decode are recorded in `L:/tmp/halospawns-h1-utc-20261023/`.
+  Browser validation additionally proves identical compressed replay chunks
+  against the prior artifact. No frontend application code or build changed.
+
+Release evidence in `release-r2/`: `image-build.log`, `publish.log`,
+`published-image.json`, `cloud/`, `cloud.log`, `api-products.json`, `viewer.json`,
+test logs, `api-live-200-verification.json`, `map-plan.log`, `full-plan.log`,
+`reviewed-plan.log`, `reviewed-plan-summary.json`, `reviewed.planfile`,
+`apply.log`, `post-map-plan.log`, `post-full-plan.log`, `worker-before.json`,
+`worker-deployed-verification.json` and `worker-health-verified.json`.
+
 ## Bot Replay Support Deployed, 2026-10-23 UTC
 
 The user released the API and explicitly authorized image publication and the

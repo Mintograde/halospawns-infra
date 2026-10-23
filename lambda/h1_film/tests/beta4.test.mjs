@@ -135,6 +135,7 @@ test('beta4 routes timestamp and join records without relaxing the retained aren
     const envelope = await readEnvelope(path);
     assert.equal(envelope.protocol_revision, 9803);
     assert.equal(envelope.build, '2026-10-20 - BETA 4 - e78e4daa');
+    assert.equal(envelope.created_utc, 1792540800);
     assert.deepEqual(envelope.network, { records: 1, applications: 1, blocks: 1, participant_count: 3, max_player_slot: 2 });
     assert.equal(adapterFor({ adapter: 'beta4-v2-120-v1' }), beta4);
     await assert.rejects(readArena(path), /header extension/);
@@ -143,6 +144,26 @@ test('beta4 routes timestamp and join records without relaxing the retained aren
       invalid.writeUInt32LE(value, offset);
       await writeFile(path, invalid);
       await assert.rejects(readEnvelope(path), `offset ${offset}`);
+    }
+  } finally { await rm(root, { recursive: true }); }
+});
+
+test('beta4 reads both UTC words, treats zero as unknown and rejects out-of-range dates', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-utc-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const timestamp of [0n, 1792540800n, 4294967296n, 253402300799n]) {
+      const film = fixture();
+      film.writeBigUInt64LE(timestamp, 464);
+      await writeFile(path, film);
+      const envelope = await readEnvelope(path);
+      assert.equal(envelope.created_utc, timestamp ? Number(timestamp) : undefined);
+    }
+    for (const timestamp of [253402300800n, 0xffffffffffffffffn]) {
+      const film = fixture();
+      film.writeBigUInt64LE(timestamp, 464);
+      await writeFile(path, film);
+      await assert.rejects(readEnvelope(path), /UTC timestamp/);
     }
   } finally { await rm(root, { recursive: true }); }
 });

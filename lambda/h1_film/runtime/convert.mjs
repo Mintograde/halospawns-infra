@@ -88,10 +88,12 @@ export async function convertFilm(options) {
   if (values.reference) await copyFile(join(values.reference, 'request.json'), join(stage, 'request.json'));
   else await save(join(stage, 'request.json'), {
     ticks: native.envelope.ticks, players: native.envelope.players, map: native.envelope.map,
-    replay_id: `h1-${filmHash}`, recorded_at: (await stat(values.film)).mtime.toISOString(), zstd_level: 6,
+    replay_id: `h1-${filmHash}`, zstd_level: 6,
   });
   const requestPath = join(stage, 'request.json');
   const request = JSON.parse(await readFile(requestPath, 'utf8'));
+  request.recorded_at = envelope.created_utc
+    ? new Date(envelope.created_utc * 1000).toISOString().replace('.000Z', 'Z') : '1970-01-01T00:00:00Z';
   request.source_tick_rate = profile.tick_rate;
   request.export_contract = profile.export_contract;
   request.transport_contract = profile.transport_contract ?? profile.export_contract;

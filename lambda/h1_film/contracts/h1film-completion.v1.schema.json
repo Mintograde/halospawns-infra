@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 61c184e732422828ce7b20360f8dd319933368e8af28ad05729e49445d083a2b",
+  "$comment": "Generated from API schemas/h1films.py SHA256 8499243039596472a5b2b30f3733ad5347d6ee0b6665f881b7e7682ff2ad53f8",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -18,6 +18,20 @@
       "format": "uuid",
       "title": "Conversion Id",
       "type": "string"
+    },
+    "created_utc": {
+      "anyOf": [
+        {
+          "maximum": 253402300799,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created Utc"
     },
     "engine_profile": {
       "maxLength": 120,

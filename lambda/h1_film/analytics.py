@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .registry import profile_for_report
+from . import recorded
 from .combat import participant_counters, validate_combat_product
 
 ANALYTICS_SCHEMA = "halospawns.h1AnalyticsSource.v1"
@@ -23,7 +24,7 @@ KNOWN_GAPS = {
     "powerup_timeline": "Pickup totals exist; per-tick pickup series are not exported.",
     "gametype_settings": "Mode/name/teamplay exist; full recorded variant settings are not exported.",
     "host_topology": "Playback-local seats cannot establish the recording's host/controller topology.",
-    "recorded_at": "Film format does not establish an authoritative UTC match timestamp.",
+    "recorded_at": "This film has no recorded UTC timestamp.",
 }
 
 NATIVE_METRICS = {
@@ -247,7 +248,7 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             if encoding.get("analytics_revision", 1) >= 2
             else "retained",
             "parity_status": "partial_pending_semantic_reconciliation",
-            "known_gaps": KNOWN_GAPS,
+            "known_gaps": dict(KNOWN_GAPS),
         },
     }
     if encoding.get("analytics_revision", 1) >= 3:
@@ -264,6 +265,17 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             opponent_matrices="Applied damage and callback death coverage are reported independently in native combat.",
             streaks_multikills="Engine award coverage is reported independently in native combat.",
         )
+    created_utc = recorded.recording_utc(report)
+    if created_utc is not None:
+        start = recorded.match_start(report, encoding) if encoding.get("analytics_revision", 1) >= 3 else None
+        end = encoding["analytics"].get("match_end_source_tick")
+        game["started_at"] = recorded.utc_timestamp(created_utc, start) if start is not None else None
+        game["ended_at"] = recorded.utc_timestamp(created_utc, end) if end is not None else None
+        metadata["h1_film"].update(
+            created_utc=created_utc, recorded_at=recorded.utc_timestamp(created_utc),
+            recorded_at_source="film_header_created_utc",
+        )
+        metadata["h1_film"]["known_gaps"].pop("recorded_at", None)
     # A film shorter than four ticks has one occupancy sample carrying its final
     # scores. Preserve the independently captured first-tick graph baseline.
     graph_players = metadata.get("graph_context", {}).get("players", {})

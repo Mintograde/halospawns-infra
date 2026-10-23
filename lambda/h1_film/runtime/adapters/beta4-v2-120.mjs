@@ -122,6 +122,8 @@ export async function readEnvelope(path) {
       'A closed film with a trailer is required');
     const netOffset = head.readUInt32LE(448), netSize = head.readUInt32LE(452);
     const namesOffset = head.readUInt32LE(456), namesSize = head.readUInt32LE(460);
+    const createdUtc = head.readBigUInt64LE(464);
+    assert.ok(createdUtc <= 253402300799n, 'Invalid Beta 4 UTC timestamp');
     assert.ok(head.subarray(472).every(byte => byte === 0), 'Unknown beta4 header extension');
     const spans = [[0, 480], [stream, trailer]];
     for (const [offset, length, before] of [
@@ -175,6 +177,7 @@ export async function readEnvelope(path) {
     return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
+      ...(createdUtc ? { created_utc: Number(createdUtc) } : {}),
       ...(bots ? { bots } : {}), ...(net ? { network: net } : {}) };
   } finally { await file.close(); }
 }

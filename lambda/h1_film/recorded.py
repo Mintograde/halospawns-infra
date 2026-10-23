@@ -4,7 +4,27 @@ from __future__ import annotations
 
 import struct
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+
+def recording_utc(report: dict) -> int | None:
+    value = report.get("envelope", {}).get("created_utc")
+    if value is None:
+        return None
+    if (
+        report["engine_profile"] != "h1-performance-beta4-p9803-wasm-v1"
+        or type(value) is not int or not 1 <= value <= 253402300799
+    ):
+        raise ValueError("Invalid recorded UTC evidence")
+    return value
+
+
+def utc_timestamp(created_utc: int, source_tick: int = 0) -> str:
+    value = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(
+        seconds=created_utc, microseconds=round(source_tick * 1_000_000 / 120)
+    )
+    return value.isoformat().replace("+00:00", "Z")
 
 
 def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:

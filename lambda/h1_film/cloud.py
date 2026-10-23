@@ -605,6 +605,9 @@ def completion_proof(job, report, encoding):
     }
     if pin["engine"].get("exporter_revision") is not None:
         proof["exporter_revision"] = pin["engine"]["exporter_revision"]
+    created_utc = recorded.recording_utc(report)
+    if created_utc is not None:
+        proof["created_utc"] = created_utc
     if proof["analytics_revision"] >= 3:
         # The format reader validates the closed trailer separately from simulation.
         require(report["envelope"]["end_reason"] in (1, 2))
@@ -618,6 +621,9 @@ def completion_proof(job, report, encoding):
 
 def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    if proof.get("created_utc") is not None:
+        require(pin["film"]["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1")
+        require(proof["created_utc"] + (proof.get("match_end_source_tick") or 0) / 120 <= 253402300799)
     require(
         proof.get("analytics_revision", 1) == analytics_revision
         if analytics_revision is not None else proof.get("analytics_revision", 1) < 3
@@ -682,19 +688,18 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     parsed = analytics.adapt_parsed_replay(parsed, report=report, encoding=encoding)
     parsed.game["metadata"]["is_full_game"] = False
     parsed.metadata["summary"]["is_full_game"] = False
-    parsed.metadata["h1_film"]["recorded_at_authoritative"] = False
+    parsed.metadata["h1_film"]["recorded_at_authoritative"] = proof.get("created_utc") is not None
     parts = shared.load_native_viewer_parts(
         directory / "candidate/parts-120",
         native_binary_path=extractor,
         revision=request.profile_revision,
     )
-    # The released manifest requires a timestamp. This stable sentinel is not
-    # game UTC; the API's availability contract marks recorded UTC unavailable.
     container = shared.assemble_viewer_container(
         parts,
         work / "viewer.hsrdc",
         replay_id=job["upload_id"],
-        recorded_at=UNKNOWN_RECORDED_AT,
+        recorded_at=recorded.utc_timestamp(proof["created_utc"])
+        if proof.get("created_utc") is not None else UNKNOWN_RECORDED_AT,
     )
     require(container.tick_count == proof["source_tick_count"])
     viewer = shared._write_viewer_artifact(

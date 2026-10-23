@@ -10,6 +10,24 @@ from h1_film import recorded
 
 
 class RecordedTests(unittest.TestCase):
+    def test_recorded_utc_is_profile_scoped_and_uses_both_words(self):
+        report = {"engine_profile": "h1-performance-beta4-p9803-wasm-v1", "envelope": {}}
+        self.assertIsNone(recorded.recording_utc(report))
+        for value in (1, 1792540800, 4294967296, 253402300799):
+            report["envelope"]["created_utc"] = value
+            self.assertEqual(recorded.recording_utc(report), value)
+        self.assertEqual(recorded.utc_timestamp(1792540800), "2026-10-21T00:00:00Z")
+        self.assertEqual(recorded.utc_timestamp(4294967296), "2106-02-07T06:28:16Z")
+        self.assertEqual(recorded.utc_timestamp(1792540800, 121), "2026-10-21T00:00:01.008333Z")
+        for value in (True, 0, -1, 1.5, "1792540800", 253402300800):
+            report["envelope"]["created_utc"] = value
+            with self.assertRaises(ValueError):
+                recorded.recording_utc(report)
+        report["envelope"]["created_utc"] = 1792540800
+        report["engine_profile"] = "h1arena-197bb65c-p9111-wasm-v1"
+        with self.assertRaises(ValueError):
+            recorded.recording_utc(report)
+
     def test_beta4_resolved_record_uses_61_fields_and_preserves_rule_offsets(self):
         words = [0] * 32
         words[:4] = (0x314D4C46, 2, 9803, 120)
