@@ -1,12 +1,19 @@
 # H1 Film Worker
 
+Dev release `20261023-r1` adds Beta 4 bot playback with exporter 7 /
+analytics 4 / viewer 5. The worker and API `live=195` are deployed and verified;
+new uploads select these pins automatically without new same-profile map
+approvals. See [bot support](BETA4.md#bot-replay-support-2026-10-23-utc) and
+[release evidence](DEPLOYMENT.md#bot-replay-support-deployed-2026-10-23-utc).
+
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `20261022-r2`, with dedicated queue/API wiring and scoped data access.
-Beta 4 selects exporter 6 / analytics 4 / viewer 5 and supports sixteen distinct
+to `20261023-r1`, with dedicated queue/API wiring and scoped data access.
+Beta 4 selects exporter 7 / analytics 4 / viewer 5 and supports sixteen distinct
 participants. Retained families keep exporter 5 / analytics 4 / viewer 4.
-API code/frontend support are ready locally but await release; API `live=192`
-still limits intake to four. Release API code before applying its limit of 16.
+The user's API release and subsequent configuration apply are verified:
+API `live=195` and the worker both allow 16. Frontend remains undeployed while
+the user tests its revision-5 support locally against dev.
 Old pins remain supported. See [deployment](DEPLOYMENT.md) and [Beta 4](BETA4.md),
 including its upstream eight-initial-player metadata limitation.
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
@@ -20,7 +27,7 @@ viewer bytes, scoreboard, graphs and occupancy. Remaining admin-default
 coordination, bulk backfill and broader hosted acceptance are not implied.
 
 New H1 conversions select [bounded pose compression](POSE_COMPRESSION.md),
-viewer revision 4 (5 for Beta 4 exporter 6) / `HSRDC002`. The fine candidate preserves every tick and all
+viewer revision 4 (5 for Beta 4 exporters 6/7) / `HSRDC002`. The fine candidate preserves every tick and all
 non-pose data, with measured artifacts about 4.3x smaller. Old contracts and
 explicit jobs remain supported; see deployment notes for the dev rollout.
 
@@ -110,7 +117,7 @@ The foundation audit below deliberately expects dormant gates, not current dev.
 
 ```powershell
 .\scripts\publish-h1-film.ps1 -Tag '<YYYYMMDD-rN>' -EngineRoot '<private-engine-store>' -BuildOnly
-.\scripts\verify-h1-film-foundation.ps1 -Tag 20261022-r2 -Mode intake
+.\scripts\verify-h1-film-foundation.ps1 -Tag 20261023-r1 -Mode intake
 ```
 
 Omitting `-BuildOnly` publishes to private dev ECR after account, immutability,

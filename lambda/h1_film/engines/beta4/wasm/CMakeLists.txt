@@ -235,7 +235,7 @@ target_link_options(h1-film PRIVATE -O2 -g -sENVIRONMENT=node -sNODERAWFS=1
     -sASSERTIONS=1 -sERROR_ON_UNDEFINED_SYMBOLS=0 -Wl,--Map=engine.map
     "--pre-js=${H1_BETA3_PORT}/node-pre.js")
 set_target_properties(h1-film PROPERTIES SUFFIX ".js")
-target_sources(h1-film PRIVATE headless-extra.c platform-extra.c
+target_sources(h1-film PRIVATE headless-extra.c platform-extra.c bot-replay.c
     "${H1_SOURCE}/host/blampc_any_device.c" "${H1_SOURCE}/host/blampc_viewer_input.c"
     "${H1_SOURCE}/host/blampc_picture_probe.c" "${H1_SOURCE}/host/blampc_announcer.c"
     "${H1_SOURCE}/host/blampc_powerup_nav.c")

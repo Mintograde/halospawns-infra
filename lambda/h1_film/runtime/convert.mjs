@@ -45,6 +45,7 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles), values['exporter-revision'] === undefined
     ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
+  if (envelope.bots) assert.ok(profile.exporter_revision >= 7, 'Bot films require exporter revision 7 or later');
   if (profile.port === 'beta4' && (envelope.players > 4 || envelope.network?.max_player_slot >= 4
     || envelope.network?.participant_count > 4)) {
     assert.ok(profile.exporter_revision >= 6, 'This Beta 4 roster requires exporter revision 6 or later');

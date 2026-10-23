@@ -1,5 +1,185 @@
 # H1 film Lambda integration
 
+## Bot Replay Support Deployed, 2026-10-23 UTC
+
+The user released the API and explicitly authorized image publication and the
+dev worker apply. Dev now runs **20261023-r1** with API **live=195**. New Beta 4
+uploads and omitted admin full-reparse requests automatically select exporter
+7 / analytics 4 / viewer 5. Existing approvals for unchanged maps under the
+same simulation profile remain valid; no new engine approval is required.
+No upload/retry, map approval, migration, frontend deployment or prod action
+was performed. Failed upload `3ac851bd-1281-4539-95d3-f6f947b6fb3b` is untouched.
+
+Published immutable ECR manifest digest:
+`sha256:a2c440a86ac32287818de0904c58c15489b1afc80bcebadb284ddcd415fa2b14`
+(376,179,569 compressed bytes). Published local image ID:
+`sha256:478d9a08e2a6477bcddb90f923834b6f1d54f864721826046e6fe6838bc52bb8`.
+The release adds exporter 7 to the append-only retention fixture; runtime,
+engine and encoder bytes remain those validated in the local candidate.
+
+The original tested local candidate image ID was
+`sha256:95e0aae768736b51fd5bd25e11350b81322b872a20c7227d71eb7a53cef2c44f`.
+This is a local image ID, not an ECR manifest digest. The retained private
+engine bundle is `L:/tmp/halospawns-h1-bots-20261023/engines`; its prior-release
+registry is alongside it as `previous-registry.json`. The image contains
+exporter 7 with WASM SHA-256
+`14d516e3f8c48968f43800c115dbc995d8c03a722f4901e1ddd23fc9fb136f95`,
+unchanged Beta 4 glue and all prior binary pins. Exact parity and packaged
+validation results are in [BETA4.md](BETA4.md#bot-replay-support-2026-10-23-utc).
+
+The downloaded API `live=195` ZIP has SHA-256
+`8e7d23689913a39d94423aff232383dde7d91d4704d19e535e90fe5a8b4f6a97`.
+Its contract, intake, admin defaults, batch inventory and batch schema modules
+match the tested source byte-for-byte. HTTPS health passes; both H1 flags
+remain true and the participant limit stays 16. The API was released through
+the user's normal pipeline; this rollout made no direct API or alias write.
+
+Exact release commands from the infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261023-r1 `
+  -EngineRoot L:/tmp/halospawns-h1-bots-20261023/engines `
+  -PreviousRegistry L:/tmp/halospawns-h1-bots-20261023/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan '-no-color' '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-bots-20261023/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-h1-bots-20261023/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-bots-20261023/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused, aggregate and saved plans contain one resource action: the H1 image
+URI update in place, plus its tag/digest outputs. The JSON review checks that
+only `image_uri` and computed `last_modified` change. Apply completes with
+**0 added / 1 changed / 0 destroyed**. Existing renderer version drift is
+refresh-only, not a renderer update. The aggregate plan also observes API
+output `app_lambda_function_version` advancing from 194 to 195; no API
+resource action is needed and its state-only output refresh was not applied.
+
+The focused postplan is no-op. The full dev postplan has no resource actions:
+all components are no-op except that same API version-output refresh. No
+additional component apply is needed for bot support.
+
+The worker is Active/Successful at the exact published digest. Its first live
+health request passes all three profile hashes, all nine explicit exporter
+hashes and the tested encoder hash
+`7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+Memory 3,008 MiB, timeout 900 s, temporary storage 8,192 MiB, concurrency 5,
+enabled batch-1 SQS mapping, intake mode and limits 512 MiB / 432,000 ticks /
+16 participants are unchanged. This is health verification, not a hosted bot
+conversion or Lambda throughput measurement. Retention/container checks and
+all 27 Node tests pass for the release.
+
+Do not overwrite `20261023-r1`. Rollback must retain exporter 7 and viewer 5
+once their jobs/artifacts exist; existing attempts must never be repinned.
+
+Commands run locally:
+
+```powershell
+.\lambda\h1_film\tools\build-engine.ps1 -Port beta4 -Combat `
+  -Source L:/tmp/halospawns-beta4-e78e4daa/src `
+  -BuildDirectory L:/tmp/halospawns-h1-bots-20261023/wasm-r1
+node lambda/h1_film/tools/verify-native-parity.mjs `
+  --native L:/tmp/halospawns-h1-16-players-20261022/native/engine/Release/h1-film-export.exe `
+  --engine L:/tmp/halospawns-h1-bots-20261023/wasm-r1/h1-film.js `
+  --assets 'L:/bens_stuff/xbox mod/Games/H1PB Beta 4' `
+  --output L:/tmp/halospawns-h1-bots-20261023/parity-r1 `
+  'L:/bens_stuff/xbox mod/Games/H1PB Beta 4/films/2026-10-22 19-19-56 dread.h1film' `
+  L:/tmp/halospawns-h1-bots-20261023/fixtures/one-bot-ffa/input.h1film `
+  L:/tmp/halospawns-h1-bots-20261023/fixtures/eleven-bots-ffa/input.h1film `
+  L:/tmp/halospawns-h1-bots-20261023/fixtures/eight-bots-teams/input.h1film `
+  'L:/bens_stuff/xbox mod/Games/H1PB Beta 4/films/2026-10-22 18-15-33 dread.h1film'
+.\scripts\publish-h1-film.ps1 -Tag 20261023-r1 `
+  -EngineRoot L:/tmp/halospawns-h1-bots-20261023/engines `
+  -PreviousRegistry L:/tmp/halospawns-h1-bots-20261023/previous-registry.json -BuildOnly
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Before publication, the initial focused/aggregate plans stopped at
+`data.aws_ecr_image.h1_film` because the candidate tag was absent; the other
+five components were no-op at that time. Publication resolved that blocker.
+Existing undeclared `asset_delivery_mode` warnings remain. Dev profile
+`halospawns-dev` in account `283279960672`, `us-east-1`, has no session blocker.
+
+Evidence/logs live under `L:/tmp/halospawns-h1-bots-20261023/`: `parity-r1/`,
+`cloud-r1/`, `cloud-network/`, `api-products.json`, `viewer.json`, test logs,
+`image-build-r1.log`, initial `map-plan.log` and `full-plan.log`, `publish.log`,
+`published-*-plan.log`, `reviewed-plan.log`, `reviewed-plan-summary.json`,
+`reviewed.planfile`, `apply.log`, `post-*-plan.log`,
+`worker-deployed-verification.json`, `worker-health-verified.json` and
+`api-live-195-verification.json`. The release container's
+read-only/non-root health check passes. The sibling API's IDE module is not
+attached, so API validation uses its documented Python 3.12 `.venv`.
+The API source-only packaging check also passes (`scripts/build-lambda.ps1
+-SkipDependencyInstall -OutputPath L:/tmp/halospawns-h1-bots-20261023/api-source-only.zip`).
+That ZIP omits dependencies/native extensions and is not a deployment artifact;
+use the normal API release pipeline. Both repositories pass whitespace checks
+and focused Ruff checks.
+
+Changed implementation files are the Beta 4 `wasm/bot-replay.c`,
+`wasm/headless-extra.c`, `wasm/CMakeLists.txt`, the Beta 4 reader,
+`runtime/convert.mjs`, `profiles/registry.json`, `cloud.py` and their tests;
+the only infrastructure configuration change is `stacks/dev.yaml` in
+`map-processing`. API changes are `h1film_contract.py`,
+`schemas/h1film_reparse.py`, `services/h1films.py`,
+`services/admin_replay_reprocess.py`, `services/h1film_reparse.py` and unit/
+PostgreSQL tests. Compatibility/deployment documentation and both repositories'
+handoffs/roadmaps record the completed dev releases. Exporter 7 is now also
+required by `tests/fixtures/retained-profiles.json`.
+
+## API Sixteen-Player Limit Enabled 2026-10-22
+
+At the user's request after their API release, verified dev API `live=193`
+and `$LATEST` have identical code SHA-256, downloaded the deployed ZIP and
+verified its digest, and compared the relevant configuration, H1 profile,
+participant/native/combat/ingest/target modules plus all revision-5 contracts
+and the registry against the tested checkout. ZIP SHA-256:
+`59c6ef2bae2f1af36ca6155afa1af8ca3da2a7a71877253353a0ae5400fded68`.
+
+Applied only the reviewed `app-api` plan: **1 added / 3 changed / 1 destroyed**.
+The replacement is the configuration-promotion invocation record, not an API
+Lambda or data store. Changes are `H1FILM_MAX_PLAYERS` 4 to 16, its contract
+data, the updater's expected configuration hash and the normal guarded alias
+promotion. The API is now **live=194**, Active/Successful, with the exact same
+code hash, limit 16 and both existing H1 flags still true. HTTPS `GET /health`
+returns 200/ok. Worker `20261022-r2` and its limit 16 are unchanged.
+
+Saved plan SHA-256:
+`b0398fe5ad7342f956b3a3bf632e5531459d3e44ed03ab19716664e6df168e76`.
+Configuration hash:
+`79b4ab455fc440b28f382f5eaf2778d436cf736dd98d115be790b1ed5ad57c50`.
+The full preplan contains only the same app-api actions; all other components
+are no-op. Focused and full dev postplans are no-op (all six dev components).
+Existing undeclared
+`asset_delivery_mode` warnings are unrelated. No AWS/profile/session blocker
+(`halospawns-dev`, `283279960672`, `us-east-1`).
+
+Frontend is deliberately **not deployed**: the user will test it locally
+against dev before releasing it. This does not require another coordinated
+backend release. Profile-specific map review and actual upload/playback
+acceptance remain separate; this apply does not approve maps, retry the failed
+upload, submit jobs, change the worker, migrate a database or touch prod.
+
+Exact commands from the infra root:
+
+```powershell
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/app-api' plan '-no-color' '-var-file=dev-app-api.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-16-players-20261022/api-limit-release/reviewed.planfile'
+terraform '-chdir=components/terraform/app-api' apply -no-color L:/tmp/halospawns-h1-16-players-20261022/api-limit-release/reviewed.planfile
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev
+```
+
+Evidence/logs: `L:/tmp/halospawns-h1-16-players-20261022/api-limit-release/`.
+No Terraform/application source changes were needed in this follow-up; the
+previously prepared `stacks/dev.yaml` and app-api contract were applied.
+Documentation updated: this file, H1 README/BETA4, root AGENTS/HANDOFFS/migration
+log, and API HANDOFFS/ROADMAP/pose-contract release status. The earlier sections
+record historical prerequisites; this section supersedes their pending API step.
+
 ## Beta 4 / Sixteen Participants Deployed 2026-10-22
 
 The user authorized the dev worker release independently of their API release.

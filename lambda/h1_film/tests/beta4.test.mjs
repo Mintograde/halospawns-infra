@@ -7,6 +7,7 @@ import { readEnvelope, adapterFor } from '../runtime/film.mjs';
 import * as beta4 from '../runtime/adapters/beta4-v2-120.mjs';
 import { readEnvelope as readArena } from '../runtime/adapters/h1arena-v2-120.mjs';
 import { ENGINE_PROFILES, selectProfile, selectExporter } from '../runtime/profiles.mjs';
+import { convertFilm } from '../runtime/convert.mjs';
 
 test('beta4 selects its exact release identity and exporter without repinning the prerelease', () => {
   const profile = ENGINE_PROFILES.find(entry => entry.port === 'beta4');
@@ -46,6 +47,61 @@ function fixture({ players = 2, joins = [2] } = {}) {
   }
   return film;
 }
+
+function botFixture({ bots = 7, seats = 1, marker = true, settings =
+  `[tuning]\nbots = ${bots}\nbot_skill = 3\nbot_teams = auto\n` } = {}) {
+  const optionsSize = marker ? 12380 : 12376;
+  const settingsOffset = 480 + optionsSize;
+  const stream = settingsOffset + Buffer.byteLength(settings);
+  const trailer = stream + 10;
+  const film = Buffer.alloc(trailer + 24);
+  const fields = { 0: 0x314d4c46, 1: 2, 2: 9803, 3: 120, 4: optionsSize, 5: 32, 6: 4,
+    11: 1, 12: trailer, 13: 120, 14: 2, 15: 100, 16: 480, 17: stream, 18: 480,
+    19: settingsOffset, 20: Buffer.byteLength(settings), 25: seats };
+  for (const [word, value] of Object.entries(fields)) film.writeUInt32LE(value, Number(word) * 4);
+  film.write('dread', 128);
+  film.write('2026-10-20 - BETA 4 - e78e4daa', 384);
+  if (marker) film.writeUInt32LE(bots, 480 + 12376);
+  film.write(settings, settingsOffset);
+  film.writeUInt32LE(0x314c5254, trailer);
+  film.writeUInt32LE(1, trailer + 4);
+  return film;
+}
+
+test('beta4 counts recorded bots as participants and keeps them off retained exporters', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-bots-'));
+  const path = join(root, 'input.h1film');
+  try {
+    await writeFile(path, botFixture());
+    const envelope = await readEnvelope(path);
+    assert.equal(envelope.players, 8);
+    assert.equal(envelope.bots, 7);
+    assert.equal(envelope.network, undefined);
+    for (const revision of [5, 6]) {
+      await assert.rejects(convertFilm({ film: path, assets: root, encoder: root, output: join(root, 'output'),
+        'trusted-local': true, 'exporter-revision': String(revision) }), /Bot films require exporter revision 7/);
+    }
+    await writeFile(path, botFixture({ bots: 11 }));
+    assert.equal((await readEnvelope(path)).players, 12);
+    await writeFile(path, botFixture({ bots: 8, seats: 4 }));
+    assert.equal((await readEnvelope(path)).players, 12);
+    await writeFile(path, botFixture({ bots: 0, marker: false }));
+    assert.equal((await readEnvelope(path)).bots, undefined);
+    for (const changes of [
+      { bots: 0 }, { bots: 12 }, { bots: 9, seats: 4 }, { marker: false },
+      { settings: '[tuning]\nbots=6\nbot_skill=3\nbot_teams=auto\n' },
+      { settings: '[tuning]\nbots=7\nbots=7\nbot_skill=3\nbot_teams=auto\n' },
+      { settings: '[tuning]\nbots=7\nbot_skill=4\nbot_teams=auto\n' },
+      { settings: '[tuning]\nbots=7\nbot_skill=3\nbot_teams=0 1\n' },
+      { settings: '[tuning]\nbots=7\n' },
+    ]) {
+      await writeFile(path, botFixture(changes));
+      await assert.rejects(readEnvelope(path));
+    }
+    await writeFile(path, botFixture({ settings: '[tuning]\nbots=7\nbot_skill=1\nbot_teams=0,1,auto\n' }));
+    assert.equal((await readEnvelope(path)).bots, 7);
+  } finally { await rm(root, { recursive: true }); }
+});
 
 test('beta4 admits sixteen participants and bounds slots, replacements and initial metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'beta4-roster-'));

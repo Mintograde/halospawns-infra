@@ -1,5 +1,18 @@
 # H1 Film Compatibility
 
+## Beta 4 Bot Replay Support
+
+Deployed exporter 7 adds recorded bot playback using the same immutable Beta 4
+profile, analytics 4 and viewer 5. Its new binary is additive; base/exporters
+5/6 and every older family remain exact. New Beta 4 intake and omitted admin
+reparse defaults select 7 in worker `20261023-r1` and API `live=195`. Existing
+jobs/retries remain pinned. Existing same-profile raw-map approvals remain
+valid; no cross-profile approval transfer is implied. Bot rosters allow at
+most eleven bots/twelve total players, separately from network's sixteen-
+participant ceiling. See [BETA4.md](BETA4.md) for parity evidence and
+[DEPLOYMENT.md](DEPLOYMENT.md) for release evidence. Rollback must retain
+exporter 7 once its jobs/artifacts exist; the retention fixture enforces it.
+
 ## Beta 4 Sixteen-Participant Extension
 
 Beta 4 exporter 6 targets analytics 4 and the append-only viewer revision 5.

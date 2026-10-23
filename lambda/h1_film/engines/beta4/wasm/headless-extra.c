@@ -18,14 +18,6 @@ int blampc_live_input_background_pad(void) { return background_pad; }
 void blampc_live_input_set_background_pad(int on) { background_pad = on != 0; }
 int blampc_kbm_seat_active_mouse(int seat) { (void)seat; return 0; }
 void blampc_play_clock_start(void) { }
-int blampc_bots_configure(int count, int skill, const unsigned char *teams)
-{
-    (void)skill; (void)teams;
-    if (count) { fputs("Beta 4 bot films are unsupported\n", stderr); abort(); }
-    return 0;
-}
-void blampc_bots_create_players(void) { }
-int blampc_bots_creation_team(int player_index) { (void)player_index; return -1; }
 void blampc_bots_inject(int absolute_index, int update_number, struct player_action *action)
 {
     (void)absolute_index; (void)update_number; (void)action;

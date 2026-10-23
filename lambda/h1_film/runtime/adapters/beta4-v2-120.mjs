@@ -110,11 +110,11 @@ export async function readEnvelope(path) {
     assert.ok(words[0] === 0x314d4c46 && words[1] === 2 && words[2] === 9803 && words[3] === 120 && words[5] === 32
       && words[6] === 4 && words[16] === 480, 'Unsupported beta4 film layout');
     assert.ok(words[11] > 0 && words[11] <= 432000 && words[25] > 0 && words[25] <= 4, 'Invalid tick or seat count');
-    assert.equal(words[4], 12376, 'Unsupported Beta 4 options layout or bot recording');
+    assert.ok([12376, 12380].includes(words[4]), 'Unsupported Beta 4 options layout');
     const flags = words[7], network = Boolean(flags & 2), universal = Boolean(flags & 8);
     assert.equal(flags & ~11, 0, 'Unknown film flags');
     assert.equal(network, universal, 'Network film requires UNIVERSAL world changes');
-    const players = network ? words[31] & 255 : words[25];
+    let players = network ? words[31] & 255 : words[25];
     assert.ok(players > 0 && players <= 16, 'Network roster exceeds sixteen-player converter limit');
     assert.ok(players <= 8, 'Beta 4 initial roster lacks recorded names and teams beyond eight players');
     const stream = words[17], trailer = words[12];
@@ -144,6 +144,29 @@ export async function readEnvelope(path) {
     spans.push([trailer, end]);
     spans.sort((left, right) => left[0] - right[0]);
     for (let index = 1; index < spans.length; index++) assert.ok(spans[index - 1][1] <= spans[index][0], 'Overlapping sections');
+    const bots = words[4] === 12380 ? (await readBlock(file, words[18] + 12376, 4)).readUInt32LE(0) : 0;
+    assert.ok(words[4] === 12376 || (!network && bots > 0 && bots <= 11 && players + bots <= 12),
+      'Invalid Beta 4 bot roster');
+    assert.ok(words[20] > 0 && words[20] <= 1024 * 1024, 'Invalid Beta 4 settings size');
+    const settings = (await readBlock(file, words[19], words[20])).toString('utf8');
+    const botSettings = new Map();
+    let section = '';
+    for (const line of settings.split(/\r?\n/)) {
+      const heading = line.trim().match(/^\[([^\]]+)\]$/);
+      if (heading) section = heading[1].toLowerCase();
+      const field = line.match(/^\s*(bots|bot_skill|bot_teams)\s*=\s*(.*?)\s*$/i);
+      if (section !== 'tuning' || !field) continue;
+      const key = field[1].toLowerCase();
+      assert.ok(!botSettings.has(key), 'Duplicate Beta 4 bot setting');
+      botSettings.set(key, field[2]);
+    }
+    assert.equal(botSettings.get('bots') ?? '0', String(bots), 'Beta 4 bot count differs from recorded settings');
+    if (bots) {
+      assert.match(botSettings.get('bot_skill') ?? '', /^[0-3]$/, 'Invalid Beta 4 bot skill');
+      const teams = (botSettings.get('bot_teams') ?? '').split(',').map(team => team.trim());
+      assert.ok(teams.length <= 11 && teams.every(team => /^(auto|0|1)$/i.test(team)), 'Invalid Beta 4 bot teams');
+      players += bots;
+    }
     const text = (start, stop) => head.subarray(start, stop).toString('utf8').split('\0')[0];
     const map = text(128, 256);
     assert.match(map, /^[a-zA-Z0-9_-]+$/, 'Invalid map name');
@@ -152,7 +175,7 @@ export async function readEnvelope(path) {
     return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
-      ...(net ? { network: net } : {}) };
+      ...(bots ? { bots } : {}), ...(net ? { network: net } : {}) };
   } finally { await file.close(); }
 }
 
