@@ -234,9 +234,9 @@ class CloudTests(unittest.TestCase):
                     self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
                 self.assertEqual(retry.call_args.args[0], job)
 
-    def test_beta4_intake_selects_bot_exporter_and_retained_jobs_keep_their_pins(self):
+    def test_beta4_intake_selects_network_exporter_and_retained_jobs_keep_their_pins(self):
         profile = load_registry()["h1-performance-beta4-p9803-wasm-v1"]
-        for revision in (6, 7):
+        for revision in (6, 7, 8):
             job = copy.deepcopy(self.job)
             job.update(schema="halospawns.h1film_job.v2", analytics_revision=4)
             film = job["conversion"]["film"]
@@ -255,7 +255,7 @@ class CloudTests(unittest.TestCase):
             )
             source = job["conversion"]["source"]
             responses = [{"data": {"job": job}}]
-            if revision == 6:
+            if revision < 8:
                 responses.insert(0, cloud.FilmError("identity_conflict"))
             with (
                 patch.dict(os.environ, {"H1_MAX_PLAYERS": "16"}),
@@ -267,9 +267,9 @@ class CloudTests(unittest.TestCase):
                 context = MagicMock()
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute({"upload_id": job["upload_id"], "source": source}, context)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 7)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 8)
                 self.assertEqual(retry.call_args.args[0], job)
-                if revision == 6:
+                if revision < 8:
                     self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
 
     def test_sqs_job_routing_and_exact_origin(self):

@@ -1,5 +1,17 @@
 # H1 Film Compatibility
 
+## Beta 4 Network Replay Exporter 8
+
+Deployed release `20261024-r1` adds exporter 8 under the unchanged Beta 4
+profile, analytics 4 and viewer 5. It fixes network replay initialization and
+native/WASM particle precision while retaining base/exporters 5/6/7 and all
+older families exactly. The user's matching API `live=201` registration and
+defaults were verified against its actual deployed artifact before worker
+activation. Existing jobs/retries never repin. Same-profile raw-map approvals remain
+valid. Rollback must retain exporter 8 once its jobs/artifacts exist.
+Score carry-over on reused player slots is not fixed. See `BETA4.md` and
+`DEPLOYMENT.md` for exact pins, tested scope and release status.
+
 ## Beta 4 Bot Replay Support
 
 Deployed exporter 7 adds recorded bot playback using the same immutable Beta 4

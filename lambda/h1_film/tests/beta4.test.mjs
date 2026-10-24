@@ -15,6 +15,13 @@ test('beta4 selects its exact release identity and exporter without repinning th
   assert.equal(profile.build, '2026-10-20 - BETA 4 - e78e4daa');
   assert.equal(selectProfile(profile), profile);
   assert.equal(selectExporter(profile, 5).transport_contract, 'HSFT0002');
+  assert.equal(selectExporter(profile, 7).wasm_sha256,
+    '14d516e3f8c48968f43800c115dbc995d8c03a722f4901e1ddd23fc9fb136f95');
+  const network = selectExporter(profile, 8);
+  assert.equal(network.wasm_sha256, '97faa72b6116ad254ec3b87dbb203c0a482665c1eadec73b8516b89323785761');
+  assert.equal(network.transport_contract, 'HSFT0002');
+  assert.equal(network.glue_sha256, selectExporter(profile, 7).glue_sha256);
+  assert.equal(network.source, profile.source);
   assert.throws(() => selectProfile({ ...profile, build: '2026-10-20 - BETA 4 - e78e4dab' }));
   const retained = ENGINE_PROFILES.find(entry => entry.port === 'h1arena');
   assert.equal(retained.source.git_commit, '197bb65ca6e9cef94c126904bf39ecdd1ea5929d');

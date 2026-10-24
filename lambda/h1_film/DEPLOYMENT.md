@@ -1,5 +1,109 @@
 # H1 film Lambda integration
 
+## Network Replay Fixes Deployed, 2026-10-24
+
+After the user's compatible API release and explicit instruction to proceed,
+verified **API live=201** and applied immutable dev worker **20261024-r1**.
+The reviewed `map-processing` apply changed only the H1 image: **0 added /
+1 changed / 0 destroyed**. The stack now pins r1. No direct API code or alias
+write was performed; the user's normal CI/S3 updater owns that release.
+
+ECR manifest digest:
+`sha256:fb93fdba821906237ce819cb2966b2d5100090aafc67cbe9940b46e6f4576291`
+(385,755,344 compressed bytes). Published image ID:
+`sha256:ea1162f9840e7e88226996ee733379ecf6c925fc2910088ebf99ec1efedabdb4`.
+It adds Beta 4 exporter 8 WASM
+`97faa72b6116ad254ec3b87dbb203c0a482665c1eadec73b8516b89323785761`,
+retaining glue, analytics 4, viewer 5, the profile and all earlier binaries.
+The retention fixture now includes 8. Same-profile map approvals remain valid.
+The unresolved slot-score carry-over is explicitly outside this release.
+
+API CI run `40102723467` released commit
+`90c0a252c70578ecdfffd2311253df90ae4e7151`. The actual Lambda ZIP SHA-256 is
+`329837834b8a9022535628f34d5c589dbde49fdedb1996b0ac245567e0498725`, matching
+AWS's code hash. Eight contract/schema/service modules match tested source
+byte-for-byte. All 21 real-film initial/rebuild/reparse callbacks pass the
+downloaded ZIP's actual Linux dependencies and API product builders in a
+network-disabled container. API health, both H1 flags and limit 16 pass.
+
+The release bundle was copied from the exact deployed r2 image, then staged
+with the validated candidate. Previous-registry and all binary audits pass.
+All five supplied films and both retained real Dread films pass packaged
+conversion/rebuild/reparse/retries, all 21 callbacks pass API product builders,
+and the existing viewer decodes 449,561 ticks and 21 cold chunks. Native/WASM
+parity remains the ten-film/3,763-hash evidence in `BETA4.md`. Tests pass:
+28 Node, 62 worker Python, 1,584 API unit and 29 isolated PostgreSQL cases;
+API Ruff and read-only/non-root container health also pass.
+
+The tested local image ID was
+`sha256:b460ddcfe483ee0d08950594480a2aae37fc46c69b1ab96e6fff6acec99fbfad`.
+A complete packaged application-file hash comparison confirms the published
+image differs only in the appended exporter-8 retention fixture (generated
+Python bytecode excluded); runtime, engine, encoder and dependency files are
+unchanged. API source-only ZIP packaging passes, but that ZIP omits Linux
+dependencies/native extensions and must not be published as a Lambda release.
+
+Commands run from the infra root:
+
+```powershell
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+.\scripts\publish-h1-film.ps1 -Tag 20261024-r1 -EngineRoot L:/tmp/halospawns-h1-network-20261024/release-r1/engines -PreviousRegistry L:/tmp/halospawns-h1-network-20261024/release-r1/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261024-r1 -EngineRoot L:/tmp/halospawns-h1-network-20261024/release-r1/engines -PreviousRegistry L:/tmp/halospawns-h1-network-20261024/release-r1/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan -no-color '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-network-20261024/release-r1/activation/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-h1-network-20261024/release-r1/activation/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-network-20261024/release-r1/activation/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Preparation baseline plans had zero resource actions, with only the unapplied
+API version-output refresh from 194 to 200. After the API release and r1 pin,
+focused, aggregate and saved preplans contained exactly one resource action:
+the H1 image update. JSON review confirms only `image_uri` and computed
+`last_modified` change. Saved plan SHA-256:
+`dc6a48a2a5a58c911b1ecd660ce52c285c51979a42ea3be9c2f751ca9f5fb509`.
+Renderer version drift (269 to 278) was refresh-only, not a renderer update.
+The focused postplan is no-op. The full dev postplan has no resource actions;
+only the API's state-only version-output refresh from 194 to 201 remains
+unapplied. Existing undeclared `asset_delivery_mode` warnings remain.
+
+The live worker is Active/Successful at the published digest. The first cold
+health inventory reached its existing 20-second subprocess limit; the second
+read-only health request passes all three profiles, ten explicit exporters,
+source provenance and encoder hash
+`7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+All operational configuration matches the pre-apply baseline: environment,
+IAM role, x86_64 architecture, memory 3,008 MiB, timeout 900 s, temporary storage
+8,192 MiB, concurrency 5 and the enabled batch-1 SQS mapping. API `live=201`
+and HTTPS health remain verified after activation. No health timeout or worker
+limit was changed to obtain a passing result.
+
+Account `283279960672`, profile `halospawns-dev`, region `us-east-1`, has no
+session blocker. No jobs/retries, map approvals, database migrations, frontend
+or prod resources were changed. Live health is not a hosted film-conversion
+canary. Existing films need separately authorized full reparses to receive
+these simulation fixes; never repin an existing attempt or overwrite the tag.
+Retain exporter 8 and API timestamp support during rollback once their
+jobs/artifacts exist.
+Private evidence: `L:/tmp/halospawns-h1-network-20261024/release-r1/`.
+Activation evidence is in its `activation/` directory, including the deployed
+API acceptance products, reviewed plan, apply, live verification and postplans.
+Coordination: `20261024-infra-api-h1film-network-exporter8`.
+
+Implementation files changed: `profiles/registry.json`, `cloud.py`,
+`tests/fixtures/retained-profiles.json`, `tests/beta4.test.mjs`,
+`tests/test_cloud.py`, `tests/test_registry.py`, compatibility/deployment/Beta 4
+documentation and root handoff/status logs. API changes are the exact registry,
+three profile-specific default selections, the explicit batch target schema,
+unit/PostgreSQL tests and release/handoff documentation. Activation changes
+`stacks/dev.yaml` plus the deployment/status/handoff documentation in both repos;
+no Terraform module source changes. Components: ECR image publication and the
+reviewed `map-processing` image-only apply. The image was not rebuilt from newer
+upstream sources or rebuilt after publication.
+
 ## Recorded UTC Support Deployed, 2026-10-23
 
 At the user's request after their API release, verified **API live=200**, then

@@ -11,6 +11,17 @@ from h1_film.registry import REGISTRY_PATH, load_registry, profile_for_report, s
 
 
 class RegistryTests(unittest.TestCase):
+    def test_beta4_network_exporter_retains_bot_pin_and_source_identity(self):
+        profile = load_registry()["h1-performance-beta4-p9803-wasm-v1"]
+        network = select_exporter(profile, 8)
+        retained = select_exporter(profile, 7)
+        self.assertEqual(network["wasm_sha256"],
+                         "97faa72b6116ad254ec3b87dbb203c0a482665c1eadec73b8516b89323785761")
+        self.assertEqual(retained["wasm_sha256"],
+                         "14d516e3f8c48968f43800c115dbc995d8c03a722f4901e1ddd23fc9fb136f95")
+        for field in ("id", "build", "format", "protocol_revision", "tick_rate", "source", "glue_sha256"):
+            self.assertEqual(network[field], retained[field])
+
     def test_combat_exporters_preserve_both_profile_identities_and_old_pins(self):
         for profile in load_registry().values():
             combat = select_exporter(profile, 5)
