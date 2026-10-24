@@ -28,6 +28,14 @@ def main():
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
     request = normalize_h1film_ingest(request)
+    settings_document = payload.get("h1film_settings")
+    if settings_document is not None:
+        from halospawns_api.schemas.h1film_settings import public_settings, settings_catalogue
+
+        assert request.h1film_settings.model_dump(mode="json", by_alias=True) == settings_document
+        assert public_settings(settings_document) == settings_document
+        catalogue_path = Path(__file__).resolve().parents[1] / "contracts/h1film-settings-catalogue.v1.json"
+        assert settings_catalogue() == json.loads(catalogue_path.read_text(encoding="utf-8"))
     checked_modes = ["initial"]
     for mode, model in (("viewer-rebuild", ReplayViewerArtifactCompletionRequest),
                         ("full-reparse", ReplayIngestRequest)):
@@ -37,6 +45,10 @@ def main():
             if mode == "full-reparse":
                 other = normalize_h1film_ingest(other)
                 assert other.metadata.get("native_analytics") == request.metadata.get("native_analytics")
+                if settings_document is not None:
+                    assert other.h1film_settings.model_dump(mode="json", by_alias=True) == settings_document
+            elif settings_document is not None:
+                assert "h1film_settings" not in other.model_dump()
             job = H1FilmJob.model_validate_json(path.with_name(f"{mode}-job.json").read_text(encoding="utf-8"))
             assert other.h1film == request.h1film
             assert str(other.reprocess_attempt_id) == str(job.attempt_id)
@@ -63,6 +75,7 @@ def main():
         "product_modes": checked_modes,
         "participants": len(participants),
         "native_analytics": request.metadata.get("native_analytics"),
+        "settings_verified": settings_document is not None,
         "graphs": graphs,
         "spatial_event_count": len(events),
         "spatial_event_sample": [dataclasses.asdict(event) for event in events[:8]],

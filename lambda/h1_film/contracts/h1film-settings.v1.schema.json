@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "H1 film settings evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "adapter_revision",
+    "catalogue_revision",
+    "engine_profile",
+    "film_sha256",
+    "raw_map_sha256",
+    "settings",
+    "recorder_profiles"
+  ],
+  "properties": {
+    "schema": {
+      "const": "halospawns.h1FilmSettings.v1"
+    },
+    "adapter_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "catalogue_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "engine_profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "film_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "raw_map_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "settings": {
+      "$ref": "#/$defs/settings"
+    },
+    "recorder_profiles": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profile_index",
+          "local_seats",
+          "settings"
+        ],
+        "properties": {
+          "profile_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "local_seats": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          },
+          "settings": {
+            "$ref": "#/$defs/settings"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "settings": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 96,
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/value"
+      }
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "value",
+            "provenance"
+          ],
+          "properties": {
+            "status": {
+              "const": "available"
+            },
+            "provenance": {
+              "enum": [
+                "none",
+                "recorded_variant",
+                "recorded_configuration",
+                "recorded_options",
+                "recorded_header",
+                "verified_envelope",
+                "verified_simulation"
+              ]
+            },
+            "value": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason",
+            "provenance"
+          ],
+          "properties": {
+            "status": {
+              "const": "unavailable"
+            },
+            "provenance": {
+              "enum": [
+                "none",
+                "recorded_variant",
+                "recorded_configuration",
+                "recorded_options",
+                "recorded_header",
+                "verified_envelope",
+                "verified_simulation"
+              ]
+            },
+            "reason": {
+              "enum": [
+                "not_recorded",
+                "not_supported",
+                "missing_section",
+                "unstated",
+                "invalid_value",
+                "not_observed",
+                "not_exported",
+                "dynamic_value_not_recorded"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

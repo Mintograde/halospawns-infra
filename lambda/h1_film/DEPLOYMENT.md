@@ -1,5 +1,98 @@
 # H1 film Lambda integration
 
+## Recorded Settings Deployed, 2026-10-24
+
+After the user confirmed API/migration deployment and authorized infra rollout,
+verified **API live=202**, then published and applied **20261024-r2** in dev.
+Initial/full reparses now emit `halospawns.h1FilmSettings.v1` with independent
+adapter/catalogue revision 1 and a 217-key typed catalogue. Recorded rules,
+timing, tuning and recorder-local preferences retain availability/provenance;
+viewer-only work and existing immutable receipts remain unchanged. See
+[SETTINGS.md](SETTINGS.md) for exact scope and configured-versus-observed semantics.
+
+Immutable ECR manifest digest:
+`sha256:bd25629c4549eb17ee57588f2f7eea4fc50463898afbcbf7d2b973fe42ee5d48`
+(385,763,825 compressed bytes). Tested and published image ID:
+`sha256:1e77e7d9f1004be1f5fefc53d26c124b9dfb99bb4eb14831e1cd1a93514a533f`.
+Publication retained that exact tested image. The previous registry came from
+the immutable r1 image; all three profiles, ten exporters, encoder and existing
+analytics/viewer/default/retry pins are unchanged. No new WASM was built.
+
+The user's API CI run `40113308788` released commit
+`89881069d1022ba41b99310f4eb5944ecea560b8`. The actual deployed ZIP SHA-256 is
+`3e6350e12f6c74b95df0e6fa903d7019525a851dd92d84bb7c6a6d7de7d885a0`, verified
+against AWS's code hash. Five settings/ingest schema, service and repository
+modules match tested source after line-ending normalization; the packaged
+217-definition catalogue matches the producer exactly. Both H1 flags remain
+true and the participant limit remains 16. API owns the already-applied,
+forward-only `20261024010000_h1film_settings.sql` migration. Infra did not run it.
+
+Release validation:
+
+- 73 Python tests pass locally and against the actual packaged Linux runtime;
+  28 Node tests and read-only/non-root container health/job rejection pass.
+- Actual r2 image conversions cover Beta 4 network, Beta 4 bots, Beta 3 and
+  h1arena with network disabled and API/S3 mocked. Initial/full/viewer products,
+  full-reparse settings equality and three identical receipt deliveries pass.
+- All twelve packaged callbacks pass the downloaded API ZIP's actual Linux
+  dependencies, schemas, normalizer, graph/spatial builders and settings public
+  projection. All twelve preparation callbacks also pass. Settings survive
+  normalization unchanged; the public catalogue and producer agree exactly.
+- Game/participant/team metadata, native analytics, settings and viewer hashes
+  match preparation evidence for all four films. The earlier Beta 4 comparisons
+  against r1 also retain stats and viewer bytes; settings are additive.
+
+Commands run from the infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261024-r2 -EngineRoot L:/tmp/halospawns-h1-network-20261024/release-r1/engines -PreviousRegistry L:/tmp/halospawns-h1-settings-20261024/release-r2/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261024-r2 -EngineRoot L:/tmp/halospawns-h1-network-20261024/release-r1/engines -PreviousRegistry L:/tmp/halospawns-h1-settings-20261024/release-r2/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan -no-color '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-settings-20261024/release-r2/activation/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-h1-settings-20261024/release-r2/activation/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-settings-20261024/release-r2/activation/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused, full and saved preplans contain only the H1 image resource update:
+**0 added / 1 changed / 0 destroyed**. JSON review permits only `image_uri`
+and computed `last_modified`. Saved plan SHA-256:
+`53247b886f6ee048114dca1560bd478a346709cacf56bf368a017e8423f565cc`.
+Applied exactly that saved plan. Focused postplan is no-op. Full dev postplan
+has no resource actions; only the unapplied state-only API version-output
+refresh from 194 to 202 remains. Existing undeclared `asset_delivery_mode`
+warnings are unchanged. No aggregate or app-api apply was performed.
+
+Live worker is Active/Successful at the published digest. Cold health inventory
+reached its existing 20-second child timeout; the second read-only invocation
+verified every retained profile/exporter hash, provenance and encoder
+`7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+All operational configuration is unchanged: environment, IAM, x86_64, 3,008 MiB,
+900-second timeout, 8,192 MiB temporary storage, concurrency 5 and enabled
+batch-1 SQS mapping. API live=202 and HTTPS health remain verified. No limit
+was altered to obtain a passing health result.
+
+Components: ECR image publication and `map-processing` image-only apply.
+Activation changes `stacks/dev.yaml` plus deployment/status/handoff docs;
+implementation adds `settings.py`, schema/catalogue, fixture/tests and offline
+tools, and extends `cloud.py` finalization/receipt validation. API-product
+verification now checks settings preservation, public projection and catalogue.
+Account `283279960672`, profile `halospawns-dev`, region `us-east-1`: no session
+blocker. No jobs, retries, backfill, hosted film-conversion canary, approvals,
+direct API writes, database migrations, frontend deployment or prod changes.
+
+Existing completed games require separately authorized full reparses; deployment
+and viewer rebuilds do not populate them. Frontend integration and filter
+operators remain separate; API advertises `filtering_supported: false` while
+typed indexes are ready. Keep compatible settings ingest, tables and immutable
+receipt readers during rollback, along with every retained engine/exporter pin.
+Private evidence: `L:/tmp/halospawns-h1-settings-20261024/release-r2/`, with
+plans, apply, API ZIP acceptance and live checks in `activation/`.
+Handoffs: `20261024-infra-api-h1film-settings` (completed) and
+`20261024-infra-svelte-h1film-settings` (frontend-owned follow-up).
+
 ## Network Replay Fixes Deployed, 2026-10-24
 
 After the user's compatible API release and explicit instruction to proceed,

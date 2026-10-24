@@ -1,0 +1,1105 @@
+{
+  "schema": "halospawns.h1FilmSettings.v1",
+  "adapter_revision": 1,
+  "catalogue_revision": 1,
+  "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+  "film_sha256": "7655c449414a0766799f6f6531052103219544b857d41997ad2abb3d318310a6",
+  "raw_map_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "settings": {
+    "variant.name": {
+      "status": "available",
+      "value": "selected",
+      "provenance": "recorded_variant"
+    },
+    "variant.game_rules": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.score_to_win": {
+      "status": "available",
+      "value": 50,
+      "provenance": "recorded_variant"
+    },
+    "variant.flag_pickup": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_pickup": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.hill_order": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.hill_move_s": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ctf_assault": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.ctf_single_flag_s": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ctf_flag_must_reset": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.ctf_flag_at_home": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.king_moving_hill": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_type": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_count": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_random_start": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_speed": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_trait_with": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.ball_trait_without": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.teams": {
+      "status": "available",
+      "value": true,
+      "provenance": "recorded_variant"
+    },
+    "variant.respawn_s": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.suicide_s": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.health_pct": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.shields": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.infinite_ammo": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.fireteams": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.infinite_grenades": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.frags": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.plasmas": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.weapon_primary": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.weapon_secondary": {
+      "status": "available",
+      "value": -1,
+      "provenance": "recorded_variant"
+    },
+    "variant.skip_first_draw": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.motion_tracker": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.objectives_indicator": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.friend_indicators": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_variant": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_refraction": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_falloff": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_tint_r": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_tint_g": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_tint_b": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.spawns_visible": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.powerup_waypoints": {
+      "status": "available",
+      "value": 3,
+      "provenance": "recorded_variant"
+    },
+    "variant.random_pct_visible": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.footstep_sounds": {
+      "status": "available",
+      "value": true,
+      "provenance": "recorded_variant"
+    },
+    "variant.kill_restores": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.overshield_visible": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_perp_r": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_perp_g": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_perp_b": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_par_r": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_par_g": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_tint_par_b": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_brightness": {
+      "status": "available",
+      "value": 70,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_type": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.omit_first_spawn": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.item_spawn_s": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.camo_drop": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.os_assassination": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_variant"
+    },
+    "variant.teammate_outlines": {
+      "status": "available",
+      "value": true,
+      "provenance": "recorded_variant"
+    },
+    "variant.teammate_view": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.teammate_respawn_timers": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_variant"
+    },
+    "variant.fov_limit": {
+      "status": "available",
+      "value": 2,
+      "provenance": "recorded_variant"
+    },
+    "tuning.plasma_overheat_damage": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.plasma_grenade_stickiness": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.shotgun_spread_constant": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.pistol_spread": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.plasma_climb": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_configuration"
+    },
+    "tuning.plasma_climb_gain": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump_window_ms": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump_height": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump_kick": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump_steer": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.wall_jump_momentum": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.crouch_slide": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.crouch_slide_friction": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.crouch_slide_gain": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.crouch_slide_max_ms": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_run_forward": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_run_backward": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_run_sideways": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_run_acceleration": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_sneak_forward": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_sneak_backward": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_sneak_sideways": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_sneak_acceleration": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_air_acceleration": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_stun_movement": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_stun_turning": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_stun_min_time": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.move_stun_max_time": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "timing.shot_delay_aim_ms": {
+      "status": "available",
+      "value": 17,
+      "provenance": "recorded_options"
+    },
+    "timing.input_pipeline_ticks": {
+      "status": "available",
+      "value": 4,
+      "provenance": "recorded_options"
+    },
+    "timing.aim_rate_hz": {
+      "status": "available",
+      "value": 120,
+      "provenance": "recorded_options"
+    },
+    "timing.shot_aim_ahead_ticks": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_options"
+    },
+    "timing.input_pipeline_ms": {
+      "status": "available",
+      "value": 33,
+      "provenance": "recorded_configuration"
+    },
+    "timing.shot_aim_ahead_ms": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.magnetism_friction": {
+      "status": "unavailable",
+      "reason": "unstated",
+      "provenance": "recorded_configuration"
+    },
+    "tuning.magnetism_adhesion": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_configuration"
+    },
+    "weapon.pistol.autoaim_angle": {
+      "status": "available",
+      "value": 3.5,
+      "provenance": "recorded_configuration"
+    },
+    "weapon.pistol.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.pistol.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.pistol.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.sniper_rifle.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.sniper_rifle.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.sniper_rifle.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.sniper_rifle.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.rocket_launcher.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.rocket_launcher.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.rocket_launcher.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.rocket_launcher.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_pistol.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_pistol.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_pistol.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_pistol.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.assault_rifle.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.assault_rifle.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.assault_rifle.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.assault_rifle.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.needler.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.needler.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.needler.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.needler.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_rifle.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_rifle.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_rifle.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.plasma_rifle.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.shotgun.autoaim_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.shotgun.autoaim_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.shotgun.magnetism_angle": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "weapon.shotgun.magnetism_distance": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "network.net_model": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "network.shot_prediction": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "network.max_players": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "network.players_per_machine": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "lobby.variant": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "lobby.gametype": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "lobby.score": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_configuration"
+    },
+    "lobby.grenades": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "lobby.teams": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "bots.bots": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "bots.bot_skill": {
+      "status": "available",
+      "value": 2,
+      "provenance": "recorded_configuration"
+    },
+    "bots.bot_teams": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "recorded_configuration"
+    },
+    "recording.format": {
+      "status": "available",
+      "value": 2,
+      "provenance": "recorded_header"
+    },
+    "recording.protocol_revision": {
+      "status": "available",
+      "value": 9803,
+      "provenance": "recorded_header"
+    },
+    "recording.build": {
+      "status": "available",
+      "value": "2026-10-20 - BETA 4 - e78e4daa",
+      "provenance": "recorded_header"
+    },
+    "recording.map": {
+      "status": "available",
+      "value": "dread",
+      "provenance": "recorded_header"
+    },
+    "recording.gametype": {
+      "status": "available",
+      "value": "test",
+      "provenance": "recorded_header"
+    },
+    "recording.tick_rate": {
+      "status": "available",
+      "value": 120,
+      "provenance": "recorded_header"
+    },
+    "recording.tick_count": {
+      "status": "available",
+      "value": 20,
+      "provenance": "recorded_header"
+    },
+    "recording.first_update": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_header"
+    },
+    "recording.end_reason": {
+      "status": "available",
+      "value": 1,
+      "provenance": "recorded_header"
+    },
+    "recording.epoch_seed": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_header"
+    },
+    "recording.epoch_local_seed": {
+      "status": "available",
+      "value": 0,
+      "provenance": "recorded_header"
+    },
+    "recording.local_seat_count": {
+      "status": "available",
+      "value": 1,
+      "provenance": "recorded_header"
+    },
+    "recording.map_bytes": {
+      "status": "available",
+      "value": 1000,
+      "provenance": "recorded_header"
+    },
+    "recording.created_utc": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "recording.networked": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_header"
+    },
+    "recording.universal": {
+      "status": "available",
+      "value": false,
+      "provenance": "recorded_header"
+    },
+    "recording.initial_human_player_count": {
+      "status": "available",
+      "value": 1,
+      "provenance": "recorded_header"
+    },
+    "recording.recorder_player_slot": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "recording.hash_period": {
+      "status": "available",
+      "value": 120,
+      "provenance": "recorded_header"
+    },
+    "observed.game_type": {
+      "status": "available",
+      "value": "slayer",
+      "provenance": "verified_simulation"
+    },
+    "observed.teamplay": {
+      "status": "available",
+      "value": true,
+      "provenance": "verified_simulation"
+    },
+    "observed.participant_count": {
+      "status": "available",
+      "value": 2,
+      "provenance": "verified_simulation"
+    },
+    "observed.match_start_source_tick": {
+      "status": "available",
+      "value": 0,
+      "provenance": "verified_simulation"
+    },
+    "observed.match_end_source_tick": {
+      "status": "available",
+      "value": 10,
+      "provenance": "verified_simulation"
+    },
+    "network.records": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.applications": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.blocks": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.participant_count": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.max_player_slot": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.input_scheduling_delay_ticks": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.ping_ms": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.jitter_ms": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.packet_loss_percent": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "network.host_player_slot": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.time_limit_seconds": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "observed.effective_respawn_seconds": {
+      "status": "unavailable",
+      "reason": "not_exported",
+      "provenance": "none"
+    }
+  },
+  "recorder_profiles": [
+    {
+      "profile_index": 1,
+      "local_seats": [
+        0
+      ],
+      "settings": {
+        "profile.invert": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.sensitivity": {
+          "status": "available",
+          "value": 4.5,
+          "provenance": "recorded_configuration"
+        },
+        "profile.vert_mult": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.vert_accel": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_dz": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_dz_type": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.move_dz": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.move_dz_type": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.outer_dz": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.outer_dz_type": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_curve": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_curve_type": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_curve_exponent": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_accel": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.look_accel_time": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.stick_swap": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.trigger_behavior": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.input_delay_ms": {
+          "status": "unavailable",
+          "reason": "dynamic_value_not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_sensitivity": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_vert_mult": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_invert": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_zoom_sensitivity": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_advanced": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_mode": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_input_hz": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_acceleration": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_offset": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_power": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_cap_min": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_cap_max": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_angle": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_angle_snap": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_speed_cap": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_prescale_x": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_prescale_y": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_postscale_x": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.mouse_adv_postscale_y": {
+          "status": "unavailable",
+          "reason": "not_recorded",
+          "provenance": "recorded_configuration"
+        },
+        "profile.input_delay_mode": {
+          "status": "available",
+          "value": "auto",
+          "provenance": "recorded_configuration"
+        }
+      }
+    }
+  ]
+}

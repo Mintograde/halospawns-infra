@@ -1,5 +1,10 @@
 # H1 Film Worker
 
+The [settings export](SETTINGS.md) is deployed in dev as `20261024-r2` with API
+`live=202`: a versioned 217-key typed catalogue, immutable settings snapshots and
+selected typed indexes for game details and future filters. Frontend integration,
+filter operators and historical full reparses remain separate follow-ups.
+
 Dev release `20261023-r1` adds Beta 4 bot playback with exporter 7 /
 analytics 4 / viewer 5. The worker and API `live=195` are deployed and verified;
 new uploads select these pins automatically without new same-profile map
@@ -8,11 +13,11 @@ approvals. See [bot support](BETA4.md#bot-replay-support-2026-10-23-utc) and
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `20261023-r1`, with dedicated queue/API wiring and scoped data access.
-Beta 4 selects exporter 7 / analytics 4 / viewer 5 and supports sixteen distinct
+to `20261024-r2`, with dedicated queue/API wiring and scoped data access.
+Beta 4 selects exporter 8 / analytics 4 / viewer 5 and supports sixteen distinct
 participants. Retained families keep exporter 5 / analytics 4 / viewer 4.
 The user's API release and subsequent configuration apply are verified:
-API `live=195` and the worker both allow 16. Frontend remains undeployed while
+API `live=202` and the worker both allow 16. Frontend remains undeployed while
 the user tests its revision-5 support locally against dev.
 Old pins remain supported. See [deployment](DEPLOYMENT.md) and [Beta 4](BETA4.md),
 including its upstream eight-initial-player metadata limitation.

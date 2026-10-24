@@ -272,6 +272,9 @@ def main():
                 else "/v1/ingest/replay-uploads"
             )
             assert ("game" in payload) == (mode == "full_reparse")
+            assert ("h1film_settings" in payload) == (mode == "full_reparse")
+            if mode == "full_reparse":
+                assert payload["h1film_settings"] == initial[1]["h1film_settings"]
             (args.output / f"{name}-completion.json").write_text(
                 json.dumps(payload, indent=2)
             )
@@ -337,6 +340,8 @@ def main():
     assert payload["replay_file"]["s3_version_id"] == source["s3_version_id"]
     assert payload["replay_file"]["content_type"] == "application/octet-stream"
     assert payload["viewer_artifact"]["playback"] == cloud.PLAYBACK
+    cloud.settings.validate_product(payload["h1film_settings"])
+    assert payload["h1film_settings"]["film_sha256"] == source["sha256"]
     (args.output / "finalization.json").write_text(json.dumps(payload, indent=2))
     (args.output / "job.json").write_text(json.dumps(job, indent=2))
     result = {

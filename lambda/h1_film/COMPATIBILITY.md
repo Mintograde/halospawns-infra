@@ -1,5 +1,20 @@
 # H1 Film Compatibility
 
+## Settings Evidence (Deployed, 2026-10-24)
+
+`halospawns.h1FilmSettings.v1` is an independent bounded settings product on
+new initial/full-reparse callbacks. Its schema, catalogue and extraction adapter
+have separate versions; engine/analytics/viewer pins stay unchanged. Exact
+profile adapters preserve the differing 57/60/61-field variant layouts and
+recorded options offsets. Existing completion receipts without settings replay
+unchanged; new receipts replay their exact settings without re-extraction.
+Worker `20261024-r2` is deployed after verifying API `live=202` and its settings
+contract. The API-owned migration is applied; retain its tables and compatible
+ingest during rollback. No engine/exporter/default pin changed. See
+[settings contract](SETTINGS.md), [release evidence](DEPLOYMENT.md) and
+handoffs `20261024-infra-api-h1film-settings` /
+`20261024-infra-svelte-h1film-settings`. No backfill/reparse was submitted.
+
 ## Beta 4 Network Replay Exporter 8
 
 Deployed release `20261024-r1` adds exporter 8 under the unchanged Beta 4

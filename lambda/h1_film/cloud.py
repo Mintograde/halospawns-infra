@@ -21,7 +21,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-from . import analytics, recorded
+from . import analytics, recorded, settings
 from .registry import IDENTITY, load_registry, select_exporter
 
 PACKAGE = Path(__file__).parent
@@ -665,6 +665,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         directory, film_sha256=source["sha256"]
     )
     proof = completion_proof(job, report, encoding)
+    film_settings = settings.extract(film, report=report, encoding=encoding) if job["mode"] != "viewer_rebuild" else None
     extractor = shared._native_extractor_path()
     extracted = work / "analytics-extracted.json"
     run_bounded(
@@ -755,7 +756,8 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         viewer_artifact=viewer,
         spatial_artifact=spatial,
     )
-    payload.update(source_kind="h1film", h1film=proof)
+    payload.update(source_kind="h1film", h1film=proof,
+                   h1film_settings=film_settings)
     if proof["analytics_revision"] >= 3:
         native = encoding["native_analytics"]
         validate_schema("native-analytics", native)
@@ -792,6 +794,11 @@ def replay_completion(job):
     payload = manifest["callback"]["payload"]
     proof = payload.get("h1film")
     validate_proof(pin, proof, analytics_revision=job.get("analytics_revision"))
+    if "h1film_settings" in payload:
+        settings.validate_product(payload["h1film_settings"])
+        require(payload["h1film_settings"]["film_sha256"] == pin["source"]["sha256"])
+        require(payload["h1film_settings"]["raw_map_sha256"] == pin["map_binding"]["raw_source"]["sha256"])
+        require(payload["h1film_settings"]["engine_profile"] == pin["film"]["engine_profile"])
     require(payload.get("source_kind") == "h1film" and "cleanup_object" not in manifest)
     require(payload["viewer_artifact"].get("playback") == PLAYBACK)
     for key in ("generation_token", "request_epoch", "request_sequence"):

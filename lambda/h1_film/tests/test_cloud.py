@@ -542,6 +542,39 @@ class CloudTests(unittest.TestCase):
         with self.assertRaises(cloud.FilmError):
             cloud.validate_proof(pin, proof)
 
+    def test_settings_receipts_validate_identity_and_replay_without_extraction(self):
+        payload = fixture("completion")
+        pin = self.job["conversion"]
+        payload["h1film_settings"] = {
+            "schema": "halospawns.h1FilmSettings.v1", "adapter_revision": 1, "catalogue_revision": 1,
+            "engine_profile": pin["film"]["engine_profile"], "film_sha256": pin["source"]["sha256"],
+            "raw_map_sha256": pin["map_binding"]["raw_source"]["sha256"],
+            "settings": {"variant.shields": {"status": "available", "value": False, "provenance": "recorded_variant"}},
+            "recorder_profiles": [],
+        }
+        manifest = self.shared._completion_manifest(
+            upload_id=self.job["upload_id"], generation_token=self.job["generation_token"], mode="initial",
+            source_replay_sha256=pin["source"]["sha256"], callback_path="/v1/ingest/replay-uploads",
+            callback_payload=payload, cleanup_object=None,
+        )
+        key = self.shared._completion_manifest_key(self.job["upload_id"], self.job["generation_token"])
+        self.shared.S3.list_objects_v2.return_value = {"Contents": [{"Key": key}]}
+        with (
+            patch.object(self.shared, "_load_completion_manifest", return_value=manifest),
+            patch.object(cloud, "api") as api,
+            patch.object(cloud.settings, "extract") as extract,
+        ):
+            self.assertTrue(cloud.replay_completion(self.job))
+            self.assertEqual(api.call_args.args[2]["h1film_settings"], payload["h1film_settings"])
+            extract.assert_not_called()
+            for field in ("film_sha256", "raw_map_sha256", "engine_profile"):
+                original = payload["h1film_settings"][field]
+                payload["h1film_settings"][field] = "b" * 64
+                with self.assertRaises(cloud.FilmError):
+                    cloud.replay_completion(self.job)
+                payload["h1film_settings"][field] = original
+            api.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
