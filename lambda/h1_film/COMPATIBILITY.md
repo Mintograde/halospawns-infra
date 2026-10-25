@@ -1,16 +1,18 @@
 # H1 Film Compatibility
 
-## Beta 4 Damage Attribution Exporter 9 (Local Candidate)
+## Beta 4 Damage Attribution Exporter 9 (Deployed, 2026-10-25 UTC)
 
 Exporter 9 adds read-only tag-reference resolution for recorded remote damage,
 preserving the Beta 4 profile, analytics 4, viewer 5 and every old binary/pin.
 Tracked shot lineage takes precedence; recovered damage never fabricates a
 discharge ID. Ambiguous sources remain unknown, and network coverage remains
 partial. Four real-film full native/WASM comparisons and packaged worker checks
-pass. API callback validation uses a temporary in-process exporter registration;
-real API registration and deployment are pending. New intake still selects 8.
-See `BETA4.md` and `20261025-infra-api-h1film-damage-exporter9`. Existing games
-require separately authorized full reparses; retries never repin.
+pass. All twelve release-image callbacks also pass actual API `live=204`
+without injected registration. Worker `20261025-r1` selects 9 for new Beta 4
+intake. Omitted API/admin and inventory defaults still select 8; promotion is
+API-owned in `20261025-infra-api-h1film-damage-exporter9`. Existing games need
+separately authorized full reparses explicitly targeting 9/4/5; retries never
+repin. Retain 9 and all older pins on rollback. See `BETA4.md` and `DEPLOYMENT.md`.
 
 ## Settings Evidence (Deployed, 2026-10-24)
 

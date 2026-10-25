@@ -835,7 +835,7 @@ def execute(work_item, context):
             try:
                 result = api("POST", "/v1/ingest/h1films/prepare", {
                     **prepare, "analytics_revision": 4,
-                    "exporter_revision": 8 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
+                    "exporter_revision": 9 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
                 })
             except FilmError as error:
                 if error.reason != "identity_conflict":

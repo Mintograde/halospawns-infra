@@ -1,22 +1,99 @@
 # H1 film Lambda integration
 
-## Damage Attribution Candidate, 2026-10-25 UTC
+## Damage Attribution Deployed, 2026-10-25 UTC
 
-Beta 4 exporter 9 is built and validated locally; it is **not deployed**.
-It recovers weapon attribution from recorded damage-effect tags while preserving
-actual damage totals, shot/hit counts, viewer bytes and existing pins. The supplied
-October 24 Dread film gains attribution for all 770 formerly unknown damage
-events. All four native/WASM film comparisons, packaged worker products/retries,
-73 Python tests and 28 Node tests pass. Twelve API callbacks pass with only a
-temporary in-process exporter-9 registration; actual API registration remains.
-Exact hashes, commands, semantics and evidence are in `BETA4.md`.
+At the user's explicit authorization, published and activated **20261025-r1**
+in dev. New Beta 4 intake selects **exporter 9 / analytics 4 / viewer 5**.
+The worker resolves remote weapon damage from exact map tag references while
+preserving actual damage, shot/hit counts, viewer bytes, settings and every
+existing profile/exporter/retry pin. All 770 formerly unknown damage events in
+the supplied October 24 Dread film gain attribution. Exact semantics, hashes
+and native/WASM evidence are in `BETA4.md`.
 
-The local candidate image is `halospawns-h1-film-damage-candidate:20261025`, ID
-`sha256:30f94c27fdedf51eb9d9867fcbc5cdc10494d15ef02c2a4fd4e155f3111e1ff0`.
-Worker `20261024-r2` and exporter-8 intake remain unchanged. No Terraform
-component, plan/apply, ECR publication, AWS resource, map approval or reparse was
-changed/submitted. API registration and coordinated activation are tracked by
-`20261025-infra-api-h1film-damage-exporter9`; historical reparses remain separate.
+Immutable ECR manifest digest:
+`sha256:464fe1714bd2a28289d54ea230dc32e69d056190d88f62f65f8bfc69e46ba553`
+(395,346,693 compressed bytes). Tested and published image ID:
+`sha256:03a0ff965708aad3c6315d9e0a10446459dbc4e57fa8654eb771958eae680480`.
+Publication preserved that exact tested image. The previous registry was
+extracted from immutable `20261024-r2`; all three profiles, all ten previous
+exporters and the encoder remain unchanged. Exporter 9 is additive and is now
+protected by the retained-profile fixture. Existing jobs never repin.
+
+The user allowed activation before API CI completed. CI actually finished
+before the apply: **API live=204**, run `40148636713`, commit
+`af99fdd11d772ed0d6e8b7c78f460df3efff2fd7`. Its downloaded ZIP SHA-256 is
+`0b587eff6713c84c7b91fa509378d9253eb213c03eebdd081a5f881e5a34c6ec`, verified
+against AWS's code hash. Four relevant contract/schema/normalizer modules match
+tested source after line-ending normalization. All twelve release-image
+callbacks pass the deployed ZIP's actual Linux dependencies without registry
+injection. A preliminary snapshot of preceding API 203 correctly rejected 9;
+that evidence is retained separately. Both H1 flags stay true and the limit
+stays 16. No direct API code/alias write or migration was performed by infra.
+
+Release validation:
+
+- 23 focused intake tests, all 73 worker Python tests locally and packaged,
+  28 Node tests, and read-only/non-root container health/job rejection pass.
+- Four actual release-image films (supplied Dread, network Dread, bot Dread,
+  Birdhouse) pass initial/viewer-rebuild/full-reparse and immutable receipt
+  retries with network disabled, fake API/S3, two CPUs and 3,008 MiB.
+- All twelve callbacks pass deployed API schemas, normalization, settings,
+  graph and spatial builders. Entire callbacks match the accepted candidate
+  except measured runtime durations/memory; viewer/occupancy hashes, damage,
+  native analytics, settings, game and participant/team data are unchanged.
+- The earlier four complete native/WASM comparisons cover 239,296 ticks and
+  1,996 hashes per engine. All player-owned damage is attributed in these films.
+  Partial network shot/damage coverage remains honest; no synthetic hits.
+
+Commands run from the infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r1 -EngineRoot L:/tmp/halospawns-h1-damage-20261024/engines -PreviousRegistry L:/tmp/halospawns-h1-damage-20261024/release-r1/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r1 -EngineRoot L:/tmp/halospawns-h1-damage-20261024/engines -PreviousRegistry L:/tmp/halospawns-h1-damage-20261024/release-r1/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan -no-color '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-h1-damage-20261024/release-r1/activation/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-h1-damage-20261024/release-r1/activation/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-h1-damage-20261024/release-r1/activation/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused/full/saved preplans show only the H1 image resource update:
+**0 added / 1 changed / 0 destroyed**. JSON review permits only `image_uri`
+and computed `last_modified`. Saved plan SHA-256:
+`dd034f2defa5952fa616dad8e2beb8552fe4d4e5d5b5f37dc63d5aec13272f4c`.
+Applied exactly that saved plan. The full preplan also shows the unapplied
+state-only API version-output refresh from 194 to 204; no API resource action
+is needed. Existing undeclared `asset_delivery_mode` warnings are unchanged.
+No aggregate or app-api apply was performed. Focused postplan is no-op; full dev
+postplan has no resource actions, only that unapplied state-only API version
+output refresh from 194 to 204.
+
+Live worker health passes on its first read-only invocation at 01:05 UTC:
+Active/Successful, all three profiles and eleven exporters match the registry,
+and encoder `7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`
+is unchanged. Environment, IAM, x86_64, 3,008 MiB, 900-second timeout, 8,192 MiB
+temporary storage, concurrency 5 and enabled batch-1 SQS mapping are identical
+to the prior release. API 204 and HTTPS health pass.
+
+Components: ECR image publication and `map-processing` image-only apply.
+Activation changes `cloud.py`, its intake/retained-job test, the retention
+fixture, `stacks/dev.yaml` and release/status/handoff docs. Account
+`283279960672`, profile `halospawns-dev`, region `us-east-1`: no session blocker.
+No jobs, retries, backfill, hosted conversion canary, map approvals, database
+migrations, frontend deployment or prod actions were submitted.
+
+Existing games, including `6cac5969-a72b-4ea1-a1e9-0e792af350a6`, need separately
+authorized **full reparses targeting 9/4/5**; deployment alone does not replace
+their stored stats. API 204 supports explicit 9 but omitted API/admin and
+inventory defaults still use 8; their promotion remains API-owned in
+`20261025-infra-api-h1film-damage-exporter9`. Worker new intake explicitly asks
+for 9. Retain 9 plus all older registrations, binaries and receipt readers on
+rollback. Slot score carry-over and partial-accuracy UI remain separate.
+Private evidence: `L:/tmp/halospawns-h1-damage-20261024/release-r1/`, with
+downloaded API ZIP, plans/apply, product comparisons and live checks in
+`activation/`.
 
 ## Recorded Settings Deployed, 2026-10-24
 
