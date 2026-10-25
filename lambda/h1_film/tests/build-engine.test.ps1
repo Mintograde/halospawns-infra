@@ -78,10 +78,11 @@ try {
     $beta4Revision.git_date = '2026-10-20'
     $beta4Revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
     $h1BuildTestState.candidate = Join-Path $root 'damage-attribution'
-    & $builder -Source $source -Port beta4 -Combat -NetworkReplayFixes -DamageAttribution -BuildDirectory $h1BuildTestState.candidate -Jobs 1
+    & $builder -Source $source -Port beta4 -Combat -NetworkReplayFixes -DamageAttribution -FiniteWorldObjects -BuildDirectory $h1BuildTestState.candidate -Jobs 1
     $damage = Get-Content -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json') -Raw | ConvertFrom-Json
     $damageConfigure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
-    if (-not $damage.damage_attribution -or -not $damage.network_replay_fixes -or
+    if (-not $damage.damage_attribution -or -not $damage.network_replay_fixes -or -not $damage.finite_world_objects -or
+        $damageConfigure -notcontains '-DH1_FINITE_WORLD_OBJECTS=ON' -or
         $damageConfigure -notcontains '-DH1_DAMAGE_ATTRIBUTION=ON' -or
         $damageConfigure -notcontains '-DH1_COMBAT_EXPORT=ON') { throw 'Damage attribution build lost its feature pins.' }
     foreach ($invalidPort in @('beta3', 'beta4')) {
@@ -91,6 +92,12 @@ try {
         } catch {
             if ($_.Exception.Message -notlike '*requires beta4 combat export*') { throw }
         }
+    }
+    try {
+        & $builder -Source $source -Port beta3 -FiniteWorldObjects -BuildDirectory (Join-Path $root 'invalid-finite')
+        throw 'Invalid finite world object build was accepted.'
+    } catch {
+        if ($_.Exception.Message -notlike '*requires the beta4 port*') { throw }
     }
     $revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
     [IO.File]::WriteAllText((Join-Path $source 'tools/build.c'), 'changed after snapshot')

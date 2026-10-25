@@ -608,6 +608,11 @@ def completion_proof(job, report, encoding):
     created_utc = recorded.recording_utc(report)
     if created_utc is not None:
         proof["created_utc"] = created_utc
+    host = report.get("envelope", {}).get("network", {}).get("host")
+    if host is not None and job["mode"] != "viewer_rebuild":
+        require(report["envelope"]["first_update"] == 0)
+        require(host["initial_player_count"] == report["envelope"]["players"])
+        proof["network_host"] = host
     if proof["analytics_revision"] >= 3:
         # The format reader validates the closed trailer separately from simulation.
         require(report["envelope"]["end_reason"] in (1, 2))
@@ -621,6 +626,14 @@ def completion_proof(job, report, encoding):
 
 def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    if proof.get("network_host") is not None:
+        try:
+            recorded.validate_network_host(
+                proof["network_host"], engine_profile=pin["film"]["engine_profile"],
+                player_count=pin["film"]["player_count"],
+            )
+        except ValueError as error:
+            raise FilmError("validation_failed") from error
     if proof.get("created_utc") is not None:
         require(pin["film"]["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1")
         require(proof["created_utc"] + (proof.get("match_end_source_tick") or 0) / 120 <= 253402300799)
@@ -835,7 +848,7 @@ def execute(work_item, context):
             try:
                 result = api("POST", "/v1/ingest/h1films/prepare", {
                     **prepare, "analytics_revision": 4,
-                    "exporter_revision": 9 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
+                    "exporter_revision": 10 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
                 })
             except FilmError as error:
                 if error.reason != "identity_conflict":

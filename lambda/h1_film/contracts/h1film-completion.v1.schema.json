@@ -1,5 +1,62 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 8499243039596472a5b2b30f3733ad5347d6ee0b6665f881b7e7682ff2ad53f8",
+  "$comment": "Generated from API schemas/h1films.py SHA256 6d3c277adddb4a009c7504049023ec205a52932c18c6841db06995570d5848bf",
+  "$defs": {
+    "H1FilmNetworkHost": {
+      "additionalProperties": false,
+      "properties": {
+        "host_slots": {
+          "items": {
+            "maximum": 7,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Host Slots",
+          "type": "array"
+        },
+        "initial_player_count": {
+          "maximum": 8,
+          "minimum": 2,
+          "title": "Initial Player Count",
+          "type": "integer"
+        },
+        "local_player_count": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Local Player Count",
+          "type": "integer"
+        },
+        "provenance": {
+          "const": "initial_fnet_drop_mask_v1",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "remote_player_mask": {
+          "maximum": 254,
+          "minimum": 1,
+          "title": "Remote Player Mask",
+          "type": "integer"
+        },
+        "source_tick": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provenance",
+        "source_tick",
+        "initial_player_count",
+        "local_player_count",
+        "remote_player_mask",
+        "host_slots"
+      ],
+      "title": "H1FilmNetworkHost",
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -100,6 +157,17 @@
       ],
       "default": null,
       "title": "Match Start Source Tick"
+    },
+    "network_host": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1FilmNetworkHost"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "played_tick_count": {
       "maximum": 432000,

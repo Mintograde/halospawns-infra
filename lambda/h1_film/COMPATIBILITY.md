@@ -1,5 +1,32 @@
 # H1 Film Compatibility
 
+## Network Host Metadata (Deployed, 2026-10-25 UTC)
+
+Worker `20261025-r3` and API `live=208` add optional `h1film.network_host`
+evidence for reviewed Beta 4 network films. It maps to existing Host metadata
+and facts without changing any engine/exporter/analytics/viewer/default pins.
+Unknown evidence remains untagged; viewer rebuilds and old receipt replay do
+not update host metadata. Six packaged films/eighteen deployed-API callbacks,
+image-only apply and live operational checks pass. Existing completed games
+need separately authorized full reparses. Retain the optional completion reader
+and every prior binary/pin on rollback. See `BETA4.md`, `DEPLOYMENT.md` and
+completed `20261025-infra-api-h1film-network-host`.
+
+## Beta 4 Finite Loose-Weapon Exporter 10 (Deployed, 2026-10-25 UTC)
+
+The user-authorized Weld fix is packaged in immutable worker `20261025-r2`.
+Exporter 10 retains the Beta 4 profile, analytics 4, viewer 5 and every old
+binary/pin. It omits loose weapons with unrepresentable transforms without
+changing simulation or player validation. Five packaged films / fifteen
+callbacks pass both source and deployed API live 207. The user allowed worker
+activation during API CI; its compatible release was verified afterward.
+Image-only apply, live engine/operational checks and focused postplan pass;
+full dev has only the unapplied API version-output refresh 194 to 207.
+New intake selects 10/4/5; API omission defaults stay 9. Existing attempts never
+repin; recovery needs a separately authorized new explicit 10/4/5 attempt.
+Retain 10 and all older binaries/registrations on rollback.
+See `BETA4.md`, `DEPLOYMENT.md` and `20261025-infra-api-h1film-finite-exporter10`.
+
 ## Beta 4 Damage Attribution Exporter 9 (Deployed, 2026-10-25 UTC)
 
 Exporter 9 adds read-only tag-reference resolution for recorded remote damage,

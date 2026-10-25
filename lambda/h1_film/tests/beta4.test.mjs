@@ -75,6 +75,74 @@ function botFixture({ bots = 7, seats = 1, marker = true, settings =
   return film;
 }
 
+function networkHostFixture({ players = 4, localPlayers = 1, recorder = 0, firstUpdate = 0,
+  records = [[0, 3, 14], [1, 3, 10]] } = {}) {
+  const film = botFixture({ bots: 0, seats: localPlayers, marker: false });
+  film.writeUInt32LE(10, 28);
+  film.writeUInt32LE(firstUpdate, 40);
+  film.writeUInt32LE(players | (recorder << 8), 124);
+  const raw = Buffer.concat(records.map(([tick, type, value]) => {
+    const length = new Map([[3, 4], [4, 8], [7, 36]]).get(type);
+    const record = Buffer.alloc(8 + length);
+    record.writeUInt32LE(tick, 0);
+    record.writeUInt16LE(type, 4);
+    record.writeUInt16LE(length, 6);
+    record.writeUInt32LE(value, 8);
+    return record;
+  }));
+  const network = Buffer.alloc(56);
+  for (const [index, value] of [0x54454e46, 2, 32, records.length, raw.length, 0, 1, 24 + raw.length,
+    raw.length, raw.length, records[0][0], records.at(-1)[0], records.length, 0].entries()) {
+    network.writeUInt32LE(value, index * 4);
+  }
+  film.writeUInt32LE(film.length, 448);
+  film.writeUInt32LE(network.length + raw.length, 452);
+  return Buffer.concat([film, network, raw]);
+}
+
+test('beta4 identifies initial host seats independently of the recorder and remote departures', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-host-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const recorder of [0, 3]) {
+      await writeFile(path, networkHostFixture({ recorder }));
+      assert.deepEqual((await readEnvelope(path)).network.host, {
+        provenance: 'initial_fnet_drop_mask_v1', source_tick: 0, initial_player_count: 4,
+        local_player_count: 1, remote_player_mask: 14, host_slots: [0],
+      });
+    }
+    for (const [localPlayers, mask, expected] of [[2, 12, [0, 1]], [1, 11, [2]], [3, 4, [0, 1, 3]]]) {
+      await writeFile(path, networkHostFixture({ localPlayers, records: [[0, 3, mask]] }));
+      assert.deepEqual((await readEnvelope(path)).network.host.host_slots, expected);
+    }
+    await writeFile(path, networkHostFixture({ records: [[0, 3, 14], [1, 4, 2], [1, 7, 65538]] }));
+    const envelope = await readEnvelope(path);
+    assert.deepEqual(envelope.network.host.host_slots, [0]);
+    assert.equal(envelope.network.participant_count, 5);
+  } finally { await rm(root, { recursive: true }); }
+});
+
+test('beta4 leaves ambiguous, absent, partial and contradictory host evidence unknown', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-host-unknown-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const changes of [
+      { records: [[1, 3, 14]] }, { records: [[0, 7, 65540]] },
+      { firstUpdate: 1 }, { records: [[0, 3, 0]] }, { records: [[0, 3, 15]] },
+      { records: [[0, 3, 30]] }, { localPlayers: 2 }, { records: [[0, 3, 12]] },
+      { records: [[0, 3, 14], [1, 3, 15]] },
+      { records: [[0, 3, 14], [0, 4, 2]] },
+      { records: [[0, 7, 65540], [0, 3, 14]] },
+      { records: [[0, 3, 14], [1, 7, 65536], [1, 3, 15]] },
+    ]) {
+      await writeFile(path, networkHostFixture(changes));
+      assert.equal((await readEnvelope(path)).network.host, undefined, JSON.stringify(changes));
+    }
+    await writeFile(path, botFixture());
+    assert.equal((await readEnvelope(path)).network, undefined);
+  } finally { await rm(root, { recursive: true }); }
+});
+
 test('beta4 counts recorded bots as participants and keeps them off retained exporters', async () => {
   const root = await mkdtemp(join(tmpdir(), 'beta4-bots-'));
   const path = join(root, 'input.h1film');

@@ -43,7 +43,7 @@ async function readBlock(file, offset, length) {
   return result;
 }
 
-async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
+async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers) {
   assert.ok(size >= 32 && size <= 96 * 1024 * 1024 + 32, 'Invalid FNET size');
   const header = await readBlock(file, offset, 32);
   const words = Array.from({ length: 8 }, (_, index) => header.readUInt32LE(index * 4));
@@ -54,6 +54,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
   const joined = new Set();
   let maxPlayerSlot = players - 1;
+  let initialDropMask, observedRemoteMask = 0, initialRosterChanged = false;
   const sizes = new Map([[1, 68], [2, 108], [3, 4], [4, 8], [5, 0], [6, 8], [7, 36]]);
   for (let block = 0; block < words[6]; block++) {
     assert.ok(cursor + 24 <= size, 'Truncated FNET block');
@@ -74,7 +75,13 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
         'Invalid FNET record bounds or time');
       if (record === 0) assert.equal(tick, first, 'FNET first tick mismatch');
       if (record === records - 1) assert.equal(tick, last, 'FNET last tick mismatch');
-      if (type === 3) assert.equal(raw.readUInt32LE(position + 8) >>> 16, 0, 'FNET drop mask exceeds converter limit');
+      if (type === 3) {
+        const mask = raw.readUInt32LE(position + 8);
+        assert.equal(mask >>> 16, 0, 'FNET drop mask exceeds converter limit');
+        if (initialDropMask === undefined && tick === 0) initialDropMask = mask;
+        observedRemoteMask |= mask;
+      }
+      if (tick === 0 && (type === 4 || type === 7)) initialRosterChanged = true;
       if (type === 7) {
         const handle = raw.readUInt32LE(position + 8), slot = handle & 65535;
         assert.ok(slot < 16, 'Joined player exceeds converter limit');
@@ -97,7 +104,16 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players) {
   assert.equal(cursor, size, 'Trailing FNET blocks');
   assert.equal(count, words[3], 'FNET record count mismatch');
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
-  return { records: count, applications, blocks: words[6], participant_count: players + joined.size, max_player_slot: maxPlayerSlot };
+  const hostSlots = Array.from({ length: players }, (_, slot) => slot)
+    .filter(slot => !(initialDropMask & (1 << slot)));
+  const host = firstTick === 0 && initialDropMask > 0 && initialDropMask >>> players === 0
+    && !initialRosterChanged && hostSlots.length === localPlayers
+    && hostSlots.every(slot => !(observedRemoteMask & (1 << slot)))
+    ? { provenance: 'initial_fnet_drop_mask_v1', source_tick: 0, initial_player_count: players,
+      local_player_count: localPlayers, remote_player_mask: initialDropMask, host_slots: hostSlots }
+    : undefined;
+  return { records: count, applications, blocks: words[6], participant_count: players + joined.size,
+    max_player_slot: maxPlayerSlot, ...(host ? { host } : {}) };
 }
 
 export async function readEnvelope(path) {
@@ -173,7 +189,7 @@ export async function readEnvelope(path) {
     const map = text(128, 256);
     assert.match(map, /^[a-zA-Z0-9_-]+$/, 'Invalid map name');
     assert.equal(Boolean(netSize), universal, 'FNET section and film flags disagree');
-    const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players) : undefined;
+    const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25]) : undefined;
     return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),

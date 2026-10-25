@@ -13,10 +13,11 @@ static unsigned char hs_buffer[HS_FRAME_LIMIT];
 static uint32_t hs_used, hs_depth;
 static struct { uint32_t offset, count; int object; } hs_stack[32];
 static FILE *hs_output, *hs_copy;
+static int hs_tick = -1;
 
 static void hs_fail(const char *reason)
 {
-    fprintf(stderr, "h1-film-export: %s\n", reason);
+    fprintf(stderr, "h1-film-export: %s (tick %d)\n", reason, hs_tick);
     exit(3);
 }
 
@@ -71,12 +72,18 @@ static void hs_int(const char *key, int32_t value) { hs_item(key); hs_byte(HS_I3
 static void hs_uint(const char *key, uint32_t value) { hs_item(key); hs_byte(HS_U32); hs_u32(value); }
 static void hs_float(const char *key, float value)
 {
-    if (!isfinite(value)) hs_fail("non-finite simulation value");
+    if (!isfinite(value)) {
+        fprintf(stderr, "field=%s\n", key ? key : "array element");
+        hs_fail("non-finite simulation value");
+    }
     hs_item(key); hs_byte(HS_F32); hs_bytes(&value, 4);
 }
 static void hs_double(const char *key, double value)
 {
-    if (!isfinite(value)) hs_fail("non-finite simulation value");
+    if (!isfinite(value)) {
+        fprintf(stderr, "field=%s\n", key ? key : "array element");
+        hs_fail("non-finite simulation value");
+    }
     hs_item(key); hs_byte(HS_F64); hs_bytes(&value, 8);
 }
 static void hs_string(const char *key, const char *value)
@@ -84,13 +91,17 @@ static void hs_string(const char *key, const char *value)
     hs_item(key); hs_byte(HS_STRING); hs_text(value ? value : "");
 }
 
-static void hs_raw_floats(const float *values, uint32_t count)
+static void hs_raw_floats_checked(const float *values, uint32_t count, const char *field)
 {
     uint32_t index;
     for (index = 0; index < count; ++index)
-        if (!isfinite(values[index])) hs_fail("non-finite simulation value");
+        if (!isfinite(values[index])) {
+            fprintf(stderr, "field=%s component=%u\n", field, index);
+            hs_fail("non-finite simulation value");
+        }
     hs_bytes(values, count * 4);
 }
+#define hs_raw_floats(values, count) hs_raw_floats_checked(values, count, #values)
 
 static void hs_flush_frame(FILE *diagnostic)
 {

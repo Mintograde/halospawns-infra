@@ -261,7 +261,10 @@ def main():
             path, payload = real_products(
                 retry, film, directory, extra, deadline, metadata
             )
-            assert payload["h1film"] == initial[1]["h1film"]
+            expected_proof = dict(initial[1]["h1film"])
+            if mode == "viewer_rebuild":
+                expected_proof.pop("network_host", None)
+            assert payload["h1film"] == expected_proof
             assert (
                 payload["viewer_artifact"]["sha256"]
                 == initial[1]["viewer_artifact"]["sha256"]

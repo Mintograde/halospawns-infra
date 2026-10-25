@@ -234,9 +234,9 @@ class CloudTests(unittest.TestCase):
                     self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
                 self.assertEqual(retry.call_args.args[0], job)
 
-    def test_beta4_intake_selects_damage_exporter_and_retained_jobs_keep_their_pins(self):
+    def test_beta4_intake_selects_finite_world_exporter_and_retained_jobs_keep_their_pins(self):
         profile = load_registry()["h1-performance-beta4-p9803-wasm-v1"]
-        for revision in (6, 7, 8, 9):
+        for revision in (6, 7, 8, 9, 10):
             job = copy.deepcopy(self.job)
             job.update(schema="halospawns.h1film_job.v2", analytics_revision=4)
             film = job["conversion"]["film"]
@@ -255,7 +255,7 @@ class CloudTests(unittest.TestCase):
             )
             source = job["conversion"]["source"]
             responses = [{"data": {"job": job}}]
-            if revision < 9:
+            if revision < 10:
                 responses.insert(0, cloud.FilmError("identity_conflict"))
             with (
                 patch.dict(os.environ, {"H1_MAX_PLAYERS": "16"}),
@@ -267,10 +267,10 @@ class CloudTests(unittest.TestCase):
                 context = MagicMock()
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute({"upload_id": job["upload_id"], "source": source}, context)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 9)
+                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 10)
                 self.assertEqual(retry.call_args.args[0], job)
-                self.assertEqual(api.call_count, 2 if revision < 9 else 1)
-                if revision < 9:
+                self.assertEqual(api.call_count, 2 if revision < 10 else 1)
+                if revision < 10:
                     self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
 
     def test_sqs_job_routing_and_exact_origin(self):
@@ -539,9 +539,28 @@ class CloudTests(unittest.TestCase):
         legacy = cloud.completion_proof(job, report, encoding)
         self.assertNotIn("created_utc", legacy)
         cloud.validate_proof(pin, legacy)
+        host = {"provenance": "initial_fnet_drop_mask_v1", "source_tick": 0,
+                "initial_player_count": 2, "local_player_count": 1,
+                "remote_player_mask": 2, "host_slots": [0]}
+        pin["film"]["player_count"] = 3
+        report["envelope"].update(first_update=0, players=2, network={"host": host})
+        hosted = cloud.completion_proof(job, report, encoding)
+        self.assertEqual(hosted["network_host"], host)
+        self.assertNotIn("network_host", legacy)
+        for changes in (
+            {"host_slots": [1]}, {"host_slots": [0, 0]}, {"host_slots": [False]},
+            {"remote_player_mask": 0}, {"remote_player_mask": 3},
+            {"local_player_count": 2}, {"source_tick": 1}, {"initial_player_count": 4},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(cloud.FilmError):
+                cloud.validate_proof(pin, {**hosted, "network_host": {**host, **changes}})
+        job["mode"] = "viewer_rebuild"
+        self.assertNotIn("network_host", cloud.completion_proof(job, report, encoding))
         pin["film"]["engine_profile"] = self.job["conversion"]["film"]["engine_profile"]
         with self.assertRaises(cloud.FilmError):
             cloud.validate_proof(pin, proof)
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_proof(pin, hosted)
 
     def test_settings_receipts_validate_identity_and_replay_without_extraction(self):
         payload = fixture("completion")

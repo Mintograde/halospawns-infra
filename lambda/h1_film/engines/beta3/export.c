@@ -93,6 +93,15 @@ static void object(int slot, const object_header_datum *header)
     const int definition = header->datum->definition_index;
     const char *tag_name = global_tag_instances && definition != -1
         ? global_tag_instances[(unsigned short)definition].name : NULL;
+#ifdef H1_FINITE_WORLD_OBJECTS
+    if (header->type == 2 && body->parent_object_index == -1) {
+        int component;
+        for (component = 0; component < 3; ++component) {
+            if (!isfinite(body->position.n[component]) || !isfinite(body->forward.n[component])
+                || !isfinite(body->up.n[component])) return;
+        }
+    }
+#endif
     hs_item(NULL);
     hs_byte(HS_WORLD_OBJECT);
     hs_u32(object_handle(slot, header));
@@ -313,6 +322,7 @@ void hs_export_tick(FILE *out, int frame)
     if (tick < 0 || tick == previous) return;
     if (previous >= 0 && tick != previous + 1) hs_fail("simulation clock skipped a tick");
     previous = tick;
+    hs_tick = tick;
     hs_begin(NULL, 1);
     hs_int("current_tick", tick);
     hs_double("current_game_time_seconds", (double)tick / TICKS_PER_SECOND);

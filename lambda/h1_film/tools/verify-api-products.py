@@ -50,7 +50,14 @@ def main():
             elif settings_document is not None:
                 assert "h1film_settings" not in other.model_dump()
             job = H1FilmJob.model_validate_json(path.with_name(f"{mode}-job.json").read_text(encoding="utf-8"))
-            assert other.h1film == request.h1film
+            if mode == "viewer-rebuild":
+                assert other.h1film.network_host is None
+                assert other.h1film == request.h1film.model_copy(update={"network_host": None})
+            else:
+                assert other.h1film == request.h1film
+                assert [player.metadata for player in other.participants] == [
+                    player.metadata for player in request.participants
+                ]
             assert str(other.reprocess_attempt_id) == str(job.attempt_id)
             checked_modes.append(mode)
     participants = tuple(
@@ -76,6 +83,8 @@ def main():
         "participants": len(participants),
         "native_analytics": request.metadata.get("native_analytics"),
         "settings_verified": settings_document is not None,
+        "network_host": request.h1film.network_host.model_dump() if request.h1film.network_host else None,
+        "host_slots": [player.slot_index for player in request.participants if player.metadata.get("is_host")],
         "graphs": graphs,
         "spatial_event_count": len(events),
         "spatial_event_sample": [dataclasses.asdict(event) for event in events[:8]],

@@ -1,5 +1,167 @@
 # H1 film Lambda integration
 
+## Network Host Metadata Deployed (2026-10-25 UTC)
+
+User-authorized dev worker **20261025-r3** is active at immutable ECR digest
+`sha256:fb3070bf0342ea8e00d29b1ca80edf3123844bbaeb3ad875c8bede76ef0a93fc`
+(404,940,352 compressed bytes). Tested and published image ID:
+`sha256:5b7b709edc96cf571acbf485bfadc7289ea4c21a8490504f8d6a02e8ba1cc4ea`.
+Initial/full-reparse callbacks carry validated Beta 4 network-host evidence;
+API derives the existing Host metadata/fact and the existing frontend badge.
+Viewer-only rebuilds and immutable receipt retries do not update host metadata.
+All three profiles, twelve exporters, encoder and existing job/default pins
+remain unchanged: worker intake is 10/4/5, API omissions remain 9.
+
+The user authorized deployment while API CI was running. CI run `40222631057`
+for user commit `28c84d3e7d648de55131b70fd0e41c271fa0f265` completed before
+activation, promoting **API live=208**. Downloaded ZIP SHA-256
+`0395276b8db345098370a0cff42400d4e3af4c2b08f67a86b4534d65ba3fbbfe`
+matches AWS's code hash. Packaged `schemas/h1films.py`,
+`services/h1film_ingest.py` and `h1film_contract.py` match tested source after
+line-ending normalization. All eighteen actual release-image callbacks pass
+the deployed ZIP and its Linux dependencies without registry injection. Both
+H1 flags remain true, participant limit 16 and API health passes.
+
+Six network-isolated packaged films pass initial/viewer/full callbacks and
+immutable receipt retries: both supplied Weld copies, October 24 Dread,
+October 22 network Dread, bot Dread and Birdhouse. Both Weld copies identify
+only `Bot 1`; the bot film identifies no network host. Viewer/spatial hashes,
+participants, game data, native combat and settings match prior accepted
+products exactly; only optional host proof and runtime telemetry differ.
+All 73 worker tests pass locally and packaged; all 30 Node tests and read-only,
+non-root container health/job rejection pass. The earlier 451 focused API
+tests (four optional corpus skips), 26 game-detail tests and Ruff also pass.
+
+Commands run from the infra root (`$release` is the evidence directory):
+
+```powershell
+$release = 'L:/tmp/halospawns-h1film-hosts-20261025/release-r3'
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r3 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry "$release/previous-registry.json" -BuildOnly
+& "$release/verify-release.ps1"
+& "$release/activation/verify-deployed-api.ps1"
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r3 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry "$release/previous-registry.json"
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan -no-color '-var-file=dev-map-processing.terraform.tfvars.json' "-out=$release/activation/reviewed.planfile"
+terraform '-chdir=components/terraform/map-processing' show -json "$release/activation/reviewed.planfile"
+terraform '-chdir=components/terraform/map-processing' apply -no-color "$release/activation/reviewed.planfile"
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused/full/saved preplans and apply change only the H1 image:
+**0 added / 1 changed / 0 destroyed**. Saved JSON review permits only
+`image_uri` and computed `last_modified`; applied plan SHA-256:
+`8e6b8cc3eb1684b60b209791f329c86b61d4e351d4421b32c8205114a92c66ea`.
+The update completes in 30 seconds. Preplans observe external renderer version
+286 to 287 without any renderer action. Focused postplan is no-op; full dev has
+no resource actions, only the unapplied API version-output refresh 194 to 208.
+Existing undeclared `asset_delivery_mode` warnings remain unchanged. No
+aggregate or app-api apply was performed.
+
+Live verification at 18:55 UTC confirms Active/Successful, every retained
+engine hash and unchanged encoder, environment/IAM, x86_64, 3,008 MiB memory,
+900-second timeout, 8,192 MiB temporary storage, concurrency 5 and enabled
+batch-1 queue mapping. First cold health inventory hits its existing 20-second
+child timeout; the second read-only health check passes. Profile
+`halospawns-dev`, account `283279960672`, region `us-east-1`: no session blocker.
+No job/retry/reparse, DB migration, map approval, direct API code/alias write,
+frontend deployment or prod action occurred. Existing completed games need
+separately authorized full reparses to gain Host tags. Retain the compatible
+optional completion reader and all existing pins on rollback.
+
+Feature files: `runtime/adapters/beta4-v2-120.mjs`, `recorded.py`, `cloud.py`,
+`contracts/h1film-completion.v1.schema.json`, `tests/beta4.test.mjs`,
+`tests/test_cloud.py`, `tools/verify-api-products.py`, `tools/verify-cloud.py`,
+API host schema/normalizer/tests and the frontend game-detail regression test.
+Activation changes: `stacks/dev.yaml`, this file, `BETA4.md`, `COMPATIBILITY.md`,
+root `AGENTS.md`, `ATMOS_MIGRATION_PLAN.md`, both root handoffs and API status
+docs. Components: ECR publication and `map-processing` image-only apply.
+Evidence, plans, exact API artifact and checks: `$release/activation/` above.
+Coordination `20261025-infra-api-h1film-network-host` is complete.
+
+## Weld Fix Deployed (2026-10-25 UTC)
+
+User authorized and completed dev deployment of additive Beta 4 exporter 10, retaining
+analytics 4/viewer 5 and every existing engine and persisted pin. Image
+`20261025-r2` is active at immutable manifest digest
+`sha256:38504af28c13473949a81da05c6d693e6b22f8888bfe30691e1f86803fe44307`
+(404,939,576 compressed bytes). The tested/published image ID is
+`sha256:a8525998b0ee7c624d89ffbb1d9bb47a583208eab1de7efc9adfbdf5246ae641`.
+
+Weld completes all 88,043 ticks and 734 recorded hashes, with verified 120/30 Hz
+readback. Actual release-image checks cover Weld, October 24 Dread, October 22
+network Dread, bot Dread and Birdhouse. All fifteen initial/viewer/full callbacks
+pass both updated API source and the actual deployed API 207 ZIP with its
+Linux dependencies. All 73 worker tests
+pass locally and packaged; 28 Node and 149 focused API tests pass, as does Ruff.
+The four earlier films retain viewer/spatial bytes, gameplay, settings and
+combat data; differences are exporter provenance and runtime telemetry only.
+Native Weld reference still has two isolated hash mismatches; WASM matches all
+recorded hashes. See `BETA4.md` for the exact fix and limitation.
+
+The registry and retention fixture add 10; new worker intake explicitly asks
+for 10/4/5. API source registers the same hashes and allows explicit 10/4/5
+reparses, with omission defaults left at 9. The user committed/pushed API
+`afe7c5c0e2fc27794fd46f7e4c0d75344916b3a4` and explicitly authorized worker
+activation while CI was running, accepting a brief single-user dev compatibility
+gap. The reviewed image-only apply completed while API 206 was still live.
+CI run `40216737366` then completed successfully and promoted API **live=207**.
+Its downloaded ZIP SHA-256 is
+`109786397b2d40b159a816fee66c9d042e71d2a26f898e54af844046628929a3`, matching AWS's
+code hash. Both changed contract/schema modules match tested source after
+line-ending normalization; all fifteen callbacks pass without registry injection.
+Both H1 flags remain true, the API participant limit is 16, and HTTPS health
+passes. Coordination `20261025-infra-api-h1film-finite-exporter10` is complete.
+
+Commands run from the infra root:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r2 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry L:/tmp/halospawns-weld-270337d1/release-r2/previous-registry.json -BuildOnly
+.\scripts\publish-h1-film.ps1 -Tag 20261025-r2 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry L:/tmp/halospawns-weld-270337d1/release-r2/previous-registry.json
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/map-processing' plan -no-color '-var-file=dev-map-processing.terraform.tfvars.json' '-out=L:/tmp/halospawns-weld-270337d1/release-r2/activation/reviewed.planfile'
+terraform '-chdir=components/terraform/map-processing' show -json L:/tmp/halospawns-weld-270337d1/release-r2/activation/reviewed.planfile
+terraform '-chdir=components/terraform/map-processing' apply -no-color L:/tmp/halospawns-weld-270337d1/release-r2/activation/reviewed.planfile
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Focused/full/saved preplans and apply: **0 added / 1 changed / 0 destroyed**;
+only the H1 `image_uri` and computed `last_modified` change. Preplans observe
+the external renderer version refresh 285 to 286 without a renderer action.
+Applied exactly the reviewed plan, SHA-256:
+`43dfea3a7cbf794dd4d5c982ba806266fc343c07d51c919fdb1c67ba4369ceec`.
+The image update completes in 20 seconds. Focused postplan is no-op; full dev
+postplan has no resource actions, only the unapplied API version-output refresh
+194 to 207 (preplan saw 206). No app-api or aggregate apply was performed.
+
+Worker is Active/Successful; live health verifies all three profiles, twelve
+exporters and unchanged encoder
+`7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e`.
+Cold health inventory reached its existing 20-second child timeout; the second
+read-only invocation passed. Environment, IAM, x86_64, 3,008 MiB memory,
+900-second timeout, 8,192 MiB temporary storage, concurrency 5 and the enabled
+batch-1 queue mapping are unchanged. Final worker/API verification passes at
+17:34 UTC. Profile `halospawns-dev`, account `283279960672`, region `us-east-1`:
+no session blocker. No job/retry/reparse, migration, map approval, direct API
+code/alias write, frontend deployment or prod action was performed.
+
+The failed Weld upload still needs a separately authorized new explicit
+10/4/5 processing attempt; the failed exporter-9 attempt remains pinned.
+Retain exporter 10 and every older engine/registration on rollback. Evidence,
+actual deployed API ZIP, plans, apply and live checks:
+`L:/tmp/halospawns-weld-270337d1/release-r2/activation/`.
+
+Changed files: `engines/beta3/export.c`, `engines/beta3/stream.h`,
+`engines/beta4/wasm/CMakeLists.txt`, `tools/build-engine.ps1`,
+`tests/build-engine.test.ps1`, `profiles/registry.json`, `cloud.py`,
+`tests/test_cloud.py`, `tests/fixtures/retained-profiles.json`, `stacks/dev.yaml`
+and rollout/status/handoff documents. API changes are `h1film_contract.py`,
+`schemas/h1film_reparse.py`, `tests/unit/test_h1film_beta4.py` and `HANDOFFS.md`.
+Components: ECR image publication and `map-processing` image-only apply.
+
 ## Damage Attribution Deployed, 2026-10-25 UTC
 
 At the user's explicit authorization, published and activated **20261025-r1**
