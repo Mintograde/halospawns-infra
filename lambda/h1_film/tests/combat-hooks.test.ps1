@@ -1,9 +1,12 @@
 param(
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$Output,
-    [ValidateSet('beta3', 'h1arena')][string]$Port = 'beta3'
+    [ValidateSet('beta3', 'h1arena', 'beta4')][string]$Port = 'beta3',
+    [switch]$DamageAttribution
 )
 $ErrorActionPreference = 'Stop'
+if ($DamageAttribution -and $Port -ne 'beta4') { throw 'Damage attribution requires the beta4 port.' }
+$testName = if ($DamageAttribution) { 'damage-attribution' } else { 'combat-hooks' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $worker = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $outputPath = [IO.Path]::GetFullPath($Output)
@@ -18,7 +21,7 @@ $mounts = @('--rm', '--network', 'none',
     -DBLAMPC_LOCAL_2V2 -DBLAMPC_TICK_RATE=120 -include /worker/engines/beta3/wasm/prelude.h `
     -I/worker/engines/beta3/wasm/include -I/source/engine -I/source/engine/data -I/source/engine/headers `
     -I/source/host/compat -I/source/host -I/source/host/stubs `
-    /worker/tests/combat-hooks.test.c -o /out/combat-hooks.cjs -sENVIRONMENT=node -sASSERTIONS=1
+    "/worker/tests/$testName.test.c" -o "/out/$testName.cjs" -sENVIRONMENT=node -sASSERTIONS=1
 if ($LASTEXITCODE) { throw 'Combat hook harness compilation failed.' }
-& node (Join-Path $outputPath 'combat-hooks.cjs')
+& node (Join-Path $outputPath "$testName.cjs")
 if ($LASTEXITCODE) { throw 'Combat hook harness failed.' }

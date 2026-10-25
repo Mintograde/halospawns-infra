@@ -1,5 +1,17 @@
 # H1 Film Compatibility
 
+## Beta 4 Damage Attribution Exporter 9 (Local Candidate)
+
+Exporter 9 adds read-only tag-reference resolution for recorded remote damage,
+preserving the Beta 4 profile, analytics 4, viewer 5 and every old binary/pin.
+Tracked shot lineage takes precedence; recovered damage never fabricates a
+discharge ID. Ambiguous sources remain unknown, and network coverage remains
+partial. Four real-film full native/WASM comparisons and packaged worker checks
+pass. API callback validation uses a temporary in-process exporter registration;
+real API registration and deployment are pending. New intake still selects 8.
+See `BETA4.md` and `20261025-infra-api-h1film-damage-exporter9`. Existing games
+require separately authorized full reparses; retries never repin.
+
 ## Settings Evidence (Deployed, 2026-10-24)
 
 `halospawns.h1FilmSettings.v1` is an independent bounded settings product on

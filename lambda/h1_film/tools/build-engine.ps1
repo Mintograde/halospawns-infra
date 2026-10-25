@@ -4,11 +4,13 @@ param(
     [Parameter(Mandatory)][string]$Port,
     [switch]$Combat,
     [switch]$NetworkReplayFixes,
+    [switch]$DamageAttribution,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
 if ($NetworkReplayFixes -and $Port -ne 'beta4') { throw 'Network replay corrections require the beta4 port.' }
+if ($DamageAttribution -and ($Port -ne 'beta4' -or -not $Combat)) { throw 'Damage attribution requires beta4 combat export.' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $worker = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $buildPath = [IO.Path]::GetFullPath($BuildDirectory)
@@ -21,6 +23,7 @@ $image = $inputs.port.toolchain_image
 $sourceStage = "/cache/sources/$($inputs.source.sha256)"
 $variant = if ($Combat) { 'combat-v1' } else { 'standard' }
 if ($NetworkReplayFixes) { $variant += '-network-replay-v1' }
+if ($DamageAttribution) { $variant += '-damage-attribution-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -39,7 +42,8 @@ if ($LASTEXITCODE) { throw "Source staging failed: $LASTEXITCODE" }
 $revisionArguments = if ($inputs.source.git_commit) { @("-DH1_SOURCE_COMMIT=$($inputs.source.git_commit)", "-DH1_SOURCE_DATE=$($inputs.source.git_date)") } else { @() }
 $combatFlag = if ($Combat) { 'ON' } else { 'OFF' }
 [string[]]$networkReplayArguments = if ($NetworkReplayFixes) { @('-DH1_NETWORK_REPLAY_FIXES=ON') } else { @() }
-& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @revisionArguments
+[string[]]$damageArguments = if ($DamageAttribution) { @('-DH1_DAMAGE_ATTRIBUTION=ON') } else { @() }
+& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 & docker run @mounts $image cmake --build $cacheBuild --parallel $Jobs -- -k *> $log
@@ -57,6 +61,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     inputs = $inputs
     combat_contract = if ($Combat) { 'halospawns.h1CombatSource.v1' } else { $null }
     network_replay_fixes = [bool]$NetworkReplayFixes
+    damage_attribution = [bool]$DamageAttribution
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

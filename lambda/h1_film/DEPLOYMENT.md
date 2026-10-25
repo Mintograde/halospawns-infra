@@ -1,5 +1,23 @@
 # H1 film Lambda integration
 
+## Damage Attribution Candidate, 2026-10-25 UTC
+
+Beta 4 exporter 9 is built and validated locally; it is **not deployed**.
+It recovers weapon attribution from recorded damage-effect tags while preserving
+actual damage totals, shot/hit counts, viewer bytes and existing pins. The supplied
+October 24 Dread film gains attribution for all 770 formerly unknown damage
+events. All four native/WASM film comparisons, packaged worker products/retries,
+73 Python tests and 28 Node tests pass. Twelve API callbacks pass with only a
+temporary in-process exporter-9 registration; actual API registration remains.
+Exact hashes, commands, semantics and evidence are in `BETA4.md`.
+
+The local candidate image is `halospawns-h1-film-damage-candidate:20261025`, ID
+`sha256:30f94c27fdedf51eb9d9867fcbc5cdc10494d15ef02c2a4fd4e155f3111e1ff0`.
+Worker `20261024-r2` and exporter-8 intake remain unchanged. No Terraform
+component, plan/apply, ECR publication, AWS resource, map approval or reparse was
+changed/submitted. API registration and coordinated activation are tracked by
+`20261025-infra-api-h1film-damage-exporter9`; historical reparses remain separate.
+
 ## Recorded Settings Deployed, 2026-10-24
 
 After the user confirmed API/migration deployment and authorized infra rollout,

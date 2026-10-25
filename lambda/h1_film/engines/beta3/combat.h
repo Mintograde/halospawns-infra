@@ -206,11 +206,21 @@ void hs_combat_headshot(int object)
     hs_headshot_target = object;
 }
 
+#ifdef H1_DAMAGE_ATTRIBUTION
+#include "../beta4/damage-attribution.h"
+#endif
+
 static hs_lineage hs_damage_lineage(const damage_data *damage)
 {
     hs_lineage lineage = hs_current;
     if (lineage.owner != damage->owner_player_index)
         lineage = (hs_lineage){0, -1, damage->owner_player_index};
+#ifdef H1_DAMAGE_ATTRIBUTION
+    if (lineage.weapon < 0 && hs_slot(damage->owner_player_index) >= 0) {
+        lineage.weapon = hs_damage_weapon(damage->definition_index);
+        lineage.shot = 0;
+    }
+#endif
     return lineage;
 }
 
@@ -238,6 +248,10 @@ void hs_combat_applied(const void *event, int object, int actual,
         relationship = game_team_is_enemy(player->team_index, target->team_index) ? 0 : 1;
     }
     if (relationship == 0 && lineage.weapon < 0) hs_missing(0);
+#ifdef H1_DAMAGE_ATTRIBUTION
+    if (relationship == 0 && !lineage.shot && lineage.weapon >= 0
+        && hs_weapons[lineage.weapon].category == 0) hs_missing(0);
+#endif
     if (hs_damage_count == 1024) { hs_coverage[0] = hs_coverage[1] = 2; return; }
     hs_damages[hs_damage_count++] = (hs_damage){lineage, attacker, victim, relationship, shield, health};
 }

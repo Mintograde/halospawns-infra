@@ -130,6 +130,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "97faa72b6116ad254ec3b87dbb203c0a482665c1eadec73b8516b89323785761",
       "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 9,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "7b262e233cb0cbed29927be94d1d68cadbaf08559b7165e9ac07df1f26c1c092",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
     }
   ]
 }

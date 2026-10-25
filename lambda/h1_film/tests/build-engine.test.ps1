@@ -73,6 +73,26 @@ try {
     $arenaConfigure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
     if ($arenaConfigure -notcontains "-DH1_SOURCE_COMMIT=$($revision.git_commit)" -or
         $arenaConfigure -notcontains '-DH1_SOURCE_DATE=2026-10-14') { throw 'Observable build identity was not pinned.' }
+    $beta4Revision = @{} + $revision
+    $beta4Revision.git_commit = 'e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad'
+    $beta4Revision.git_date = '2026-10-20'
+    $beta4Revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
+    $h1BuildTestState.candidate = Join-Path $root 'damage-attribution'
+    & $builder -Source $source -Port beta4 -Combat -NetworkReplayFixes -DamageAttribution -BuildDirectory $h1BuildTestState.candidate -Jobs 1
+    $damage = Get-Content -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json') -Raw | ConvertFrom-Json
+    $damageConfigure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
+    if (-not $damage.damage_attribution -or -not $damage.network_replay_fixes -or
+        $damageConfigure -notcontains '-DH1_DAMAGE_ATTRIBUTION=ON' -or
+        $damageConfigure -notcontains '-DH1_COMBAT_EXPORT=ON') { throw 'Damage attribution build lost its feature pins.' }
+    foreach ($invalidPort in @('beta3', 'beta4')) {
+        try {
+            & $builder -Source $source -Port $invalidPort -DamageAttribution -BuildDirectory (Join-Path $root 'invalid-damage')
+            throw 'Invalid damage attribution build was accepted.'
+        } catch {
+            if ($_.Exception.Message -notlike '*requires beta4 combat export*') { throw }
+        }
+    }
+    $revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
     [IO.File]::WriteAllText((Join-Path $source 'tools/build.c'), 'changed after snapshot')
     try {
         & $builder -Source $source -Port h1arena -BuildDirectory (Join-Path $root 'changed-snapshot')
