@@ -43,7 +43,7 @@ impl<W: Write> Write for Bounded<W> {
 // are sampled at 30 Hz; metadata counters are observed at 120 Hz before retiming.
 pub struct Export {
     revision: u8,
-    output: Bounded<zstd::stream::write::Encoder<'static, BufWriter<File>>>,
+    output: Bounded<BufWriter<zstd::stream::write::Encoder<'static, BufWriter<File>>>>,
     pending: Option<Value>,
     final_players: Vec<Value>,
     samples: usize,
@@ -87,7 +87,10 @@ impl Export {
     pub fn with_revision(path: &Path, revision: u8) -> Result<Self, Box<dyn Error>> {
         let file = File::options().write(true).create_new(true).open(path)?;
         let mut output = Bounded {
-            inner: zstd::stream::write::Encoder::new(BufWriter::new(file), 3)?,
+            inner: BufWriter::with_capacity(
+                64 * 1024,
+                zstd::stream::write::Encoder::new(BufWriter::new(file), 3)?,
+            ),
             bytes: 0,
         };
         output.write_all(b"{\"ticks\":[")?;
@@ -261,7 +264,8 @@ impl Export {
         }
         self.output.write_all(b"}")?;
         let raw_bytes = self.output.bytes;
-        let mut file = self.output.inner.finish()?;
+        let mut file = self.output.inner.into_inner()
+            .map_err(|error| error.into_error())?.finish()?;
         file.flush()?;
         let bytes = file.get_ref().metadata()?.len();
         if bytes > 64 * 1024 * 1024 {
@@ -279,6 +283,36 @@ impl Export {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn buffered_compression_matches_fragmented_writes_and_retains_raw_limit() {
+        let mut reference = Bounded {
+            inner: zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap(),
+            bytes: 0,
+        };
+        let mut buffered = Bounded {
+            inner: BufWriter::with_capacity(
+                64 * 1024,
+                zstd::stream::write::Encoder::new(Vec::new(), 3).unwrap(),
+            ),
+            bytes: 0,
+        };
+        for ordinal in 0..4096 {
+            let value = json!({"tick":ordinal,"players":[{"name":"Player",
+                "x":-0.0,"y":ordinal as f64 / 120.0,"kills":1}],"absent":null});
+            serde_json::to_writer(&mut reference, &value).unwrap();
+            serde_json::to_writer(&mut buffered, &value).unwrap();
+        }
+        assert!(buffered.bytes > 128 * 1024);
+        assert_eq!(buffered.bytes, reference.bytes);
+        let actual = buffered.inner.into_inner()
+            .map_err(|error| error.into_error()).unwrap().finish().unwrap();
+        assert_eq!(actual, reference.inner.finish().unwrap());
+        let mut limited = Bounded { inner: BufWriter::new(Vec::new()), bytes: MAX_RAW_BYTES - 1 };
+        assert!(limited.write_all(b"xx").is_err());
+        assert_eq!(limited.bytes, MAX_RAW_BYTES - 1);
+        assert!(limited.inner.buffer().is_empty());
+    }
 
     #[test]
     fn partial_tail_keeps_final_scores_without_adding_occupancy_or_fake_host_facts() {

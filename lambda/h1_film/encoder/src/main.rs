@@ -467,7 +467,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     if request.verify_incremental_state && !incremental {
         return Err("full-source verification requires incremental state".into());
     }
-    #[cfg(all(feature = "native-cached-spawns", not(windows)))]
+    #[cfg(all(feature = "cached-spawns", not(windows)))]
     { source.cache_spawns = incremental && high.supports_cached_spawns(); }
     while let Some(mut tick) = if incremental {
         source.next_incremental_with_poses(spare, typed_poses)?

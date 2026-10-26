@@ -62,7 +62,9 @@ function stableCallback(value, report) {
   ]) {
     if (metrics) delete metrics[field];
   }
-  if (result.spatial_artifact?.metadata) delete result.spatial_artifact.metadata.process_peak_rss_kib;
+  if (result.spatial_artifact?.metadata) {
+    for (const field of ['process_peak_rss_kib', 'parse_duration_ms']) delete result.spatial_artifact.metadata[field];
+  }
   if (changedExporter) {
     for (const key of ['wasm_sha256', 'glue_sha256', 'exporter_revision']) {
       assert.equal(result.h1film[key], key === 'exporter_revision' ? report[key] : report.provenance[key]);

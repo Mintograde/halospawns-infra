@@ -6,9 +6,9 @@ param(
     [string]$CandidateEncoder,
     [string]$CandidateEngineRoot,
     [string]$NativeModule,
-    [ValidateSet(1, 2, 3)][int]$AnalyticsRevision = 3,
+    [ValidateSet(1, 2, 3, 4)][int]$AnalyticsRevision = 3,
     [ValidateRange(1, 256)][int]$ExporterRevision = 1,
-    [ValidateSet(1, 2, 3, 4)][int]$ViewerRevision = 2,
+    [ValidateSet(1, 2, 3, 4, 5)][int]$ViewerRevision = 2,
     [switch]$GenericState,
     [switch]$GenericPoses,
     [switch]$VerifyIncrementalState

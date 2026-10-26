@@ -468,8 +468,14 @@ mod tests {
 
     #[test]
     fn cached_spawns_match_generic_bytes_across_changes_absence_and_chunk_boundaries() {
-        let projection = Projection::load_revision(4).unwrap();
-        let validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        for revision in [4, 5] {
+            cached_spawn_bytes_for_revision(revision);
+        }
+    }
+
+    fn cached_spawn_bytes_for_revision(revision: u32) {
+        let projection = Projection::load_revision(revision).unwrap();
+        let validator = crate::fast_schema::Validator::for_revision(revision).unwrap();
         let point = serde_json::json!({"spawn_index":0,"x":-0.0,"y":1.0,"z":2.0,"facing":0.0,"team":0,"gametypes":[1,2,0,0]});
         let ticks: Vec<_> = (0..KEYFRAME_INTERVAL + 17).map(|frame| {
             let mut tick = serde_json::json!({"current_tick":frame,"players":[],"objects":[],"spawns":[point.clone()]});
@@ -517,8 +523,14 @@ mod tests {
 
     #[test]
     fn cached_spawns_validate_schema_source_safety_and_decoder_identity() {
-        let projection = Projection::load_revision(4).unwrap();
-        let validator = crate::fast_schema::Validator::for_revision(4).unwrap();
+        for revision in [4, 5] {
+            cached_spawn_safety_for_revision(revision);
+        }
+    }
+
+    fn cached_spawn_safety_for_revision(revision: u32) {
+        let projection = Projection::load_revision(revision).unwrap();
+        let validator = crate::fast_schema::Validator::for_revision(revision).unwrap();
         let point = serde_json::json!({"x":-0.0,"y":1.0,"z":2.0});
         let mut invalid = point.clone();
         invalid["x"] = Value::from("bad");

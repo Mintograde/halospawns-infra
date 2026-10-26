@@ -1,0 +1,811 @@
+{
+  "schema": "halospawns.h1WasmPerformanceAttempt.v1",
+  "measured_date_utc": "2026-10-26",
+  "scope": "Offline production WASM converter including staging, hash checks and inline artifact verification; excludes Python finalization, S3/API and Lambda startup.",
+  "deployment_status": "local_only",
+  "sampling": {
+    "timed_pairs_per_film": 3,
+    "warmups_per_backend": 1,
+    "order": "alternating",
+    "concurrency": "sequential",
+    "memory_mib": 3008,
+    "networking": "disabled",
+    "container_root": "read_only",
+    "uid": 1000
+  },
+  "baseline_image": "halospawns-h1-film:20261025-r3",
+  "baseline_image_id": "sha256:5b7b709edc96cf571acbf485bfadc7289ea4c21a8490504f8d6a02e8ba1cc4ea",
+  "runtime_sha256": "8bf12820b249264bdf070490ea4320ae523f7b26604cc22b7a78793f116f23b1",
+  "configuration": {
+    "exporter-revision": "10",
+    "analytics-revision": "4",
+    "viewer-revision": "5"
+  },
+  "baseline_encoder_sha256": "7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e",
+  "source_sha256": "d32067cc2565ec6d80eb95908ac663d40b960522e8f8dd0ab8bb0a783033ed96",
+  "toolchain_image_id": "sha256:aee668ddbc268852d166c26cb6307da57c236484fcf1513dd81226a2d8b91254",
+  "portable": {
+    "image": "halospawns-h1-film:20261026-r1",
+    "image_id": "sha256:67af5dec3caf1b19569730a185d300fb9e163aca81b168c25beb5388c01796d7",
+    "encoder_sha256": "2646c0364aff6ea38ce1fed303ae9fa76d59160a140050a7c311d8a86af223db",
+    "rustflags": "-C target-feature=+crt-static -C target-cpu=x86-64"
+  },
+  "pgo": {
+    "image": "halospawns-h1-film:20261026-r2",
+    "image_id": "sha256:a25f4198e84d20d0a43cd71fd5f7395dbeb0295c01650440b13038b450ecddcb",
+    "encoder_sha256": "955095e0bdc8689201a1a48b8e229c021af129aac9244a59877921f972cc8167",
+    "rustflags": "-C target-feature=+crt-static -C target-cpu=haswell -C profile-use=/out/encoder.profdata",
+    "profile_sha256": "4b32cfa1184dc4c4af44e0e7a4e499fb8c98af9cf1f8a4e4172e47528713928a",
+    "training_films": [
+      {
+        "name": "Birdhouse",
+        "ticks": 56596
+      },
+      {
+        "name": "Dread bots",
+        "ticks": 77354
+      }
+    ]
+  },
+  "films": [
+    {
+      "name": "dread",
+      "ticks": 61934,
+      "hash_checks": 517,
+      "provenance": {
+        "film_sha256": "bf83f4b237919cffa10bae298ad4c31557551f15ff0a4b2e7b6ad75c8f75797b",
+        "map_sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730",
+        "engine_source": {
+          "project": "h1arena",
+          "git_commit": "e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad",
+          "git_date": "2026-10-20",
+          "algorithm": "halospawns.sourceTreeSha256.v1",
+          "files": 12473,
+          "sha256": "886e74eeff42729d2bf549d757dd42063648d4ce0ff09b1b3d680b321a8d9c15"
+        },
+        "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54",
+        "wasm_sha256": "fb0fce8a771f2efb03dee0ad28e1c70eea4099b3ed5f26181bbda7447f67e362",
+        "node": "v24.21.0"
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "2e7ad32e58ec13684edde0c65b9e8161d052d02badcea41b846c935528636a39",
+          "bytes": 2083904
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "d24afff604aea1860ce03a0fe85e5b22077664cfa4d30b731a949c55b61cee0a",
+          "bytes": 29280886
+        }
+      }
+    },
+    {
+      "name": "weld",
+      "ticks": 88043,
+      "hash_checks": 734,
+      "provenance": {
+        "film_sha256": "b37e4c8dfe91aa0b3e8c9933833dace46892d7fc180e6415a6134d0e8df5e3a6",
+        "map_sha256": "52cd8ed86d13e93614533f21819da8b4e3efb81cec3dd0863884f74cd31f4925",
+        "engine_source": {
+          "project": "h1arena",
+          "git_commit": "e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad",
+          "git_date": "2026-10-20",
+          "algorithm": "halospawns.sourceTreeSha256.v1",
+          "files": 12473,
+          "sha256": "886e74eeff42729d2bf549d757dd42063648d4ce0ff09b1b3d680b321a8d9c15"
+        },
+        "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54",
+        "wasm_sha256": "fb0fce8a771f2efb03dee0ad28e1c70eea4099b3ed5f26181bbda7447f67e362",
+        "node": "v24.21.0"
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "3598cbd7fdd09c74ed2e9b477ce154e745b330c024c14c6a81c150a2e94758ca",
+          "bytes": 1936376
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "7900ac7d6659601f624ce8442da77d6a1aba4e3e23bc2a84a85bf79d66b171cf",
+          "bytes": 37755783
+        }
+      }
+    },
+    {
+      "name": "carousel",
+      "ticks": 101019,
+      "hash_checks": 842,
+      "provenance": {
+        "film_sha256": "b3aec2277b04dd5ce2c32c99e6ca8858669d3e8aee50d1f98cb3bf747a016c8d",
+        "map_sha256": "ad0ff4008fab19b12421136653fdf801a6e0635abd58e3051b015221bbdab5f4",
+        "engine_source": {
+          "project": "h1arena",
+          "git_commit": "e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad",
+          "git_date": "2026-10-20",
+          "algorithm": "halospawns.sourceTreeSha256.v1",
+          "files": 12473,
+          "sha256": "886e74eeff42729d2bf549d757dd42063648d4ce0ff09b1b3d680b321a8d9c15"
+        },
+        "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54",
+        "wasm_sha256": "fb0fce8a771f2efb03dee0ad28e1c70eea4099b3ed5f26181bbda7447f67e362",
+        "node": "v24.21.0"
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "043d207385e1813fdd6c0556ba0d00c5c497ff00f6a4906973af9ed37f25c74f",
+          "bytes": 2507454
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "2a664b112f0694a22e0c062566a1f27fe55801c6c265ec0ffdc842b848a5afc5",
+          "bytes": 50260763
+        }
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "name": "portable",
+      "cpus": 2,
+      "encoder_sha256": "2646c0364aff6ea38ce1fed303ae9fa76d59160a140050a7c311d8a86af223db",
+      "full_source_proof": false,
+      "baseline_sum_median_seconds": 62.93265851799998,
+      "candidate_sum_median_seconds": 62.64207929599998,
+      "reduction_percent": 0.4617304096837027,
+      "rows": [
+        {
+          "name": "final-dread",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 18.354022343999997,
+                "minimum": 18.345623615000004,
+                "maximum": 18.577193427999998
+              },
+              "candidate": {
+                "median": 18.448408729000004,
+                "minimum": 18.335755050000007,
+                "maximum": 19.046668918
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 18.730591073000003,
+                "minimum": 18.708448073000007,
+                "maximum": 18.946942170000025
+              },
+              "candidate": {
+                "median": 18.812846231999995,
+                "minimum": 18.69807287399999,
+                "maximum": 19.520143732999998
+              }
+            }
+          },
+          "reduction_percent": -0.4391487630017288,
+          "paired_total_reduction_percent": -1.1440459276300663,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 19.046668918,
+              "total_seconds": 19.520143732999998
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 18.345623615000004,
+              "total_seconds": 18.730591073000003
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 18.354022343999997,
+              "total_seconds": 18.708448073000007
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 18.448408729000004,
+              "total_seconds": 18.812846231999995
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 18.335755050000007,
+              "total_seconds": 18.69807287399999
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 18.577193427999998,
+              "total_seconds": 18.946942170000025
+            }
+          ]
+        },
+        {
+          "name": "final-weld",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 15.903017242999995,
+                "minimum": 15.843378225000007,
+                "maximum": 16.552771833999984
+              },
+              "candidate": {
+                "median": 16.434034320000006,
+                "minimum": 16.381771973000003,
+                "maximum": 17.621318904
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 16.460534830000004,
+                "minimum": 16.429479624,
+                "maximum": 17.146454981
+              },
+              "candidate": {
+                "median": 17.037737759999988,
+                "minimum": 16.969275264999997,
+                "maximum": 18.236731346
+              }
+            }
+          },
+          "reduction_percent": -3.5065867297823683,
+          "paired_total_reduction_percent": -4.411332296071269,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 16.381771973000003,
+              "total_seconds": 16.969275264999997
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 15.903017242999995,
+              "total_seconds": 16.460534830000004
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 15.843378225000007,
+              "total_seconds": 16.429479624
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 16.434034320000006,
+              "total_seconds": 17.037737759999988
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 17.621318904,
+              "total_seconds": 18.236731346
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 16.552771833999984,
+              "total_seconds": 17.146454981
+            }
+          ]
+        },
+        {
+          "name": "final-carousel",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 27.135109467000003,
+                "minimum": 26.146787127999996,
+                "maximum": 27.25952948099999
+              },
+              "candidate": {
+                "median": 26.188296261,
+                "minimum": 26.123755103999983,
+                "maximum": 26.32379616299999
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 27.741532614999976,
+                "minimum": 26.705574928999994,
+                "maximum": 27.82619892099999
+              },
+              "candidate": {
+                "median": 26.791495303999998,
+                "minimum": 26.684695015000006,
+                "maximum": 26.975069670999975
+              }
+            }
+          },
+          "reduction_percent": 3.4246028299326436,
+          "paired_total_reduction_percent": 2.214626533546571,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 26.188296261,
+              "total_seconds": 26.791495303999998
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 26.146787127999996,
+              "total_seconds": 26.705574928999994
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 27.25952948099999,
+              "total_seconds": 27.82619892099999
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 26.123755103999983,
+              "total_seconds": 26.684695015000006
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 26.32379616299999,
+              "total_seconds": 26.975069670999975
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 27.135109467000003,
+              "total_seconds": 27.741532614999976
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pgo",
+      "cpus": 2,
+      "encoder_sha256": "955095e0bdc8689201a1a48b8e229c021af129aac9244a59877921f972cc8167",
+      "full_source_proof": true,
+      "baseline_sum_median_seconds": 63.786432275999985,
+      "candidate_sum_median_seconds": 63.37732281399999,
+      "reduction_percent": 0.6413737959662047,
+      "rows": [
+        {
+          "name": "final-pgo-dread",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 19.140188821000002,
+                "minimum": 18.651720166,
+                "maximum": 20.34119892900002
+              },
+              "candidate": {
+                "median": 18.025438802999997,
+                "minimum": 17.070825169999996,
+                "maximum": 18.281715287
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 19.50929261199999,
+                "minimum": 19.018793938999995,
+                "maximum": 20.73542305699999
+              },
+              "candidate": {
+                "median": 18.390659678999995,
+                "minimum": 17.440272939999996,
+                "maximum": 18.656574315000004
+              }
+            }
+          },
+          "reduction_percent": 5.733846712165935,
+          "paired_total_reduction_percent": 8.058926488814077,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 18.025438802999997,
+              "total_seconds": 18.390659678999995
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 19.140188821000002,
+              "total_seconds": 19.50929261199999
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 18.651720166,
+              "total_seconds": 19.018793938999995
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 17.070825169999996,
+              "total_seconds": 17.440272939999996
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 18.281715287,
+              "total_seconds": 18.656574315000004
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 20.34119892900002,
+              "total_seconds": 20.73542305699999
+            }
+          ]
+        },
+        {
+          "name": "final-pgo-weld",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 16.153782409999984,
+                "minimum": 16.044159041000007,
+                "maximum": 16.256426359000006
+              },
+              "candidate": {
+                "median": 16.451296183,
+                "minimum": 16.397167383,
+                "maximum": 16.764672252999997
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 16.765492106000004,
+                "minimum": 16.614452819000014,
+                "maximum": 17.001676809999996
+              },
+              "candidate": {
+                "median": 17.255884632999994,
+                "minimum": 16.965796506,
+                "maximum": 17.324594563999998
+              }
+            }
+          },
+          "reduction_percent": -2.925011230803598,
+          "paired_total_reduction_percent": -2.311664309112338,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 16.397167383,
+              "total_seconds": 16.965796506
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 16.256426359000006,
+              "total_seconds": 17.001676809999996
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 16.044159041000007,
+              "total_seconds": 16.614452819000014
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 16.764672252999997,
+              "total_seconds": 17.324594563999998
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 16.451296183,
+              "total_seconds": 17.255884632999994
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 16.153782409999984,
+              "total_seconds": 16.765492106000004
+            }
+          ]
+        },
+        {
+          "name": "final-pgo-carousel",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 26.918002569999995,
+                "minimum": 26.619994115000008,
+                "maximum": 27.065324141999998
+              },
+              "candidate": {
+                "median": 26.959719348999993,
+                "minimum": 26.395999291,
+                "maximum": 27.95339312600001
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 27.511647557999996,
+                "minimum": 27.194951090999997,
+                "maximum": 27.824326486000004
+              },
+              "candidate": {
+                "median": 27.730778502,
+                "minimum": 27.007034837,
+                "maximum": 28.581790052000027
+              }
+            }
+          },
+          "reduction_percent": -0.7965024396958897,
+          "paired_total_reduction_percent": -0.9556154310762288,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 26.395999291,
+              "total_seconds": 27.007034837
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 26.918002569999995,
+              "total_seconds": 27.511647557999996
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 27.065324141999998,
+              "total_seconds": 27.824326486000004
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 27.95339312600001,
+              "total_seconds": 28.581790052000027
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 26.959719348999993,
+              "total_seconds": 27.730778502
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 26.619994115000008,
+              "total_seconds": 27.194951090999997
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pgo-quota",
+      "cpus": 1.7,
+      "encoder_sha256": "955095e0bdc8689201a1a48b8e229c021af129aac9244a59877921f972cc8167",
+      "full_source_proof": false,
+      "baseline_sum_median_seconds": 73.95771829099999,
+      "candidate_sum_median_seconds": 70.912218445,
+      "reduction_percent": 4.117893191373112,
+      "rows": [
+        {
+          "name": "quota-pgo-dread",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 22.033008386000002,
+                "minimum": 21.825007203999995,
+                "maximum": 22.588978061000002
+              },
+              "candidate": {
+                "median": 20.198013765999995,
+                "minimum": 20.056225570999988,
+                "maximum": 20.227206151999997
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 22.401411255999992,
+                "minimum": 22.188906324000005,
+                "maximum": 22.956494345
+              },
+              "candidate": {
+                "median": 20.570569436,
+                "minimum": 20.423196029,
+                "maximum": 20.588732720999992
+              }
+            }
+          },
+          "reduction_percent": 8.172886069888207,
+          "paired_total_reduction_percent": 8.829896732391196,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 20.198013765999995,
+              "total_seconds": 20.570569436
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 21.825007203999995,
+              "total_seconds": 22.188906324000005
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 22.588978061000002,
+              "total_seconds": 22.956494345
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 20.227206151999997,
+              "total_seconds": 20.588732720999992
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 20.056225570999988,
+              "total_seconds": 20.423196029
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 22.033008386000002,
+              "total_seconds": 22.401411255999992
+            }
+          ]
+        },
+        {
+          "name": "quota-pgo-weld",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 18.67346839600001,
+                "minimum": 18.469036198,
+                "maximum": 18.852924408
+              },
+              "candidate": {
+                "median": 18.87027928100001,
+                "minimum": 18.58167916,
+                "maximum": 18.916849593000006
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 19.276286984000006,
+                "minimum": 19.106495865000003,
+                "maximum": 19.667291909000006
+              },
+              "candidate": {
+                "median": 19.472255523999994,
+                "minimum": 19.130568001000007,
+                "maximum": 19.484741372000006
+              }
+            }
+          },
+          "reduction_percent": -1.016630122609441,
+          "paired_total_reduction_percent": -0.06458241295341782,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 18.916849593000006,
+              "total_seconds": 19.484741372000006
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 18.852924408,
+              "total_seconds": 19.667291909000006
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 18.469036198,
+              "total_seconds": 19.106495865000003
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 18.58167916,
+              "total_seconds": 19.130568001000007
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 18.87027928100001,
+              "total_seconds": 19.472255523999994
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 18.67346839600001,
+              "total_seconds": 19.276286984000006
+            }
+          ]
+        },
+        {
+          "name": "quota-pgo-carousel",
+          "measurements": {
+            "pipeline_seconds": {
+              "baseline": {
+                "median": 31.669337252,
+                "minimum": 30.19904693699999,
+                "maximum": 31.839686052000005
+              },
+              "candidate": {
+                "median": 30.241441829999996,
+                "minimum": 29.296810843999992,
+                "maximum": 30.413449628000002
+              }
+            },
+            "total_seconds": {
+              "baseline": {
+                "median": 32.280020051,
+                "minimum": 30.89512324800002,
+                "maximum": 32.435384846
+              },
+              "candidate": {
+                "median": 30.869393485,
+                "minimum": 29.89485326599999,
+                "maximum": 30.99868212099999
+              }
+            }
+          },
+          "reduction_percent": 4.369968060030072,
+          "paired_total_reduction_percent": 4.024242254121734,
+          "runs": [
+            {
+              "iteration": 1,
+              "kind": "candidate",
+              "pipeline_seconds": 30.241441829999996,
+              "total_seconds": 30.869393485
+            },
+            {
+              "iteration": 1,
+              "kind": "baseline",
+              "pipeline_seconds": 31.839686052000005,
+              "total_seconds": 32.435384846
+            },
+            {
+              "iteration": 2,
+              "kind": "baseline",
+              "pipeline_seconds": 30.19904693699999,
+              "total_seconds": 30.89512324800002
+            },
+            {
+              "iteration": 2,
+              "kind": "candidate",
+              "pipeline_seconds": 30.413449628000002,
+              "total_seconds": 30.99868212099999
+            },
+            {
+              "iteration": 3,
+              "kind": "candidate",
+              "pipeline_seconds": 29.296810843999992,
+              "total_seconds": 29.89485326599999
+            },
+            {
+              "iteration": 3,
+              "kind": "baseline",
+              "pipeline_seconds": 31.669337252,
+              "total_seconds": 32.280020051
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "real_films": 6,
+    "source_ticks": 455528,
+    "unique_simulation_hashes_per_backend": 3799,
+    "full_source_proof_ticks": 321578,
+    "callback_modes_compared_per_backend": 18,
+    "artifacts": "byte_identical",
+    "callbacks": "identical_except_operational_metrics",
+    "retained_beta3": "exporter_5_analytics_4_viewer_4",
+    "aws_access": false,
+    "api_access": false
+  },
+  "evidence_directory": "L:/tmp/halospawns-h1-wasm-perf-20261026"
+}

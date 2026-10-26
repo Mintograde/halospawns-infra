@@ -5,8 +5,10 @@ edition = "2024"
 publish = false
 
 [features]
+default = ["cached-spawns"]
+cached-spawns = []
 native-pipeline = []
-native-cached-spawns = []
+native-cached-spawns = ["cached-spawns"]
 
 [dependencies]
 h1-pose-codec = { path = "../pose_codec" }
