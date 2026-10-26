@@ -1,0 +1,148 @@
+{
+  "schema": "halospawns.h1Beta4LinuxBenchmarkSummary.v1",
+  "cpus": 2,
+  "memory_mib": 3008,
+  "image_id": "sha256:5b7b709edc96cf571acbf485bfadc7289ea4c21a8490504f8d6a02e8ba1cc4ea",
+  "native_sha256": "c7630d03308548c314374f46c3acc1ba46317efbe170227003f4f311a6b201b1",
+  "encoder_sha256": "7335dd63d12605c944e618c844b4688aa148a5292e03b904cf152b57182bc21e",
+  "candidate_encoder_sha256": "b4818a295fd7d6c59e017a25efa86c9c47b84b6868560ee867137740df4e8a92",
+  "scope": "Offline simulation, export, encoding and analytics; excludes staging, Lambda startup, Python finalization and S3/API.",
+  "rows": [
+    {
+      "name": "final-dread",
+      "ticks": 61934,
+      "hash_checks": 517,
+      "film_sha256": "bf83f4b237919cffa10bae298ad4c31557551f15ff0a4b2e7b6ad75c8f75797b",
+      "map_sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730",
+      "native_seconds": {
+        "median": 13.69181042499999,
+        "min": 13.546176712000015,
+        "max": 13.70299321
+      },
+      "wasm_seconds": {
+        "median": 19.754391726,
+        "min": 19.40114783900001,
+        "max": 19.84523049799999
+      },
+      "reduction_percent": 30.689789820360126,
+      "half_time_goal_met": false,
+      "native_engine_rss_mib": {
+        "median": 35.1640625,
+        "min": 35.16015625,
+        "max": 35.1640625
+      },
+      "wasm_engine_rss_mib": {
+        "median": 189.2265625,
+        "min": 187.6328125,
+        "max": 209.4453125
+      },
+      "native_encoder_rss_mib": {
+        "median": 48.359375,
+        "min": 47.984375,
+        "max": 49.37109375
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "2e7ad32e58ec13684edde0c65b9e8161d052d02badcea41b846c935528636a39",
+          "bytes": 2083904
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "d24afff604aea1860ce03a0fe85e5b22077664cfa4d30b731a949c55b61cee0a",
+          "bytes": 29280886
+        }
+      }
+    },
+    {
+      "name": "final-weld",
+      "ticks": 88043,
+      "hash_checks": 734,
+      "film_sha256": "b37e4c8dfe91aa0b3e8c9933833dace46892d7fc180e6415a6134d0e8df5e3a6",
+      "map_sha256": "52cd8ed86d13e93614533f21819da8b4e3efb81cec3dd0863884f74cd31f4925",
+      "native_seconds": {
+        "median": 12.36021618199999,
+        "min": 12.315349168000001,
+        "max": 12.759056514999996
+      },
+      "wasm_seconds": {
+        "median": 16.825775947999993,
+        "min": 16.431134208000003,
+        "max": 17.434449614
+      },
+      "reduction_percent": 26.53999304282193,
+      "half_time_goal_met": false,
+      "native_engine_rss_mib": {
+        "median": 43.8828125,
+        "min": 41.890625,
+        "max": 43.8828125
+      },
+      "wasm_engine_rss_mib": {
+        "median": 196.421875,
+        "min": 194.34375,
+        "max": 199.30859375
+      },
+      "native_encoder_rss_mib": {
+        "median": 32.9921875,
+        "min": 32.4140625,
+        "max": 33.8828125
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "3598cbd7fdd09c74ed2e9b477ce154e745b330c024c14c6a81c150a2e94758ca",
+          "bytes": 1936376
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "7900ac7d6659601f624ce8442da77d6a1aba4e3e23bc2a84a85bf79d66b171cf",
+          "bytes": 37755783
+        }
+      }
+    },
+    {
+      "name": "final-carousel",
+      "ticks": 101019,
+      "hash_checks": 842,
+      "film_sha256": "b3aec2277b04dd5ce2c32c99e6ca8858669d3e8aee50d1f98cb3bf747a016c8d",
+      "map_sha256": "ad0ff4008fab19b12421136653fdf801a6e0635abd58e3051b015221bbdab5f4",
+      "native_seconds": {
+        "median": 23.027301237999986,
+        "min": 22.343972335,
+        "max": 24.08594840200001
+      },
+      "wasm_seconds": {
+        "median": 27.147592974,
+        "min": 26.711320534,
+        "max": 27.596478965000017
+      },
+      "reduction_percent": 15.177374067550408,
+      "half_time_goal_met": false,
+      "native_engine_rss_mib": {
+        "median": 40.42578125,
+        "min": 37,
+        "max": 40.4296875
+      },
+      "wasm_engine_rss_mib": {
+        "median": 191.4375,
+        "min": 188.9140625,
+        "max": 210.70703125
+      },
+      "native_encoder_rss_mib": {
+        "median": 47.84765625,
+        "min": 47.56640625,
+        "max": 48.62109375
+      },
+      "products": {
+        "analytics.30hz.json.zst": {
+          "sha256": "043d207385e1813fdd6c0556ba0d00c5c497ff00f6a4906973af9ed37f25c74f",
+          "bytes": 2507454
+        },
+        "replay.120hz.hsrdc": {
+          "sha256": "2a664b112f0694a22e0c062566a1f27fe55801c6c265ec0ffdc842b848a5afc5",
+          "bytes": 50260763
+        }
+      }
+    }
+  ],
+  "native_sum_median_seconds": 49.079327844999966,
+  "wasm_sum_median_seconds": 63.72776064799999,
+  "reduction_percent": 22.985952517475994,
+  "half_time_goal_met": false
+}

@@ -3,21 +3,27 @@ project(h1_linux_candidate C)
 set(LINUX_SERVER_NET ON CACHE BOOL "Retain offline network film handlers")
 set(LINUX_SERVER_SRC "${H1_SOURCE}" CACHE PATH "Archived upstream source")
 add_subdirectory("${H1_SOURCE}/linux_server" server)
+set(H1_SEQUENTIAL_SOURCE "${H1_GENERATED}/film_sequential.c")
+file(READ "${H1_SOURCE}/source-revision.json" source_revision)
+string(JSON source_commit GET "${source_revision}" git_commit)
+if(source_commit STREQUAL "e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/beta4.cmake")
+endif()
 get_target_property(host_sources blam_server SOURCES)
 list(FILTER host_sources EXCLUDE REGEX "(^|/)blampc_(film|pad_claim)\\.c$")
 set_property(TARGET blam_server PROPERTY SOURCES "${host_sources}")
-target_sources(blam_server PRIVATE "${H1_GENERATED}/film_sequential.c" "${H1_GENERATED}/export.c" "${H1_GENERATED}/candidate.c" "${CMAKE_CURRENT_SOURCE_DIR}/platform.c")
+target_sources(blam_server PRIVATE "${H1_SEQUENTIAL_SOURCE}" "${H1_GENERATED}/export.c" "${H1_GENERATED}/candidate.c" "${CMAKE_CURRENT_SOURCE_DIR}/platform.c")
 target_sources(blam_server PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/headless-extra.c")
-target_include_directories(blam_server PRIVATE "${H1_SOURCE}/engine" "${H1_GENERATED}" "${CMAKE_CURRENT_SOURCE_DIR}/include")
-foreach(source IN ITEMS film_sequential.c export.c)
-    set_property(SOURCE "${H1_GENERATED}/${source}" TARGET_DIRECTORY blam_server APPEND PROPERTY COMPILE_OPTIONS
+target_include_directories(blam_server PRIVATE "${H1_SOURCE}/engine" "${H1_GENERATED}" "${CMAKE_CURRENT_SOURCE_DIR}/include" "/engines/beta3")
+foreach(source IN ITEMS "${H1_SEQUENTIAL_SOURCE}" "${H1_GENERATED}/export.c")
+    set_property(SOURCE "${source}" TARGET_DIRECTORY blam_server APPEND PROPERTY COMPILE_OPTIONS
         -include linux_server_prelude.h -include blampc_prelude.h)
 endforeach()
 set_property(SOURCE "${H1_GENERATED}/export.c" TARGET_DIRECTORY blam_server APPEND PROPERTY COMPILE_OPTIONS -fbuiltin)
 set_property(SOURCE "${H1_GENERATED}/export.c" TARGET_DIRECTORY blam_server APPEND PROPERTY COMPILE_DEFINITIONS WC_ERR_INVALID_CHARS=0x80 sprintf_s=snprintf)
 set_property(SOURCE "${H1_GENERATED}/export.c" "${H1_SOURCE}/host/blampc_net.c" TARGET_DIRECTORY blam_server
     APPEND PROPERTY COMPILE_DEFINITIONS _POSIX_C_SOURCE=200809L)
-set_property(SOURCE "${H1_GENERATED}/film_sequential.c" "${H1_SOURCE}/host/blampc_net_rec.c" "${H1_SOURCE}/host/blampc_net_trace.c" "${H1_SOURCE}/host/blampc_picture_probe.c" TARGET_DIRECTORY blam_server
+set_property(SOURCE "${H1_SEQUENTIAL_SOURCE}" "${H1_SOURCE}/host/blampc_net_rec.c" "${H1_SOURCE}/host/blampc_net_trace.c" "${H1_SOURCE}/host/blampc_picture_probe.c" TARGET_DIRECTORY blam_server
     APPEND PROPERTY COMPILE_OPTIONS -include candidate-platform.h)
 set_property(SOURCE "${H1_SOURCE}/host/main.c" TARGET_DIRECTORY blam_server APPEND PROPERTY COMPILE_DEFINITIONS
     blampc_state_dump=hs_export_tick blampc_spawn_odds_tick=hs_unused_spawn_odds_tick)

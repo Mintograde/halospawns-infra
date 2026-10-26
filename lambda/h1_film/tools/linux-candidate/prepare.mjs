@@ -35,10 +35,10 @@ film = replaceOnce(film, 'if (g_kf_failed || !film_keyframe_open())', 'if (1)');
 film = replaceOnce(film, '"maps\\\\%s.map"', '"maps/%s.map"');
 await writeFile(join(output, 'film_sequential.c'), film);
 await writeFile(join(output, 'candidate.c'),
-  `const char *blampc_menu_build_label(void) { return "UNIVERSAL Only - ${revision.git_date} - ${revision.git_commit.slice(0, 8)}"; }\nvoid hs_unused_spawn_odds_tick(void) { }\n`);
+  `const char *blampc_menu_build_label(void) { return "${revision.git_commit === 'e78e4daa4b6d6b3e9ca290e3ebfe7a993ed558ad' ? `${revision.git_date} - BETA 4` : `UNIVERSAL Only - ${revision.git_date}`} - ${revision.git_commit.slice(0, 8)}"; }\nvoid hs_unused_spawn_odds_tick(void) { }\n`);
 await writeFile(join(output, 'inputs.json'), JSON.stringify({
   schema: 'halospawns.h1LinuxCandidateInputs.v1', source: { ...revision, native_tree: nativeSource },
-  exporter: await fingerprintTree(shared, ['export.c', 'stream.h']),
-  integration: await fingerprintTree(fileURLToPath(new URL('./', import.meta.url)), ['CMakeLists.txt', 'prepare.mjs', 'build.ps1', 'trap-stubs.mjs', 'include', 'platform.c', 'headless-extra.c', 'measure.c']),
+  exporter: await fingerprintTree(resolve(shared, '..'), ['beta3', 'beta4']),
+  integration: await fingerprintTree(fileURLToPath(new URL('./', import.meta.url)), ['CMakeLists.txt', 'beta4.cmake', 'prepare.mjs', 'build.ps1', 'trap-stubs.mjs', 'include', 'platform.c', 'headless-extra.c', 'measure.c']),
   excluded_work: ['theater pad cache', 'seek keyframes', 'spawn-odds HUD calculation'],
 }, null, 2) + '\n');

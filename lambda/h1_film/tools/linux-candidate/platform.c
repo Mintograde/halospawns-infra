@@ -14,6 +14,7 @@ int hs_usleep(unsigned int microseconds)
     return nanosleep(&delay, NULL);
 }
 
+#ifndef H1_LINUX_BETA4
 __time64_t _time64(__time64_t *result)
 {
     __time64_t value = (__time64_t)time(NULL);
@@ -32,3 +33,4 @@ int fopen_s(FILE **output, const char *path, const char *mode)
     *output = fopen(path, mode);
     return *output ? 0 : errno;
 }
+#endif

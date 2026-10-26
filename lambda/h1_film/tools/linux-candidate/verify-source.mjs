@@ -9,6 +9,9 @@ const [runArgument, encoderArgument, outputArgument] = process.argv.slice(2);
 assert.ok(runArgument && encoderArgument && outputArgument, 'Supply comparison, encoder and new output paths');
 const run = resolve(runArgument), encoder = resolve(encoderArgument), output = resolve(outputArgument);
 const summary = JSON.parse(await readFile(join(run, 'summary.json'), 'utf8'));
+const beta4 = summary.schema === 'halospawns.h1Beta4LinuxBenchmark.v1';
+const cases = beta4 ? [{ fixture: { name: 'beta4', ticks: summary.envelope.ticks },
+  capture: summary.parity, runs: summary.runs }] : summary.results;
 async function digest(path) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
@@ -17,14 +20,15 @@ async function digest(path) {
 assert.equal(await digest(encoder), summary.candidate_encoder_sha256, 'Verify the measured encoder');
 await mkdir(output);
 const results = [];
-for (const result of summary.results) {
+for (const result of cases) {
   const name = result.fixture.name;
   assert.match(name, /^[a-z0-9-]+$/);
-  const capture = join(run, `${name}-parity-wasm`, 'capture.hsft');
+  const capture = join(run, beta4 ? 'parity-wasm' : `${name}-parity-wasm`, 'capture.hsft');
   assert.equal(await digest(capture), result.capture.find(entry => entry.kind === 'wasm').products.stream.sha256);
   const directory = join(output, name);
   await mkdir(directory);
-  const request = JSON.parse(await readFile(join(run, `${name}-run-1-native`, 'request.json'), 'utf8'));
+  const request = JSON.parse(await readFile(beta4 ? join(run, 'request.json')
+    : join(run, `${name}-run-1-native`, 'request.json'), 'utf8'));
   request.verify_incremental_state = true;
   const requestPath = join(directory, 'request.json');
   await writeFile(requestPath, JSON.stringify(request, null, 2) + '\n', { flag: 'wx' });

@@ -25,6 +25,7 @@ if ($LASTEXITCODE) { throw 'Toolchain image missing.' }
 & docker volume create $volume | Out-Null
 if ($LASTEXITCODE) { throw 'Build volume creation failed.' }
 $mounts = @('--rm', '--network', 'none', '--mount', "type=volume,source=$volume,target=/b",
+    '--mount', "type=bind,source=$((Resolve-Path (Join-Path $PSScriptRoot '../../engines')).Path),target=/engines,readonly",
     '--mount', "type=bind,source=$sourcePath,target=/source,readonly",
     '--mount', "type=bind,source=$PSScriptRoot,target=/integration,readonly",
     '--mount', "type=bind,source=$outputPath,target=/out")
