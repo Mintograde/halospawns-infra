@@ -99,6 +99,7 @@ def main():
     parser.add_argument("--film", required=True, type=Path)
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--release-manifest", type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3, 4), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
     parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5), default=4)
@@ -187,6 +188,18 @@ def main():
             job["conversion"]["engine"] = engine
             binding.update(engine_profile=selected["id"], game_release_key=f"{selected['port']}_local_test")
             job.update(schema="halospawns.h1film_job.v2", analytics_revision=args.analytics_revision)
+            if args.release_manifest:
+                manifest = json.loads(args.release_manifest.read_text())
+                recipe = manifest["defaults"][selected["id"]]
+                assert recipe["exporter_revision"] == args.exporter_revision
+                assert recipe["analytics_revision"] == args.analytics_revision
+                assert recipe["viewer_revision"] == args.viewer_revision
+                job["conversion"]["release"] = {
+                    "release_id": manifest["release_id"], "image_digest": manifest["image_digest"],
+                    "manifest_sha256": hashlib.sha256(json.dumps(
+                        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                    ).encode()).hexdigest(), "policy_revision": 1, "recipe": recipe,
+                }
             return {"data": {"job": copy.deepcopy(job)}}
         assert path in {
             "/v1/ingest/replay-uploads",
@@ -347,6 +360,14 @@ def main():
     assert payload["h1film_settings"]["film_sha256"] == source["sha256"]
     (args.output / "finalization.json").write_text(json.dumps(payload, indent=2))
     (args.output / "job.json").write_text(json.dumps(job, indent=2))
+    failure_status = []
+    with patch.object(cloud, "api", side_effect=lambda method, path, payload: failure_status.append(
+        {"method": method, "path": path, "payload": payload}
+    )):
+        for reason in sorted(cloud.FAILURES):
+            cloud.report_failure(job, cloud.FilmError(reason))
+            cloud.report_failure({**job, "attempt_id": str(uuid.uuid4())}, cloud.FilmError(reason))
+    (args.output / "failure-status.json").write_text(json.dumps(failure_status, indent=2))
     result = {
         "status": "offline_cloud_worker_verified",
         "aws_access": False,

@@ -57,6 +57,7 @@ components:
           enabled: true
           processing_enabled: true
           uploads_enabled: true
+          releases_enabled: true
           # User-authorized dev preview; existing worker ceilings, not measured limits.
           max_size_bytes: 536870912
           max_source_ticks: 432000
@@ -156,7 +157,8 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: 20261025-r3
+          image_tag: 20261027-r1
+          default_release: 20261027-r1
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

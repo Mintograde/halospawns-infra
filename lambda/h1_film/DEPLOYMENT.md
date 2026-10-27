@@ -1,5 +1,131 @@
 # H1 film Lambda integration
 
+## Immutable release defaults deployed (2026-10-27 UTC)
+
+Dev worker **20261027-r1** is installed at immutable ECR digest
+`sha256:49ae52a3cb361b673aaac02c2871409808a21f91cfc5f47591050cdf03f0ae16`
+(405,087,024 compressed bytes). API **live=213** has release resolution enabled.
+The effective default is **20261027-r1**, policy revision **1**. Beta 4 uses
+exporter 10 / analytics 4 / viewer 5; Beta 3 and retained arena use 5 / 4 / 4.
+All three profiles, twelve exporters, maps, old jobs and receipts are retained.
+New completions include the requested release and actual producer image.
+
+Read [RELEASES.md](RELEASES.md) for the normal publish/promote workflow. Once a
+compatible image is installed, changing `h1_film.default_release` and running
+`atmos workflow promote-dev --file h1-film` promotes new initial/full attempts.
+Compatible exporter/profile additions come from the immutable manifest, without
+API hash/default commits or frontend pin updates. New contract/adapter behavior
+still requires compatible readers. Retries and viewer-only rebuilds retain pins;
+policy rollback does not route old attempts to historical shared runtimes.
+
+API-owned migration `20261026010000_h1film_releases.sql` was dry-run checked and
+applied to linked dev. It adds the immutable release catalogue, singleton policy
+and append-only activation audit with RLS and no browser grants. API commits
+`0a456adb5646c2eeed554c0a6fb73b5c02fb9291` and
+`d12255bfab06a2425e3643bc7aa85210f4f221c1` passed normal CI:
+[initial release](https://github.com/Mintograde/halospawns-api/actions/runs/40446489044),
+[scoped-preview policy](https://github.com/Mintograde/halospawns-api/actions/runs/40447554791).
+API configuration bootstrap published 210, CI published 211/212, and final
+release enablement published identical code as 213. Its downloaded ZIP SHA-256
+`7ba1b41da942f6e4be9a376cfdd00c59c5c46a2ebcad5cbc1c5b915bfd92cf21`
+matches AWS's code hash. No CI workflow or GitHub environment variable changed.
+
+Validation:
+
+- Four packaged real films cover every profile: Beta 3 Prisoner, retained arena
+  Dread, Beta 4 Weld and bot Dread. Initial/full/viewer callbacks and immutable
+  receipt retries pass. All twelve success callbacks, every terminal failure
+  reason for initial/manual attempts, and receipt serialization pass against the
+  exact deployed API 213 ZIP and Linux dependencies without manual hash injection.
+- 74 packaged Python worker tests, 31 Node tests, read-only/non-root container
+  checks and live worker registry/engine health pass. The cold-health child
+  timeout is now 60 seconds; the deployed health checks passed.
+- Latest API CI: 1,735 passed / 187 skipped, Rust checks/tests and Ruff pass.
+  Opt-in database/private-product tests are not enabled in CI. Separately, 17
+  relevant PostgreSQL tests passed locally, including concurrent promotion,
+  immutable registration, fresh initial/full resolution, stale previews, rollback
+  and existing batch/job retry pins. A synthetic future exporter 11 is accepted
+  as manifest data without another API registration constant.
+- Frontend: all 756 site tests, `pnpm build:site` and `pnpm build` pass. Tests cover
+  dynamic targets, stale policy rejection and scoped preview/journal fencing.
+  Existing bundle-size warnings remain. Frontend is uncommitted and undeployed
+  for the user's local testing against dev.
+- Publication checkpoint recovery, image-derived manifest equality and guarded
+  artifact ordering passed with AWS writes stubbed; completed-publication resume
+  was also verified against S3 without a rebuild or overwrite.
+
+Only `app-api` and `map-processing` were changed. API bootstrap:
+**2 added / 3 changed / 1 destroyed** (the destruction is replacement of the
+configuration-invocation marker, not a service). Final flag enablement:
+**1 added / 3 changed / 1 destroyed**, again the marker. Worker saved plan:
+**0 added / 1 changed / 0 destroyed**, only its image and digest environment
+value. The workflow rejected an initial verifier assertion before any deployment;
+the checker was corrected to use wire aliases during serialization. All later
+checks passed. A repeated promotion was a worker no-op and kept policy revision 1.
+The focused API and worker postplans are no-op. The final full dev postplan
+reports no changes for all six enabled aggregate components, including no
+pending API version-output refresh. Existing undeclared `asset_delivery_mode`
+warnings remain unchanged.
+
+The API role gained only `lambda:GetFunction` on `halospawns-h1-film-dev`.
+Release commands use direct IAM Lambda invocation; no HTTP control route or
+new credential exists. API processing/uploads/release flags are true, limit 16;
+worker memory 3,008 MiB, timeout 900 seconds, reserved concurrency 5 and batch-one
+event source remain unchanged/enabled. Queue visible/in-flight counts and DLQ
+depth were zero at the final read. API `/health` passes. No AWS/session blocker.
+No upload, live reparse, Weld recovery, queue mutation, frontend deployment or
+prod action was submitted. Infra/frontend changes remain uncommitted.
+
+Exact commands from the infra root (API commands use its sibling directory):
+
+```powershell
+# API migration and CI
+Push-Location ../halospawns-api
+.\scripts\apply-migrations.ps1 -DryRun
+.\scripts\apply-migrations.ps1
+# The two commits above were pushed to main through normal build-and-publish CI.
+Pop-Location
+
+# Immutable image plus private real-film corpus
+.\scripts\publish-h1-film.ps1 -Tag 20261027-r1 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry L:/tmp/halospawns-h1film-hosts-20261025/release-r3/previous-registry.json
+.\scripts\publish-h1-film.ps1 -Tag 20261027-r1 -ResumePublication
+
+# API bootstrap: release flag initially false
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/app-api' plan -no-color '-var-file=dev-app-api.terraform.tfvars.json' '-out=L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-bootstrap.planfile'
+terraform '-chdir=components/terraform/app-api' show -json 'L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-bootstrap.planfile'
+terraform '-chdir=components/terraform/app-api' apply -no-color 'L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-bootstrap.planfile'
+
+# Worker install and policy activation, after CI compatibility checks
+atmos workflow promote-dev --file h1-film
+# Workflow internally runs scripts/plan.ps1 dev map-processing and reviews/applies
+# .build/h1-promotions/20261027-035807-5e497bddf27e443d95d609c49756b0f9/worker.planfile
+
+# Final release flag true
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev
+terraform '-chdir=components/terraform/app-api' plan -no-color '-var-file=dev-app-api.terraform.tfvars.json' '-out=L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-enable.planfile'
+terraform '-chdir=components/terraform/app-api' show -json 'L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-enable.planfile'
+terraform '-chdir=components/terraform/app-api' apply -no-color 'L:/bens_stuff/projects/halospawns-infra/.build/h1-release-api-enable.planfile'
+
+# API 213 callback/health/policy checks, idempotency and postplans
+atmos workflow promote-dev --file h1-film
+.\scripts\promote-h1-film.ps1 dev -CheckOnly
+.\scripts\plan.ps1 dev app-api
+.\scripts\plan.ps1 dev
+```
+
+Final promotion evidence:
+`.build/h1-promotions/20261027-040844-b62960d760774dc7aa50187999643a35/`.
+Archive SHA-256: `ce778f2711db7eb18654c3193e8f25872a2e4bf4cb951769c45dbf2fa7edc03b`.
+Plans, applies, publication logs and validation output are under `.build/h1-release*`.
+Changed files are the two components' `h1-film.tf`, `stacks/dev.yaml`, the H1
+workflow and publish/test/verify/promote scripts, worker Docker/intake/health,
+registry/schema snapshots, verification tools/tests and these runbooks. API
+changes are in the two commits above; frontend changes cover shared request
+builders and admin reparse controls/tests/journals.
+
 ## Network Host Metadata Deployed (2026-10-25 UTC)
 
 User-authorized dev worker **20261025-r3** is active at immutable ECR digest

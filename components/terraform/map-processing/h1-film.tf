@@ -4,6 +4,7 @@ variable "h1_film" {
     enabled              = optional(bool, false)
     repository_name      = optional(string, "halospawns-h1-film")
     image_tag            = optional(string, "")
+    default_release      = optional(string, "")
     memory_mb            = optional(number, 4096)
     timeout_seconds      = optional(number, 900)
     ephemeral_storage_mb = optional(number, 8192)
@@ -175,9 +176,10 @@ resource "aws_lambda_function" "h1_film" {
 
   environment {
     variables = merge({
-      ENVIRONMENT    = var.environment
-      H1_WORKER_MODE = local.h1_film_intake ? "intake" : "foundation"
-      H1_ENGINE_ROOT = "/var/task/engines"
+      ENVIRONMENT            = var.environment
+      H1_WORKER_MODE         = local.h1_film_intake ? "intake" : "foundation"
+      H1_ENGINE_ROOT         = "/var/task/engines"
+      H1_WORKER_IMAGE_DIGEST = data.aws_ecr_image.h1_film[0].image_digest
       }, local.h1_film_intake ? {
       H1_QUEUE_ARN                               = local.h1_film_pipeline.queue_arn
       H1_TOPIC_ARN                               = data.terraform_remote_state.uploads_ingest.outputs.file_uploaded_topic_arns["films"]

@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 61c184e732422828ce7b20360f8dd319933368e8af28ad05729e49445d083a2b",
+  "$comment": "Generated from API schemas/h1films.py SHA256 3d4f5ce77a067e179dba6c52cd844c725a16edb197d1ec7049e67226b637a747",
   "$defs": {
     "H1FilmEngine": {
       "additionalProperties": false,
@@ -147,6 +147,17 @@
         "map_binding": {
           "$ref": "#/$defs/H1FilmMapBinding"
         },
+        "release": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/H1FilmReleasePin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "source": {
           "$ref": "#/$defs/H1FilmSource"
         },
@@ -216,6 +227,79 @@
         "scenario"
       ],
       "title": "H1FilmMapBinding",
+      "type": "object"
+    },
+    "H1FilmRecipe": {
+      "additionalProperties": false,
+      "properties": {
+        "analytics_revision": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Analytics Revision",
+          "type": "integer"
+        },
+        "exporter_revision": {
+          "minimum": 1,
+          "title": "Exporter Revision",
+          "type": "integer"
+        },
+        "max_players": {
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Max Players",
+          "type": "integer"
+        },
+        "viewer_revision": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Viewer Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "exporter_revision",
+        "analytics_revision",
+        "viewer_revision",
+        "max_players"
+      ],
+      "title": "H1FilmRecipe",
+      "type": "object"
+    },
+    "H1FilmReleasePin": {
+      "additionalProperties": false,
+      "properties": {
+        "image_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "policy_revision": {
+          "minimum": 0,
+          "title": "Policy Revision",
+          "type": "integer"
+        },
+        "recipe": {
+          "$ref": "#/$defs/H1FilmRecipe"
+        },
+        "release_id": {
+          "pattern": "^[0-9]{8}-r[1-9][0-9]*$",
+          "title": "Release Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "release_id",
+        "manifest_sha256",
+        "policy_revision",
+        "image_digest",
+        "recipe"
+      ],
+      "title": "H1FilmReleasePin",
       "type": "object"
     },
     "H1FilmSource": {

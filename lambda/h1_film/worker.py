@@ -1,6 +1,7 @@
 """Lambda entry point. Foundation mode remains fail-closed during adoption."""
 
 import json
+import hashlib
 import logging
 import os
 import subprocess
@@ -26,10 +27,18 @@ def handler(event, context):
             env={**cloud.child_environment(), "H1_WORKER_MODE": "foundation"},
             check=True,
             capture_output=True,
-            timeout=20,
+            timeout=60,
         )
         health = json.loads(result.stdout)
         health.update(mode=mode, intake_enabled=mode == "intake")
+        registry = json.loads((cloud.PACKAGE / "profiles/registry.json").read_text())
+        health["release"] = {
+            "release_id": os.environ.get("H1_WORKER_RELEASE_ID"),
+            "image_digest": os.environ.get("H1_WORKER_IMAGE_DIGEST"),
+            "registry_sha256": hashlib.sha256(json.dumps(
+                registry, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+            ).encode()).hexdigest(),
+        }
         return health
     if mode != "intake":
         raise ValueError(

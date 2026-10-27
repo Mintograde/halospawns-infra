@@ -15,6 +15,8 @@ RUN cargo build --locked --release --jobs 4 --target x86_64-unknown-linux-gnu \
 FROM public.ecr.aws/lambda/nodejs:24@sha256:8dc1d72900bef6774cffbf7116704344e7e17e57ced1941e21b34106f38c1805 AS node
 FROM public.ecr.aws/lambda/python:3.12@sha256:d9f4dc50998552b084107763177eb53ed95230f2d4e1c320158bd7325d0eac30
 COPY --from=node /var/lang/bin/node /var/lang/bin/node
+ARG H1_WORKER_RELEASE_ID
+ENV H1_WORKER_RELEASE_ID=${H1_WORKER_RELEASE_ID}
 COPY lambda/replay_parser/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt --target "${LAMBDA_TASK_ROOT}"
 COPY lambda/h1_film/package.json lambda/h1_film/handler.mjs lambda/h1_film/convert.mjs ${LAMBDA_TASK_ROOT}/

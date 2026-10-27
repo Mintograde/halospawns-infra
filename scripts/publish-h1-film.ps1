@@ -9,13 +9,21 @@ param(
         $true
     })]
     [string]$Tag,
-    [Parameter(Mandatory)][string]$EngineRoot,
+    [string]$EngineRoot,
     [string]$PreviousRegistry,
-    [switch]$BuildOnly
+    [string]$CorpusPath = '.build/h1-film-corpus.json',
+    [switch]$BuildOnly,
+    [switch]$ResumePublication
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if ($ResumePublication) {
+    if ($BuildOnly) { throw 'ResumePublication and BuildOnly cannot be combined.' }
+    & (Join-Path $PSScriptRoot 'complete-h1-film-publication.ps1') -Tag $Tag -CorpusPath $CorpusPath
+    return
+}
+if (-not $EngineRoot) { throw 'EngineRoot is required when building a new image.' }
 $engines = (Resolve-Path -LiteralPath $EngineRoot).Path
 $profile = "halospawns-$Stack"
 $account = '283279960672'
@@ -66,6 +74,7 @@ try {
         }
     }
     Invoke-Checked docker @('buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--load',
+        '--build-arg', "H1_WORKER_RELEASE_ID=$Tag",
         '--build-context', "engines=$stage", '-f', 'lambda/h1_film/Dockerfile', '-t', $localImage, '-t', $remoteImage, '.')
     & ./lambda/h1_film/tests/container.test.ps1 -Image $localImage
 
@@ -77,10 +86,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'ECR login failed.' }
         $password = $null
         Invoke-Checked docker @('push', $remoteImage)
-        Invoke-Checked aws @('ecr', 'describe-images', '--profile', $profile, '--region', $region,
-            '--repository-name', $repository, '--image-ids', "imageTag=$Tag",
-            '--query', 'imageDetails[0].{digest:imageDigest,bytes:imageSizeInBytes}', '--output', 'json')
-        Write-Host "Published $remoteImage. Pin the tag in stacks/dev.yaml and plan/apply map-processing; Lambda was not updated by this script."
+        & ./scripts/complete-h1-film-publication.ps1 -Tag $Tag -CorpusPath $CorpusPath
     }
 } finally {
     if ($stage -and (Test-Path -LiteralPath $stage)) {

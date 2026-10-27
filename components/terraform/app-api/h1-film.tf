@@ -4,6 +4,7 @@ variable "h1_film" {
     enabled            = optional(bool, false)
     processing_enabled = optional(bool, false)
     uploads_enabled    = optional(bool, false)
+    releases_enabled   = optional(bool, false)
     max_size_bytes     = optional(number)
     max_source_ticks   = optional(number)
     max_players        = optional(number)
@@ -33,6 +34,8 @@ locals {
     H1FILM_UPLOADS_ENABLED      = tostring(var.h1_film.uploads_enabled)
     H1FILM_PROCESSING_ENABLED   = tostring(var.h1_film.processing_enabled)
     H1FILM_PROCESSING_QUEUE_URL = try(local.h1_film_pipeline.queue_url, "")
+    H1FILM_RELEASES_ENABLED     = tostring(var.h1_film.releases_enabled)
+    H1FILM_RELEASE_WORKER_NAME  = "${var.project}-h1-film-${var.environment}"
     }, var.h1_film.processing_enabled ? {
     H1FILM_MAX_SIZE_BYTES   = tostring(var.h1_film.max_size_bytes)
     H1FILM_MAX_SOURCE_TICKS = tostring(var.h1_film.max_source_ticks)
@@ -42,6 +45,20 @@ locals {
     { route_key = "POST /v1/ingest/h1films/prepare", authorization_type = "NONE" },
     { route_key = "POST /v1/ingest/h1films/resolve-map", authorization_type = "NONE" },
   ] : []
+}
+
+resource "aws_iam_role_policy" "h1_film_release_readiness" {
+  count = local.h1_film_api_enabled ? 1 : 0
+  name  = "h1-film-release-readiness"
+  role  = module.app_lambda[0].role_name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:GetFunction"]
+      Resource = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.project}-h1-film-${var.environment}"
+    }]
+  })
 }
 
 resource "terraform_data" "h1_film_contract" {

@@ -215,8 +215,6 @@ class CloudTests(unittest.TestCase):
                     encoding_sha256=contract.encoding_sha256,
                 )
             responses = [{"data": {"job": job}}]
-            if retained:
-                responses.insert(0, cloud.FilmError("identity_conflict"))
             with (
                 patch.object(cloud, "download", return_value=source),
                 patch.object(cloud, "inspect_film", return_value=evidence),
@@ -226,12 +224,10 @@ class CloudTests(unittest.TestCase):
                 context = MagicMock()
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute(item, context)
-                self.assertEqual(api.call_args_list[0].args[2]["analytics_revision"], 4)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 5)
-                self.assertEqual(api.call_count, 2 if retained else 1)
-                if retained:
-                    self.assertNotIn("analytics_revision", api.call_args_list[1].args[2])
-                    self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
+                self.assertTrue(api.call_args_list[0].args[2]["use_default_release"])
+                self.assertNotIn("analytics_revision", api.call_args_list[0].args[2])
+                self.assertNotIn("exporter_revision", api.call_args_list[0].args[2])
+                self.assertEqual(api.call_count, 1)
                 self.assertEqual(retry.call_args.args[0], job)
 
     def test_beta4_intake_selects_finite_world_exporter_and_retained_jobs_keep_their_pins(self):
@@ -255,8 +251,6 @@ class CloudTests(unittest.TestCase):
             )
             source = job["conversion"]["source"]
             responses = [{"data": {"job": job}}]
-            if revision < 10:
-                responses.insert(0, cloud.FilmError("identity_conflict"))
             with (
                 patch.dict(os.environ, {"H1_MAX_PLAYERS": "16"}),
                 patch.object(cloud, "download", return_value=source),
@@ -267,11 +261,10 @@ class CloudTests(unittest.TestCase):
                 context = MagicMock()
                 context.get_remaining_time_in_millis.return_value = 600000
                 cloud.execute({"upload_id": job["upload_id"], "source": source}, context)
-                self.assertEqual(api.call_args_list[0].args[2]["exporter_revision"], 10)
+                self.assertNotIn("exporter_revision", api.call_args_list[0].args[2])
+                self.assertTrue(api.call_args_list[0].args[2]["use_default_release"])
                 self.assertEqual(retry.call_args.args[0], job)
-                self.assertEqual(api.call_count, 2 if revision < 10 else 1)
-                if revision < 10:
-                    self.assertNotIn("exporter_revision", api.call_args_list[1].args[2])
+                self.assertEqual(api.call_count, 1)
 
     def test_sqs_job_routing_and_exact_origin(self):
         self.assertEqual(cloud.work_from_record(record(self.job)), self.job)
@@ -464,6 +457,17 @@ class CloudTests(unittest.TestCase):
                 worker.handler(event, None),
                 {"batchItemFailures": [{"itemIdentifier": "message-1"}]},
             )
+
+    def test_unknown_job_contract_retains_attempt_for_failure_callback(self):
+        item = copy.deepcopy(self.job)
+        item["schema"] = "halospawns.h1film_job.v99"
+        item["attempt_id"] = "00000000-0000-4000-8000-000000000099"
+        with patch.object(cloud, "report_failure") as report:
+            context = MagicMock()
+            context.get_remaining_time_in_millis.return_value = 900000
+            result = worker.handler({"Records": [record(item)]}, context)
+        self.assertEqual(result, {"batchItemFailures": []})
+        self.assertEqual(report.call_args.args[0]["attempt_id"], item["attempt_id"])
 
     def test_configuration_and_transient_failures_retry_without_public_raw_error(self):
         with (

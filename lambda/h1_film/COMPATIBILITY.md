@@ -1,5 +1,14 @@
 # H1 Film Compatibility
 
+## Release catalogue (2026-10-27 UTC)
+
+Compatible future engine/exporter registrations and per-profile defaults are
+declared by the immutable worker release manifest. Read `RELEASES.md` before
+changing pins or publishing. `h1_film.default_release` selects new initial/full
+attempts; retries and viewer rebuilds preserve persisted pins. API legacy hash
+tables remain frozen, and every subsequent image retains registered binaries,
+recipes and readers. True contract/adapter changes still require reader support.
+
 ## Network Host Metadata (Deployed, 2026-10-25 UTC)
 
 Worker `20261025-r3` and API `live=208` add optional `h1film.network_host`

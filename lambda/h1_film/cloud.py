@@ -179,6 +179,15 @@ def validate_job(job):
     require(job["job_id"] == f"h1film:{job['upload_id']}:generation:{generation}")
     require(upload_id_from_key(conversion["source"]["s3_key"]) == job["upload_id"])
     target = job["viewer_artifact_target"]
+    release = conversion.get("release")
+    if release:
+        recipe = release["recipe"]
+        registered = json.loads((PACKAGE / "profiles/registry.json").read_text())["processing"]
+        require(recipe in registered["recipes"].get(film["engine_profile"], []), "unsupported_build")
+        require(recipe["exporter_revision"] == exporter)
+        require(recipe["analytics_revision"] == job["analytics_revision"])
+        require(recipe["viewer_revision"] == target["profile_revision"])
+        require(film["player_count"] <= recipe["max_players"])
     require(type(target.get("request_epoch")) is int and target["request_epoch"] >= 0)
     require(
         type(target.get("request_sequence")) is int and target["request_sequence"] >= 0
@@ -233,8 +242,12 @@ def work_from_record(record):
     require(isinstance(body, str) and len(body.encode()) <= 256 * 1024)
     payload = json.loads(body)
     require(isinstance(payload, dict))
-    if payload.get("schema") in {"halospawns.h1film_job.v1", "halospawns.h1film_job.v2"}:
-        validate_job(payload)
+    if isinstance(payload.get("schema"), str) and payload["schema"].startswith("halospawns.h1film_job."):
+        require(payload.get("environment") == os.environ["ENVIRONMENT"] == "dev")
+        require(payload.get("source_kind") == "h1film")
+        require(str(uuid.UUID(payload["upload_id"])) == payload["upload_id"])
+        if payload.get("attempt_id"):
+            require(str(uuid.UUID(payload["attempt_id"])) == payload["attempt_id"])
         return payload
     require(
         payload.get("Type") == "Notification"
@@ -605,6 +618,13 @@ def completion_proof(job, report, encoding):
     }
     if pin["engine"].get("exporter_revision") is not None:
         proof["exporter_revision"] = pin["engine"]["exporter_revision"]
+    if pin.get("release"):
+        proof["release"] = pin["release"]
+    if os.environ.get("H1_WORKER_IMAGE_DIGEST"):
+        proof["producer"] = {
+            "release_id": os.environ["H1_WORKER_RELEASE_ID"],
+            "image_digest": os.environ["H1_WORKER_IMAGE_DIGEST"],
+        }
     created_utc = recorded.recording_utc(report)
     if created_utc is not None:
         proof["created_utc"] = created_utc
@@ -844,19 +864,9 @@ def execute(work_item, context):
         source = download(source, film, metadata=source_metadata)
         evidence = inspect_film(film, work, deadline)
         if job is None:
-            prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence}
-            try:
-                result = api("POST", "/v1/ingest/h1films/prepare", {
-                    **prepare, "analytics_revision": 4,
-                    "exporter_revision": 10 if evidence["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1" else 5,
-                })
-            except FilmError as error:
-                if error.reason != "identity_conflict":
-                    raise
-                # A redelivered notification can belong to an already pinned
-                # legacy job. Omission retrieves that job without repinning it;
-                # the API still checks the complete original source identity.
-                result = api("POST", "/v1/ingest/h1films/prepare", prepare)
+            prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence,
+                       "use_default_release": True}
+            result = api("POST", "/v1/ingest/h1films/prepare", prepare)
             job = result["data"]["job"]
             validate_job(job)
             require(

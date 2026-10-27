@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -14,8 +15,13 @@ def main():
     parser.add_argument("--api", required=True, type=Path)
     parser.add_argument("--finalization", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--release-catalog", type=Path)
     args = parser.parse_args()
     sys.path.insert(0, str(args.api.resolve() / "src"))
+    if args.release_catalog:
+        from halospawns_api.h1film_releases import _catalog
+        os.environ["H1FILM_RELEASES_ENABLED"] = "true"
+        _catalog.set(json.loads(args.release_catalog.read_text(encoding="utf-8-sig")))
     from halospawns_api.repositories.replay_ingest import _game_graph_data_from_meta
     from halospawns_api.schemas.h1films import H1FilmJob
     from halospawns_api.schemas.replay_ingest import ReplayIngestRequest
@@ -28,6 +34,14 @@ def main():
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
     request = normalize_h1film_ingest(request)
+    assert ReplayIngestRequest.model_validate_json(request.model_dump_json(by_alias=True)).model_dump() == request.model_dump()
+    failure_path = args.finalization.with_name("failure-status.json")
+    if failure_path.exists():
+        from halospawns_api.schemas.replay_ingest import ReplayReprocessAttemptStatusUpdate
+        from halospawns_api.schemas.uploads import UploadProcessingStatusUpdate
+        for failure in json.loads(failure_path.read_text()):
+            model = ReplayReprocessAttemptStatusUpdate if "/replay-reprocess-attempts/" in failure["path"] else UploadProcessingStatusUpdate
+            model.model_validate(failure["payload"])
     settings_document = payload.get("h1film_settings")
     if settings_document is not None:
         from halospawns_api.schemas.h1film_settings import public_settings, settings_catalogue

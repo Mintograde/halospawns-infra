@@ -14,8 +14,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     source = args.api / "src/halospawns_api/schemas/h1films.py"
-    models = runpy.run_path(str(source))
     sys.path.insert(0, str(args.api / "src"))
+    models = runpy.run_path(str(source))
     from halospawns_api.schemas.h1film_analytics import H1NativeAnalytics
     from halospawns_api.schemas.h1film_combat import H1NativeAnalyticsV2
     provenance = (

@@ -1,0 +1,6 @@
+workflows:
+  promote-dev:
+    description: Register, verify, install and activate the selected H1 release for new attempts.
+    steps:
+      - command: pwsh -NoProfile -File ./scripts/promote-h1-film.ps1 dev
+        type: shell
