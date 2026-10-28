@@ -558,6 +558,20 @@ class CloudTests(unittest.TestCase):
         ):
             with self.subTest(changes=changes), self.assertRaises(cloud.FilmError):
                 cloud.validate_proof(pin, {**hosted, "network_host": {**host, **changes}})
+        neutral = {**host, "provenance": "initial_fnet_all_remote_v1",
+                   "local_player_count": 0, "remote_player_mask": 3, "host_slots": []}
+        report["envelope"]["network"]["host"] = neutral
+        for mode in ("initial", "full_reparse"):
+            job["mode"] = mode
+            self.assertEqual(cloud.completion_proof(job, report, encoding)["network_host"], neutral)
+        for changes in (
+            {"provenance": "initial_fnet_drop_mask_v1"}, {"remote_player_mask": 2},
+            {"remote_player_mask": 7}, {"local_player_count": 1},
+            {"local_player_count": False}, {"host_slots": [0]}, {"source_tick": 1},
+            {"initial_player_count": 0}, {"initial_player_count": 9},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(cloud.FilmError):
+                cloud.validate_proof(pin, {**hosted, "network_host": {**neutral, **changes}})
         job["mode"] = "viewer_rebuild"
         self.assertNotIn("network_host", cloud.completion_proof(job, report, encoding))
         pin["film"]["engine_profile"] = self.job["conversion"]["film"]["engine_profile"]

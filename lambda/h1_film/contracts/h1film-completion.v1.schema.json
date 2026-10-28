@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 3d4f5ce77a067e179dba6c52cd844c725a16edb197d1ec7049e67226b637a747",
+  "$comment": "Generated from API schemas/h1films.py SHA256 e4391e28d727a0777fa0be92962eaa7a19f064641f6f028d0a8fcf8dbc6d5206",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -11,29 +11,31 @@
             "type": "integer"
           },
           "maxItems": 4,
-          "minItems": 1,
           "title": "Host Slots",
           "type": "array"
         },
         "initial_player_count": {
           "maximum": 8,
-          "minimum": 2,
+          "minimum": 1,
           "title": "Initial Player Count",
           "type": "integer"
         },
         "local_player_count": {
           "maximum": 4,
-          "minimum": 1,
+          "minimum": 0,
           "title": "Local Player Count",
           "type": "integer"
         },
         "provenance": {
-          "const": "initial_fnet_drop_mask_v1",
+          "enum": [
+            "initial_fnet_drop_mask_v1",
+            "initial_fnet_all_remote_v1"
+          ],
           "title": "Provenance",
           "type": "string"
         },
         "remote_player_mask": {
-          "maximum": 254,
+          "maximum": 255,
           "minimum": 1,
           "title": "Remote Player Mask",
           "type": "integer"

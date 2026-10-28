@@ -54,7 +54,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
   const joined = new Set();
   let maxPlayerSlot = players - 1;
-  let initialDropMask, observedRemoteMask = 0, initialRosterChanged = false;
+  let initialDropMask, observedRemoteMask = 0, initialRosterChanged = false, initialMaskChanged = false;
   const sizes = new Map([[1, 68], [2, 108], [3, 4], [4, 8], [5, 0], [6, 8], [7, 36]]);
   for (let block = 0; block < words[6]; block++) {
     assert.ok(cursor + 24 <= size, 'Truncated FNET block');
@@ -79,6 +79,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
         const mask = raw.readUInt32LE(position + 8);
         assert.equal(mask >>> 16, 0, 'FNET drop mask exceeds converter limit');
         if (initialDropMask === undefined && tick === 0) initialDropMask = mask;
+        if (tick === 0 && mask !== initialDropMask) initialMaskChanged = true;
         observedRemoteMask |= mask;
       }
       if (tick === 0 && (type === 4 || type === 7)) initialRosterChanged = true;
@@ -106,12 +107,21 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
   const hostSlots = Array.from({ length: players }, (_, slot) => slot)
     .filter(slot => !(initialDropMask & (1 << slot)));
-  const host = firstTick === 0 && initialDropMask > 0 && initialDropMask >>> players === 0
-    && !initialRosterChanged && hostSlots.length === localPlayers
-    && hostSlots.every(slot => !(observedRemoteMask & (1 << slot)))
-    ? { provenance: 'initial_fnet_drop_mask_v1', source_tick: 0, initial_player_count: players,
-      local_player_count: localPlayers, remote_player_mask: initialDropMask, host_slots: hostSlots }
-    : undefined;
+  let host;
+  if (firstTick === 0 && initialDropMask > 0 && initialDropMask >>> players === 0
+    && !initialRosterChanged && !initialMaskChanged) {
+    if (hostSlots.length === localPlayers
+      && hostSlots.every(slot => !(observedRemoteMask & (1 << slot)))) {
+      host = { provenance: 'initial_fnet_drop_mask_v1', source_tick: 0, initial_player_count: players,
+        local_player_count: localPlayers, remote_player_mask: initialDropMask, host_slots: hostSlots };
+    } else if (hostSlots.length === 0 && localPlayers === 1) {
+      // Beta 4's recorder clamps opts->players to one even on a dedicated host.
+      // The tick-zero mask positively identifies every initial player as remote;
+      // zero local players here is derived evidence, not the envelope placeholder.
+      host = { provenance: 'initial_fnet_all_remote_v1', source_tick: 0, initial_player_count: players,
+        local_player_count: 0, remote_player_mask: initialDropMask, host_slots: [] };
+    }
+  }
   return { records: count, applications, blocks: words[6], participant_count: players + joined.size,
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}) };
 }

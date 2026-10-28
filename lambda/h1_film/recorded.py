@@ -14,14 +14,14 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
         or not isinstance(value, dict)
         or set(value) != {"provenance", "source_tick", "initial_player_count",
                           "local_player_count", "remote_player_mask", "host_slots"}
-        or value["provenance"] != "initial_fnet_drop_mask_v1"
+        or value["provenance"] not in ("initial_fnet_drop_mask_v1", "initial_fnet_all_remote_v1")
         or any(type(value[key]) is not int for key in (
             "source_tick", "initial_player_count", "local_player_count", "remote_player_mask"
         ))
         or value["source_tick"] != 0
-        or not 2 <= value["initial_player_count"] <= min(8, player_count)
-        or not 1 <= value["local_player_count"] <= 4
-        or not 0 < value["remote_player_mask"] < (1 << value["initial_player_count"]) - 1
+        or not 1 <= value["initial_player_count"] <= min(8, player_count)
+        or not 0 <= value["local_player_count"] <= 4
+        or not 0 < value["remote_player_mask"] <= (1 << value["initial_player_count"]) - 1
     ):
         raise ValueError("Invalid network host evidence")
     slots = value["host_slots"]
@@ -30,6 +30,7 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
     if (
         not isinstance(slots, list) or any(type(slot) is not int for slot in slots)
         or slots != expected or len(slots) != value["local_player_count"]
+        or (value["provenance"] == "initial_fnet_all_remote_v1") != (len(slots) == 0)
     ):
         raise ValueError("Network host slots disagree with initial remote mask and local seats")
 

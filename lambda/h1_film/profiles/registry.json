@@ -244,7 +244,8 @@
         "completion": "halospawns.h1FilmCompletion.v1",
         "failure": "halospawns.h1FilmFailure.v1",
         "settings": "halospawns.h1FilmSettings.v1",
-        "native": "halospawns.h1NativeAnalytics.v2"
+        "native": "halospawns.h1NativeAnalytics.v2",
+        "network_host": "halospawns.h1NetworkHost.v2"
       }
     },
   "profiles": [

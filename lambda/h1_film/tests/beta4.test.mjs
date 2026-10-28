@@ -128,18 +128,50 @@ test('beta4 leaves ambiguous, absent, partial and contradictory host evidence un
   try {
     for (const changes of [
       { records: [[1, 3, 14]] }, { records: [[0, 7, 65540]] },
-      { firstUpdate: 1 }, { records: [[0, 3, 0]] }, { records: [[0, 3, 15]] },
+      { firstUpdate: 1 }, { records: [[0, 3, 0]] },
       { records: [[0, 3, 30]] }, { localPlayers: 2 }, { records: [[0, 3, 12]] },
       { records: [[0, 3, 14], [1, 3, 15]] },
       { records: [[0, 3, 14], [0, 4, 2]] },
       { records: [[0, 7, 65540], [0, 3, 14]] },
       { records: [[0, 3, 14], [1, 7, 65536], [1, 3, 15]] },
+      { records: [[0, 3, 14], [0, 3, 10]] },
     ]) {
       await writeFile(path, networkHostFixture(changes));
       assert.equal((await readEnvelope(path)).network.host, undefined, JSON.stringify(changes));
     }
     await writeFile(path, botFixture());
     assert.equal((await readEnvelope(path)).network, undefined);
+  } finally { await rm(root, { recursive: true }); }
+});
+
+test('beta4 proves a neutral host from an all-remote initial roster, never from missing host tags', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'beta4-neutral-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const players of [1, 4, 8]) {
+      const mask = (1 << players) - 1;
+      for (const recorder of [0, players - 1]) {
+        await writeFile(path, networkHostFixture({ players, recorder, records: [[0, 3, mask], [1, 3, 0]] }));
+        assert.deepEqual((await readEnvelope(path)).network.host, {
+          provenance: 'initial_fnet_all_remote_v1', source_tick: 0, initial_player_count: players,
+          local_player_count: 0, remote_player_mask: mask, host_slots: [],
+        });
+      }
+    }
+    // A later departure/replacement cannot turn a remote participant into a host.
+    await writeFile(path, networkHostFixture({ records: [[0, 3, 15], [1, 4, 0], [1, 7, 65536], [1, 3, 14]] }));
+    const envelope = await readEnvelope(path);
+    assert.equal(envelope.network.host.provenance, 'initial_fnet_all_remote_v1');
+    assert.equal(envelope.network.participant_count, 5);
+    for (const changes of [
+      { records: [[1, 3, 15]] }, { firstUpdate: 1, records: [[1, 3, 15]] },
+      { localPlayers: 2, records: [[0, 3, 15]] },
+      { records: [[0, 3, 15], [0, 4, 2]] }, { records: [[0, 7, 65540], [0, 3, 15]] },
+      { records: [[0, 3, 15], [0, 3, 14]] }, { records: [[0, 3, 14], [0, 3, 15]] },
+    ]) {
+      await writeFile(path, networkHostFixture(changes));
+      assert.equal((await readEnvelope(path)).network.host, undefined, JSON.stringify(changes));
+    }
   } finally { await rm(root, { recursive: true }); }
 });
 

@@ -1,5 +1,20 @@
 # H1 film Lambda integration
 
+## Pending local host-style extension (2026-10-27 UTC)
+
+Evidence-based `on_off` / `neutral` / unknown classification is implemented and
+tested locally. See `BETA4.md` and handoff `20261027-infra-api-h1film-host-style`.
+The sibling API must release its compatible proof reader and normalization
+before a new immutable worker is published/promoted. Its manifest declares
+`network_host: halospawns.h1NetworkHost.v2`, which older APIs reject. The normal
+`RELEASES.md` workflow still applies; no recipe or engine revision changes.
+The local candidate passes a packaged Weld conversion and candidate-API
+initial/full/viewer callbacks with unchanged replay/spatial/statistics/settings
+products. Neutral classification has synthetic coverage; add a real dedicated
+film to the private corpus when available. No new release, policy promotion,
+Terraform apply, migration, historical reparse or prod action was performed.
+The installed worker and active policy below remain unchanged.
+
 ## Immutable release defaults deployed (2026-10-27 UTC)
 
 Dev worker **20261027-r1** is installed at immutable ECR digest

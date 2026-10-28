@@ -58,6 +58,7 @@ def main():
             other = model.model_validate_json(path.read_text(encoding="utf-8"))
             if mode == "full-reparse":
                 other = normalize_h1film_ingest(other)
+                assert other.facts == request.facts
                 assert other.metadata.get("native_analytics") == request.metadata.get("native_analytics")
                 if settings_document is not None:
                     assert other.h1film_settings.model_dump(mode="json", by_alias=True) == settings_document
@@ -99,6 +100,7 @@ def main():
         "settings_verified": settings_document is not None,
         "network_host": request.h1film.network_host.model_dump() if request.h1film.network_host else None,
         "host_slots": [player.slot_index for player in request.participants if player.metadata.get("is_host")],
+        "host_style": request.facts.game.get("game.host_style") if request.facts else None,
         "graphs": graphs,
         "spatial_event_count": len(events),
         "spatial_event_sample": [dataclasses.asdict(event) for event in events[:8]],
