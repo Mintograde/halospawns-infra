@@ -22,6 +22,7 @@ locals {
     ], []),
     local.replay_processed_prefix == null ? [] : ["${local.uploads_bucket_arn}/${local.replay_processed_prefix}*.zst"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*.hsrv"],
+    ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*/generations/*/h1-client-diagnostics.v1.*.h1diag"],
   )
   asset_trusted_key_groups = var.cdn.enabled && var.asset_delivery_mode != "cloudfront" ? [aws_cloudfront_key_group.main[0].id] : []
   asset_cache_ttls = {

@@ -1,5 +1,163 @@
 # H1 film Lambda integration
 
+## Diagnostic companion downloads enabled (2026-10-30 UTC)
+
+The user-reviewed uploads-ingest change is applied in dev. The saved plan
+updated only `module.uploads_bucket.aws_s3_bucket_policy.this` (0 added, 1
+changed, 0 destroyed), allowing generation-bound `h1-client-diagnostics.v1.*.h1diag`
+files through the existing distribution `E3EQNW63YKDA8U` read grant. The worker,
+API and frontend required no deployment; object versions and contents are unchanged.
+
+Both real companions changed from 403 to valid 32-byte 206 responses with
+`H1DG0001`, correct Content-Range and CORS for `http://127.0.0.1:5173`. Full
+downloads pass `https://dev.halospawns.com` CORS and match SHA-256 hashes at
+2,748,426 and 1,647,398 bytes. The sibling `.hsrv` remains readable; the existing
+completion manifest, original `.h1film` and original `.map` remain 403. Live
+policy equals the reviewed plan, CloudFront configuration/ETag is unchanged,
+and all S3 public-access blocks remain enabled. Nine Terraform tests pass and
+the focused postplan is no-op. The full dev postplan has no resource actions,
+only the existing unapplied API version-output refresh 213 to 221. No
+invalidation, reparse or prod action.
+
+Evidence: `.build/h1-diagnostics-cdn-20261030/` (saved plan, apply, policy review,
+before/after HTTP checks and postplans). See `ASSET_DELIVERY.md` and completed
+handoff `20261030-api-infra-h1-diagnostics-cdn-access`.
+
+## PB2 Beta 5 catalogue classification deployed (2026-10-29 UTC)
+
+API **live=220** (`7bba3c1`) now classifies H1 games by the verified engine's
+assigned game release, independently of the map's original release. Worker and
+default **20261029-r4**, policy revision **4**, remain unchanged. API CI:
+[40970963827](https://github.com/Mintograde/halospawns-api/actions/runs/40970963827).
+All 183 deployed Python source files match the committed source; deployed ZIP
+SHA-256 is `4f17d33a381cc7cbe1c60b54ca621c153f251f58e3027086d258c854f481b730`.
+
+The user authorized creating the dev release from PB2 Beta 4 and correcting
+existing verified Beta 5 games. The audited release service created
+`halo1_pc_pb2_beta5`, display name `Halo Performance Build 2.0 Beta 5`, short name
+`PB2 Beta 5`, ID `e45586ef-99cc-47e5-ae8a-21879e0ab4bc`. It retains the original
+game/platform/cache fields and reviewed `absent` ui.map policy, with new names,
+description and copy provenance. It does not invent a map upload or discovery
+fingerprint. Creation audit: `1339817c-8e1e-4cbc-9c6f-ab801fa113e1`.
+
+Applied API-owned additive migration `20261029010000_h1film_game_releases.sql`,
+then assigned `h1-performance-beta5-p9818-wasm-v1` to the release through the
+audited engine service at settings revision 2. New initial conversions freeze
+the played release and settings revision in API-only immutable columns. Existing
+conversion identities, worker jobs and completion contracts remain unchanged.
+Legacy null pins retain map-based classification; explicit admin overrides take
+priority during retries and full reparses. Contract and rollback guidance:
+`../halospawns-api/docs/h1film-game-releases.md` (relative to the repository root).
+
+Both release-map listing and map collection queries return the same **70**
+approved maps for Beta 5. Map IDs, raw/GLB assets, origin Beta 4 release and all
+Beta 4/Beta 5 approvals are unchanged. Membership is derived from currently
+eligible approvals for assigned engines, so stale/retired approvals cannot
+silently grant compatibility. No duplicate map records or release tags are needed.
+
+Two existing games were corrected through the audited game-release override
+service after checking their immutable Beta 5 conversion engine:
+
+- `2c30be17-93af-402a-90f3-9b15137f63b0`, audit
+  `d005f155-0565-4068-b063-607b9c3ca68d`.
+- `a38181f5-e000-46f3-81b8-4729b02ffbe0`, audit
+  `52442e76-7903-44c6-8758-5ce544fb232a`.
+
+Live database queries confirm `PB2 Beta 5` in both game-list runtime summaries.
+Before/after checks prove old jobs, identities, receipts, reprocess attempts,
+map approvals, the Beta 4 catalogue release and all other game fields unchanged.
+No replay conversion or artifact rewrite was submitted.
+
+Validation: 1,778 unit tests, 124 database integration tests and 17 frontend
+context tests pass; Ruff and CI pass. The exact deployed API ZIP accepts all
+21 archived initial/full/viewer callbacks across seven films/four profiles,
+including failure and receipt checks. Public health is 200; worker digest and
+r4/revision-4 policy are unchanged. Focused app-api and full dev plans have no
+resource actions, only the unapplied API version-output refresh 213 to 220;
+existing `asset_delivery_mode` warnings remain. Evidence: `.build/beta5-release/`, including
+`verified.json`, `classification-{before,after,audits}.json`, and
+`deployed-callbacks/`. Frontend tests remain local and uncommitted; its existing
+runtime-summary rendering already handles Beta 5. No frontend or prod deployment.
+
+## Beta 5 client diagnostics deployed (2026-10-29 UTC)
+
+Worker/default **20261029-r4** is active in dev at policy revision **4**, with
+API **live=219**. Image digest:
+`sha256:9cd2a88623b9e9dfe98f6da4298c74603de4045b25796cd438a366b3da817f0b`
+(435,198,725 compressed bytes). It was built from committed `b8d975b` in the
+isolated `.build/h1-diagnostics-release` checkout. Beta 5 now selects exporter
+**11 / analytics 4 / viewer 5**; all four profiles, fourteen exporter entries,
+prior recipes and all 70 transferred map approvals remain available.
+
+Exporter 11 preserves LDG1 v5 / LDC1 v11 diagnostic sections in the versioned,
+indexed `halospawns.h1ClientDiagnostics.v1` companion. Shot/verdict identities,
+client target poses, aim/seen/net/correction samples, trigger pulls, screen
+events, input arrival and predicted endpoints retain their original clocks and
+row indices. The companion is immutable and tied to the viewer generation;
+the API validates its source/map/engine/hash/version bindings and returns its
+delivery URL with the selected replay asset. World replay bytes and combat
+statistics are unchanged. See `CLIENT_DIAGNOSTICS.md` for the complete contract.
+The browser reader and frontend handoff are local and uncommitted; overlay UI
+and separate `_client.h1film` predicted-world playback remain future work.
+
+Validation:
+
+- All three supplied Beta 5 films preserve every diagnostic section byte and
+  match 1,018,808 independent upstream field comparisons, plus decoded poses,
+  aim directions, round links and verdict geometry. All 623 shots pair exactly.
+  Companions are 105,415 / 2,748,426 / 1,647,398 bytes. Their packaged hashes
+  match the independently verified files; viewer hashes match release r2.
+- All 48 Node and 78 local/packaged worker tests pass. Seven packaged films
+  cover every profile; all 21 initial/full/viewer callbacks, failures and
+  receipt serialization/retries pass against the exact deployed API 219 ZIP.
+- API unit tests: 1,775 pass, six skipped. Normal CI: 1,777 pass, 214 skipped,
+  four Rust tests and lint pass. The frontend's three focused reader tests and
+  standalone build pass (existing large-chunk warning).
+- Focused/full preplans allow only the H1 image/digest update. Apply is
+  0 added / 1 changed / 0 destroyed. Live engine/registry hashes and health pass.
+  Memory 3,008 MiB, timeout 900 seconds, ephemeral storage 8,192 MiB, concurrency
+  5 and enabled batch-one queue mapping are retained; queue/DLQ counts are zero.
+- Final desired/effective default check agrees on r4/revision 4. Focused
+  postplan is no-op; full dev postplan has no resource actions, only the
+  unapplied API version-output refresh from 213 to 219. Existing undeclared
+  `asset_delivery_mode` warnings are unchanged.
+
+The first activation found a separate API activation allowlist still rejecting
+the new contract. It left policy revision 3/r2 unchanged while the compatible
+r4 worker was installed. API commits `c96ed90` / `738f473` fix that gate and add
+actual activation/rollback/unknown-contract regression tests, following reader
+commit `0ec700c`. The retry verifies API 219 and activates revision 4 without a
+second resource update. API CI:
+[40965036417](https://github.com/Mintograde/halospawns-api/actions/runs/40965036417).
+Exact deployed ZIP SHA-256:
+`5bdb304e4ae56212e926db62b4ecd194b997a45a76d563b3995b368c6b7578c9`.
+
+Release r3 was published but never installed or promoted; r4 includes the final
+unknown-identity and clock-index reader fixes. Immutable tags were not reused.
+No database migration, historical reparse, live upload, Weld recovery, frontend
+deployment or prod action was performed. Policy rollback may select r2 while
+retaining the r4 worker and API 219 companion/activation readers for pinned jobs.
+
+Evidence:
+
+- Promotion: `.build/h1-promotions/20261029-222415-77bea7d7d50b4186a67aa9a741f0e4d1/`.
+- Initial apply: `.build/h1-promotions/20261029-221452-c7c4e07cdb4c4be3b713432f26c82ab1/`.
+- Packaged corpus: `.build/h1-diagnostics-release/.build/h1-contracts/20261029-r4-abe6aa28f2c643728c14bf9de43e8857/`.
+- Callback archive SHA-256: `c5482e429cf57781bd4458b302bbc69e9f224d697b7081cb7f4c1b4560144e48`.
+- Reference decoding, plans, policy and operational checks: `.build/beta5/diagnostics-*`.
+
+```powershell
+# From the isolated committed checkout, using absolute private input paths:
+.\scripts\publish-h1-film.ps1 -Tag 20261029-r4 -EngineRoot <beta5-engine-store> -PreviousRegistry <r2-registry> -CorpusPath <seven-film-corpus>
+# Root stack pins image_tag and default_release to 20261029-r4.
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+atmos workflow promote-dev --file h1-film
+.\scripts\promote-h1-film.ps1 dev -CheckOnly
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
 ## Beta 5 deployed (2026-10-29 UTC)
 
 Worker **20261029-r2** is installed and promoted in dev at policy revision

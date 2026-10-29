@@ -4,16 +4,21 @@ The `beta5` port pins upstream tag `beta-5`, commit
 `fbbfae27d6be7e47613acce37da95ed754dccb42` in `../h1-arena`.
 Its registered simulation profile is `h1-performance-beta5-p9818-wasm-v1`:
 format 2, protocol 9818, 120 Hz, recorded build `Linux server`.
-Worker `20261029-r2` is deployed and promoted in dev at policy revision 3,
-with the compatible API reader at `live=217`.
+Worker `20261029-r4` is deployed and promoted in dev at policy revision 4,
+with the compatible API reader at `live=219`.
 This is the identity in all three supplied October 29 Dread films. Other
 recorder build labels remain unregistered; client-view films are rejected
 because they do not provide the authoritative match simulation used here.
 
-Beta 5 selects exporter 10 / analytics 4 / viewer 5, with at most sixteen
+Beta 5 selects exporter 11 / analytics 4 / viewer 5, with at most sixteen
 distinct participants. Every older profile, binary, exporter and recipe is
 retained. Existing attempts and receipts keep their original pins. No viewer
-format, analytics schema, database migration or frontend pin change is needed.
+pose format, analytics schema, database migration or frontend pin change is needed.
+Exporter 11 adds the versioned client diagnostic companion and compatible API
+reader; its simulator binaries match retained exporter 10 exactly. All supplied
+films are client-enriched host-world copies. Their recorded client evidence is
+exported for future overlays; separate predicted-world client films remain
+unsupported. See `CLIENT_DIAGNOSTICS.md` for the wire format and frontend handoff.
 See `DEPLOYMENT.md` for publication/promotion status and `RELEASES.md` for the
 release workflow.
 

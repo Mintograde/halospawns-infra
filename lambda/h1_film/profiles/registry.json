@@ -21,7 +21,7 @@
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 10,
+        "exporter_revision": 11,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
@@ -250,6 +250,12 @@
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 11,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ]
     },
@@ -259,7 +265,8 @@
       "failure": "halospawns.h1FilmFailure.v1",
       "settings": "halospawns.h1FilmSettings.v1",
       "native": "halospawns.h1NativeAnalytics.v2",
-      "network_host": "halospawns.h1NetworkHost.v2"
+      "network_host": "halospawns.h1NetworkHost.v2",
+      "client_diagnostics": "halospawns.h1ClientDiagnostics.v1"
     }
   },
   "profiles": [
@@ -433,6 +440,13 @@
     {
       "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
       "revision": 10,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "6893f5cf29b242371bedff719d5c8e259b2453c4d49d739a613b1878e77e15fd",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 11,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "6893f5cf29b242371bedff719d5c8e259b2453c4d49d739a613b1878e77e15fd",
       "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"

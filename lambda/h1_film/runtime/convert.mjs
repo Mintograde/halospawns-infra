@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { adapterFor, readEnvelope } from './film.mjs';
 import { resolveMap, selectProfile, selectExporter, validateRegistry, validateExporters } from './profiles.mjs';
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
+import { exportDiagnostics } from './export-diagnostics.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -279,6 +280,13 @@ export async function convertFilm(options) {
         report.status = 'simulation_and_artifacts_verified';
       } finally { closeSync(validationLog); }
       report.timing.validation_seconds = (performance.now() - verificationStarted) / 1000;
+    }
+    if (profile.port === 'beta5' && profile.exporter_revision >= 11) {
+      report.client_diagnostics = await exportDiagnostics(join(work, 'input.h1film'),
+        join(stage, 'candidate', 'client-diagnostics.h1diag'), {
+          film_sha256: filmHash, raw_map_sha256: mapHash, engine_profile: profile.id,
+          source_tick_count: native.envelope.ticks, source_tick_rate: profile.tick_rate,
+        });
     }
     report.timing.total_seconds = (performance.now() - totalStarted) / 1000;
     await save(join(stage, 'report.json'), report);

@@ -1,5 +1,18 @@
 # H1 Film Compatibility
 
+## Beta 5 client diagnostic companion (deployed, 2026-10-29 UTC)
+
+Worker/default `20261029-r4`, policy revision 4, and API `live=219` select Beta 5
+11/4/5. `halospawns.h1ClientDiagnostics.v1` is an indexed companion to the same
+viewer-5 world replay, bound to its immutable generation. API registration,
+activation, ingest and asset delivery all recognize the contract. Old recipes
+and readers remain; Beta 4 approvals copied to Beta 5 retain their exact pins.
+All three real companions match the source byte-for-byte and upstream decoding;
+the world replay hashes match exporter 10. Existing clients still play viewer 5.
+Frontend reader/handoff changes stay local; overlay rendering is future work.
+Rollback the policy while retaining the current worker/API readers for pinned
+diagnostic jobs. See `CLIENT_DIAGNOSTICS.md` and `DEPLOYMENT.md`.
+
 ## Beta 5 (deployed, 2026-10-29 UTC)
 
 Worker `20261029-r2` / API `live=217` add the separate `beta5` port and profile

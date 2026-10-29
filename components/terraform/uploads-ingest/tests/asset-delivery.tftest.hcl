@@ -64,8 +64,9 @@ run "s3_default" {
       "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*.webp",
       "arn:aws:s3:::uploads-dev-283279960672/replays/processed/*.zst",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*.hsrv",
+      "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*/generations/*/h1-client-diagnostics.v1.*.h1diag",
     ])
-    error_message = "CDN access must exclude raw maps, unprocessed uploads, manifests, and support-only artifacts."
+    error_message = "CDN access must include generation-bound H1 diagnostic companions and exclude raw maps, unprocessed uploads, manifests, and support-only artifacts."
   }
   assert {
     condition     = aws_cloudfront_cache_policy.assets["mutable"].max_ttl == 300 && aws_cloudfront_cache_policy.assets["immutable"].max_ttl == 31536000
@@ -139,7 +140,7 @@ run "h1_preserves_canonical_versions" {
       local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
       local.pipelines.films.unprocessed_prefix == "films/unprocessed/" &&
       aws_sqs_queue.file_processing["films"].visibility_timeout_seconds == 5400 &&
-      length(local.asset_download_object_arns) == 8
+      length(local.asset_download_object_arns) == 9
     )
     error_message = "Keep pinned film versions without broadening CDN access or changing Xbox retention."
   }
@@ -194,7 +195,7 @@ run "h1_preserves_retained_map_versions" {
   }
   assert {
     condition = (
-      length(local.asset_download_object_arns) == 8 &&
+      length(local.asset_download_object_arns) == 9 &&
       !contains(local.asset_download_object_arns, "${local.uploads_bucket_arn}/maps/processed/*.map")
     )
     error_message = "Retaining raw originals must not make them downloadable through CloudFront."

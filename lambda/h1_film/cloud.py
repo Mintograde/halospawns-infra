@@ -21,7 +21,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-from . import analytics, recorded, settings
+from . import analytics, client_diagnostics, recorded, settings
 from .registry import IDENTITY, load_registry, select_exporter
 
 PACKAGE = Path(__file__).parent
@@ -747,6 +747,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         container=container,
     )
     viewer["playback"] = dict(PLAYBACK)
+    client_diagnostics.publish(shared, report, directory, proof, viewer)
     if job["mode"] == "viewer_rebuild":
         return "/v1/ingest/replay-viewer-artifacts", {
             "replay_file_id": job["replay_id"],
@@ -834,6 +835,8 @@ def replay_completion(job):
         require(payload["h1film_settings"]["engine_profile"] == pin["film"]["engine_profile"])
     require(payload.get("source_kind") == "h1film" and "cleanup_object" not in manifest)
     require(payload["viewer_artifact"].get("playback") == PLAYBACK)
+    client_diagnostics.validate(payload["viewer_artifact"].get("h1_diagnostics"),
+                                proof, payload["viewer_artifact"])
     for key in ("generation_token", "request_epoch", "request_sequence"):
         require(
             payload["viewer_artifact"].get(key) == job["viewer_artifact_target"][key]
