@@ -1344,7 +1344,7 @@ class ReplayParserFactFinalizationTests(unittest.TestCase):
         self.assertIs(participant_facts["participant.is_host"], True)
         self.assertIs(participant_facts["participant.is_hostman"], True)
 
-    def test_parse_replay_sets_on_off_host_style_for_single_non_hostman_host(self) -> None:
+    def test_parse_replay_sets_local_host_style_for_single_non_hostman_host(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = _write_replay_json(
                 Path(tmp),
@@ -1366,10 +1366,27 @@ class ReplayParserFactFinalizationTests(unittest.TestCase):
             )
             parsed = handler._parse_replay(path)
 
-        self.assertEqual(parsed.facts["game"]["game.host_style"], "on_off")
+        self.assertEqual(parsed.facts["game"]["game.host_style"], "local")
         participant_facts = parsed.facts["participants"][0]["facts"]
         self.assertIs(participant_facts["participant.is_host"], True)
         self.assertNotIn("participant.is_hostman", participant_facts)
+
+    def test_parse_replay_classifies_all_local_and_mixed_host_rosters(self) -> None:
+        for flags, expected in (
+            ([True, True], "local"), ([True, True, True, True], "local"),
+            ([True, False], "on_off"), ([True, None], "on_off"),
+        ):
+            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as tmp:
+                path = _write_replay_json(Path(tmp), map_info=None, tick_overrides={
+                    "players": [
+                        {"player_index": slot, "name": f"Player {slot}", "team": 0,
+                         "kills": 0, "deaths": 0, "assists": 0, "score": 0,
+                         "derived_stats": {"is_host": host} if host is not None else {}}
+                        for slot, host in enumerate(flags)
+                    ],
+                })
+                parsed = handler._parse_replay(path)
+                self.assertEqual(parsed.facts["game"]["game.host_style"], expected)
 
     def test_parse_replay_sets_on_off_host_style_for_multiple_hosts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

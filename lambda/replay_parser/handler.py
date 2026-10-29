@@ -2786,6 +2786,11 @@ def _host_style_fact_value(participants: list[dict[str, Any]]) -> str:
         metadata = _proxy_dict(host_players[0].get("metadata"))
         if _optional_bool(metadata.get("is_hostman")) is True:
             return "neutral"
+    if len(host_players) == len(participants) and all(
+        _optional_bool(_proxy_dict(player.get("metadata")).get("is_hostman")) is not True
+        for player in host_players
+    ):
+        return "local"
     return "on_off"
 
 

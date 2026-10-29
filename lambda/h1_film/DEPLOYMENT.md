@@ -1,19 +1,88 @@
 # H1 film Lambda integration
 
-## Pending local host-style extension (2026-10-27 UTC)
+## Host-style extension deployed (2026-10-29 UTC)
 
-Evidence-based `on_off` / `neutral` / unknown classification is implemented and
-tested locally. See `BETA4.md` and handoff `20261027-infra-api-h1film-host-style`.
-The sibling API must release its compatible proof reader and normalization
-before a new immutable worker is published/promoted. Its manifest declares
-`network_host: halospawns.h1NetworkHost.v2`, which older APIs reject. The normal
-`RELEASES.md` workflow still applies; no recipe or engine revision changes.
-The local candidate passes a packaged Weld conversion and candidate-API
-initial/full/viewer callbacks with unchanged replay/spatial/statistics/settings
-products. Neutral classification has synthetic coverage; add a real dedicated
-film to the private corpus when available. No new release, policy promotion,
-Terraform apply, migration, historical reparse or prod action was performed.
-The installed worker and active policy below remain unchanged.
+The user authorized publication and dev promotion while the compatible API was
+deploying. Worker **20261029-r1** is installed and is the effective default at
+policy revision **2**, verified against API **live=215**. Immutable image digest:
+`sha256:ccd005c4bfddc978db259b54adb6758a3b89dad82926ae6f5020bc82ada49a25`
+(405,091,675 compressed bytes). The release date is UTC; local publication was
+the evening of October 28.
+
+This release adds `network_host: halospawns.h1NetworkHost.v2` for evidence-based
+`on_off` / `neutral` / unknown classification. All three profiles, twelve
+exporters, existing map approvals and processing recipes remain unchanged:
+Beta 4 uses 10 / 4 / 5; Beta 3 and retained arena use 5 / 4 / 4. New initial/full
+attempts resolve the new release; old attempts and receipts keep their pins.
+See `BETA4.md` and completed handoff `20261027-infra-api-h1film-host-style`.
+
+The image was built from committed source
+`005d008c8a919eee88c69e0955889c54221e74b4` in the isolated checkout
+`.build/h1-release-source-20261029-r1/`. This excludes the user's pending
+uncommitted Xbox local-host edit to `lambda/replay_parser/handler.py`, which
+the H1 Dockerfile otherwise copies as a shared dependency. The original
+working-tree edit and its tests remain untouched.
+
+The user's API release from commit
+`bfa39fcd9c4ebef10888be7948164aa152ceca3c` reached alias 215 through normal CI.
+The downloaded ZIP SHA-256
+`3cbd73db679a425cbad48311f24d70e3f7aacb7047b6675d3ad46b65f4adf9e1`
+matches AWS. Its reader and release-requirement compatibility were verified
+before publication; the promotion then tested against the actual deployed ZIP
+and its Linux dependencies, fencing that same API version through activation.
+
+Validation:
+
+- All 32 Node tests and 74 packaged Python worker tests pass. Read-only/non-root
+  container health and job rejection pass.
+- Four packaged real films cover Beta 3 Prisoner, retained arena Dread, Beta 4
+  Weld and local bot Dread. All initial/full/viewer callbacks and immutable
+  receipt retries pass. Weld verifies 88,043 ticks and all 734 recorded hashes.
+- All twelve success callbacks, terminal failure callbacks and receipt
+  serialization pass against deployed API 215 without manual registry injection.
+  Neutral classification retains synthetic coverage; a real dedicated-server
+  film remains a private-corpus follow-up.
+- Focused and full dev preplans have only the H1 image/digest resource update;
+  the full plan also has the state-only API version-output refresh 213 to 215.
+  Renderer version 287 to 288 is external refresh drift, not a resource action.
+- The guarded saved-plan apply is **0 added / 1 changed / 0 destroyed**.
+  Live worker health, every retained engine hash, registry digest and producer
+  image pass. The API `/health` check passes. Memory 3,008 MiB, timeout 900
+  seconds, concurrency 5 and enabled batch-one queue mapping are unchanged.
+  Queue visible/in-flight/delayed counts and DLQ depth were zero after promotion.
+- Final `-CheckOnly` confirms desired/effective `20261029-r1`, revision 2.
+  The focused postplan is no-op. The full dev postplan has no resource actions,
+  only the unapplied API version-output refresh 213 to 215. Existing undeclared
+  `asset_delivery_mode` warnings remain unchanged.
+
+Exact release commands (the isolated checkout contains the committed scripts):
+
+```powershell
+git worktree add --detach .build/h1-release-source-20261029-r1 005d008c8a919eee88c69e0955889c54221e74b4
+Push-Location .build/h1-release-source-20261029-r1
+.\scripts\publish-h1-film.ps1 -Tag 20261029-r1 -EngineRoot L:/tmp/halospawns-weld-270337d1/release-r2/engines -PreviousRegistry L:/bens_stuff/projects/halospawns-infra/.build/h1-releases/20261027-r1-publication/registry.json -CorpusPath L:/bens_stuff/projects/halospawns-infra/.build/h1-film-corpus.json
+Pop-Location
+# Set map-processing.h1_film.image_tag and default_release to 20261029-r1.
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+atmos workflow promote-dev --file h1-film
+.\scripts\promote-h1-film.ps1 dev -CheckOnly
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Promotion evidence:
+`.build/h1-promotions/20261029-001918-98062403d9a84b5fa6d8ccbe27017c0e/`.
+Release logs, pre/postplans and operational snapshots:
+`.build/h1-host-style-release-20261029-r1/`. Packaged corpus evidence:
+`.build/h1-release-source-20261029-r1/.build/h1-contracts/20261029-r1-40efd38bbaac4871a9638c3feb31b22d/`.
+Published callback archive SHA-256:
+`3dd1102b59ba87a146695d290bc55274666b503604a6f71edda0eb74d7365e60`.
+
+No live upload/reparse, Weld recovery, historical backfill, queue mutation,
+migration, frontend deployment or prod action was submitted. Historical games
+need separately requested full reparses. Keep the release-aware readers and
+all retained recipes on rollback. The previous 20261027 release is retained.
 
 ## Immutable release defaults deployed (2026-10-27 UTC)
 
