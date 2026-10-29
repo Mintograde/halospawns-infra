@@ -1,5 +1,22 @@
 # H1 Film Compatibility
 
+## Beta 5 (deployed, 2026-10-29 UTC)
+
+Worker `20261029-r2` / API `live=217` add the separate `beta5` port and profile
+`h1-performance-beta5-p9818-wasm-v1`, pinned to upstream `beta-5` commit
+`fbbfae27d6be7e47613acce37da95ed754dccb42`. It accepts the supplied authoritative
+`Linux server` recordings at protocol 9818 with exporter 10 / analytics 4 /
+viewer 5. Client-view films and unregistered recorder labels remain unsupported.
+The new envelope, network projectile records and settings layout have separate
+adapters; every older engine, recipe and receipt reader is retained.
+
+All three supplied Dread films match the native reference byte-for-byte and
+pass all 964 recorded state hashes. Seven packaged films and 21 actual deployed
+API success callbacks plus failure/receipt checks pass. The user-authorized
+transfer copied all 70 Beta 4 map approvals with exact pins and audited lineage;
+the originals remain unchanged. Default release `20261029-r2` is active at
+policy revision 3. See `BETA5.md` and `DEPLOYMENT.md` for evidence and limits.
+
 ## Release catalogue (2026-10-27 UTC)
 
 Compatible future engine/exporter registrations and per-profile defaults are

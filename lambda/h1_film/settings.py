@@ -19,6 +19,8 @@ SCHEMA = "halospawns.h1FilmSettings.v1"
 MAX_DOCUMENT_BYTES = 256 * 1024
 MAX_TEXT_BYTES = 1024 * 1024
 LAYOUTS = {
+    "beta5": (504, 72, 13152, {"shot_delay_aim_ms": 12836, "input_pipeline_ticks": 12840,
+                            "aim_rate_hz": 12864, "shot_aim_ahead_ticks": 12844}),
     "beta3": (448, 57, 10352, {"shot_delay_aim_ms": 10168, "input_pipeline_ticks": 10172, "aim_rate_hz": 10188}),
     "h1arena": (480, 60, 12340, {"shot_delay_aim_ms": 12048, "input_pipeline_ticks": 12052, "aim_rate_hz": 12072}),
     "beta4": (480, 61, 12376, {"shot_delay_aim_ms": 12080, "input_pipeline_ticks": 12084,
@@ -36,6 +38,21 @@ footstep_sounds kill_restores overshield_visible os_tint_perp_r os_tint_perp_g
 os_tint_perp_b os_tint_par_r os_tint_par_g os_tint_par_b os_brightness os_type
 omit_first_spawn item_spawn_s camo_drop os_assassination teammate_outlines
 teammate_view teammate_respawn_timers fov_limit
+""".split()
+# Pinned beta5 blampc_gametype_custom: 128-byte name followed by 72 i32 fields.
+BETA5_VARIANT_FIELDS = """
+game_rules score_to_win flag_pickup ball_pickup hill_order hill_move_s
+ctf_assault ctf_single_flag_s ctf_flag_must_reset ctf_flag_at_home king_moving_hill ball_type
+ball_count ball_random_start ball_speed ball_trait_with ball_trait_without teams
+respawn_s suicide_s health_pct shields infinite_ammo fireteams
+infinite_grenades frags plasmas weapon_primary weapon_secondary skip_first_draw
+motion_tracker objectives_indicator friend_indicators camo_variant camo_refraction camo_falloff
+camo_tint_r camo_tint_g camo_tint_b spawns_visible powerup_waypoints random_pct_visible
+footstep_sounds pickup_sounds teleporter_sounds shield_sounds weapon_drop_sounds map_scenery_audio
+weapon_sounds_all ambience_volume kill_restores overshield_visible os_tint_perp_r os_tint_perp_g
+os_tint_perp_b os_tint_par_r os_tint_par_g os_tint_par_b os_brightness os_type
+omit_first_spawn item_spawn_s camo_drop os_assassination teammate_outlines teammate_view
+teammate_respawn_timers fov_limit time_limit_min overtime overtime_timed overtime_length_min
 """.split()
 VARIANT_BOOLEANS = set("""
 ctf_assault ctf_flag_must_reset ctf_flag_at_home king_moving_hill ball_random_start
@@ -255,7 +272,7 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         if words[:4] != (0x314D4C46, profile["format"], profile["protocol_revision"], profile["tick_rate"]):
             raise ValueError("Settings header differs from engine profile")
         if words[16] != header_size or words[4] not in (
-            options_size, options_size + 4 if profile["port"] == "beta4" else options_size
+            options_size, options_size + 4 if profile["port"] in ("beta4", "beta5") else options_size
         ):
             raise ValueError("Unsupported recorded settings layout")
         if not header_size <= words[17] <= size:
@@ -289,12 +306,16 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
     if variant:
         name = variant[:128].split(b"\0", 1)[0].decode("utf-8", errors="replace")
         fields["variant.name"] = entry("variant.name", name, "recorded_variant")
-        variant_fields = VARIANT_FIELDS if profile["port"] == "beta4" else [
+        variant_fields = VARIANT_FIELDS if profile["port"] in ("beta4", "beta5") else [
             key for key in VARIANT_FIELDS if key != "powerup_waypoints"
         ][:field_count]
+        if profile["port"] == "beta5":
+            variant_fields = BETA5_VARIANT_FIELDS
         for key in VARIANT_FIELDS:
             fields[f"variant.{key}"] = unavailable("not_supported")
         for index, key in enumerate(variant_fields):
+            if key not in VARIANT_FIELDS or (profile["port"] == "beta5" and key in ("footstep_sounds", "kill_restores")):
+                continue  # Beta5 changed these from booleans to sliders/enums.
             fields[f"variant.{key}"] = entry(f"variant.{key}", struct.unpack_from("<i", variant, 128 + index * 4)[0],
                                               "recorded_variant")
     else:
@@ -335,7 +356,7 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         header_fields.update(initial_human_player_count=words[31] & 255, recorder_player_slot=(words[31] >> 8) & 255)
     else:
         header_fields["initial_human_player_count"] = words[25]
-    if profile["port"] == "beta4":
+    if profile["port"] in ("beta4", "beta5"):
         created = struct.unpack_from("<Q", header, 464)[0]
         if created:
             header_fields["created_utc"] = created

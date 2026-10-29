@@ -1,5 +1,87 @@
 # H1 film Lambda integration
 
+## Beta 5 deployed (2026-10-29 UTC)
+
+Worker **20261029-r2** is installed and promoted in dev at policy revision
+**3**, with compatible API **live=217**. Immutable image digest:
+`sha256:d5744b3a9ccaa34e6f3123f9f06288c858d3b593b463b21e6d307fc980517342`
+(425,167,035 compressed bytes). Both `image_tag` and `default_release` select
+this release. The new `beta5` port/profile uses exporter 10 / analytics 4 /
+viewer 5 and pins upstream `beta-5` / `fbbfae27d6be7e47613acce37da95ed754dccb42`.
+All four profiles, thirteen exporter entries and prior recipes are retained.
+See `BETA5.md` for exact binary pins, source-layout changes and tested scope:
+protocol 9818 / `Linux server` authoritative recordings; other recorder labels
+and client-view films remain unsupported.
+
+The user explicitly authorized all Beta 4 approvals to carry forward. All
+**70** eligible approvals were copied with the API-owned audited transfer
+service from the matching API source, under the existing sole admin approver.
+The bounded previews had zero blockers. Transfers preserved every raw S3
+version/hash/size, map/release/scenario identity, GLB hash and exporter evidence;
+each destination has source-binding and transfer lineage. All original Beta 4
+rows were compared afterward and remain unchanged. Operations:
+`baa4fd58-d760-4237-8a4b-2cbcd8f04ff7` (50) and
+`34c21a84-6875-42e7-93f6-7c3887d3f81a` (20). The new display name is
+`H1 Performance Beta 5`. Preview, frozen requests, results and verification are
+retained under `.build/beta5/map-*.json`; no raw SQL mutations were used.
+
+API commit `e916ba48b849ee1f3e16a655d9cebef0abab74dd` extends only the reviewed
+timestamp/network-host evidence reader. It passed normal
+[build/publish CI](https://github.com/Mintograde/halospawns-api/actions/runs/40956754525)
+and deployed as 217. The actual deployed ZIP SHA-256 is
+`35759d484103d8954393256762ff25a1cd54bab6fd771a6939009a3c6feeefc7`.
+The promotion verified that ZIP's hash and Linux dependencies and fenced API
+217 through activation. Engine/default registration remains manifest-owned;
+no migration, API hash-table update or frontend pin change was needed.
+
+Validation and rollout:
+
+- Final reproducible WASM exports match native bytes for all three supplied
+  Beta 5 Dread films: 115,604 ticks, 964 recorded hashes, zero seed/hash
+  mismatches. The longer film has eight distinct participants and late joins.
+- All 41 Node and 76 local/packaged worker tests pass. API source passes 1,766
+  unit tests (six skipped) and full lint. Container health and rejection pass.
+- Seven packaged films cover Beta 3, retained arena, Beta 4 and Beta 5. All
+  initial/full/viewer callbacks and receipt retries pass. All 21 success
+  callbacks plus failure/receipt checks pass against the actual deployed API.
+  All three Beta 5 products retain settings and real `neutral` host evidence.
+- Focused/full preplans contain only the H1 image/digest resource update.
+  The guarded apply is **0 added / 1 changed / 0 destroyed**. Live worker health,
+  all retained hashes, release/registry provenance and API `/health` pass.
+- Final desired/effective default is `20261029-r2`, revision 3. Memory 3,008
+  MiB, timeout 900 seconds, ephemeral storage 8,192 MiB, concurrency 5 and the
+  enabled batch-one SQS mapping are unchanged. Queue and DLQ counts are zero.
+- Focused postplan is no-op. Full dev postplan has no resource actions, only
+  the unapplied API version-output refresh 213 to 217. Existing undeclared
+  `asset_delivery_mode` warnings are unchanged.
+
+Exact release commands:
+
+```powershell
+.\lambda\h1_film\tools\build-engine.ps1 -Source .build/beta5/source -BuildDirectory .build/beta5/wasm-final -Port beta5 -Combat -NetworkReplayFixes -DamageAttribution -FiniteWorldObjects
+.\scripts\publish-h1-film.ps1 -Tag 20261029-r2 -EngineRoot .build/beta5/engines -PreviousRegistry .build/beta5/previous-registry.json -CorpusPath .build/beta5/corpus.json
+# Set map-processing.h1_film.image_tag and default_release to 20261029-r2.
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+atmos workflow promote-dev --file h1-film
+.\scripts\promote-h1-film.ps1 dev -CheckOnly
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Promotion evidence:
+`.build/h1-promotions/20261029-212535-0744496dc30542b6b3c70fc807c36a79/`.
+Packaged corpus:
+`.build/h1-contracts/20261029-r2-251bcb5d9e53406883fb67e24fb980e4/`.
+Published callback archive SHA-256:
+`c88581d5ce1dc75017e01a55d0013301e4d19c13b0822caa3c6e0be140ab167f`.
+Build/parity, approval transfer, plans and operational evidence: `.build/beta5/`.
+
+No live upload/reparse, Weld recovery, historical backfill, queue mutation,
+frontend deployment or prod action was submitted. Existing attempts retain
+their pins. Keep Beta 5 readers and all engines when rolling back the default;
+the previous worker/default release remains available.
+
 ## Host-style extension deployed (2026-10-29 UTC)
 
 The user authorized publication and dev promotion while the compatible API was

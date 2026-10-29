@@ -10,9 +10,9 @@ param(
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
-if ($FiniteWorldObjects -and $Port -ne 'beta4') { throw 'Finite world object filtering requires the beta4 port.' }
-if ($NetworkReplayFixes -and $Port -ne 'beta4') { throw 'Network replay corrections require the beta4 port.' }
-if ($DamageAttribution -and ($Port -ne 'beta4' -or -not $Combat)) { throw 'Damage attribution requires beta4 combat export.' }
+if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5')) { throw 'Finite world object filtering requires beta4 or beta5.' }
+if ($NetworkReplayFixes -and $Port -notin @('beta4', 'beta5')) { throw 'Network replay corrections require beta4 or beta5.' }
+if ($DamageAttribution -and ($Port -notin @('beta4', 'beta5') -or -not $Combat)) { throw 'Damage attribution requires beta4 or beta5 combat export.' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $worker = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $buildPath = [IO.Path]::GetFullPath($BuildDirectory)

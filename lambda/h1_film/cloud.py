@@ -655,7 +655,7 @@ def validate_proof(pin, proof, *, analytics_revision=None):
         except ValueError as error:
             raise FilmError("validation_failed") from error
     if proof.get("created_utc") is not None:
-        require(pin["film"]["engine_profile"] == "h1-performance-beta4-p9803-wasm-v1")
+        require(pin["film"]["engine_profile"] in recorded.RECORDED_PROFILES)
         require(proof["created_utc"] + (proof.get("match_end_source_tick") or 0) / 120 <= 253402300799)
     require(
         proof.get("analytics_revision", 1) == analytics_revision

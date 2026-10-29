@@ -8,9 +8,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
+RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1")
+
+
 def validate_network_host(value: dict, *, engine_profile: str, player_count: int) -> None:
     if (
-        engine_profile != "h1-performance-beta4-p9803-wasm-v1"
+        engine_profile not in RECORDED_PROFILES
         or not isinstance(value, dict)
         or set(value) != {"provenance", "source_tick", "initial_player_count",
                           "local_player_count", "remote_player_mask", "host_slots"}
@@ -40,7 +43,7 @@ def recording_utc(report: dict) -> int | None:
     if value is None:
         return None
     if (
-        report["engine_profile"] != "h1-performance-beta4-p9803-wasm-v1"
+        report["engine_profile"] not in RECORDED_PROFILES
         or type(value) is not int or not 1 <= value <= 253402300799
     ):
         raise ValueError("Invalid recorded UTC evidence")
@@ -62,6 +65,8 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
         return 480, 60
     if identity == (0x314D4C46, 2, 9803, 120) and words[16] == 480:
         return 480, 61
+    if identity == (0x314D4C46, 2, 9818, 120) and words[16] == 504:
+        return 504, 72
     raise ValueError("Unsupported recorded evidence adapter")
 
 

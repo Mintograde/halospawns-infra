@@ -142,3 +142,18 @@ class RecordedTests(unittest.TestCase):
             struct.pack_into("<I", data, 22 * 4, 0)
             path.write_bytes(data)
             self.assertIsNone(recorded.resolved_variant(path, encoding=encoding))
+
+    def test_beta5_recording_evidence_retains_exact_profile_and_header_gates(self):
+        profile = "h1-performance-beta5-p9818-wasm-v1"
+        self.assertEqual(recorded.recording_utc({"engine_profile": profile,
+                         "envelope": {"created_utc": 1793303779}}), 1793303779)
+        words = [0] * 32
+        words[:4] = (0x314D4C46, 2, 9818, 120)
+        words[16] = 504
+        self.assertEqual(recorded.recorded_layout(tuple(words)), (504, 72))
+        words[16] = 480
+        with self.assertRaises(ValueError):
+            recorded.recorded_layout(tuple(words))
+        recorded.validate_network_host({"provenance": "initial_fnet_all_remote_v1",
+            "source_tick": 0, "initial_player_count": 5, "local_player_count": 0,
+            "remote_player_mask": 31, "host_slots": []}, engine_profile=profile, player_count=8)

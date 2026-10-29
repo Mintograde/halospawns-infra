@@ -24,8 +24,8 @@ class RegistryTests(unittest.TestCase):
 
     def test_combat_exporters_preserve_both_profile_identities_and_old_pins(self):
         for profile in load_registry().values():
-            combat = select_exporter(profile, 5)
-            if profile["port"] == "beta4":
+            combat = select_exporter(profile, 10 if profile["port"] == "beta5" else 5)
+            if profile["port"] in ("beta4", "beta5"):
                 with self.assertRaisesRegex(ValueError, "exporter"):
                     select_exporter(profile, 4)
             else:
@@ -35,6 +35,19 @@ class RegistryTests(unittest.TestCase):
             for field in ("id", "build", "format", "protocol_revision", "tick_rate", "source"):
                 self.assertEqual(combat.get(field), profile.get(field))
             self.assertEqual(select_exporter(profile, None), profile)
+
+    def test_beta5_has_its_own_protocol_and_immutable_source_identity(self):
+        profile = load_registry()["h1-performance-beta5-p9818-wasm-v1"]
+        self.assertEqual(profile["port"], "beta5")
+        self.assertEqual(profile["adapter"], "beta5-v2-120-v1")
+        self.assertEqual(profile["protocol_revision"], 9818)
+        self.assertEqual(profile["build"], "Linux server")
+        self.assertEqual(profile["source"]["git_commit"],
+                         "fbbfae27d6be7e47613acce37da95ed754dccb42")
+        exporter = select_exporter(profile, 10)
+        self.assertEqual(exporter["source"], profile["source"])
+        with self.assertRaisesRegex(ValueError, "exporter"):
+            select_exporter(profile, 9)
 
     def test_h1arena_requires_full_commit_and_source_fingerprint(self):
         document = json.loads(REGISTRY_PATH.read_text())

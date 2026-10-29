@@ -68,6 +68,8 @@ score_to_win = 999
             fields = settings.VARIANT_FIELDS if port == "beta4" else [
                 field for field in settings.VARIANT_FIELDS if field != "powerup_waypoints"
             ][:count]
+            if port == "beta5":
+                fields = settings.BETA5_VARIANT_FIELDS
             values = {"game_rules": 0, "score_to_win": 50, "teams": 1, "shields": 0,
                       "weapon_secondary": -1, "footstep_sounds": 1, "teammate_outlines": 1,
                       "os_brightness": 70, "fov_limit": 2, "powerup_waypoints": 3}
@@ -109,10 +111,14 @@ score_to_win = 999
                 self.assertEqual(fields["variant.name"]["value"], "selected")
                 self.assertEqual(fields["variant.score_to_win"]["value"], 50)
                 self.assertEqual(fields["variant.os_brightness"]["value"], 70)
-                self.assertIs(fields["variant.footstep_sounds"]["value"], True)
+                if port == "beta5":
+                    self.assertEqual(fields["variant.footstep_sounds"]["status"], "unavailable")
+                    self.assertEqual(fields["variant.kill_restores"]["status"], "unavailable")
+                else:
+                    self.assertIs(fields["variant.footstep_sounds"]["value"], True)
                 self.assertIs(fields["variant.teammate_outlines"]["value"], True)
                 self.assertEqual(fields["variant.weapon_secondary"]["value"], -1)
-                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port == "beta4" else None)
+                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port in ("beta4", "beta5") else None)
                 self.assertEqual(fields["variant.fov_limit"].get("value"), None if port == "beta3" else 2)
 
     def test_timing_uses_binary_ticks_and_the_recorded_tick_rate(self):

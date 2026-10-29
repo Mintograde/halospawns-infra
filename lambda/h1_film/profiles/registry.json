@@ -1,253 +1,267 @@
 {
   "schema": "halospawns.h1EngineRegistry.v1",
   "processing": {
-      "defaults": {
-        "h1-performance-beta3-p45-wasm-v1": {
+    "defaults": {
+      "h1-performance-beta3-p45-wasm-v1": {
+        "exporter_revision": 5,
+        "analytics_revision": 4,
+        "viewer_revision": 4,
+        "max_players": 4
+      },
+      "h1arena-197bb65c-p9111-wasm-v1": {
+        "exporter_revision": 5,
+        "analytics_revision": 4,
+        "viewer_revision": 4,
+        "max_players": 4
+      },
+      "h1-performance-beta4-p9803-wasm-v1": {
+        "exporter_revision": 10,
+        "analytics_revision": 4,
+        "viewer_revision": 5,
+        "max_players": 16
+      },
+      "h1-performance-beta5-p9818-wasm-v1": {
+        "exporter_revision": 10,
+        "analytics_revision": 4,
+        "viewer_revision": 5,
+        "max_players": 16
+      }
+    },
+    "recipes": {
+      "h1-performance-beta3-p45-wasm-v1": [
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 1,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 2,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 2,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 2,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 2,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 3,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 3,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 3,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        }
+      ],
+      "h1arena-197bb65c-p9111-wasm-v1": [
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 1,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 2,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 4,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        }
+      ],
+      "h1-performance-beta4-p9803-wasm-v1": [
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 1,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 1,
+          "analytics_revision": 2,
+          "viewer_revision": 2,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 1,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 2,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 5,
+          "analytics_revision": 3,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
           "exporter_revision": 5,
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
         },
-        "h1arena-197bb65c-p9111-wasm-v1": {
-          "exporter_revision": 5,
+        {
+          "exporter_revision": 6,
           "analytics_revision": 4,
-          "viewer_revision": 4,
-          "max_players": 4
+          "viewer_revision": 5,
+          "max_players": 16
         },
-        "h1-performance-beta4-p9803-wasm-v1": {
+        {
+          "exporter_revision": 7,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 8,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 9,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
           "exporter_revision": 10,
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
         }
-      },
-      "recipes": {
-        "h1-performance-beta3-p45-wasm-v1": [
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 1,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 2,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 2,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 2,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 2,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 3,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 3,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 3,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 4,
-            "viewer_revision": 4,
-            "max_players": 4
-          }
-        ],
-        "h1arena-197bb65c-p9111-wasm-v1": [
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 1,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 2,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 4,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 4,
-            "viewer_revision": 4,
-            "max_players": 4
-          }
-        ],
-        "h1-performance-beta4-p9803-wasm-v1": [
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 1,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 1,
-            "analytics_revision": 2,
-            "viewer_revision": 2,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 1,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 2,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 3,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 5,
-            "analytics_revision": 4,
-            "viewer_revision": 4,
-            "max_players": 4
-          },
-          {
-            "exporter_revision": 6,
-            "analytics_revision": 4,
-            "viewer_revision": 5,
-            "max_players": 16
-          },
-          {
-            "exporter_revision": 7,
-            "analytics_revision": 4,
-            "viewer_revision": 5,
-            "max_players": 16
-          },
-          {
-            "exporter_revision": 8,
-            "analytics_revision": 4,
-            "viewer_revision": 5,
-            "max_players": 16
-          },
-          {
-            "exporter_revision": 9,
-            "analytics_revision": 4,
-            "viewer_revision": 5,
-            "max_players": 16
-          },
-          {
-            "exporter_revision": 10,
-            "analytics_revision": 4,
-            "viewer_revision": 5,
-            "max_players": 16
-          }
-        ]
-      },
-      "requirements": {
-        "job": "halospawns.h1film_job.v2",
-        "completion": "halospawns.h1FilmCompletion.v1",
-        "failure": "halospawns.h1FilmFailure.v1",
-        "settings": "halospawns.h1FilmSettings.v1",
-        "native": "halospawns.h1NativeAnalytics.v2",
-        "network_host": "halospawns.h1NetworkHost.v2"
-      }
+      ],
+      "h1-performance-beta5-p9818-wasm-v1": [
+        {
+          "exporter_revision": 10,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        }
+      ]
     },
+    "requirements": {
+      "job": "halospawns.h1film_job.v2",
+      "completion": "halospawns.h1FilmCompletion.v1",
+      "failure": "halospawns.h1FilmFailure.v1",
+      "settings": "halospawns.h1FilmSettings.v1",
+      "native": "halospawns.h1NativeAnalytics.v2",
+      "network_host": "halospawns.h1NetworkHost.v2"
+    }
+  },
   "profiles": [
     {
       "id": "h1-performance-beta3-p45-wasm-v1",
@@ -308,6 +322,29 @@
       },
       "wasm_sha256": "6d85adc3181566b4100c811b33ced38525baf1b842c84642adc7cad60013df66",
       "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "id": "h1-performance-beta5-p9818-wasm-v1",
+      "format": 2,
+      "protocol_revision": 9818,
+      "tick_rate": 120,
+      "build": "Linux server",
+      "adapter": "beta5-v2-120-v1",
+      "port": "beta5",
+      "export_contract": "HSFT0001",
+      "transport_contract": "HSFT0002",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "source": {
+        "project": "h1arena",
+        "git_commit": "fbbfae27d6be7e47613acce37da95ed754dccb42",
+        "git_date": "2026-10-29",
+        "algorithm": "halospawns.sourceTreeSha256.v1",
+        "files": 12679,
+        "sha256": "06dfc16e2672967b01162902e9f3457f9d51acffb4cc2b7db3f59494671e6d8f"
+      },
+      "wasm_sha256": "6893f5cf29b242371bedff719d5c8e259b2453c4d49d739a613b1878e77e15fd",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
     }
   ],
   "exporters": [
@@ -392,6 +429,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "fb0fce8a771f2efb03dee0ad28e1c70eea4099b3ed5f26181bbda7447f67e362",
       "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 10,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "6893f5cf29b242371bedff719d5c8e259b2453c4d49d739a613b1878e77e15fd",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
     }
   ]
 }
