@@ -100,3 +100,15 @@ test('map names and file sizes cannot cross builds or resolve ambiguous cache va
   assert.throws(() => resolveMap(profile, { ...envelope, build: 'different build' }, catalog([map])));
   assert.throws(() => resolveMap(profile, envelope, catalog([{ ...map, sha256: 'not-a-hash' }])));
 });
+
+test('Beta 5 missing recorded size requires one exact profile/scenario binding', () => {
+  const beta5 = ENGINE_PROFILES.find(p => p.port === 'beta5');
+  const film = { ...beta5, map: 'dread', map_bytes: 0 };
+  const binding = { ...map, engine_profile: beta5.id };
+  assert.deepEqual(resolveMap(beta5, film, catalog([binding])), binding);
+  assert.throws(() => resolveMap(beta5, film, catalog([])), /unavailable/);
+  assert.throws(() => resolveMap(beta5, film, catalog([binding, {...binding, size_bytes: 4096}])), /Ambiguous/);
+  assert.throws(() => resolveMap(beta5, film, catalog([map])), /unavailable/);
+  assert.throws(() => resolveMap(profile, {...envelope, map_bytes: 0}, catalog([map])), /unavailable/);
+  assert.throws(() => resolveMap(beta5, {...film, map_bytes: 4096}, catalog([binding])), /unavailable/);
+});

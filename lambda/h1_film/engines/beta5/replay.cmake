@@ -1,3 +1,5 @@
+option(H1_ROSTER_RECOVERY "Build evidence-bound Beta 5 initial roster recovery" OFF)
+
 function(hs_beta5_replace input anchor replacement)
     string(FIND "${${input}}" "${anchor}" first)
     string(FIND "${${input}}" "${anchor}" last REVERSE)
@@ -26,6 +28,21 @@ function(hs_beta5_replay_source name input output)
         hs_beta5_replace(content "opts->players = count;" "opts->players = count < 4 ? count : 4;")
         file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/roster.c" roster_source)
         string(APPEND content "\n${roster_source}")
+        if(H1_ROSTER_RECOVERY)
+            file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/roster-recovery.c" recovery_source)
+            hs_beta5_replace(content "static blampc_boot_options g_film_options;"
+                "static blampc_boot_options g_film_options;\n${recovery_source}")
+            hs_beta5_replace(content "film_names_load(g_file, &g_env);"
+                "film_names_load(g_file, &g_env);\n    hs_load_roster_recovery();")
+            string(REPLACE "count > BLAMPC_FILM_ROSTER_MAX" "count > (hs_recovery_count ? (int)hs_recovery_count : BLAMPC_FILM_ROSTER_MAX)" content "${content}")
+            hs_beta5_replace(content "((g_env.reserved[0] >> (4 * i)) & 0xFu)" "hs_initial_team(i)")
+            hs_beta5_replace(content "if (physical >= BLAMPC_FILM_ROSTER_MAX) abort();"
+                "if (physical >= (hs_recovery_count ? (int)hs_recovery_count : BLAMPC_FILM_ROSTER_MAX)) abort();")
+            hs_beta5_replace(content "player->team_index = (g_env.reserved[0] >> (physical * 4)) & 15u;"
+                "if (physical >= 8 && (unsigned int)handle != hs_recovery_handles[physical]) abort();\n    player->team_index = hs_initial_team(physical);")
+            hs_beta5_replace(content "if (g_film_names_loaded) {"
+                "if (physical >= 8) memset(player->name, 0, sizeof player->name);\n    if (g_film_names_loaded && physical < 8) {")
+        endif()
     elseif(name STREQUAL "create_local_players.c")
         hs_beta5_replace(content "i < player_spawn_count;" "i < hs_film_initial_count(player_spawn_count);")
         hs_beta5_replace(content "int player_index = player_new(0, -1, local_player_index, 0);" "int player_index = player_new(i / 4, -1, local_player_index, 0);")

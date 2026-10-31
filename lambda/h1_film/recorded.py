@@ -11,7 +11,26 @@ from pathlib import Path
 RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1")
 
 
-def validate_network_host(value: dict, *, engine_profile: str, player_count: int) -> None:
+def validate_roster_recovery(value: dict, *, engine_profile: str, ticks: int,
+                            player_count: int, exporter: int) -> None:
+    players = value["recovered_players"]
+    if (
+        engine_profile != "h1-performance-beta5-p9818-wasm-v1" or exporter < 12
+        or value["schema"] != "halospawns.h1InitialRosterRecovery.v1"
+        or value["recorded_player_count"] != 8
+        or not 9 <= value["initial_player_count"] == player_count <= 16
+        or value["initial_remote_mask"] != (1 << player_count) - 1
+        or [p["slot"] for p in players] != list(range(8, player_count))
+        or len({p["team"] for p in players}) != len(players)
+        or any(not 0 <= p["first_source_tick"] <= p["last_source_tick"] < ticks
+               or p["player_handle"] & 65535 != p["slot"]
+               or p["player_handle"] >> 16 == 0 for p in players)
+    ):
+        raise ValueError("Invalid recovered initial roster")
+
+
+def validate_network_host(value: dict, *, engine_profile: str, player_count: int,
+                          roster_recovery: dict | None = None) -> None:
     if (
         engine_profile not in RECORDED_PROFILES
         or not isinstance(value, dict)
@@ -22,11 +41,17 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
             "source_tick", "initial_player_count", "local_player_count", "remote_player_mask"
         ))
         or value["source_tick"] != 0
-        or not 1 <= value["initial_player_count"] <= min(8, player_count)
+        or not 1 <= value["initial_player_count"] <= min(16 if roster_recovery else 8, player_count)
         or not 0 <= value["local_player_count"] <= 4
         or not 0 < value["remote_player_mask"] <= (1 << value["initial_player_count"]) - 1
     ):
         raise ValueError("Invalid network host evidence")
+    if value["initial_player_count"] > 8 and (
+        value["initial_player_count"] != roster_recovery["initial_player_count"]
+        or value["remote_player_mask"] != roster_recovery["initial_remote_mask"]
+        or value["provenance"] != "initial_fnet_all_remote_v1"
+    ):
+        raise ValueError("Network host evidence differs from recovered initial roster")
     slots = value["host_slots"]
     expected = [slot for slot in range(value["initial_player_count"])
                 if not value["remote_player_mask"] & (1 << slot)]

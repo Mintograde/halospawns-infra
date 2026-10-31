@@ -308,6 +308,32 @@ class H1AdaptationTests(unittest.TestCase):
                 parsed, report=report, encoding={"final_counters": {"0": counters}}
             )
 
+        # The recorded zero remains unknown; the Node-verified catalogue binding
+        # still supplies a bounded actual size and the simulated map's exact hash.
+        beta5 = "h1-performance-beta5-p9818-wasm-v1"
+        report["engine_profile"] = binding["engine_profile"] = beta5
+        binding["sha256"] = "b" * 64
+        report["envelope"]["map_bytes"] = 0
+        result = h1_film.adapt_parsed_replay(
+            parsed, report=report, encoding={"final_counters": {"0": counters}}
+        )
+        self.assertEqual(result.game["map_id"], binding["map_id"])
+        for key, value in (("size_bytes", 0), ("size_bytes", -1), ("size_bytes", 1.0),
+                           ("size_bytes", 256 * 1024 * 1024 + 1), ("sha256", "c" * 64),
+                           ("scenario", "other")):
+            previous = binding[key]
+            binding[key] = value
+            with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, "simulated map"):
+                h1_film.adapt_parsed_replay(
+                    parsed, report=report, encoding={"final_counters": {"0": counters}}
+                )
+            binding[key] = previous
+        report["engine_profile"] = binding["engine_profile"] = PROFILE["id"]
+        with self.assertRaisesRegex(ValueError, "simulated map"):
+            h1_film.adapt_parsed_replay(
+                parsed, report=report, encoding={"final_counters": {"0": counters}}
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

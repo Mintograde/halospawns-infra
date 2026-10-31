@@ -425,6 +425,46 @@ class CloudTests(unittest.TestCase):
             self.assertEqual(proof["recording_duration_seconds"], 1)
             self.assertEqual(proof["match_end_source_tick"], 90)
 
+    def test_recovered_roster_is_pinned_and_cannot_use_a_retained_exporter(self):
+        pin = self.job["conversion"]
+        profile = load_registry()["h1-performance-beta5-p9818-wasm-v1"]
+        selected = select_exporter(profile, 12)
+        pin["engine"].update({key: selected[key] for key in (
+            "format", "protocol_revision", "tick_rate", "build", "wasm_sha256",
+            "glue_sha256", "exporter_revision",
+        )})
+        recovery = {
+            "schema": "halospawns.h1InitialRosterRecovery.v1", "recorded_player_count": 8,
+            "initial_player_count": 9, "initial_remote_mask": 511,
+            "recovered_players": [{"slot": 8, "player_handle": -327679992, "team": 9,
+                "damage_record_count": 2, "first_source_tick": 1, "last_source_tick": 119}],
+        }
+        pin["film"].update(engine_profile=profile["id"], player_count=9,
+                            roster_recovery=recovery)
+        pin["film"].update({key: selected[key] for key in cloud.IDENTITY})
+        pin["map_binding"]["engine_profile"] = profile["id"]
+        proof = fixture("completion")["h1film"]
+        proof.update(engine_profile=profile["id"], exporter_revision=12,
+            wasm_sha256=selected["wasm_sha256"], glue_sha256=selected["glue_sha256"],
+            roster_recovery=copy.deepcopy(recovery))
+        proof["network_host"] = {"provenance": "initial_fnet_all_remote_v1", "source_tick": 0,
+            "initial_player_count": 9, "local_player_count": 0,
+            "remote_player_mask": 511, "host_slots": []}
+        cloud.validate_proof(pin, proof)
+        for mutation in ({"roster_recovery": None}, {"exporter_revision": 11}):
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_proof(pin, {**proof, **mutation})
+        changed = copy.deepcopy(proof)
+        changed["roster_recovery"]["recovered_players"][0]["damage_record_count"] += 1
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_proof(pin, changed)
+        self.job.update(schema="halospawns.h1film_job.v2", analytics_revision=1)
+        with patch.dict(os.environ, {"H1_MAX_PLAYERS": "16"}):
+            cloud.validate_job(self.job)
+            pin["engine"]["exporter_revision"] = 11
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_job(self.job)
+
     def test_foundation_rejects_jobs_and_extra_health_fields(self):
         with patch.dict(os.environ, {"H1_WORKER_MODE": "foundation"}):
             for event in (
@@ -616,3 +656,19 @@ class CloudTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class MissingMapSizeTests(unittest.TestCase):
+    def test_versioned_missing_size_is_beta5_only(self):
+        from jsonschema import Draft202012Validator
+        schema = json.loads((cloud.PACKAGE / 'contracts/h1film-job.v1.schema.json').read_text())['$defs']['H1FilmEvidence']
+        validate = Draft202012Validator(schema).is_valid
+        film = copy.deepcopy(fixture('initial-job')['conversion']['film'])
+        self.assertTrue(validate(film))
+        film['map_size_bytes'] = 0
+        self.assertFalse(validate(film))
+        film['map_size_evidence'] = 'halospawns.h1MissingMapSize.v1'
+        self.assertFalse(validate(film))
+        film['engine_profile'] = 'h1-performance-beta5-p9818-wasm-v1'
+        self.assertTrue(validate(film))
+        film['map_size_bytes'] = 100
+        self.assertFalse(validate(film))

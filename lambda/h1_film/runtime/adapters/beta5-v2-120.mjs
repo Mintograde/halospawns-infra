@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { open } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { verifyPlayback as verifyBasePlayback } from './film-v2-120.mjs';
+import {recoverInitialRoster, observeDamageOwner} from '../roster-recovery.mjs';
 
 export function unpackMszip(packed, expected) {
   assert.ok(packed.length >= 24 && packed.readUInt32LE(0) === 0xc0e5510a
@@ -43,7 +44,7 @@ async function readBlock(file, offset, length) {
   return result;
 }
 
-async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers) {
+async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers, recoveryContext) {
   assert.ok(size >= 32 && size <= 96 * 1024 * 1024 + 32, 'Invalid FNET size');
   const header = await readBlock(file, offset, 32);
   const words = Array.from({ length: 8 }, (_, index) => header.readUInt32LE(index * 4));
@@ -53,6 +54,8 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   assert.ok(words[6] <= Math.floor(words[7] / 24), 'Invalid FNET block count');
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
   const joined = new Set();
+  const owners = new Map();
+  let rosterChanged = false;
   let maxPlayerSlot = players - 1;
   let initialDropMask, observedRemoteMask = 0, initialRosterChanged = false, initialMaskChanged = false;
   const sizes = new Map([[1, 68], [2, 108], [3, 4], [4, 8], [5, 0], [6, 8], [7, 36], [8, 124], [9, 0], [10, 32], [11, 56], [12, 20]]);
@@ -83,6 +86,8 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
         observedRemoteMask |= mask;
       }
       if (tick === 0 && (type === 4 || type === 7)) initialRosterChanged = true;
+      if (type === 6 || type === 7) rosterChanged = true;
+      if (type === 2 && tick < firstTick + ticks) observeDamageOwner(owners, raw.subarray(position+8,position+8+length),tick);
       if (type === 7) {
         const handle = raw.readUInt32LE(position + 8), slot = handle & 65535;
         assert.ok(slot < 16, 'Joined player exceeds converter limit');
@@ -105,6 +110,13 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   assert.equal(cursor, size, 'Trailing FNET blocks');
   assert.equal(count, words[3], 'FNET record count mismatch');
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
+  const roster_recovery = recoverInitialRoster({players,firstTick,ticks,localPlayers,
+    initialMask:initialDropMask,maskChanged:initialMaskChanged,rosterChanged:rosterChanged || initialRosterChanged,
+    observedMask:observedRemoteMask,owners,...recoveryContext});
+  if (roster_recovery) {
+    players = roster_recovery.initial_player_count;
+    maxPlayerSlot = players - 1;
+  }
   const hostSlots = Array.from({ length: players }, (_, slot) => slot)
     .filter(slot => !(initialDropMask & (1 << slot)));
   let host;
@@ -123,7 +135,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     }
   }
   return { records: count, applications, blocks: words[6], participant_count: players + joined.size,
-    max_player_slot: maxPlayerSlot, ...(host ? { host } : {}) };
+    max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
 export async function readEnvelope(path) {
@@ -203,7 +215,14 @@ export async function readEnvelope(path) {
     const map = text(128, 256);
     assert.match(map, /^[a-zA-Z0-9_-]+$/, 'Invalid map name');
     assert.equal(Boolean(netSize), universal, 'FNET section and film flags disagree');
-    const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25]) : undefined;
+    // Pinned Beta 5 custom variant: name[128], 72 LE i32 fields. Field 17 is
+    // teamplay and field 23 is fireteams (blampc_config.h). No guessed mode.
+    const variant = words[22] === 416 ? await readBlock(file,words[21],416) : undefined;
+    const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25], {
+      teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+17*4) === 0
+        && variant.readInt32LE(128+23*4) === 0 && head.readUInt32LE(472) === 0),
+    }) : undefined;
+    if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;
     return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),

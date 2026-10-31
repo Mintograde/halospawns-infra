@@ -1,5 +1,8 @@
 # H1 Film Worker
 
+See [analytics ideas](ANALYTICS_IDEAS.md) for candidate stats, metrics, replay
+scenarios, evidence requirements, and suggested priorities for future review.
+
 The [settings export](SETTINGS.md) is deployed in dev as `20261024-r2` with API
 `live=202`: a versioned 217-key typed catalogue, immutable settings snapshots and
 selected typed indexes for game details and future filters. Frontend integration,

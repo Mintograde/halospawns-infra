@@ -151,6 +151,13 @@ def validate_job(job):
     profile = load_registry().get(film["engine_profile"])
     require(profile is not None, "unsupported_build")
     exporter = engine.get("exporter_revision")
+    recovery = film.get("roster_recovery")
+    if recovery is not None:
+        try:
+            recorded.validate_roster_recovery(recovery, engine_profile=film["engine_profile"],
+                ticks=film["source_tick_count"], player_count=film["player_count"], exporter=exporter or 1)
+        except ValueError as error:
+            raise FilmError("validation_failed") from error
     require(exporter is None or versioned, "unsupported_build")
     try:
         profile = select_exporter(profile, exporter)
@@ -171,7 +178,9 @@ def validate_job(job):
         binding["engine_profile"] == profile["id"]
         and binding["scenario"] == film["scenario"]
     )
-    require(binding["raw_source"]["size_bytes"] == film["map_size_bytes"])
+    missing_size = film.get("map_size_evidence") == "halospawns.h1MissingMapSize.v1"
+    require(not missing_size or (film["engine_profile"] == "h1-performance-beta5-p9818-wasm-v1" and film["map_size_bytes"] == 0))
+    require(missing_size or binding["raw_source"]["size_bytes"] == film["map_size_bytes"])
     validate_source(conversion["source"])
     validate_source(binding["raw_source"], raw_map=True)
     generation = job["attempt_id"] or job["upload_id"]
@@ -512,12 +521,16 @@ def inspect_film(path, work, deadline):
         env["ticks"] <= limits()["SOURCE_TICKS"]
         and env["players"] <= limits()["PLAYERS"]
     )
-    require(0 < env["map_bytes"] <= 256 * 1024**2)
+    missing_size = env["map_bytes"] == 0 and result["profile"] == "h1-performance-beta5-p9818-wasm-v1"
+    require(missing_size or 0 < env["map_bytes"] <= 256 * 1024**2)
     return {
         "engine_profile": result["profile"],
         **{key: env[key] for key in IDENTITY},
         "scenario": env["map"],
         "map_size_bytes": env["map_bytes"],
+        **({"map_size_evidence": "halospawns.h1MissingMapSize.v1"} if missing_size else {}),
+        **({"roster_recovery": env["network"]["roster_recovery"]}
+           if env.get("network", {}).get("roster_recovery") is not None else {}),
         "source_tick_count": env["ticks"],
         "player_count": env.get("network", {}).get("participant_count", env["players"]),
         "hash_sample_count": env["hash_samples"],
@@ -629,6 +642,10 @@ def completion_proof(job, report, encoding):
     if created_utc is not None:
         proof["created_utc"] = created_utc
     host = report.get("envelope", {}).get("network", {}).get("host")
+    recovery = report.get("envelope", {}).get("network", {}).get("roster_recovery")
+    require(recovery == film.get("roster_recovery"))
+    if recovery is not None:
+        proof["roster_recovery"] = recovery
     if host is not None and job["mode"] != "viewer_rebuild":
         require(report["envelope"]["first_update"] == 0)
         require(host["initial_player_count"] == report["envelope"]["players"])
@@ -646,11 +663,21 @@ def completion_proof(job, report, encoding):
 
 def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    recovery = proof.get("roster_recovery")
+    require(recovery == pin["film"].get("roster_recovery"))
+    if recovery is not None:
+        try:
+            recorded.validate_roster_recovery(recovery, engine_profile=pin["film"]["engine_profile"],
+                ticks=proof["source_tick_count"], player_count=pin["film"]["player_count"],
+                exporter=proof.get("exporter_revision") or 1)
+        except ValueError as error:
+            raise FilmError("validation_failed") from error
     if proof.get("network_host") is not None:
         try:
             recorded.validate_network_host(
                 proof["network_host"], engine_profile=pin["film"]["engine_profile"],
                 player_count=pin["film"]["player_count"],
+                roster_recovery=recovery,
             )
         except ValueError as error:
             raise FilmError("validation_failed") from error

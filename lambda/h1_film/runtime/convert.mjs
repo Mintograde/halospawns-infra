@@ -9,6 +9,7 @@ import { adapterFor, readEnvelope } from './film.mjs';
 import { resolveMap, selectProfile, selectExporter, validateRegistry, validateExporters } from './profiles.mjs';
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
 import { exportDiagnostics } from './export-diagnostics.mjs';
+import {recoveryEngineValue} from './roster-recovery.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -46,6 +47,9 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles), values['exporter-revision'] === undefined
     ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
+  const recovery = envelope.network?.roster_recovery;
+  if (recovery) assert.ok(profile.port === 'beta5' && profile.exporter_revision >= 12,
+    'Initial roster recovery requires Beta 5 exporter 12 or later');
   if (envelope.bots) assert.ok(profile.exporter_revision >= 7, 'Bot films require exporter revision 7 or later');
   if (profile.port === 'beta4' && (envelope.players > 4 || envelope.network?.max_player_slot >= 4
     || envelope.network?.participant_count > 4)) {
@@ -61,7 +65,10 @@ export async function convertFilm(options) {
   assert.ok(native.envelope.ticks > 0 && native.envelope.ticks <= 432000);
   assert.ok((await stat(values.film)).size <= 512 * 1024 * 1024);
   const map = join(values.assets, 'maps', native.envelope.map + '.map');
-  assert.equal((await stat(map)).size, native.envelope.map_bytes, 'Map size differs from recorded cache');
+  const actualMapSize = (await stat(map)).size;
+  const missingMapSize = profile.id === 'h1-performance-beta5-p9818-wasm-v1' && envelope.map_bytes === 0;
+  if (missingMapSize) assert.ok(values['map-catalog'], 'Missing recorded size requires a reviewed map catalog');
+  else assert.equal(actualMapSize, native.envelope.map_bytes, 'Map size differs from recorded cache');
   const filmHash = await sha256(values.film), mapHash = await sha256(map);
   const engineHashes = engine.hashes;
   let mapBinding;
@@ -69,6 +76,7 @@ export async function convertFilm(options) {
     assert.ok((await stat(values['map-catalog'])).size <= 4 * 1024 * 1024, 'Map catalog too large');
     mapBinding = resolveMap(profile, native.envelope,
       JSON.parse(await readFile(values['map-catalog'], 'utf8')));
+    assert.equal(actualMapSize, mapBinding.size_bytes, 'Raw map size differs from catalog');
     assert.equal(mapHash, mapBinding.sha256, 'Raw map differs from its catalog binding');
   }
   if (values.reference) {
@@ -119,7 +127,8 @@ export async function convertFilm(options) {
   const stagingSeconds = (performance.now() - totalStarted) / 1000;
 
   const environment = Object.fromEntries(Object.entries(process.env)
-    .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|VIEWER_ARTIFACT_)/i.test(key)));
+    .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|H1_ROSTER_|VIEWER_ARTIFACT_)/i.test(key)));
+  if (recovery) environment.H1_ROSTER_RECOVERY = recoveryEngineValue(recovery);
   Object.assign(environment, { BLAMPC_FILM_RING: '0', BLAMPC_FILM_KEYFRAME_TICKS: '432001',
     BLAMPC_FILM_VIEW_DELIVERED: '1', BLAMPC_STATS_DIR: join(work, 'stats'),
     BLAMPC_FILM_DIR: join(work, 'films'), H1_EXPORT_HANDLE: '3',

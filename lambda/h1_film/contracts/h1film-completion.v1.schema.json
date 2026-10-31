@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 e4391e28d727a0777fa0be92962eaa7a19f064641f6f028d0a8fcf8dbc6d5206",
+  "$comment": "Generated from API schemas/h1films.py SHA256 6ff8c4168f6b0b34be5f90be993b60583ff1ad37f2ae94a12edeab755806a0d9",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -15,7 +15,7 @@
           "type": "array"
         },
         "initial_player_count": {
-          "maximum": 8,
+          "maximum": 16,
           "minimum": 1,
           "title": "Initial Player Count",
           "type": "integer"
@@ -35,7 +35,7 @@
           "type": "string"
         },
         "remote_player_mask": {
-          "maximum": 255,
+          "maximum": 65535,
           "minimum": 1,
           "title": "Remote Player Mask",
           "type": "integer"
@@ -150,6 +150,103 @@
         "recipe"
       ],
       "title": "H1FilmReleasePin",
+      "type": "object"
+    },
+    "H1FilmRosterRecovery": {
+      "additionalProperties": false,
+      "properties": {
+        "initial_player_count": {
+          "maximum": 16,
+          "minimum": 9,
+          "title": "Initial Player Count",
+          "type": "integer"
+        },
+        "initial_remote_mask": {
+          "maximum": 65535,
+          "minimum": 511,
+          "title": "Initial Remote Mask",
+          "type": "integer"
+        },
+        "recorded_player_count": {
+          "maximum": 8,
+          "minimum": 8,
+          "title": "Recorded Player Count",
+          "type": "integer"
+        },
+        "recovered_players": {
+          "items": {
+            "$ref": "#/$defs/RecoveredPlayer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Recovered Players",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1InitialRosterRecovery.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "recorded_player_count",
+        "initial_player_count",
+        "initial_remote_mask",
+        "recovered_players"
+      ],
+      "title": "H1FilmRosterRecovery",
+      "type": "object"
+    },
+    "RecoveredPlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "damage_record_count": {
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Damage Record Count",
+          "type": "integer"
+        },
+        "first_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "First Source Tick",
+          "type": "integer"
+        },
+        "last_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Last Source Tick",
+          "type": "integer"
+        },
+        "player_handle": {
+          "exclusiveMaximum": 2147483648,
+          "minimum": -2147483648,
+          "title": "Player Handle",
+          "type": "integer"
+        },
+        "slot": {
+          "maximum": 15,
+          "minimum": 8,
+          "title": "Slot",
+          "type": "integer"
+        },
+        "team": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Team",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot",
+        "player_handle",
+        "team",
+        "damage_record_count",
+        "first_source_tick",
+        "last_source_tick"
+      ],
+      "title": "RecoveredPlayer",
       "type": "object"
     }
   },
@@ -313,6 +410,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/H1FilmReleasePin"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "roster_recovery": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/H1FilmRosterRecovery"
         },
         {
           "type": "null"

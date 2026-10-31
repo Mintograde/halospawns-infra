@@ -194,6 +194,8 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
         raise ValueError("H1 analytics parser tick count mismatch")
     participants = copy.deepcopy(parsed.participants)
     normalized = participant_counters(encoding)
+    recovery = report.get("envelope", {}).get("network", {}).get("roster_recovery")
+    unknown_slots = {p["slot"] for p in recovery["recovered_players"]} if recovery else set()
     for player in participants:
         counters = encoding["final_counters"][str(player["slot_index"])]
         for field, source in [
@@ -212,14 +214,25 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
         if "shots_hit" in counters:
             player["stats"]["shots_hit"] = counters["shots_hit"]
         player["metadata"].pop("local_player", None)
+        if player["slot_index"] in unknown_slots:
+            player["in_game_name"] = f"Unknown player {player['slot_index'] + 1}"
+            player["service_tag"] = None
+            player["metadata"]["name_status"] = "unknown"
     game = copy.deepcopy(parsed.game)
     binding = report.get("map_binding")
     if binding:
+        recorded_size = report["envelope"]["map_bytes"]
+        resolved_size = binding.get("size_bytes")
+        missing_size = (
+            report["engine_profile"] == "h1-performance-beta5-p9818-wasm-v1"
+            and type(recorded_size) is int and recorded_size == 0
+        )
         if (
             binding.get("engine_profile") != report["engine_profile"]
             or binding.get("scenario") != report["envelope"]["map"]
             or binding.get("sha256") != report["provenance"]["map_sha256"]
-            or binding.get("size_bytes") != report["envelope"]["map_bytes"]
+            or type(resolved_size) is not int or not 0 < resolved_size <= 256 * 1024 * 1024
+            or (not missing_size and resolved_size != recorded_size)
         ):
             raise ValueError("H1 map binding differs from simulated map")
         # An API-owned resolver must establish these trusted catalog identities.

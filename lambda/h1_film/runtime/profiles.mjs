@@ -119,7 +119,8 @@ export function resolveMap(profile, envelope, catalog) {
   assert.ok(Array.isArray(catalog.maps) && catalog.maps.length <= 4096, 'Invalid map catalog');
   assert.match(envelope.map, /^[a-zA-Z0-9_-]+$/, 'Invalid scenario name');
   const matches = catalog.maps.filter(map => map.engine_profile === profile.id
-    && map.scenario === envelope.map && map.size_bytes === envelope.map_bytes);
+    && map.scenario === envelope.map && (map.size_bytes === envelope.map_bytes
+      || (profile.id === 'h1-performance-beta5-p9818-wasm-v1' && envelope.map_bytes === 0)));
   assert.equal(matches.length, 1, matches.length ? 'Ambiguous map binding' : 'Matching raw map unavailable');
   const map = matches[0];
   assert.match(map.sha256, /^[0-9a-f]{64}$/, 'Invalid raw map hash');
