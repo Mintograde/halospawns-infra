@@ -1,5 +1,68 @@
 # H1 film Lambda integration
 
+## Beta 5 missing-size and roster recovery deployed (2026-10-31 UTC)
+
+The user authorized promoting the Jaywalk experiment and missing-map-size
+support. Dev worker/default **20261031-r1**, policy revision **5**, selects
+Beta 5 **12/4/5**. API **live=222**, source `4ef8cc1`, was published through
+[normal CI](https://github.com/Mintograde/halospawns-api/actions/runs/41164828034).
+Its deployed ZIP matches all 184 Python source files and SHA256
+`772c9b0883bdb76774156cf998d0b4deda992c6298a97b41368448f6e51a7d14`.
+
+Worker image digest:
+`sha256:d76587729e918ec13d71a63e59f1b290e764bf6958f941c5378c772268d79d13`.
+It was built from committed `7501b2d` in the isolated
+`.build/h1-roster-release` checkout. Four profiles/fifteen exporter entries and
+all older recipes remain. Beta 4 stays 10/4/5; retained families stay 5/4/4.
+The new WASM hash is recorded in `BETA5.md` and the immutable release manifest.
+
+Zero recorded size now requires the reviewed Beta 5 evidence contract and one
+eligible profile/scenario map approval with exact measured size/hash/version.
+Exporter 12 reconstructs only initial rosters proved by the film's all-remote
+FFA mask and consistent damage-owner handles/teams. Prepare and completion
+freeze `halospawns.h1InitialRosterRecovery.v1`; names absent from the recording
+remain unknown. All simulation integrity checks remain mandatory.
+
+Validation:
+
+- 52 Node and 80 local/packaged worker tests, plus build orchestration checks.
+- 1,840 API unit tests and 110 focused isolated PostgreSQL tests; six/two
+  optional tests skipped respectively. API Ruff and CI build/test/lint pass.
+- Sixteen packaged films pass initial/full/viewer callbacks, failure handling
+  and receipt retries. All 48 success callbacks also pass the exact deployed
+  API ZIP using its Linux dependencies.
+- Jaywalk's native/WASM full exports match byte-for-byte for all 64,233 ticks.
+  All 536 world hashes and 264,979 network applications verify with zero seed
+  mismatches or refusals. Original film/map bytes remain unchanged. Ten
+  participants are accepted; slots 8/9 have explicitly unknown names.
+- The other eleven Beta 5 films retain identical viewer bytes, native analytics
+  and final counters compared with the preceding exporter-11 acceptance run.
+- The reviewed saved plan applied only `aws_lambda_function.h1_film[0]`:
+  image and producer digest, 0 added / 1 changed / 0 destroyed. First live
+  health and exact release/registry verification pass. Default activation is
+  fenced to API 222 and prior policy revision 4.
+- The focused worker postplan is no-op. Full dev has no resource actions;
+  only the existing unapplied API version-output refresh 213 to 222 remains.
+  Read-only before/after checks preserve 59 conversions, 284 receipts, 232
+  H1 attempts, all 220 approvals (including 70 Beta 5), and worker/API limits,
+  concurrency and queue settings.
+
+Commands, run from the isolated checkout for publication and repo root for promotion:
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261031-r1 -EngineRoot <beta5-engine-store> -PreviousRegistry <r4-registry> -CorpusPath <sixteen-film-corpus>
+.\scripts\plan.ps1 dev map-processing
+atmos workflow promote-dev --file h1-film
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Evidence: `.build/h1-roster/`,
+`.build/h1-roster-release/.build/h1-contracts/20261031-r1-51d73a42117d4c5b89975a33befbdd61/`,
+and `.build/h1-promotions/20261031-034023-0a0383d9e2ee4be0b0e5a768d8964a9e/`.
+No migration, live retry/reparse, frontend release or prod action was submitted.
+Policy rollback must retain the new worker/API readers and immutable old pins.
+
 ## Diagnostic companion downloads enabled (2026-10-30 UTC)
 
 The user-reviewed uploads-ingest change is applied in dev. The saved plan

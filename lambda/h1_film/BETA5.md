@@ -389,8 +389,9 @@ sources before relinking retained objects. It reproduces all 64,233 Jaywalk
 ticks, all 536 hashes and all 264,979 network applications without mismatches
 or refusals. Packaged initial/full/viewer callbacks and receipt retries pass;
 the sibling API validates ten participants. Evidence is in `.build/h1-roster`
-and `.build/beta5/roster-native-v1`. Deployment results will be recorded in
-`DEPLOYMENT.md` after promotion.
+and `.build/beta5/roster-native-v1`. The dev promotion is now verified as
+worker/default `20261031-r1`, policy revision 5, API `live=222`; see
+`DEPLOYMENT.md` for the sixteen-film corpus and exact deployed-API evidence.
 
 The older investigation sections below describe the evidence available at
 their dates and are superseded by this explicit promotion for supported films.

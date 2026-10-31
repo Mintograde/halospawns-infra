@@ -1,5 +1,20 @@
 # H1 Film Compatibility
 
+## Beta 5 missing-size and roster recovery (2026-10-31 UTC)
+
+Exporter 12 retains the Beta 5 profile and upstream commit, adds a new immutable
+WASM pin, and keeps analytics 4 / viewer 5. API 222 supports the additional
+`halospawns.h1MissingMapSize.v1` and `halospawns.h1InitialRosterRecovery.v1`
+requirements. Zero recorded size resolves only through one reviewed
+profile/scenario approval, preserving measured size, hash and S3 version.
+
+Initial roster recovery is limited to the proven all-remote FFA subset described
+in `BETA5.md`. Jobs freeze the recovered slots/handles/teams and original count;
+completion must match. Missing names remain unknown. Separate client-predicted
+world playback is still unsupported. All older profiles, binaries and recipes
+remain available. Roll back defaults while retaining the current worker/API
+readers for existing recovered jobs and receipts; do not repin old attempts.
+
 ## Beta 5 client diagnostic companion (deployed, 2026-10-29 UTC)
 
 Worker/default `20261029-r4`, policy revision 4, and API `live=219` select Beta 5

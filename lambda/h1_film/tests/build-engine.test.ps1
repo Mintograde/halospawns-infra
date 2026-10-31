@@ -90,14 +90,33 @@ try {
             & $builder -Source $source -Port $invalidPort -DamageAttribution -BuildDirectory (Join-Path $root 'invalid-damage')
             throw 'Invalid damage attribution build was accepted.'
         } catch {
-            if ($_.Exception.Message -notlike '*requires beta4 combat export*') { throw }
+            if ($_.Exception.Message -notlike '*requires beta4 or beta5 combat export*') { throw }
         }
     }
     try {
         & $builder -Source $source -Port beta3 -FiniteWorldObjects -BuildDirectory (Join-Path $root 'invalid-finite')
         throw 'Invalid finite world object build was accepted.'
     } catch {
-        if ($_.Exception.Message -notlike '*requires the beta4 port*') { throw }
+        if ($_.Exception.Message -notlike '*requires beta4 or beta5*') { throw }
+    }
+    $beta5Revision = @{} + $revision
+    $beta5Revision.git_commit = 'fbbfae27d6be7e47613acce37da95ed754dccb42'
+    $beta5Revision.git_date = '2026-10-29'
+    $beta5Revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
+    $h1BuildTestState.candidate = Join-Path $root 'roster-recovery'
+    & $builder -Source $source -Port beta5 -Combat -NetworkReplayFixes -DamageAttribution -FiniteWorldObjects -RosterRecovery -BuildDirectory $h1BuildTestState.candidate -Jobs 1
+    $recovery = Get-Content -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json') -Raw | ConvertFrom-Json
+    $recoveryConfigure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
+    if (-not $recovery.roster_recovery -or $recoveryConfigure -notcontains '-DH1_ROSTER_RECOVERY=ON') {
+        throw 'Roster recovery lost its explicit build pin.'
+    }
+    foreach ($invalidPort in @('beta3', 'beta4', 'beta5')) {
+        try {
+            & $builder -Source $source -Port $invalidPort -RosterRecovery -BuildDirectory (Join-Path $root 'invalid-recovery')
+            throw 'Invalid roster recovery build was accepted.'
+        } catch {
+            if ($_.Exception.Message -notlike '*requires beta5 network replay fixes*') { throw }
+        }
     }
     $revision | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $source 'source-revision.json') -Encoding utf8
     [IO.File]::WriteAllText((Join-Path $source 'tools/build.c'), 'changed after snapshot')

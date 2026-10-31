@@ -16,14 +16,15 @@ approvals. See [bot support](BETA4.md#bot-replay-support-2026-10-23-utc) and
 
 Home of the Node/WASM H1 converter, Rust compact encoder and Python analytics
 adapter. The dev intake worker is deployed as `halospawns-h1-film-dev`, pinned
-to `20261024-r2`, with dedicated queue/API wiring and scoped data access.
-Beta 4 selects exporter 8 / analytics 4 / viewer 5 and supports sixteen distinct
-participants. Retained families keep exporter 5 / analytics 4 / viewer 4.
+to `20261031-r1`, with dedicated queue/API wiring and scoped data access.
+Beta 5 selects exporter 12 / analytics 4 / viewer 5, including verified missing
+map-size and initial-roster recovery. Beta 4 keeps 10/4/5; both support sixteen
+distinct participants. Retained families keep exporter 5 / analytics 4 / viewer 4.
 The user's API release and subsequent configuration apply are verified:
-API `live=202` and the worker both allow 16. Frontend remains undeployed while
+API `live=222` and the worker both allow 16. Frontend remains undeployed while
 the user tests its revision-5 support locally against dev.
-Old pins remain supported. See [deployment](DEPLOYMENT.md) and [Beta 4](BETA4.md),
-including its upstream eight-initial-player metadata limitation.
+Old pins remain supported. See [deployment](DEPLOYMENT.md), [Beta 4](BETA4.md),
+and [Beta 5](BETA5.md) for the evidence required to recover truncated initial rosters.
 The user enabled the single-user dev preview on 2026-10-09: concurrency five,
 SQS mapping enabled and both API capability flags true. Broader acceptance and
 prod activation remain pending; Xbox uploads are unchanged.
