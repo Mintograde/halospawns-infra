@@ -10,6 +10,7 @@ import { resolveMap, selectProfile, selectExporter, validateRegistry, validateEx
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
 import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
+import { validateBuildMatching } from './build-identity.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -37,14 +38,15 @@ export async function convertFilm(options) {
     assert.equal(native.status, 'verified');
     assert.deepEqual(envelope, native.envelope, 'Film envelope differs from the native baseline');
   }
-  let profiles, exporters;
+  let profiles, exporters, buildMatching;
   if (values['candidate-registry']) {
     assert.ok(values.engine, 'A candidate registry requires an explicit local engine');
     const candidate = JSON.parse(await readFile(values['candidate-registry'], 'utf8'));
     profiles = validateRegistry(candidate);
+    buildMatching = validateBuildMatching(profiles, candidate.build_matching);
     exporters = validateExporters(candidate, profiles);
   }
-  const profile = selectExporter(selectProfile(envelope, profiles), values['exporter-revision'] === undefined
+  const profile = selectExporter(selectProfile(envelope, profiles, buildMatching), values['exporter-revision'] === undefined
     ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
   const recovery = envelope.network?.roster_recovery;
@@ -75,7 +77,7 @@ export async function convertFilm(options) {
   if (values['map-catalog']) {
     assert.ok((await stat(values['map-catalog'])).size <= 4 * 1024 * 1024, 'Map catalog too large');
     mapBinding = resolveMap(profile, native.envelope,
-      JSON.parse(await readFile(values['map-catalog'], 'utf8')));
+      JSON.parse(await readFile(values['map-catalog'], 'utf8')), buildMatching);
     assert.equal(actualMapSize, mapBinding.size_bytes, 'Raw map size differs from catalog');
     assert.equal(mapHash, mapBinding.sha256, 'Raw map differs from its catalog binding');
   }

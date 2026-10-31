@@ -1,0 +1,17 @@
+{
+  "accepted": [
+    "Linux server",
+    "2026-10-29 - BETA 5 - fbbfae27",
+    "Windows - fbbfae27",
+    "Repackaged PB2 - fbbfae27d6be",
+    "fbbfae27d6be7e47613acce37da95ed754dccb42"
+  ],
+  "rejected": [
+    "BETA 5", "Windows", "Linux server ", "other - e78e4daa",
+    "BETA 5 - fbbfae2", "BETA 5 - fbbfae270", "BETA 5 - fbbfae27+",
+    "BETA 5 - fbbfae27-dirty", "BETA 5 - fbbfae27 trailing",
+    "BETA 5 - fbbfae27\n", "BETA 5 - fbbfae27\u0000",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - fbbfae27",
+    "BETA 5 - FBBFAE27", "not-a-delimiter-fbbfae27", "BETA 5 - 01234567"
+  ]
+}

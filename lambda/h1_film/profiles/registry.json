@@ -1,5 +1,9 @@
 {
   "schema": "halospawns.h1EngineRegistry.v1",
+  "build_matching": {
+    "h1-performance-beta4-p9803-wasm-v1": "source_commit_suffix_v1",
+    "h1-performance-beta5-p9818-wasm-v1": "source_commit_suffix_v1"
+  },
   "processing": {
     "defaults": {
       "h1-performance-beta3-p45-wasm-v1": {
@@ -274,7 +278,8 @@
       "network_host": "halospawns.h1NetworkHost.v2",
       "client_diagnostics": "halospawns.h1ClientDiagnostics.v1",
       "missing_map_size": "halospawns.h1MissingMapSize.v1",
-      "initial_roster_recovery": "halospawns.h1InitialRosterRecovery.v1"
+      "initial_roster_recovery": "halospawns.h1InitialRosterRecovery.v1",
+      "recorded_build": "halospawns.h1RecordedBuild.v1"
     }
   },
   "profiles": [

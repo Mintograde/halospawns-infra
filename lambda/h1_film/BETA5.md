@@ -1,5 +1,51 @@
 # Beta 5 engine
 
+## Windows recorder labels (local candidate, 2026-10-31)
+
+The supplied `2026-10-31 08-35-52 dread.h1film` and
+`2026-10-31 08-23-56 dread.h1film` both record
+`2026-10-29 - BETA 5 - fbbfae27`, format 2/protocol 9818/120 Hz. They are
+eight-participant local games with seven recorded bots. Their source commit
+matches the deployed Beta 5 engine, but the previous exact `Linux server`
+comparison rejected them before simulation.
+
+The local worker/API candidate adds opt-in source-commit label matching under
+`halospawns.h1RecordedBuild.v1`; see `COMPATIBILITY.md` for the precise rule.
+It preserves exporter 12/analytics 4/viewer 5, every old pin and original film
+bytes. Future display-label variations with the same clean commit are accepted;
+a new commit still requires a registered engine and compatibility validation.
+
+Both films pass native/WASM **full-export byte equality**: respectively
+41,624 ticks/347 recorded hashes and 67,510 ticks/563 recorded hashes.
+Film SHA-256 values are `afbb420a5b7017afd92659f65439a1c522c2216846db597b3d0d4b8c9a6eefab`
+and `487e01f501b460be9a746b705b949e7178c8104813ac65a7e036bb56df7c8ff4`.
+Dread map SHA-256 is `94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730`.
+The seven-film packaged corpus includes both new films, a Linux Beta 5 control
+and all retained engine families. All initial/full/viewer callbacks and receipt
+retries pass; all 21 callbacks also pass the candidate API's admission/schema,
+analytics, graph and spatial checks. No raw film patching is used.
+
+Evidence: `.build/h1-build-label-parity/parity.json`,
+`.build/h1-build-label-{manifest,corpus,catalog}.json`, and
+`.build/h1-contracts/20261031-r2-0cb4344d99954f97b4f1a3ffc1b8a479/`.
+The candidate release ID and digest are offline test values, not a published
+ECR release. API publication and a new immutable worker release/promotion remain.
+No live retry/reparse, frontend change or prod action has been performed.
+
+Validation: 54 Node tests, 83 local/packaged worker tests, 1,881 API unit tests
+(four optional skips), API Ruff, and focused isolated PostgreSQL tests pass.
+The database run initially exposed the old film/engine label equality check;
+after correcting that schema check, both canonical and alternate-label
+persistence/retry cases pass. The other 104 database cases passed in the first
+run (two optional skips). Original labels persist in immutable conversions,
+and changing even an equivalent label on retry fails. The actual candidate
+manifest passes API registration against the preceding release; all four
+profile entries, fifteen exporter entries and recipe defaults remain identical.
+Logs: `.build/h1-build-label-*.log`. The final local image was rebuilt after
+hardening malformed-rule validation and its packaged worker tests passed again.
+
+## Original deployment
+
 The `beta5` port pins upstream tag `beta-5`, commit
 `fbbfae27d6be7e47613acce37da95ed754dccb42` in `../h1-arena`.
 Its registered simulation profile is `h1-performance-beta5-p9818-wasm-v1`:

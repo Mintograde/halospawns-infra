@@ -22,7 +22,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 
 from . import analytics, client_diagnostics, recorded, settings
-from .registry import IDENTITY, load_registry, select_exporter
+from .registry import IDENTITY, load_registry, matches_film, select_exporter
 
 PACKAGE = Path(__file__).parent
 NODE_ROOT = Path(os.getenv("H1_NODE_ROOT", str(PACKAGE)))
@@ -169,7 +169,7 @@ def validate_job(job):
             for key in (*IDENTITY, "wasm_sha256", "glue_sha256")
         )
     )
-    require(all(film.get(key) == profile[key] for key in IDENTITY))
+    require(matches_film(profile, film))
     require(
         film["source_tick_count"] <= limits()["SOURCE_TICKS"]
         and film["player_count"] <= limits()["PLAYERS"]

@@ -1,5 +1,28 @@
 # H1 Film Compatibility
 
+## PB2 recorder label matching (local candidate, 2026-10-31 UTC)
+
+`halospawns.h1RecordedBuild.v1` separates recorded labels from canonical engine
+labels. The registry opts Beta 4 and Beta 5 into `source_commit_suffix_v1` via
+the top-level `build_matching` map. Exact registered labels remain accepted.
+Other printable ASCII labels (1–63 bytes) must end with a clean 8–40 character
+lowercase Git prefix matching that profile's full source commit, either alone
+or after ` - `. Format, protocol and rate must still match. Dirty `+` suffixes,
+unknown commits, missing/truncated hashes and ambiguous profile matches fail.
+This is not a protocol-only fallback or automatic support for future engines.
+
+Profiles, binaries, exporter revisions, recipes and map approvals are unchanged.
+The original label remains in the film envelope, settings and frozen conversion;
+`engine.build` retains its canonical value. Retried attempts cannot rewrite the
+recorded label, even to an equivalent spelling. Manifest registration requires
+the new reader contract and retains previously registered build rules. Policy
+rollback must retain these API/worker readers and rules.
+
+The two supplied October 31 Windows Dread recordings identify Beta 5 commit
+`fbbfae27` and pass 109,134 native/WASM ticks with identical full exports and
+all 910 recorded hashes. See `BETA5.md` for acceptance evidence. This candidate
+is not deployed; dev remains worker/default `20261031-r1` / API 222.
+
 ## Beta 5 missing-size and roster recovery (2026-10-31 UTC)
 
 Exporter 12 retains the Beta 5 profile and upstream commit, adds a new immutable

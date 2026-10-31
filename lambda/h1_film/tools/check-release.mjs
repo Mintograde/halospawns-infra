@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { ENGINE_PROFILES, ENGINE_EXPORTERS, validateRegistry, validateExporters,
   assertRetainedProfiles, assertRetainedExporters, profileById, selectExporter } from '../runtime/profiles.mjs';
 import { resolveEngine } from '../runtime/engine-store.mjs';
+import { BUILD_MATCHING } from '../runtime/profiles.mjs';
 
 const { values } = parseArgs({ options: {
   'engine-root': { type: 'string' }, 'previous-registry': { type: 'string' },
@@ -16,6 +17,9 @@ if (values['previous-registry']) {
   const previous = JSON.parse(await readFile(values['previous-registry'], 'utf8'));
   assertRetainedProfiles(ENGINE_PROFILES, validateRegistry(previous));
   assertRetainedExporters(ENGINE_EXPORTERS, validateExporters(previous));
+  for (const [name, rule] of Object.entries(previous.build_matching ?? {})) {
+    assert.equal(BUILD_MATCHING[name], rule, 'Previously supported recorded build rule changed');
+  }
 }
 for (const profile of [...ENGINE_PROFILES, ...ENGINE_EXPORTERS.map(entry =>
   selectExporter(profileById(entry.engine_profile), entry.revision))]) {

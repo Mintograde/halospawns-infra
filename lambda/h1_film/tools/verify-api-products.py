@@ -30,6 +30,19 @@ def main():
     )
     from halospawns_api.services.replay_ingest import _spatial_events_from_game_meta
     from halospawns_api.services.h1film_ingest import normalize_h1film_ingest
+    from halospawns_api.h1film_contract import require_profile
+
+    def validate_job(path):
+        job = H1FilmJob.model_validate_json(path.read_text(encoding="utf-8"))
+        engine = job.conversion.engine
+        assert require_profile(job.conversion.film, exporter_revision=engine.exporter_revision) == (
+            engine.model_dump(mode="json")
+        ), "API admission must retain the canonical engine and original recorder label"
+        return job
+
+    initial_job = args.finalization.with_name("job.json")
+    if initial_job.exists():
+        validate_job(initial_job)
 
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
@@ -64,7 +77,7 @@ def main():
                     assert other.h1film_settings.model_dump(mode="json", by_alias=True) == settings_document
             elif settings_document is not None:
                 assert "h1film_settings" not in other.model_dump()
-            job = H1FilmJob.model_validate_json(path.with_name(f"{mode}-job.json").read_text(encoding="utf-8"))
+            job = validate_job(path.with_name(f"{mode}-job.json"))
             if mode == "viewer-rebuild":
                 assert other.h1film.network_host is None
                 assert other.h1film == request.h1film.model_copy(update={"network_host": None})

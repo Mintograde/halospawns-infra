@@ -425,6 +425,26 @@ class CloudTests(unittest.TestCase):
             self.assertEqual(proof["recording_duration_seconds"], 1)
             self.assertEqual(proof["match_end_source_tick"], 90)
 
+    def test_recorded_build_varies_but_engine_identity_remains_canonical(self):
+        pin = self.job["conversion"]
+        profile = load_registry()["h1-performance-beta5-p9818-wasm-v1"]
+        pin["engine"] = {key: profile[key] for key in (
+            *cloud.IDENTITY, "wasm_sha256", "glue_sha256",
+        )}
+        pin["film"].update({key: profile[key] for key in cloud.IDENTITY})
+        pin["film"].update(engine_profile=profile["id"], build="2026-10-29 - BETA 5 - fbbfae27")
+        pin["map_binding"]["engine_profile"] = profile["id"]
+        cloud.validate_job(self.job)
+        self.assertEqual(pin["engine"]["build"], "Linux server")
+        for build in ("BETA 5", "Repack - fbbfae27+", "Repack - e78e4daa"):
+            pin["film"]["build"] = build
+            with self.assertRaises(cloud.FilmError):
+                cloud.validate_job(self.job)
+        pin["film"]["build"] = "Repack - fbbfae27"
+        pin["engine"]["build"] = pin["film"]["build"]
+        with self.assertRaises(cloud.FilmError):
+            cloud.validate_job(self.job)
+
     def test_recovered_roster_is_pinned_and_cannot_use_a_retained_exporter(self):
         pin = self.job["conversion"]
         profile = load_registry()["h1-performance-beta5-p9818-wasm-v1"]

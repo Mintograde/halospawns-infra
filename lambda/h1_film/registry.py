@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+from .build_identity import matches_profile, validate_build_matching
+
 REGISTRY_PATH = Path(__file__).with_name("profiles") / "registry.json"
 IDENTITY = ("format", "protocol_revision", "tick_rate", "build")
 
@@ -116,10 +118,7 @@ def profile_for_report(report: dict) -> dict:
         raise ValueError("Unsupported H1 engine profile")
     profile = select_exporter(profile, report.get("exporter_revision"))
     envelope = report.get("envelope", {})
-    if any(
-        type(envelope.get(k)) is not type(profile[k]) or envelope[k] != profile[k]
-        for k in IDENTITY
-    ):
+    if not matches_film(profile, envelope):
         raise ValueError("H1 engine profile differs from the film identity")
     provenance = report.get("provenance", {})
     if "source" in profile and provenance.get("engine_source") != profile["source"]:
@@ -133,3 +132,9 @@ def profile_for_report(report: dict) -> dict:
     ):
         raise ValueError("H1 engine export contract mismatch")
     return profile
+
+
+def matches_film(profile, film):
+    document = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    rules = validate_build_matching(document["profiles"], document.get("build_matching", {}))
+    return matches_profile(profile, film, rules.get(profile["id"]))

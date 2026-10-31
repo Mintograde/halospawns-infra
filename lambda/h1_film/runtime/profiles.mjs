@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { matchesProfile, validateBuildMatching } from './build-identity.mjs';
 
 export const REGISTRY_SCHEMA = 'halospawns.h1EngineRegistry.v1';
 const ID = /^[a-z0-9][a-z0-9-]{0,95}$/;
@@ -47,6 +48,7 @@ export function validateRegistry(document) {
 
 const registry = JSON.parse(readFileSync(new URL('../profiles/registry.json', import.meta.url), 'utf8'));
 export const ENGINE_PROFILES = validateRegistry(registry);
+export const BUILD_MATCHING = validateBuildMatching(ENGINE_PROFILES, registry.build_matching);
 
 export function validateExporters(document, profiles = ENGINE_PROFILES) {
   const entries = document.exporters ?? [];
@@ -86,8 +88,8 @@ export function assertRetainedExporters(current, previous) {
   }
 }
 
-export function selectProfile(envelope, profiles = ENGINE_PROFILES) {
-  const matches = profiles.filter(profile => IDENTITY.every(key => profile[key] === envelope[key]));
+export function selectProfile(envelope, profiles = ENGINE_PROFILES, buildMatching = BUILD_MATCHING) {
+  const matches = profiles.filter(profile => matchesProfile(profile, envelope, buildMatching[profile.id]));
   assert.equal(matches.length, 1, 'Unsupported film engine profile');
   return matches[0];
 }
@@ -113,8 +115,8 @@ export function verifyEngine(profile, hashes) {
 // This catalog is trusted deployment/API input, never a browser-supplied map ID.
 // Format 2 records a name and size, not a cryptographic map hash. A reviewed
 // build-to-map binding plus clean simulation hashes is required for exactness.
-export function resolveMap(profile, envelope, catalog) {
-  selectProfile(envelope, [profile]);
+export function resolveMap(profile, envelope, catalog, buildMatching = BUILD_MATCHING) {
+  selectProfile(envelope, [profile], buildMatching);
   assert.equal(catalog.schema, 'halospawns.h1FilmMapCatalog.v1');
   assert.ok(Array.isArray(catalog.maps) && catalog.maps.length <= 4096, 'Invalid map catalog');
   assert.match(envelope.map, /^[a-zA-Z0-9_-]+$/, 'Invalid scenario name');

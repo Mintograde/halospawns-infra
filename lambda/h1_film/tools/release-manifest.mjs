@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { validateRegistry } from '../runtime/profiles.mjs';
+import { BUILD_MATCHING_CONTRACT, validateBuildMatching } from '../runtime/build-identity.mjs';
 
 export function createReleaseManifest(registry, releaseId, imageDigest) {
-  validateRegistry(registry);
+  const profiles = validateRegistry(registry);
+  const rules = validateBuildMatching(profiles, registry.build_matching);
+  if (Object.keys(rules).length) assert.equal(registry.processing.requirements.recorded_build, BUILD_MATCHING_CONTRACT);
   assert.match(releaseId, /^\d{8}-r[1-9]\d*$/);
   assert.match(imageDigest, /^sha256:[0-9a-f]{64}$/);
   const { defaults, recipes, requirements } = registry.processing;
