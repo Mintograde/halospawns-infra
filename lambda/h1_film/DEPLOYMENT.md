@@ -1,5 +1,65 @@
 # H1 film Lambda integration
 
+## PB2 recorder labels deployed (2026-10-31 UTC)
+
+User-authorized dev worker/default **20261031-r2**, policy revision **6**, is
+active with API **live=223**, source `a3d1cdb`. The API was published through
+[normal CI](https://github.com/Mintograde/halospawns-api/actions/runs/41204178525).
+All 185 Python source files in its deployed ZIP match that commit exactly;
+ZIP SHA-256: `b56d237d3bc0227bee72f8ab2155d9f928be14646e825945eed35147fc5f556d`.
+
+Worker image digest:
+`sha256:82e2941c1af14636dcc244144ed15e36f6015dbb1e90330900e9f6e5a3d96cfc`.
+It was built from committed `24e8f10` in `.build/h1-build-label-source`, with
+the stack selection committed as `c2fe5fc`. Registry SHA-256:
+`eb326a18e12d5e6fd8be5b06cfd0df6f21cc2f416dd242840a2c13f41a7c5ecb`.
+
+`halospawns.h1RecordedBuild.v1` opts Beta 4/5 into clean source-commit suffix
+matching. Display text can vary while format/protocol/rate and the registered
+commit still match. Original film labels are preserved; canonical engine
+identities, four profiles, fifteen exporter entries, recipes and map approvals
+remain unchanged. Beta 5 remains 12/4/5. Unknown commits and modified-source
+suffixes remain unsupported. See `COMPATIBILITY.md` and `BETA5.md`.
+
+Validation:
+
+- Both supplied October 31 Windows Dread films match native/WASM full exports
+  across 109,134 ticks and all 910 recorded hashes, without editing either film.
+- 54 Node tests, 83 local/packaged worker tests, 1,881 API unit tests (four
+  optional skips), API Ruff and CI pass. Focused isolated PostgreSQL checks
+  preserve original labels and reject rewritten retry identities; 104 cases
+  passed before the schema fix, then both affected canonical/alternate-label
+  persistence cases passed after it (two optional cases skipped).
+- Eighteen release-image films cover all retained engine families, previous
+  missing-size/roster-recovery cases and both new recordings. All 54 initial,
+  full-reparse and viewer-rebuild callbacks pass the exact deployed API ZIP
+  and Linux dependencies, plus admission, failure and receipt checks.
+- The guarded saved plan applied only `aws_lambda_function.h1_film[0]`: the
+  image and producer digest, **0 added / 1 changed / 0 destroyed**. First live
+  health and exact registry/image verification passed; activation was fenced
+  to API 223 and prior policy revision 5.
+- The focused worker postplan is no-op. Before/after read-only snapshots match
+  all 74 conversion pins/jobs, 299 receipts, 232 H1 attempts and 220 map approvals
+  (70 Beta 5), plus API/worker limits, concurrency and event-source settings.
+- Full dev has no resource actions; only the existing unapplied API version-
+  output refresh from 213 to 223 remains. AWS dev account/session checks passed.
+
+Commands (publication from the isolated source checkout; promotion/plans from root):
+
+```powershell
+.\scripts\publish-h1-film.ps1 -Tag 20261031-r2 -EngineRoot <beta5-engine-store> -PreviousRegistry <r1-registry> -CorpusPath <eighteen-film-corpus>
+.\scripts\plan.ps1 dev map-processing
+atmos workflow promote-dev --file h1-film
+.\scripts\plan.ps1 dev map-processing
+.\scripts\plan.ps1 dev
+```
+
+Evidence: `.build/h1-build-label-release/`,
+`.build/h1-build-label-source/.build/h1-contracts/20261031-r2-ea52c9f76ab048509286b61d85fd62e2/`,
+and `.build/h1-promotions/20261031-131635-fab06a5164124708bc8cd2a89071c7f7/`.
+No migration, live retry/reparse, frontend change or prod action was submitted.
+Policy rollback must retain the recorded-build readers/rules and all old pins.
+
 ## Beta 5 missing-size and roster recovery deployed (2026-10-31 UTC)
 
 The user authorized promoting the Jaywalk experiment and missing-map-size

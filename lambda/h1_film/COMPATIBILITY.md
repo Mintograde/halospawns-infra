@@ -1,6 +1,6 @@
 # H1 Film Compatibility
 
-## PB2 recorder label matching (local candidate, 2026-10-31 UTC)
+## PB2 recorder label matching (deployed, 2026-10-31 UTC)
 
 `halospawns.h1RecordedBuild.v1` separates recorded labels from canonical engine
 labels. The registry opts Beta 4 and Beta 5 into `source_commit_suffix_v1` via
@@ -20,8 +20,9 @@ rollback must retain these API/worker readers and rules.
 
 The two supplied October 31 Windows Dread recordings identify Beta 5 commit
 `fbbfae27` and pass 109,134 native/WASM ticks with identical full exports and
-all 910 recorded hashes. See `BETA5.md` for acceptance evidence. This candidate
-is not deployed; dev remains worker/default `20261031-r1` / API 222.
+all 910 recorded hashes. Dev worker/default `20261031-r2`, policy revision 6,
+and API 223 are deployed. Eighteen packaged films and all 54 exact deployed-API
+callbacks pass. See `BETA5.md` and `DEPLOYMENT.md` for acceptance evidence.
 
 ## Beta 5 missing-size and roster recovery (2026-10-31 UTC)
 

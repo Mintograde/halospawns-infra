@@ -1,6 +1,6 @@
 # Beta 5 engine
 
-## Windows recorder labels (local candidate, 2026-10-31)
+## Windows recorder labels (deployed, 2026-10-31)
 
 The supplied `2026-10-31 08-35-52 dread.h1film` and
 `2026-10-31 08-23-56 dread.h1film` both record
@@ -9,7 +9,8 @@ eight-participant local games with seven recorded bots. Their source commit
 matches the deployed Beta 5 engine, but the previous exact `Linux server`
 comparison rejected them before simulation.
 
-The local worker/API candidate adds opt-in source-commit label matching under
+Worker/default `20261031-r2`, policy revision 6, and API 223 add source-commit
+label matching under
 `halospawns.h1RecordedBuild.v1`; see `COMPATIBILITY.md` for the precise rule.
 It preserves exporter 12/analytics 4/viewer 5, every old pin and original film
 bytes. Future display-label variations with the same clean commit are accepted;
@@ -28,8 +29,10 @@ analytics, graph and spatial checks. No raw film patching is used.
 Evidence: `.build/h1-build-label-parity/parity.json`,
 `.build/h1-build-label-{manifest,corpus,catalog}.json`, and
 `.build/h1-contracts/20261031-r2-0cb4344d99954f97b4f1a3ffc1b8a479/`.
-The candidate release ID and digest are offline test values, not a published
-ECR release. API publication and a new immutable worker release/promotion remain.
+Those initial candidate manifests use offline test digests. The subsequent
+eighteen-film release-image corpus and all 54 callbacks pass the exact deployed
+API 223 ZIP. Published image digest and full evidence are in `DEPLOYMENT.md`;
+publication used the committed isolated `.build/h1-build-label-source` checkout.
 No live retry/reparse, frontend change or prod action has been performed.
 
 Validation: 54 Node tests, 83 local/packaged worker tests, 1,881 API unit tests
