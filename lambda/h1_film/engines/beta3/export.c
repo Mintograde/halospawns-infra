@@ -319,6 +319,10 @@ void hs_export_tick(FILE *out, int frame)
     int now_ended = game_engine_globals.mode != game_engine_mode_active;
     char elapsed[32];
     (void)frame;
+#ifdef H1_CLIENT_VIEW
+    extern int hs_film_export_tick(int);
+    tick = hs_film_export_tick(tick);
+#endif
     if (tick < 0 || tick == previous) return;
     if (previous >= 0 && tick != previous + 1) hs_fail("simulation clock skipped a tick");
     previous = tick;

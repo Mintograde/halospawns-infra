@@ -10,7 +10,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
   if (Object.keys(rules).length) assert.equal(registry.processing.requirements.recorded_build, BUILD_MATCHING_CONTRACT);
   assert.match(releaseId, /^\d{8}-r[1-9]\d*$/);
   assert.match(imageDigest, /^sha256:[0-9a-f]{64}$/);
-  const { defaults, recipes, requirements } = registry.processing;
+  const { defaults, recipes, requirements, client_view_recipes } = registry.processing;
   for (const profile of registry.profiles) {
     assert.ok(recipes[profile.id]?.some(recipe =>
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
@@ -22,8 +22,22 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
     }
   }
+  if (client_view_recipes !== undefined) {
+    assert.equal(requirements.client_view, 'halospawns.h1ClientView.v1');
+    assert.deepEqual(Object.keys(client_view_recipes), ['h1-performance-beta5-p9818-wasm-v1']);
+    for (const [id, entries] of Object.entries(client_view_recipes)) {
+      assert.ok(Array.isArray(entries) && entries.length > 0);
+      for (const recipe of entries) {
+        assert.ok(recipe.exporter_revision >= 13 && recipe.analytics_revision === 2 && recipe.viewer_revision === 5);
+        assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
+        assert.ok(registry.exporters.some(e => e.engine_profile === id && e.revision === recipe.exporter_revision));
+        assert.ok(!recipes[id].some(r => r.exporter_revision === recipe.exporter_revision), 'Client exporter appears in host recipes');
+      }
+    }
+  }
   return { schema: 'halospawns.h1FilmRelease.v1', release_id: releaseId,
-    image_digest: imageDigest, registry, defaults, recipes, requirements };
+    image_digest: imageDigest, registry, defaults, recipes, requirements,
+    ...(client_view_recipes === undefined ? {} : {client_view_recipes}) };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -11,6 +11,7 @@ import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
 import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
+import {readEnvelope as readBeta5Envelope} from './adapters/beta5-v2-120.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -30,7 +31,14 @@ export async function convertFilm(options) {
   const timeout = Number(values.timeout) * 1000;
   assert.ok(Number.isFinite(timeout) && timeout > 0 && timeout <= 3600000);
   async function save(path, value) { await writeFile(path, JSON.stringify(value, null, 2) + '\n'); }
-  const envelope = await readEnvelope(values.film);
+  if(values['client-view']) {
+    assert.ok(values['trusted-local'], 'Client view requires trusted worker input');
+    assert.ok(values['source-viewer-only'] && !values.analytics && analyticsRevision === 2,
+      'Client view is a viewer-only track; authoritative analytics are host-owned');
+    assert.equal(Number(values['viewer-revision']),5,'Client view requires viewer revision 5');
+  }
+  const envelope = values['client-view'] ? await readBeta5Envelope(values.film,{allowClientView:true}) : await readEnvelope(values.film);
+  if(values['client-view']) assert.equal(envelope.recording_kind,'client-view','Expected a client-view recording');
   const native = values.reference
     ? JSON.parse(await readFile(join(values.reference, 'report.json'), 'utf8'))
     : { envelope, provenance: {} };
@@ -49,6 +57,16 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles, buildMatching), values['exporter-revision'] === undefined
     ? undefined : Number(values['exporter-revision']), exporters);
   const adapter = adapterFor(profile);
+  if(values['client-view']) assert.ok(profile.port==='beta5'&&profile.exporter_revision>=13,
+    'Client view requires a new candidate exporter pin');
+  const registry = JSON.parse(await readFile(values['candidate-registry'] || new URL('../profiles/registry.json', import.meta.url), 'utf8'));
+  const clientRecipes = registry.processing?.client_view_recipes?.[profile.id] ?? [];
+  if (values['client-view'] && !values['candidate-registry']) {
+    assert.ok(clientRecipes.some(r => r.exporter_revision === profile.exporter_revision && r.analytics_revision === analyticsRevision
+      && r.viewer_revision === 5 && r.max_players >= envelope.players), 'Unregistered client-view recipe');
+  } else if (!values['client-view']) {
+    assert.ok(!clientRecipes.some(r => r.exporter_revision === profile.exporter_revision), 'Client exporter cannot convert an authoritative track');
+  }
   const recovery = envelope.network?.roster_recovery;
   if (recovery) assert.ok(profile.port === 'beta5' && profile.exporter_revision >= 12,
     'Initial roster recovery requires Beta 5 exporter 12 or later');
@@ -292,7 +310,7 @@ export async function convertFilm(options) {
       } finally { closeSync(validationLog); }
       report.timing.validation_seconds = (performance.now() - verificationStarted) / 1000;
     }
-    if (profile.port === 'beta5' && profile.exporter_revision >= 11) {
+    if (profile.port === 'beta5' && profile.exporter_revision >= 11 && !values['client-view']) {
       report.client_diagnostics = await exportDiagnostics(join(work, 'input.h1film'),
         join(stage, 'candidate', 'client-diagnostics.h1diag'), {
           film_sha256: filmHash, raw_map_sha256: mapHash, engine_profile: profile.id,

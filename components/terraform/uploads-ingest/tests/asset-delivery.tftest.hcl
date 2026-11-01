@@ -65,6 +65,7 @@ run "s3_default" {
       "arn:aws:s3:::uploads-dev-283279960672/replays/processed/*.zst",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*.hsrv",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*/generations/*/h1-client-diagnostics.v1.*.h1diag",
+      "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/client-views/*/generations/*/h1-client-view-timeline.v1.*.json",
     ])
     error_message = "CDN access must include generation-bound H1 diagnostic companions and exclude raw maps, unprocessed uploads, manifests, and support-only artifacts."
   }
@@ -140,7 +141,7 @@ run "h1_preserves_canonical_versions" {
       local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
       local.pipelines.films.unprocessed_prefix == "films/unprocessed/" &&
       aws_sqs_queue.file_processing["films"].visibility_timeout_seconds == 5400 &&
-      length(local.asset_download_object_arns) == 9
+      length(local.asset_download_object_arns) == 10
     )
     error_message = "Keep pinned film versions without broadening CDN access or changing Xbox retention."
   }
@@ -195,7 +196,7 @@ run "h1_preserves_retained_map_versions" {
   }
   assert {
     condition = (
-      length(local.asset_download_object_arns) == 9 &&
+      length(local.asset_download_object_arns) == 10 &&
       !contains(local.asset_download_object_arns, "${local.uploads_bucket_arn}/maps/processed/*.map")
     )
     error_message = "Retaining raw originals must not make them downloadable through CloudFront."
@@ -231,4 +232,34 @@ run "cdn_not_provisioned" {
     cdn                 = { enabled = false }
   }
   expect_failures = [var.asset_delivery_mode]
+}
+
+run "client_view_notification_and_retention" {
+  state_key = "assets"
+  command   = plan
+  variables {
+    pipelines = {
+      films = {
+        unprocessed_prefix         = "films/unprocessed/"
+        additional_source_prefixes = ["films/client-views/unprocessed/"]
+        preserve_source_versions   = true
+      }
+    }
+  }
+  assert {
+    condition = (
+      length(local.source_notifications) == 2 &&
+      local.source_notifications["films-source-0"].pipeline == "films" &&
+      local.source_notifications["films-source-0"].prefix == "films/client-views/unprocessed/" &&
+      length(local.pipeline_lifecycle_rules) == 0
+    )
+    error_message = "Client sources must use the existing film queue and retain every immutable version."
+  }
+  assert {
+    condition = contains(local.asset_download_object_arns,
+      "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}client-views/*/generations/*/h1-client-view-timeline.v1.*.json") && alltrue([
+      for arn in local.asset_download_object_arns : !strcontains(arn, "films/client-views/unprocessed/") && !endswith(arn, "/*.json")
+    ])
+    error_message = "Only the generation-bound client timeline JSON may be delivered publicly."
+  }
 }

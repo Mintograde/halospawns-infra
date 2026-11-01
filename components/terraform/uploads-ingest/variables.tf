@@ -145,6 +145,7 @@ variable "pipelines" {
   description = "Upload notification and processing queue configuration keyed by stable upload type."
   type = map(object({
     unprocessed_prefix          = string
+    additional_source_prefixes  = optional(list(string), [])
     processed_prefix            = optional(string)
     failed_prefix               = optional(string)
     preserve_source_versions    = optional(bool, false)
@@ -171,7 +172,9 @@ variable "pipelines" {
   validation {
     condition = length(var.pipelines) > 0 && alltrue([
       for name, pipeline in var.pipelines :
-      trimspace(name) != "" && trim(pipeline.unprocessed_prefix, "/") != ""
+      trimspace(name) != "" && trim(pipeline.unprocessed_prefix, "/") != "" &&
+      alltrue([for prefix in pipeline.additional_source_prefixes : trim(prefix, "/") != ""]) &&
+      (length(pipeline.additional_source_prefixes) == 0 || pipeline.preserve_source_versions)
     ])
     error_message = "pipelines must contain at least one non-empty key and unprocessed prefix."
   }

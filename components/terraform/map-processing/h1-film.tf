@@ -131,9 +131,15 @@ resource "aws_iam_role_policy" "h1_film_intake" {
         Action = ["s3:GetObjectVersion"]
         Resource = [
           "${local.h1_film_bucket_arn}/films/unprocessed/*",
+          "${local.h1_film_bucket_arn}/films/client-views/unprocessed/*",
           "${local.h1_film_bucket_arn}/${local.map_unprocessed_prefix}/*",
           "${local.h1_film_bucket_arn}/${local.map_processed_prefix}/*",
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${local.h1_film_bucket_arn}/films/client-views/unprocessed/*"]
       },
       {
         Effect = "Allow"

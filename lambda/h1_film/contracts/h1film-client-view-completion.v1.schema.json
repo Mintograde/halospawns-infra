@@ -1,0 +1,307 @@
+{
+  "$defs": {
+    "ClientViewIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": {
+          "const": "halospawns.h1ClientView.v1",
+          "title": "Contract",
+          "type": "string"
+        },
+        "recording_role": {
+          "const": "client",
+          "title": "Recording Role",
+          "type": "string"
+        },
+        "game_id": {
+          "format": "uuid",
+          "title": "Game Id",
+          "type": "string"
+        },
+        "upload_id": {
+          "format": "uuid",
+          "title": "Upload Id",
+          "type": "string"
+        },
+        "host_artifact_id": {
+          "format": "uuid",
+          "title": "Host Artifact Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "engine_profile": {
+          "const": "h1-performance-beta5-p9818-wasm-v1",
+          "title": "Engine Profile",
+          "type": "string"
+        },
+        "exporter_revision": {
+          "minimum": 13,
+          "title": "Exporter Revision",
+          "type": "integer"
+        },
+        "viewer_revision": {
+          "const": 5,
+          "title": "Viewer Revision",
+          "type": "integer"
+        },
+        "analytics_revision": {
+          "const": 2,
+          "title": "Analytics Revision",
+          "type": "integer"
+        },
+        "wasm_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Wasm Sha256",
+          "type": "string"
+        },
+        "glue_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Glue Sha256",
+          "type": "string"
+        },
+        "map_binding_id": {
+          "format": "uuid",
+          "title": "Map Binding Id",
+          "type": "string"
+        },
+        "raw_map": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "match_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Match Id",
+          "type": "string"
+        },
+        "recorded_own_player": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Recorded Own Player",
+          "type": "integer"
+        },
+        "clock_source": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "release": {
+          "$ref": "#/$defs/H1FilmReleasePin"
+        }
+      },
+      "required": [
+        "contract",
+        "recording_role",
+        "game_id",
+        "upload_id",
+        "host_artifact_id",
+        "source",
+        "engine_profile",
+        "exporter_revision",
+        "viewer_revision",
+        "analytics_revision",
+        "wasm_sha256",
+        "glue_sha256",
+        "map_binding_id",
+        "raw_map",
+        "match_id",
+        "recorded_own_player",
+        "clock_source",
+        "release"
+      ],
+      "title": "ClientViewIdentity",
+      "type": "object"
+    },
+    "H1FilmProducer": {
+      "additionalProperties": false,
+      "properties": {
+        "image_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "release_id": {
+          "pattern": "^[0-9]{8}-r[1-9][0-9]*$",
+          "title": "Release Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "image_digest",
+        "release_id"
+      ],
+      "title": "H1FilmProducer",
+      "type": "object"
+    },
+    "H1FilmRecipe": {
+      "additionalProperties": false,
+      "properties": {
+        "exporter_revision": {
+          "minimum": 1,
+          "title": "Exporter Revision",
+          "type": "integer"
+        },
+        "analytics_revision": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Analytics Revision",
+          "type": "integer"
+        },
+        "viewer_revision": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Viewer Revision",
+          "type": "integer"
+        },
+        "max_players": {
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Max Players",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "exporter_revision",
+        "analytics_revision",
+        "viewer_revision",
+        "max_players"
+      ],
+      "title": "H1FilmRecipe",
+      "type": "object"
+    },
+    "H1FilmReleasePin": {
+      "additionalProperties": false,
+      "properties": {
+        "release_id": {
+          "pattern": "^[0-9]{8}-r[1-9][0-9]*$",
+          "title": "Release Id",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "policy_revision": {
+          "minimum": 0,
+          "title": "Policy Revision",
+          "type": "integer"
+        },
+        "image_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "recipe": {
+          "$ref": "#/$defs/H1FilmRecipe"
+        }
+      },
+      "required": [
+        "release_id",
+        "manifest_sha256",
+        "policy_revision",
+        "image_digest",
+        "recipe"
+      ],
+      "title": "H1FilmReleasePin",
+      "type": "object"
+    },
+    "H1FilmSource": {
+      "additionalProperties": false,
+      "properties": {
+        "s3_bucket": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "S3 Bucket",
+          "type": "string"
+        },
+        "s3_key": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Key",
+          "type": "string"
+        },
+        "s3_version_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Version Id",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 536870912,
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "s3_bucket",
+        "s3_key",
+        "s3_version_id",
+        "size_bytes",
+        "sha256"
+      ],
+      "title": "H1FilmSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "identity": {
+      "$ref": "#/$defs/ClientViewIdentity"
+    },
+    "artifact": {
+      "$ref": "#/$defs/H1FilmSource"
+    },
+    "timeline": {
+      "$ref": "#/$defs/H1FilmSource"
+    },
+    "frame_count": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Frame Count",
+      "type": "integer"
+    },
+    "first_update": {
+      "maximum": 2147051647,
+      "minimum": 0,
+      "title": "First Update",
+      "type": "integer"
+    },
+    "verified_hash_count": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Verified Hash Count",
+      "type": "integer"
+    },
+    "producer": {
+      "$ref": "#/$defs/H1FilmProducer"
+    },
+    "verification": {
+      "const": "simulation_and_encoding_verified",
+      "title": "Verification",
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "identity",
+    "artifact",
+    "timeline",
+    "frame_count",
+    "first_update",
+    "verified_hash_count",
+    "producer",
+    "verification"
+  ],
+  "title": "ClientViewCompletion",
+  "type": "object"
+}

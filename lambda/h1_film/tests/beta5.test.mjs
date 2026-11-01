@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {readEnvelope} from '../runtime/film.mjs';
 import {readEnvelope as beta4} from '../runtime/adapters/beta4-v2-120.mjs';
+import {readEnvelope as beta5} from '../runtime/adapters/beta5-v2-120.mjs';
 function fixture(records = [[3,4],[9,0],[8,124],[10,32],[11,56],[12,20]]) {
   const header=504,options=13152,text=Buffer.from('[tuning]\nbots = 0\n');
   const stream=header+options+text.length,trailer=stream+10,net=trailer+24;
@@ -29,3 +30,21 @@ for(const [name,mutate] of [
 ])test('beta5 rejects '+name,async()=>{const b=fixture();mutate(b);await withFilm(b,p=>assert.rejects(readEnvelope(p)))});
 test('beta5 rejects malformed projectile payload lengths and unknown records',async()=>{for(const records of [[[8,123]],[[10,31]],[[11,55]],[[12,19]],[[13,0]],[[64,4]]])await withFilm(fixture(records),p=>assert.rejects(readEnvelope(p)));});
 test('beta5 accepts bounded optional ledger and client evidence plus recorded fireteams',async()=>{let b=fixture();const size=b.length;b=Buffer.concat([b,Buffer.alloc(48)]);b.writeUInt32LE(0x55,472);b.writeUInt32LE(size,480);b.writeUInt32LE(24,484);b.writeUInt32LE(size+24,496);b.writeUInt32LE(24,500);await withFilm(b,p=>readEnvelope(p));});
+
+test('client-view discovery requires explicit opt-in and excludes rule metadata',async()=>{
+  const b=fixture([[64,4],[65,132],[81,0],[82,0]]);b.writeUInt32LE(106,28);
+  await withFilm(b,async p=>{
+    await assert.rejects(readEnvelope(p));
+    const e=await beta5(p,{allowClientView:true});
+    assert.equal(e.recording_kind,'client-view');assert.equal(e.network.applications,2);
+    assert.deepEqual(e.network.clocks,[{frame:0,game_tick:0}]);assert.equal(e.network.host,undefined);
+  });
+});
+test('client-view discovery rejects missing clocks, unknown records and invalid fixed payloads',async()=>{
+  for(const records of [[[65,132]],[[64,3]],[[64,4],[65,131]],[[64,4],[83,0]],
+    [[64,4],[74,7]],[[64,4],[75,10]],[[64,4],[76,4]],[[64,4],[77,2]],
+    [[64,4],[78,4]],[[64,4],[79,5]],[[64,4],[72,0xf01]]]) {
+    const b=fixture(records);b.writeUInt32LE(106,28);
+    await withFilm(b,p=>assert.rejects(beta5(p,{allowClientView:true})));
+  }
+});

@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "ClientViewClock": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "game_tick": {
+          "maximum": 2147051647,
+          "minimum": 0,
+          "title": "Game Tick",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame",
+        "game_tick"
+      ],
+      "title": "ClientViewClock",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "const": "halospawns.h1ClientViewTimeline.v1",
+      "title": "Contract",
+      "type": "string"
+    },
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "source_film_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Film Sha256",
+      "type": "string"
+    },
+    "clock_source_film_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Clock Source Film Sha256",
+      "type": "string"
+    },
+    "host_artifact_id": {
+      "format": "uuid",
+      "title": "Host Artifact Id",
+      "type": "string"
+    },
+    "frame_count": {
+      "maximum": 432000,
+      "minimum": 1,
+      "title": "Frame Count",
+      "type": "integer"
+    },
+    "first_update": {
+      "maximum": 2147051647,
+      "minimum": 0,
+      "title": "First Update",
+      "type": "integer"
+    },
+    "clocks": {
+      "items": {
+        "$ref": "#/$defs/ClientViewClock"
+      },
+      "maxItems": 432000,
+      "minItems": 1,
+      "title": "Clocks",
+      "type": "array"
+    },
+    "alignment_method": {
+      "const": "beta5-client-clock-v1",
+      "title": "Alignment Method",
+      "type": "string"
+    },
+    "alignment_rows": {
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "maximum": 2147051647,
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "maximum": 2147051647,
+            "minimum": 0,
+            "type": "integer"
+          }
+        ],
+        "type": "array"
+      },
+      "maxItems": 65536,
+      "title": "Alignment Rows",
+      "type": "array"
+    }
+  },
+  "required": [
+    "contract",
+    "attempt_id",
+    "source_film_sha256",
+    "clock_source_film_sha256",
+    "host_artifact_id",
+    "frame_count",
+    "first_update",
+    "clocks",
+    "alignment_method",
+    "alignment_rows"
+  ],
+  "title": "ClientViewTimeline",
+  "type": "object"
+}

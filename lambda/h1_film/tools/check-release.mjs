@@ -20,6 +20,12 @@ if (values['previous-registry']) {
   for (const [name, rule] of Object.entries(previous.build_matching ?? {})) {
     assert.equal(BUILD_MATCHING[name], rule, 'Previously supported recorded build rule changed');
   }
+  const current = JSON.parse(await readFile(new URL('../profiles/registry.json', import.meta.url), 'utf8'));
+  for (const [id, recipes] of Object.entries(previous.processing?.client_view_recipes ?? {})) {
+    assert.equal(current.processing.requirements.client_view, previous.processing.requirements.client_view);
+    for (const recipe of recipes) assert.ok(current.processing.client_view_recipes?.[id]?.some(r =>
+      JSON.stringify(r) === JSON.stringify(recipe)), 'Previously supported client recipe removed');
+  }
 }
 for (const profile of [...ENGINE_PROFILES, ...ENGINE_EXPORTERS.map(entry =>
   selectExporter(profileById(entry.engine_profile), entry.revision))]) {

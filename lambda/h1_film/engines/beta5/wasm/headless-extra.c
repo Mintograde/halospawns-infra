@@ -5,7 +5,9 @@
 #include "blampc_bots.h"
 
 /* Offline host-film playback has no live network session. */
+#ifndef H1_CLIENT_VIEW
 int u_session(void) { return 0; }
+#endif
 
 static int background_pad;
 int blampc_live_input_phys_slot(int port) { return port >= 0 && port < 4 ? port : -1; }

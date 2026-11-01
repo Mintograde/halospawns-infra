@@ -1,0 +1,364 @@
+{
+  "$defs": {
+    "H1FilmEvidence": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "map_size_evidence"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "map_size_bytes": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "engine_profile": {
+                "const": "h1-performance-beta5-p9818-wasm-v1"
+              },
+              "map_size_evidence": {
+                "const": "halospawns.h1MissingMapSize.v1"
+              }
+            },
+            "required": [
+              "map_size_evidence"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "engine_profile": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Engine Profile",
+          "type": "string"
+        },
+        "format": {
+          "minimum": 1,
+          "title": "Format",
+          "type": "integer"
+        },
+        "protocol_revision": {
+          "minimum": 1,
+          "title": "Protocol Revision",
+          "type": "integer"
+        },
+        "tick_rate": {
+          "minimum": 1,
+          "title": "Tick Rate",
+          "type": "integer"
+        },
+        "build": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Build",
+          "type": "string"
+        },
+        "scenario": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,159}$",
+          "title": "Scenario",
+          "type": "string"
+        },
+        "map_size_bytes": {
+          "maximum": 268435456,
+          "minimum": 0,
+          "title": "Map Size Bytes",
+          "type": "integer"
+        },
+        "map_size_evidence": {
+          "anyOf": [
+            {
+              "const": "halospawns.h1MissingMapSize.v1",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Map Size Evidence"
+        },
+        "roster_recovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/H1FilmRosterRecovery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_tick_count": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Source Tick Count",
+          "type": "integer"
+        },
+        "player_count": {
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Player Count",
+          "type": "integer"
+        },
+        "hash_sample_count": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Hash Sample Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "engine_profile",
+        "format",
+        "protocol_revision",
+        "tick_rate",
+        "build",
+        "scenario",
+        "map_size_bytes",
+        "source_tick_count",
+        "player_count",
+        "hash_sample_count"
+      ],
+      "title": "H1FilmEvidence",
+      "type": "object"
+    },
+    "H1FilmRosterRecovery": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "halospawns.h1InitialRosterRecovery.v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "recorded_player_count": {
+          "maximum": 8,
+          "minimum": 8,
+          "title": "Recorded Player Count",
+          "type": "integer"
+        },
+        "initial_player_count": {
+          "maximum": 16,
+          "minimum": 9,
+          "title": "Initial Player Count",
+          "type": "integer"
+        },
+        "initial_remote_mask": {
+          "maximum": 65535,
+          "minimum": 511,
+          "title": "Initial Remote Mask",
+          "type": "integer"
+        },
+        "recovered_players": {
+          "items": {
+            "$ref": "#/$defs/RecoveredPlayer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Recovered Players",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema",
+        "recorded_player_count",
+        "initial_player_count",
+        "initial_remote_mask",
+        "recovered_players"
+      ],
+      "title": "H1FilmRosterRecovery",
+      "type": "object"
+    },
+    "H1FilmSource": {
+      "additionalProperties": false,
+      "properties": {
+        "s3_bucket": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "S3 Bucket",
+          "type": "string"
+        },
+        "s3_key": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Key",
+          "type": "string"
+        },
+        "s3_version_id": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "S3 Version Id",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 536870912,
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "s3_bucket",
+        "s3_key",
+        "s3_version_id",
+        "size_bytes",
+        "sha256"
+      ],
+      "title": "H1FilmSource",
+      "type": "object"
+    },
+    "RecoveredPlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "maximum": 15,
+          "minimum": 8,
+          "title": "Slot",
+          "type": "integer"
+        },
+        "player_handle": {
+          "exclusiveMaximum": 2147483648,
+          "minimum": -2147483648,
+          "title": "Player Handle",
+          "type": "integer"
+        },
+        "team": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Team",
+          "type": "integer"
+        },
+        "damage_record_count": {
+          "maximum": 67108864,
+          "minimum": 1,
+          "title": "Damage Record Count",
+          "type": "integer"
+        },
+        "first_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "First Source Tick",
+          "type": "integer"
+        },
+        "last_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Last Source Tick",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot",
+        "player_handle",
+        "team",
+        "damage_record_count",
+        "first_source_tick",
+        "last_source_tick"
+      ],
+      "title": "RecoveredPlayer",
+      "type": "object"
+    },
+    "ViewRecordingEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "recording_role": {
+          "enum": [
+            "host",
+            "client"
+          ],
+          "title": "Recording Role",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/H1FilmSource"
+        },
+        "film": {
+          "$ref": "#/$defs/H1FilmEvidence"
+        },
+        "raw_map_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Raw Map Sha256",
+          "type": "string"
+        },
+        "match_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Match Id",
+          "type": "string"
+        },
+        "recorded_own_player": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Recorded Own Player",
+          "type": "integer"
+        },
+        "first_update": {
+          "maximum": 2147051647,
+          "minimum": 0,
+          "title": "First Update",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "recording_role",
+        "source",
+        "film",
+        "raw_map_sha256",
+        "match_id",
+        "recorded_own_player",
+        "first_update"
+      ],
+      "title": "ViewRecordingEvidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "format": "uuid",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "client": {
+      "$ref": "#/$defs/ViewRecordingEvidence"
+    },
+    "host": {
+      "$ref": "#/$defs/ViewRecordingEvidence"
+    },
+    "clock_host": {
+      "$ref": "#/$defs/ViewRecordingEvidence"
+    },
+    "diagnostic_recorded_own_player": {
+      "maximum": 15,
+      "minimum": 0,
+      "title": "Diagnostic Recorded Own Player",
+      "type": "integer"
+    },
+    "exporter_revision": {
+      "minimum": 13,
+      "title": "Exporter Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "client",
+    "host",
+    "clock_host",
+    "diagnostic_recorded_own_player",
+    "exporter_revision"
+  ],
+  "title": "ClientViewPrepare",
+  "type": "object"
+}

@@ -279,7 +279,18 @@
       "client_diagnostics": "halospawns.h1ClientDiagnostics.v1",
       "missing_map_size": "halospawns.h1MissingMapSize.v1",
       "initial_roster_recovery": "halospawns.h1InitialRosterRecovery.v1",
-      "recorded_build": "halospawns.h1RecordedBuild.v1"
+      "recorded_build": "halospawns.h1RecordedBuild.v1",
+      "client_view": "halospawns.h1ClientView.v1"
+    },
+    "client_view_recipes": {
+      "h1-performance-beta5-p9818-wasm-v1": [
+        {
+          "exporter_revision": 13,
+          "analytics_revision": 2,
+          "viewer_revision": 5,
+          "max_players": 16
+        }
+      ]
     }
   },
   "profiles": [
@@ -470,6 +481,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "529da30900a89ef47c757a19c42ae050b089582de777640b2d13b103b46236f7",
       "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 13,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "0405e296d1d98f4c5c69de088c6e738dd5b9f301afabdbf50820bf2aae9e940b",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
     }
   ]
 }

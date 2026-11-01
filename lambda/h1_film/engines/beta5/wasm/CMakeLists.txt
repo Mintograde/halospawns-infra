@@ -9,6 +9,10 @@ if(NOT IS_DIRECTORY "${H1_SOURCE}/engine")
 endif()
 set(CMAKE_C_STANDARD 17)
 option(H1_COMBAT_EXPORT "Build candidate combat hooks" OFF)
+option(H1_CLIENT_VIEW "Build candidate Beta 5 client world playback" OFF)
+if(H1_CLIENT_VIEW)
+    add_compile_definitions(H1_CLIENT_VIEW=1)
+endif()
 option(H1_DAMAGE_ATTRIBUTION "Resolve untracked damage through map tag references" OFF)
 option(H1_FINITE_WORLD_OBJECTS "Omit loose weapon objects with non-finite transforms" OFF)
 if(H1_FINITE_WORLD_OBJECTS)
@@ -228,6 +232,10 @@ list(APPEND host_sources "${CMAKE_CURRENT_BINARY_DIR}/local-network.c" "${CMAKE_
 set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/local-network.c" APPEND PROPERTY INCLUDE_DIRECTORIES "${H1_SOURCE}/host/local")
 set_property(SOURCE "${H1_SOURCE}/host/blampc_db_variants.c" APPEND PROPERTY COMPILE_OPTIONS "-include${H1_BETA3_PORT}/include/environment.h")
 set_property(SOURCE "${H1_SOURCE}/host/blampc_kbm_binds.c" APPEND PROPERTY COMPILE_OPTIONS "-include${CMAKE_CURRENT_SOURCE_DIR}/include/keys.h")
+set(network_sources "${CMAKE_CURRENT_BINARY_DIR}/offline-network.c")
+if(H1_CLIENT_VIEW)
+    include("${CMAKE_CURRENT_BINARY_DIR}/client-network-sources.cmake")
+endif()
 add_executable(h1-film ${host_sources} "${CMAKE_CURRENT_BINARY_DIR}/film_sequential.c" "${CMAKE_CURRENT_BINARY_DIR}/main_headless.c"
     "${CMAKE_CURRENT_BINARY_DIR}/typed_stubs.c"
     "${CMAKE_CURRENT_BINARY_DIR}/platform_buffers.c"
@@ -235,7 +243,7 @@ add_executable(h1-film ${host_sources} "${CMAKE_CURRENT_BINARY_DIR}/film_sequent
     "${CMAKE_CURRENT_BINARY_DIR}/rollback.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/export.c" "${H1_BETA3_PORT}/platform.c" "${CMAKE_CURRENT_BINARY_DIR}/headless.c"
     "${H1_BETA3_PORT}/cache-io.c" "${H1_BETA3_PORT}/wide-format.c"
-    "${CMAKE_CURRENT_BINARY_DIR}/offline-network.c" mszip.c)
+    ${network_sources} mszip.c)
 set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/main_headless.c" APPEND PROPERTY COMPILE_DEFINITIONS
     blampc_state_dump=hs_export_tick blampc_spawn_odds_tick=hs_unused_spawn_odds_tick)
 # The exporter is new portable code, so its bounded memcpy/strlen calls can

@@ -135,6 +135,8 @@ components:
             preserve_processed_versions: true
           films:
             unprocessed_prefix: films/unprocessed/
+            additional_source_prefixes:
+              - films/client-views/unprocessed/
             preserve_source_versions: true
             visibility_timeout_seconds: 5400
             message_retention_seconds: 604800

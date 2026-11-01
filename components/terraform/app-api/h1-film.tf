@@ -44,6 +44,10 @@ locals {
   h1_film_api_routes = local.h1_film_api_enabled ? [
     { route_key = "POST /v1/ingest/h1films/prepare", authorization_type = "NONE" },
     { route_key = "POST /v1/ingest/h1films/resolve-map", authorization_type = "NONE" },
+    { route_key = "GET /v1/ingest/h1films/client-views/attempts/{attempt_id}", authorization_type = "NONE" },
+    { route_key = "POST /v1/ingest/h1films/client-views/prepare", authorization_type = "NONE" },
+    { route_key = "POST /v1/ingest/h1films/client-views/complete", authorization_type = "NONE" },
+    { route_key = "POST /v1/ingest/h1films/client-views/failed", authorization_type = "NONE" },
   ] : []
 }
 

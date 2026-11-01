@@ -32,6 +32,12 @@ if ($manifest.Count -ne 1 -or $index.release_id -ne $ReleaseId -or
 foreach ($profile in $manifest[0].defaults.PSObject.Properties.Name) {
     if ($profile -notin @($index.cases.engine_profile)) { throw "Missing callback coverage: $profile" }
 }
+if ($manifest[0].PSObject.Properties.Name -contains 'client_view_recipes') {
+    if ($index.PSObject.Properties.Name -notcontains 'client_views') { throw 'Missing client-view callback evidence.' }
+    foreach ($profile in $manifest[0].client_view_recipes.PSObject.Properties.Name) {
+        if ($profile -notin @($index.client_views.engine_profile)) { throw "Missing client callback coverage: $profile" }
+    }
+}
 Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $root 'callbacks')
 $snapshot = Invoke-Aws @('lambda', 'get-function', '--function-name', 'halospawns-dev-app-api', '--qualifier', 'live') | ConvertFrom-Json
 $version = [string]$snapshot.Configuration.Version
@@ -55,6 +61,21 @@ foreach ($case in $index.cases) {
         --output "/evidence/$($case.name)-api.json" *> (Join-Path $root "$($case.name)-api.log")
     if ($LASTEXITCODE) { throw "Deployed API rejected $($case.name) callbacks. Evidence: $root" }
     Write-Host "API live=$version accepts $($case.name) success/failure callbacks and receipt serialization."
+}
+if ($index.PSObject.Properties.Name -contains 'client_views') {
+    foreach ($case in $index.client_views) {
+        if ($case.name -notmatch '^[a-z0-9-]+$') { throw 'Invalid client callback case.' }
+        docker run --rm --network none --read-only --user 10001:10001 --cpus 2 --memory 3008m `
+            --env PYTHONPATH=/api:/var/task --tmpfs /tmp:rw,nosuid,size=512m,mode=1777 `
+            --mount "type=bind,source=$api,target=/api,readonly" `
+            --mount "type=bind,source=$root,target=/evidence" `
+            --mount "type=bind,source=$CatalogPath,target=/catalog.json,readonly" `
+            --mount "type=bind,source=$repo/lambda/h1_film,target=/checks,readonly" `
+            --entrypoint /var/lang/bin/python3.12 $Image /checks/tools/verify-api-client-view.py `
+            --case "/evidence/callbacks/$($case.name)" --catalog /catalog.json *> (Join-Path $root "$($case.name)-api.log")
+        if ($LASTEXITCODE) { throw "Deployed API rejected client-view callbacks. Evidence: $root" }
+        Write-Host "API live=$version accepts $($case.name) preparation, completion and original source/world/timeline bytes."
+    }
 }
 $after = Invoke-Aws @('lambda', 'get-alias', '--function-name', 'halospawns-dev-app-api', '--name', 'live') | ConvertFrom-Json
 if ($after.FunctionVersion -ne $version) { throw 'API changed during verification; run promotion again.' }

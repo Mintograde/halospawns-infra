@@ -7,6 +7,15 @@ locals {
     })
   }
 
+  source_notifications = merge(
+    { for name, pipeline in local.pipelines : name => { pipeline = name, prefix = pipeline.unprocessed_prefix } },
+    { for entry in flatten([for name, pipeline in local.pipelines : [
+      for index, prefix in pipeline.additional_source_prefixes : {
+        id = "${name}-source-${index}", pipeline = name, prefix = "${trim(prefix, "/")}/"
+      }
+    ]]) : entry.id => entry }
+  )
+
   replay_spatial_artifact_prefix     = "${trim(var.storage.replay_spatial_artifacts.prefix, "/")}/"
   replay_viewer_artifact_prefix      = "${trim(var.storage.replay_viewer_artifacts.prefix, "/")}/"
   replay_processed_prefix            = try(local.pipelines.replays.processed_prefix, null)
@@ -23,6 +32,7 @@ locals {
     local.replay_processed_prefix == null ? [] : ["${local.uploads_bucket_arn}/${local.replay_processed_prefix}*.zst"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*.hsrv"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*/generations/*/h1-client-diagnostics.v1.*.h1diag"],
+    ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}client-views/*/generations/*/h1-client-view-timeline.v1.*.json"],
   )
   asset_trusted_key_groups = var.cdn.enabled && var.asset_delivery_mode != "cloudfront" ? [aws_cloudfront_key_group.main[0].id] : []
   asset_cache_ttls = {

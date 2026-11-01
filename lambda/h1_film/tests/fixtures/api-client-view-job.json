@@ -1,0 +1,156 @@
+{
+  "schema": "halospawns.h1ClientView.v1",
+  "attempt_id": "3731dfcd-2744-481f-96ef-35c42bfc9abd",
+  "identity": {
+    "contract": "halospawns.h1ClientView.v1",
+    "recording_role": "client",
+    "game_id": "a67cfbe1-4994-4a77-938c-1a9efced7215",
+    "upload_id": "27af79f4-9e66-40cd-b69f-93e8a5dd3cd4",
+    "host_artifact_id": "ecedc0f7-77e5-413c-9f22-4fff1d1f6a39",
+    "source": {
+      "s3_bucket": "contract-fixture-bucket",
+      "s3_key": "films/client-views/unprocessed/27af79f4-9e66-40cd-b69f-93e8a5dd3cd4/client.h1film",
+      "s3_version_id": "original-client-v1",
+      "sha256": "4b2ca36c0b45e2e37fbb004e12fe085ae4c53e9022a8eb038f3378ab4733baa4",
+      "size_bytes": 851697
+    },
+    "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+    "exporter_revision": 13,
+    "viewer_revision": 5,
+    "analytics_revision": 2,
+    "wasm_sha256": "0405e296d1d98f4c5c69de088c6e738dd5b9f301afabdbf50820bf2aae9e940b",
+    "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8",
+    "map_binding_id": "44444444-4444-4444-8444-444444444444",
+    "raw_map": {
+      "s3_bucket": "contract-fixture-bucket",
+      "s3_key": "maps/unprocessed/dread.map",
+      "s3_version_id": "fixture-map-version-1",
+      "size_bytes": 74690664,
+      "sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730"
+    },
+    "match_id": "134c2a61fc9fa7dd",
+    "recorded_own_player": 2,
+    "clock_source": {
+      "s3_bucket": "contract-fixture-bucket",
+      "s3_key": "films/unprocessed/22222222-2222-4222-8222-222222222222-example.h1film",
+      "s3_version_id": "fixture-film-version-1",
+      "size_bytes": 3822439,
+      "sha256": "d2ed91b67f65c719f4f76866ea10686184f7fe52815b429c13fac8c3908d4a82"
+    },
+    "release": {
+      "release_id": "20261101-r1",
+      "image_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_sha256": "b58fcb488238e8dbcce9b7e62d5fd4279278d90b6dca4003c50a8f3188167286",
+      "policy_revision": 1,
+      "recipe": {
+        "exporter_revision": 13,
+        "analytics_revision": 2,
+        "viewer_revision": 5,
+        "max_players": 16
+      }
+    }
+  },
+  "evidence": {
+    "attempt_id": "3731dfcd-2744-481f-96ef-35c42bfc9abd",
+    "exporter_revision": 13,
+    "client": {
+      "film": {
+        "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+        "format": 2,
+        "protocol_revision": 9818,
+        "tick_rate": 120,
+        "build": "2026-10-29 - BETA 5 - fbbfae27",
+        "scenario": "dread",
+        "map_size_bytes": 74690664,
+        "source_tick_count": 5134,
+        "player_count": 3,
+        "hash_sample_count": 43
+      },
+      "recording_role": "client",
+      "match_id": "134c2a61fc9fa7dd",
+      "recorded_own_player": 2,
+      "first_update": 0,
+      "source": {
+        "s3_bucket": "contract-fixture-bucket",
+        "s3_key": "films/client-views/unprocessed/27af79f4-9e66-40cd-b69f-93e8a5dd3cd4/client.h1film",
+        "sha256": "4b2ca36c0b45e2e37fbb004e12fe085ae4c53e9022a8eb038f3378ab4733baa4",
+        "size_bytes": 851697,
+        "s3_version_id": "original-client-v1"
+      },
+      "raw_map_sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730"
+    },
+    "host": {
+      "film": {
+        "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+        "format": 2,
+        "protocol_revision": 9818,
+        "tick_rate": 120,
+        "build": "Linux server",
+        "scenario": "dread",
+        "map_size_bytes": 0,
+        "map_size_evidence": "halospawns.h1MissingMapSize.v1",
+        "source_tick_count": 39120,
+        "player_count": 3,
+        "hash_sample_count": 326
+      },
+      "recording_role": "host",
+      "match_id": "134c2a61fc9fa7dd",
+      "recorded_own_player": 2,
+      "first_update": 0,
+      "source": {
+        "s3_bucket": "contract-fixture-bucket",
+        "s3_key": "films/unprocessed/22222222-2222-4222-8222-222222222222-example.h1film",
+        "s3_version_id": "fixture-film-version-1",
+        "size_bytes": 3822439,
+        "sha256": "d2ed91b67f65c719f4f76866ea10686184f7fe52815b429c13fac8c3908d4a82"
+      },
+      "raw_map_sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730"
+    },
+    "clock_host": {
+      "film": {
+        "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+        "format": 2,
+        "protocol_revision": 9818,
+        "tick_rate": 120,
+        "build": "Linux server",
+        "scenario": "dread",
+        "map_size_bytes": 0,
+        "map_size_evidence": "halospawns.h1MissingMapSize.v1",
+        "source_tick_count": 39120,
+        "player_count": 3,
+        "hash_sample_count": 326
+      },
+      "recording_role": "host",
+      "match_id": "134c2a61fc9fa7dd",
+      "recorded_own_player": 2,
+      "first_update": 0,
+      "source": {
+        "s3_bucket": "contract-fixture-bucket",
+        "s3_key": "films/unprocessed/22222222-2222-4222-8222-222222222222-example.h1film",
+        "s3_version_id": "fixture-film-version-1",
+        "size_bytes": 3822439,
+        "sha256": "d2ed91b67f65c719f4f76866ea10686184f7fe52815b429c13fac8c3908d4a82"
+      },
+      "raw_map_sha256": "94daca13bd3c06107ea8540175eb85c3932ad36a6277d26ad46047b89dc7b730"
+    },
+    "diagnostic_recorded_own_player": 2
+  },
+  "requested_outputs": [
+    "viewer_artifact"
+  ],
+  "viewer_artifact_target": {
+    "artifact_kind": "viewer_replay_delta",
+    "format": "halospawns.viewerReplayDelta.v2",
+    "container_version": 2,
+    "manifest_schema_sha256": "8aee94b8e95564d9baf34d6b72b003372ecdf991d5ee6e139611f3f684fd37ee",
+    "encoding_sha256": "5518df313953e7158cd66afc04e7ef6345bec94f9ea05bfeabe4d83d6524a723",
+    "profile": "frontend-default",
+    "profile_revision": 5,
+    "projection_sha256": "210416ff3b889875b957258c96c4703bbf332a021d35447fb4c61128f965502c",
+    "schema_name": "halospawns.viewerReplay.v1"
+  },
+  "output": {
+    "s3_bucket": "contract-fixture-bucket",
+    "prefix": "replays/derived/viewer/client-views/27af79f4-9e66-40cd-b69f-93e8a5dd3cd4/generations/3731dfcd-2744-481f-96ef-35c42bfc9abd/"
+  }
+}

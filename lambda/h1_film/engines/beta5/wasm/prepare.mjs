@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import {prepareClientView} from './client-view.mjs';
 
-const [source, output, shared, commit, date] = process.argv.slice(2);
+const [source, output, shared, commit, date, clientView] = process.argv.slice(2);
 assert.match(commit, /^[0-9a-f]{40}$/);
 assert.match(date, /^\d{4}-\d{2}-\d{2}$/);
 const host = name => readFile(join(source, 'host', name), 'utf8');
@@ -68,6 +69,15 @@ for (const name of ['blampc_universal_damage_deals', 'blampc_universal_film_deal
   stubs = stubs.replace(new RegExp(`\\b${name}\\b`, 'g'), `hs_unused_${name}`);
 }
 await writeFile(join(output, 'local-network.c'), stubs);
+if (clientView === 'ON') {
+  let original = await host('local/blampc_net_local_stub.c');
+  for (const match of projectile.matchAll(/^(?:int|void|unsigned int|float) +([a-zA-Z0-9_]+)\([^;{}]*\)\s*\{/gm)) {
+    original = original.replace(new RegExp('\\b' + match[1] + '\\b', 'g'), 'hs_unused_' + match[1]);
+  }
+  for (const name of ['blampc_net_gametype_received', 'blampc_net_gametype_host_base'])
+    original = original.replace(new RegExp(`\\b${name}\\b`, 'g'), `hs_unused_${name}`);
+  await prepareClientView(source,output,original);
+}
 let headless = await readFile(join(shared, 'headless.c'), 'utf8');
 for (const name of ['blampc_net_host_set_variant', 'blampc_net_session_variant']) {
   headless = headless.replace(new RegExp(`\\b${name}\\b`, 'g'), `hs_unused_${name}`);

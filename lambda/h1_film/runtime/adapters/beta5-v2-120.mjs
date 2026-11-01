@@ -44,7 +44,10 @@ async function readBlock(file, offset, length) {
   return result;
 }
 
-async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers, recoveryContext) {
+const CLIENT_FIXED_SIZES = new Map([[64,4],[65,132],[66,4],[67,68],[68,44],[69,64],[70,112],[71,16],[73,64],[80,0],[81,0],[82,0]]);
+const CLIENT_BATCH_STRIDES = new Map([[74,8],[75,11],[76,5],[77,3],[78,5]]);
+
+async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers, recoveryContext, clientView = false) {
   assert.ok(size >= 32 && size <= 96 * 1024 * 1024 + 32, 'Invalid FNET size');
   const header = await readBlock(file, offset, 32);
   const words = Array.from({ length: 8 }, (_, index) => header.readUInt32LE(index * 4));
@@ -55,6 +58,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
   const joined = new Set();
   const owners = new Map();
+  const clocks = [];
   let rosterChanged = false;
   let maxPlayerSlot = players - 1;
   let initialDropMask, observedRemoteMask = 0, initialRosterChanged = false, initialMaskChanged = false;
@@ -73,11 +77,35 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     for (let record = 0; record < records; record++) {
       assert.ok(position + 8 <= raw.length, 'Truncated FNET record');
       const tick = raw.readUInt32LE(position), type = raw.readUInt16LE(position + 4), length = raw.readUInt16LE(position + 6);
-      assert.equal(length, sizes.get(type), 'Unsupported FNET record');
+      if (clientView && type >= 64) {
+        assert.ok(type <= 82, 'Unsupported client FNET record');
+        if (CLIENT_FIXED_SIZES.has(type)) assert.equal(length,CLIENT_FIXED_SIZES.get(type),'Invalid client FNET record size');
+        else if(CLIENT_BATCH_STRIDES.has(type)) assert.ok(length>0&&length%CLIENT_BATCH_STRIDES.get(type)===0,'Invalid client FNET batch');
+        else if(type===72) assert.ok(length>0&&length<=0xf00,'Invalid client game state');
+        else assert.ok(type===79&&length>=4&&length<=0xe00,'Invalid client engine write');
+      } else assert.equal(length, sizes.get(type), 'Unsupported FNET record');
       assert.ok(position + 8 + length <= raw.length && tick >= previous && tick <= firstTick + ticks,
         'Invalid FNET record bounds or time');
       if (record === 0) assert.equal(tick, first, 'FNET first tick mismatch');
       if (record === records - 1) assert.equal(tick, last, 'FNET last tick mismatch');
+      if(clientView&&type===79) {
+        const payload=raw.subarray(position+8,position+8+length);
+        let at=4;
+        while(at<payload.length) {
+          assert.ok(at+5<=payload.length,'Truncated client engine write');
+          const region=payload[at],offset=payload.readUInt16LE(at+1),count=payload.readUInt16LE(at+3);
+          assert.ok(region<9&&offset+count<=65536&&at+5+count<=payload.length,'Invalid client engine write bounds');
+          // Region-specific bounds are additionally checked by the pinned engine.
+          at+=5+count;
+        }
+      }
+      if (clientView && type === 64) {
+        const gameTick = raw.readInt32LE(position + 8);
+        assert.ok(gameTick >= 0 && gameTick <= 0x7fffffff - ticks, 'Invalid client clock');
+        const clock={frame:tick,game_tick:gameTick};
+        if(clocks.at(-1)?.frame===tick)clocks[clocks.length-1]=clock;
+        else clocks.push(clock);
+      }
       if (type === 3) {
         const mask = raw.readUInt32LE(position + 8);
         assert.equal(mask >>> 16, 0, 'FNET drop mask exceeds converter limit');
@@ -97,7 +125,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
         assert.ok(players + joined.size <= 16, 'Participant roster exceeds converter limit');
         assert.ok(raw.readInt32LE(position + 16) >= 0, 'Invalid join respawn timer');
       }
-      if (type !== 3 && type !== 9 && tick < firstTick + ticks) applications++;
+      if (type !== 3 && type !== 9 && type !== 81 && type !== 82 && tick < firstTick + ticks) applications++;
       position += 8 + length;
       previous = tick;
     }
@@ -110,6 +138,10 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   assert.equal(cursor, size, 'Trailing FNET blocks');
   assert.equal(count, words[3], 'FNET record count mismatch');
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
+  if (clientView) {
+    assert.ok(clocks.length && clocks[0].frame === firstTick, 'Client film lacks initial clock');
+    return {records:count,applications,blocks:words[6],clocks};
+  }
   const roster_recovery = recoverInitialRoster({players,firstTick,ticks,localPlayers,
     initialMask:initialDropMask,maskChanged:initialMaskChanged,rosterChanged:rosterChanged || initialRosterChanged,
     observedMask:observedRemoteMask,owners,...recoveryContext});
@@ -138,7 +170,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path) {
+export async function readEnvelope(path, {allowClientView = false} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -150,7 +182,9 @@ export async function readEnvelope(path) {
     assert.ok(words[11] > 0 && words[11] <= 432000 && words[25] > 0 && words[25] <= 4, 'Invalid tick or seat count');
     assert.ok([13152, 13156].includes(words[4]), 'Unsupported Beta 5 options layout');
     const flags = words[7], network = Boolean(flags & 2), universal = Boolean(flags & 8);
-    assert.equal(flags & ~59, 0, 'Unknown film flags');
+    const clientView = Boolean(flags & 64);
+    assert.equal(flags & ~(allowClientView ? 123 : 59), 0, 'Unknown film flags');
+    assert.ok(!clientView || network && universal, 'Client view requires UNIVERSAL networking');
     assert.equal(network, universal, 'Network film requires UNIVERSAL world changes');
     let players = network ? words[31] & 255 : words[25];
     assert.ok(players > 0 && players <= 16, 'Network roster exceeds sixteen-player converter limit');
@@ -221,12 +255,16 @@ export async function readEnvelope(path) {
     const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25], {
       teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+17*4) === 0
         && variant.readInt32LE(128+23*4) === 0 && head.readUInt32LE(472) === 0),
-    }) : undefined;
+    }, clientView) : undefined;
     if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;
     return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
       ...(createdUtc ? { created_utc: Number(createdUtc) } : {}),
+      ...(allowClientView ? {recording_kind:clientView?'client-view':'host',
+        match_id:head.readBigUInt64LE(488).toString(16).padStart(16,'0'),
+        recorded_own_player:(words[31] >>> 8) & 255,
+        recorded_local_player_mask:(words[31] >>> 16) & 255} : {}),
       ...(bots ? { bots } : {}), ...(net ? { network: net } : {}) };
   } finally { await file.close(); }
 }

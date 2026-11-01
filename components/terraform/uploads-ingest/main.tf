@@ -228,11 +228,11 @@ resource "aws_s3_bucket_notification" "uploads_notification" {
   bucket = module.uploads_bucket.s3_bucket_id
 
   dynamic "topic" {
-    for_each = local.pipelines
+    for_each = local.source_notifications
     content {
-      topic_arn     = aws_sns_topic.file_uploaded[topic.key].arn
+      topic_arn     = aws_sns_topic.file_uploaded[topic.value.pipeline].arn
       events        = ["s3:ObjectCreated:*"]
-      filter_prefix = topic.value.unprocessed_prefix
+      filter_prefix = topic.value.prefix
     }
   }
 

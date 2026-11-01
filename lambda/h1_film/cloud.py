@@ -106,7 +106,7 @@ def limits():
     return result
 
 
-def validate_source(source, *, raw_map=False):
+def validate_source(source, *, raw_map=False, client_view=False):
     require(isinstance(source, dict))
     require(source.get("s3_bucket") == os.environ["H1_UPLOADS_BUCKET"])
     key = source.get("s3_key", "")
@@ -117,6 +117,9 @@ def validate_source(source, *, raw_map=False):
             key.startswith(("maps/unprocessed/", "maps/processed/"))
             and key.lower().endswith(".map")
         )
+    elif client_view:
+        from .client_views import upload_id_from_key
+        upload_id_from_key(key)
     else:
         require(key.startswith(SOURCE_PREFIX) and key.lower().endswith(".h1film"))
     version = source.get("s3_version_id")
@@ -151,6 +154,8 @@ def validate_job(job):
     profile = load_registry().get(film["engine_profile"])
     require(profile is not None, "unsupported_build")
     exporter = engine.get("exporter_revision")
+    client_recipes = json.loads((PACKAGE / "profiles/registry.json").read_text())["processing"].get("client_view_recipes", {})
+    require(not any(r["exporter_revision"] == exporter for r in client_recipes.get(film["engine_profile"], [])), "unsupported_build")
     recovery = film.get("roster_recovery")
     if recovery is not None:
         try:
@@ -251,6 +256,10 @@ def work_from_record(record):
     require(isinstance(body, str) and len(body.encode()) <= 256 * 1024)
     payload = json.loads(body)
     require(isinstance(payload, dict))
+    from . import client_views
+    if payload.get("schema") == client_views.DISPATCH:
+        client_views.validate_dispatch(payload)
+        return payload
     if isinstance(payload.get("schema"), str) and payload["schema"].startswith("halospawns.h1film_job."):
         require(payload.get("environment") == os.environ["ENVIRONMENT"] == "dev")
         require(payload.get("source_kind") == "h1film")
@@ -288,12 +297,16 @@ def work_from_record(record):
         "s3_version_id": obj.get("versionId"),
         "size_bytes": obj.get("size"),
     }
+    if source["s3_key"].startswith(client_views.SOURCE_PREFIX):
+        validate_source(source, client_view=True)
+        return {"schema": client_views.DISPATCH,
+                "upload_id": client_views.upload_id_from_key(source["s3_key"]), "source": source}
     validate_source(source)
     return {"upload_id": upload_id_from_key(source["s3_key"]), "source": source}
 
 
-def download(source, path, *, raw_map=False, metadata=None):
-    validate_source(source, raw_map=raw_map)
+def download(source, path, *, raw_map=False, client_view=False, metadata=None):
+    validate_source(source, raw_map=raw_map, client_view=client_view)
     s3 = shared_parser().S3
     args = {
         "Bucket": source["s3_bucket"],
@@ -441,7 +454,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise FilmError("retry_pending", retryable=True)
 
 
-def api(method, path, payload):
+def api(method, path, payload=None):
     shared = shared_parser()
     settings = shared._settings()
     base = urllib.parse.urlsplit(settings["app_api_base_url"])
@@ -455,7 +468,7 @@ def api(method, path, payload):
         and not base.query
         and not base.fragment
     )
-    body = json.dumps(
+    body = b"" if payload is None else json.dumps(
         payload, separators=(",", ":"), sort_keys=True, allow_nan=False
     ).encode()
     timestamp = str(int(time.time()))
@@ -470,7 +483,7 @@ def api(method, path, payload):
     )
     request = urllib.request.Request(
         settings["app_api_base_url"].rstrip("/") + path,
-        data=body,
+        data=body if payload is not None else None,
         method=method,
         headers={
             "Content-Type": "application/json",
@@ -879,6 +892,9 @@ def replay_completion(job):
 
 
 def execute(work_item, context):
+    from . import client_views
+    if work_item.get("schema") == client_views.DISPATCH:
+        return client_views.execute(work_item, context)
     started = time.monotonic()
     deadline = started + min(context.get_remaining_time_in_millis() / 1000 - 10, 890)
     with tempfile.TemporaryDirectory(prefix="h1-job-") as temporary:
@@ -944,6 +960,9 @@ def execute(work_item, context):
 
 
 def report_failure(item, error):
+    from . import client_views
+    if item.get("schema") == client_views.DISPATCH:
+        return client_views.report_failure(item, error)
     if error.reason in {"stale_attempt", "identity_conflict"}:
         return
     reason = error.reason if error.reason in FAILURES else "retry_pending"

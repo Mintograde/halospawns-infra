@@ -116,7 +116,7 @@ data "aws_iam_policy_document" "app_runtime" {
     content {
       sid       = "PresignH1FilmUploads"
       actions   = ["s3:PutObject"]
-      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*"]
+      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*", "${local.uploads_bucket_arn}/films/client-views/unprocessed/*"]
     }
   }
 
@@ -125,7 +125,7 @@ data "aws_iam_policy_document" "app_runtime" {
     content {
       sid       = "DownloadOwnedH1FilmVersion"
       actions   = ["s3:GetObjectVersion"]
-      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*"]
+      resources = ["${local.uploads_bucket_arn}/films/unprocessed/*", "${local.uploads_bucket_arn}/films/client-views/unprocessed/*"]
     }
   }
 

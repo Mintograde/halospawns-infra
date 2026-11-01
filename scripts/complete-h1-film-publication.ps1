@@ -67,6 +67,12 @@ if ($index.release_id -ne $Tag -or $index.image_digest -ne $digest -or
 foreach ($profile in $packaged.registry.processing.defaults.PSObject.Properties.Name) {
     if ($profile -notin @($index.cases.engine_profile)) { throw "Missing profile validation: $profile" }
 }
+if ($packaged.registry.processing.PSObject.Properties.Name -contains 'client_view_recipes') {
+    if ($index.PSObject.Properties.Name -notcontains 'client_views') { throw 'Missing client-view validation archive.' }
+    foreach ($profile in $packaged.registry.processing.client_view_recipes.PSObject.Properties.Name) {
+        if ($profile -notin @($index.client_views.engine_profile)) { throw "Missing client validation: $profile" }
+    }
+}
 foreach ($artifact in @(
     @{ Suffix = '.contracts.zip'; Path = $validation.Archive; Type = 'application/zip' },
     @{ Suffix = '.validation.json'; Path = $validation.Index; Type = 'application/json' },

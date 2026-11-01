@@ -28,6 +28,10 @@ function(hs_beta5_replay_source name input output)
         hs_beta5_replace(content "opts->players = count;" "opts->players = count < 4 ? count : 4;")
         file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/roster.c" roster_source)
         string(APPEND content "\n${roster_source}")
+        if(H1_CLIENT_VIEW)
+            # g_frames is the consumed recording frame, independent of clock jumps.
+            string(APPEND content "\nint hs_film_export_tick(int fallback)\n{\n    return (g_env.flags & BLAMPC_FILM_FLAG_CLIENT_VIEW) ? (int)g_frames - 1 : fallback;\n}\n")
+        endif()
         if(H1_ROSTER_RECOVERY)
             file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/roster-recovery.c" recovery_source)
             hs_beta5_replace(content "static blampc_boot_options g_film_options;"
