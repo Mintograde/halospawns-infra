@@ -1,9 +1,9 @@
 # Beta 5 client-view replay tracks
 
-Status (2026-11-01): client-world conversion, logical packaging and the separate
-hosted worker protocol are implemented. Both supplied `-view` films pass
-native/WASM parity and produce viewer-revision-5 artifacts. See `DEPLOYMENT.md`
-for the current dev deployment. Frontend adoption is being handled separately.
+Status (2026-11-01): deployed in dev as worker/default `20261101-r1`, policy 7,
+with API `live=224` and the applied client-view migration. Both supplied `-view`
+films pass native/WASM parity and produce viewer-revision-5 artifacts. See
+`DEPLOYMENT.md` for deployment evidence. Frontend adoption is handled separately.
 
 ## Implementation
 
@@ -65,9 +65,11 @@ Inline bounded-pose verification covers every encoded frame. Windows uses the
 non-incremental state path; the initial attempt to request incremental-state
 verification failed explicitly and was not counted as a successful conversion.
 
-All 62 Node tests and the build-engine PowerShell tests pass, including malformed
+The original local validation passed 62 Node tests and the build-engine PowerShell
+tests, including malformed
 client records, clock gaps/repeats and manifest/source/path binding. No Rust
-codec changes were required.
+codec changes were required. Deployment validation now passes 65 Node tests,
+90 worker tests and 10 Terraform tests; see `DEPLOYMENT.md`.
 
 ## Logical replay package and clocks
 
@@ -148,7 +150,7 @@ Useful ignored artifacts in this workspace:
 - `.build/client-view-port/acceptance.json`: consolidated source/map/artifact
   hash checks, strict final reference-log verification and package mapping checks.
 
-Final candidate pins (local exporter 13, not registered):
+Registered client exporter 13 pins:
 
 - Upstream: `fbbfae27d6be7e47613acce37da95ed754dccb42`.
 - WASM: `0405e296d1d98f4c5c69de088c6e738dd5b9f301afabdbf50820bf2aae9e940b`.
@@ -168,10 +170,10 @@ reference runner checks both process completion and strict playback verification
 an engine process returning zero does not by itself establish parity.
 
 For conversion, use the usual film/assets/engine/encoder/map-catalog/output
-arguments plus `--trusted-local --client-view --candidate-registry PATH
+arguments plus `--trusted-local --client-view
 --exporter-revision 13 --viewer-revision 5 --analytics-revision 2
---source-viewer-only --skip-readback`. The local registry must contain the exact
-candidate engine hashes; keep the deployed registry unchanged. The map catalogue
+--source-viewer-only --skip-readback`. A separate unregistered experiment can
+add `--candidate-registry PATH` with exact candidate hashes. The map catalogue
 must retain the reviewed profile-specific map binding. `--skip-readback` skips
 the built-in external viewer readback; inline pose verification still runs, and
 the artifacts above received a separate complete frontend decoder check.
@@ -186,8 +188,9 @@ the artifacts above received a separate complete frontend decoder check.
   `../../../halospawns-svelte/HANDOFFS.md`: session-owned host/client selection,
   clock-aware seek/coverage, cancellation, participant mapping and rendered tests.
 
-Cloud intake/finalization must adopt the agreed API contract before promotion.
-Client-view conversion must not enter the existing authoritative game/statistics
-callback path. No API/schema/frontend implementation or release, AWS mutation,
-historical reparse or production action was performed. Dev remains worker/default
-`20261031-r2`, policy revision 6, API `live=223`, with Beta 5 defaults 12/4/5.
+Cloud adoption and dev promotion are complete under
+`20261031-api-infra-h1film-client-view-protocol`. Client-view conversion never
+enters the authoritative game/statistics callback path. Beta 5 host defaults
+remain 12/4/5. The rollout submitted no live game association, historical
+reparse, frontend deployment or prod mutation. The user owns the ongoing viewer
+integration; use the API's hosted package shape and external timeline binding.

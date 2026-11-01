@@ -1,5 +1,67 @@
 # H1 film Lambda integration
 
+## Beta 5 client views deployed (2026-11-01 UTC)
+
+User-authorized dev worker/default **20261101-r1**, policy revision **7**, is
+active with API **live=224** (`bdb287c`). All 189 Python source files in the
+deployed native/Linux API ZIP match that commit; ZIP SHA-256 is
+`058d39e229d0caa9fd10996ceecd5b6c126ffc0acfce231d4ad58fcac6bfc12d`.
+The API-owned migration `20261031010000_h1film_client_views.sql` was applied by
+the API work and independently confirmed present during this rollout. Retain it
+and compatible readers on rollback.
+
+Worker image:
+`sha256:b859afee3d49a525bb8821ac27da84458292c2f39f86efa9363e9b699e4fee3b`.
+Built from committed `30cd49c` in `.build/client-view-release-source`; stack
+selection is `e9c78f2`. Registry SHA-256:
+`41d36b40833ee7caf61104d1c73f58fa6ebf6eb59b89c60ceb2498fb7b057720`.
+Four profiles and all old exporters remain, with one additional exporter (16
+exporter entries total). Beta 5 host defaults remain **12/4/5**. The separate
+client recipe is **13/2/5**, requiring `halospawns.h1ClientView.v1`; client
+sources never enter host statistics finalization. See `CLIENT_VIEWS.md` and
+`../../../halospawns-api/docs/h1film-client-views.md` in the sibling API repository.
+
+Validation and rollout:
+
+- 65 Node tests, 90 local/packaged worker tests, the build-orchestration checks,
+  and all 10 uploads-ingest Terraform tests pass. The seven focused packaged
+  client tests also cover a different recording-machine host with the same match.
+- Nineteen packaged host films/57 initial/full/viewer callbacks pass the exact
+  deployed API, including failure and receipt checks. All eighteen retained
+  films produce byte-identical host viewer artifacts compared with `20261031-r2`.
+- The supplied short pair passes separate role-aware preparation, strict client
+  simulation and complete API source/world/timeline byte checks (5,134 frames,
+  43 hashes). Lost completion delivery reuses immutable artifacts; terminal
+  redelivery performs no simulation. Cross-generation substitutions fail.
+- The long client passes the release container (328,585 frames, 2,739 hashes).
+  Both clients already match native/WASM exports across 333,719 frames. The long
+  host's existing native/WASM desync remains rejected; no verified pair is
+  claimed for it. Real multi-machine/browser acceptance remains frontend work;
+  independent-source association and clock binding have synthetic coverage.
+- Applied uploads-ingest notification plus narrow timeline CDN grant (0/2/0),
+  app-api's four dedicated HMAC routes plus source IAM (4/1/0), and worker source
+  IAM (0/1/0), then the guarded image/digest-only promotion (0/1/0). Shared
+  queues, limits, concurrency, host defaults and all 220 map approvals remain.
+- First live worker health and exact registry/image verification passed before
+  activation, fenced to API 224 and policy revision 6. Live HMAC context lookup
+  returns the expected missing-attempt 404; unsigned access returns 401. IAM
+  permits exact client source versions while denying worker source writes/deletes.
+- One immutable timeline canary passes CloudFront versionId, 206/range, full
+  SHA-256 and CORS from `http://127.0.0.1:5173`; source/map/completion JSON reads
+  remain 403. The first probe used unconfigured `localhost` and correctly lacked
+  CORS; the configured origin passes. No distribution invalidation was needed.
+- Before/after read-only snapshots preserve all **76 conversions, 301 receipts,
+  232 H1 attempts and 220 map approvals**, plus operational limits/concurrency.
+  The full dev postplan, including map-processing, is no-op with no output drift.
+  No game association, historical retry/reparse, frontend deployment or prod
+  mutation was submitted. Live browser/attachment acceptance is not claimed.
+
+Evidence: `.build/client-view-deploy/`, private publication artifacts under
+`.build/client-view-release-source/.build/h1-contracts/20261101-r1-bc74090085bc4b82a1ab8ff5e99a9469/`,
+and `.build/h1-promotions/20261101-132232-dbd501d8501e40b2a1b934a10fc2b4f8/`.
+The publication's private archive includes the short client fixture and immutable
+world/timeline bytes for exact API checks; it has no CDN read grant.
+
 ## PB2 recorder labels deployed (2026-10-31 UTC)
 
 User-authorized dev worker/default **20261031-r2**, policy revision **6**, is

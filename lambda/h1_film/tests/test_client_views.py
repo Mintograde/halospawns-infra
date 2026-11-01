@@ -57,6 +57,11 @@ class ClientViewTests(unittest.TestCase):
 
     def test_wrong_clock_recorder_match_or_host_proof_is_rejected(self):
         job = ClientViewTests.job(self)
+        independent = copy.deepcopy(job["evidence"])
+        independent["host"]["source"].update(s3_key="films/unprocessed/another-host.h1film", sha256="f" * 64,
+                                             s3_version_id="other-machine-v1")
+        independent["host"]["recorded_own_player"] = 1
+        views.validate_association(independent)
         for field, value in (("match_id", "1111111111111111"), ("recorded_own_player", 15), ("recording_role", "client")):
             evidence = copy.deepcopy(job["evidence"])
             evidence["clock_host"][field] = value
