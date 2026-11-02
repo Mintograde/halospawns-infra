@@ -21,6 +21,7 @@ def main():
     values = {k: json.loads((root / f"{k}.json").read_text()) for k in ("context", "prepare", "job", "completion")}
     job, context = values["job"], values["context"]
     intake_path = root / "intake.json"
+    intake_document = None
     if intake_path.exists():
         from halospawns_api.schemas.h1film_intake import FilmIntake
         intakes = json.loads(intake_path.read_text())
@@ -30,6 +31,7 @@ def main():
         assert intake.source.model_dump(mode="json") == job["identity"]["source"]
         assert intake.match_id == job["identity"]["match_id"]
         assert intake.recorded_own_player == job["identity"]["recorded_own_player"]
+        intake_document = intake.model_dump(mode="json")
     data = json.loads(args.catalog.read_text())
     manifest = next(m for m in data["manifests"] if m["release_id"] == job["identity"]["release"]["release_id"])
     data["policy"] = {"release_id": manifest["release_id"], "revision": job["identity"]["release"]["policy_revision"],
@@ -41,9 +43,17 @@ def main():
         "source": None, "request": {k: context["source"][k] for k in ("sha256", "size_bytes")},
         **{k: context["source"][k] for k in ("s3_bucket", "s3_key")}}
 
+    class IntakeCursor:
+        def execute(self, query, parameters):
+            assert query == "select evidence from public.h1film_intakes where upload_id=%s"
+            assert parameters == (upload["id"],)
+
+        def fetchone(self):
+            return (intake_document,) if intake_document else None
+
     class Repository:
         def prepare(self, request, build):
-            prepared, track = build(None, upload, context["host"], context["clock_host"])
+            prepared, track = build(IntakeCursor(), upload, context["host"], context["clock_host"])
             assert prepared == job
             assert track["source_film_sha256"] == context["host"]["identity"]["source"]["sha256"]
             return prepared
@@ -76,6 +86,17 @@ def main():
          patch.object(service, "require_active_engine"), patch.object(service, "resolve_map", return_value=context["host"]["identity"]["map_binding"]), \
          patch.object(service, "read_catalog", return_value=data):
         instance.prepare(models.ClientViewPrepare.model_validate(values["prepare"]), None)
+        if intake_document:
+            original_update = intake_document["first_update"]
+            intake_document["first_update"] += 1
+            try:
+                instance.prepare(models.ClientViewPrepare.model_validate(values["prepare"]), None)
+            except ConflictError:
+                pass
+            else:
+                raise AssertionError("Client preparation ignored the frozen intake observation")
+            finally:
+                intake_document["first_update"] = original_update
         assert instance.complete(models.ClientViewCompletion.model_validate(values["completion"]), None) == values["completion"]
         for kind in ("artifact", "timeline"):
             invalid = copy.deepcopy(values["completion"])
@@ -88,7 +109,8 @@ def main():
                 raise AssertionError("Cross-generation object accepted")
     print(json.dumps({"status": "deployed_api_client_view_verified", "frame_count": values["completion"]["frame_count"],
         "hash_checks": values["completion"]["verified_hash_count"], "schemas": 4, "prepare": True, "complete": True,
-        "source_bytes": True, "world_bytes": True, "timeline_bytes": True, "cross_generation_rejected": True}))
+        "source_bytes": True, "world_bytes": True, "timeline_bytes": True, "cross_generation_rejected": True,
+        "automatic_intake_verified": intake_document is not None}))
 
 
 if __name__ == "__main__":
