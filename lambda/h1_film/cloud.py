@@ -260,6 +260,16 @@ def work_from_record(record):
     if payload.get("schema") == client_views.DISPATCH:
         client_views.validate_dispatch(payload)
         return payload
+    if payload.get("schema") == "halospawns.h1FilmIntakeEvent.v1":
+        require(set(payload) == {"schema", "event_id", "upload_id"})
+        for key in ("event_id", "upload_id"):
+            require(str(uuid.UUID(payload[key])) == payload[key])
+        return payload
+    if payload.get("schema") == "halospawns.h1FilmInspect.v1":
+        require(set(payload) == {"schema", "upload_id", "source"})
+        validate_source(payload["source"])
+        require(upload_id_from_key(payload["source"]["s3_key"]) == payload["upload_id"])
+        return payload
     if isinstance(payload.get("schema"), str) and payload["schema"].startswith("halospawns.h1film_job."):
         require(payload.get("environment") == os.environ["ENVIRONMENT"] == "dev")
         require(payload.get("source_kind") == "h1film")
@@ -516,11 +526,11 @@ def api(method, path, payload=None):
         raise FilmError("retry_pending", retryable=True) from error
 
 
-def inspect_film(path, work, deadline):
+def inspect_film(path, work, deadline, *, intake=None):
     log = run_bounded(
         ["node", str(NODE_ROOT / "runtime/inspect.mjs"), str(path)],
         work,
-        min(deadline, time.monotonic() + 15),
+        min(deadline, time.monotonic() + 60),
         output_name="inspect.log",
         allow_failure=True,
     )
@@ -530,6 +540,8 @@ def inspect_film(path, work, deadline):
             result["error"] if result["error"] in FAILURES else "validation_failed"
         )
     env = result["envelope"]
+    if intake is not None and result.get("intake"):
+        intake.update(result["intake"])
     require(
         env["ticks"] <= limits()["SOURCE_TICKS"]
         and env["players"] <= limits()["PLAYERS"]
@@ -888,11 +900,24 @@ def replay_completion(job):
     )
     require(manifest["callback"]["path"] == path)
     api("POST", path, payload)
+    # Cached receipts take this path too. Do not acknowledge the SQS source until
+    # the API's committed matching events have been handed to the durable queue.
+    drain_intake_events({"upload_id": job["upload_id"]})
     return True
+
+
+def drain_intake_events(payload):
+    for _ in range(20):
+        result = api("POST", "/v1/ingest/h1films/reconcile", payload)["data"]
+        if result.get("complete", True) and not result.get("pending", False):
+            return result
+    raise FilmError("retry_pending", retryable=True)
 
 
 def execute(work_item, context):
     from . import client_views
+    if work_item.get("schema") == "halospawns.h1FilmIntakeEvent.v1":
+        return drain_intake_events({"event_id": work_item["event_id"]})
     if work_item.get("schema") == client_views.DISPATCH:
         return client_views.execute(work_item, context)
     started = time.monotonic()
@@ -908,7 +933,20 @@ def execute(work_item, context):
         film = work / "input.h1film"
         source_metadata = {}
         source = download(source, film, metadata=source_metadata)
-        evidence = inspect_film(film, work, deadline)
+        intake = {}
+        evidence = inspect_film(film, work, deadline, intake=intake)
+        if intake:
+            observed = api("POST", "/v1/ingest/h1films/intake", {
+                "upload_id": work_item["upload_id"], "source": source, "film": evidence, **intake,
+            })["data"]
+            require(observed["recording_role"] == intake["recording_role"])
+            if observed.get("pending"):
+                drain_intake_events({"upload_id": work_item["upload_id"]})
+            if intake["recording_role"] == "client":
+                require(job is None)
+                return
+        if work_item.get("schema") == "halospawns.h1FilmInspect.v1":
+            return
         if job is None:
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence,
                        "use_default_release": True}
@@ -961,6 +999,9 @@ def execute(work_item, context):
 
 def report_failure(item, error):
     from . import client_views
+    if item.get("schema") in {"halospawns.h1FilmInspect.v1", "halospawns.h1FilmIntakeEvent.v1"}:
+        # A backfill inspection cannot invalidate an already verified host recording.
+        return
     if item.get("schema") == client_views.DISPATCH:
         return client_views.report_failure(item, error)
     if error.reason in {"stale_attempt", "identity_conflict"}:

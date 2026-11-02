@@ -1,5 +1,46 @@
 # Beta 5 client-view replay tracks
 
+## Automatic intake (local, not deployed)
+
+Normal `films/unprocessed/<upload-id>-<filename>.h1film` notifications now
+inspect Beta 5 flags before host preparation. Both roles use the normal upload
+ticket and immutable source version; the `-view` filename suffix is optional.
+The worker posts bounded identity/clock evidence to `/v1/ingest/h1films/intake`.
+Clients stop at this stage until the API matches verified host and recorder-clock
+sources, regardless of their uploaders. They resume through the existing client-only
+dispatch/prepare/conversion/completion path, including normal-prefix source
+validation and all immutable pins. No client enters host statistics ingestion.
+
+The worker consumes durable `halospawns.h1FilmIntakeEvent.v1` messages from its
+trusted queue. Observations, host artifact selection and relevant reviewed game
+changes create these events transactionally. `/reconcile {event_id}` saves bounded
+matching progress and exact client dispatch messages in the API outbox. Failed
+delivery uses SQS retries; duplicate events reuse the same attempt. Original and
+cached host completions drain events before acknowledging their SQS delivery.
+Waiting clients have no timer. The unshipped five-minute schedule/target/permission
+and `h1FilmReconcile.v1` handler were removed; no such rule exists in dev.
+
+A one-time retained-host inventory records 19 unsent events at migration time.
+After compatible rollout, unobserved hosts receive one `h1FilmInspect.v1` job
+each; these never rerun the simulator or change a verified host to failed.
+An empty `/reconcile` only flushes the outbox, not a scan of waiting clients.
+Usual SQS retention/DLQ recovery applies if delivery retries are exhausted.
+The app-api component adds explicit
+HMAC routes for `POST /v1/ingest/h1films/intake` and `/reconcile` (the JWT default
+route cannot serve worker HMAC requests). No additional S3 permission is needed.
+
+API migrations `20261101010000_h1film_automatic_intake.sql` and
+`20261101020000_h1film_intake_events.sql` were applied and verified on linked dev
+on 2026-11-01 and are forward-only. Keep the consumer paused during coordinated
+API/routes and worker rollout until both understand the new event messages.
+Register a fresh immutable worker image through `RELEASES.md`; conversion
+recipes and defaults are unchanged. The code and Terraform remain local;
+the deployed version described below is the earlier explicit-attachment
+release. See API `docs/h1film-client-views.md` for status and ownership semantics.
+All 96 worker tests, eight map-processing Terraform tests, 1,917 API tests and
+47 isolated database cases pass. The migrations sent no processing messages;
+existing conversion/receipt counts and dev API health are preserved.
+
 Status (2026-11-01): deployed in dev as worker/default `20261101-r1`, policy 7,
 with API `live=224` and the applied client-view migration. Both supplied `-view`
 films pass native/WASM parity and produce viewer-revision-5 artifacts. See
@@ -18,7 +59,8 @@ repeat, so it cannot serve as the world artifact's frame index.
 client FNET types 64-82, fixed and batched record sizes, bounded engine writes
 and frame clocks. The initial clock is required; the last CLOCK record for a
 frame wins, matching playback. Region-specific write bounds are also checked
-by the engine. Default intake still rejects client-view films.
+by the engine. Generic converter reads remain host-only unless explicitly enabled;
+the cloud intake inspector detects either role and routes it before conversion.
 
 `convert.mjs --client-view` requires trusted worker input, a registered client
 recipe (or an explicit local candidate registry), a new
@@ -77,11 +119,12 @@ Hosted intake uses `client_views.py` and the API-owned
 `halospawns.h1ClientView.v1` protocol. Client source versions under
 `films/client-views/unprocessed/<upload_id>/` use the existing films queue with
 separate role routing and HMAC preparation/completion/failure endpoints. The API
-requires explicit ownership or audited admin approval of the host and clock-host
-generations. The worker independently hashes each source and the reviewed map,
+allows permanent users to attach clients to verified public host and clock-host
+generations from any uploader. Client ticket status/retries stay with their
+uploader. The worker independently hashes each source and the reviewed map,
 validates the retained host completion proof and extracts this client's clocks.
 Host and clock-host copies may differ; both must be independently verified and
-match the recorded match/profile/map. Match IDs never authorize attachment.
+match the recorded match/profile/map. Match IDs alone never establish association.
 
 Exporter 13 / analytics 2 / viewer 5 is in `client_view_recipes`, never in host
 defaults. Immutable client world and timeline objects use the API's upload/attempt

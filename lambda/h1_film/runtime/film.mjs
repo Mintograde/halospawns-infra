@@ -14,7 +14,7 @@ export function adapterFor(profile) {
 }
 
 // Inspect only the common signature before routing to a versioned reader.
-export async function readEnvelope(path) {
+export async function readEnvelope(path, options = {}) {
   const file = await open(path, 'r');
   let format, headerSize, protocol;
   try {
@@ -26,7 +26,7 @@ export async function readEnvelope(path) {
     headerSize = header.readUInt32LE(64);
   } finally { await file.close(); }
   assert.equal(format, 2, 'Unsupported film format');
-  if (headerSize === 504 && protocol === 9818) return beta5.readEnvelope(path);
+  if (headerSize === 504 && protocol === 9818) return beta5.readEnvelope(path, options);
   if (headerSize === 480 && protocol === 9803) return beta4.readEnvelope(path);
   return (headerSize === 480 ? arena : format2).readEnvelope(path);
 }

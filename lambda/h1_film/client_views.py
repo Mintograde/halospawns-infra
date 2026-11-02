@@ -36,6 +36,9 @@ def identifier(value):
 
 
 def upload_id_from_key(key):
+    if isinstance(key, str) and key.startswith(cloud.SOURCE_PREFIX):
+        require(key.lower().endswith(".h1film"), "invalid_source")
+        return cloud.upload_id_from_key(key)
     require(isinstance(key, str) and key.startswith(SOURCE_PREFIX), "invalid_source")
     parts = key[len(SOURCE_PREFIX):].split("/")
     require(len(parts) == 2 and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,180}\.h1film", parts[1]),
@@ -142,6 +145,7 @@ def replay_completion(job):
     payload = json.loads(raw)
     validate_completion(job, payload)
     cloud.api("POST", API + "/complete", payload)
+    cloud.drain_intake_events({"upload_id": job["identity"]["upload_id"]})
     return True
 
 
@@ -279,6 +283,7 @@ def execute(item, lambda_context):
     deadline = time.monotonic() + min(lambda_context.get_remaining_time_in_millis() / 1000 - 10, 890)
     context = initial_context(item)
     if context["status"] in TERMINAL:
+        cloud.drain_intake_events({"upload_id": item["upload_id"]})
         return
     job = context.get("job")
     if job:
@@ -291,7 +296,8 @@ def execute(item, lambda_context):
         source_metadata = {}
         source = cloud.download(source, work / "client.h1film", client_view=True, metadata=source_metadata)
         metadata = source_metadata["metadata"]
-        require(metadata.get("upload-id") == item["upload_id"] and metadata.get("source-kind") == "h1film-client-view", "invalid_source")
+        kind = "h1film" if source["s3_key"].startswith(cloud.SOURCE_PREFIX) else "h1film-client-view"
+        require(metadata.get("upload-id") == item["upload_id"] and metadata.get("source-kind") == kind, "invalid_source")
         client = inspect(work / "client.h1film", work, deadline, "client")
         binding = context["host"]["identity"]["map_binding"]
         require(binding == context["clock_host"]["identity"]["map_binding"])
@@ -321,6 +327,7 @@ def execute(item, lambda_context):
         if not job:
             prepared = cloud.api("POST", API + "/prepare", evidence)["data"]
             if prepared["status"] in TERMINAL:
+                cloud.drain_intake_events({"upload_id": item["upload_id"]})
                 return
             job = prepared["job"]
         validate_job(job, item)

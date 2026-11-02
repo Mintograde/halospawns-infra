@@ -565,13 +565,19 @@ class CloudTests(unittest.TestCase):
                 self.shared, "_load_completion_manifest", return_value=manifest
             ),
             patch.object(cloud, "api") as api,
+            patch.object(cloud, "drain_intake_events") as wake,
         ):
             self.assertTrue(cloud.replay_completion(self.job))
             api.assert_called_once()
+            wake.assert_called_once_with({"upload_id": self.job["upload_id"]})
+            wake.side_effect = cloud.FilmError("retry_pending", retryable=True)
+            with self.assertRaises(cloud.FilmError):
+                cloud.replay_completion(self.job)
+            self.assertEqual(api.call_count, 2)
             manifest["callback"]["path"] = "/v1/ingest/map-uploads"
             with self.assertRaises(cloud.FilmError):
                 cloud.replay_completion(self.job)
-            api.assert_called_once()
+            self.assertEqual(api.call_count, 2)
 
     def test_timestamp_completion_keeps_original_job_identity_and_legacy_receipts(self):
         job = copy.deepcopy(self.job)
@@ -661,6 +667,7 @@ class CloudTests(unittest.TestCase):
             patch.object(self.shared, "_load_completion_manifest", return_value=manifest),
             patch.object(cloud, "api") as api,
             patch.object(cloud.settings, "extract") as extract,
+            patch.object(cloud, "drain_intake_events"),
         ):
             self.assertTrue(cloud.replay_completion(self.job))
             self.assertEqual(api.call_args.args[2]["h1film_settings"], payload["h1film_settings"])

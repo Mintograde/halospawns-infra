@@ -43,6 +43,13 @@ def main():
     initial_job = args.finalization.with_name("job.json")
     if initial_job.exists():
         validate_job(initial_job)
+    intake_path = args.finalization.with_name("intake.json")
+    if intake_path.exists():
+        from halospawns_api.schemas.h1film_intake import FilmIntake
+        for document in json.loads(intake_path.read_text()):
+            intake = FilmIntake.model_validate(document)
+            assert intake.recording_role == "host"
+            assert intake.source == validate_job(initial_job).conversion.source
 
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)

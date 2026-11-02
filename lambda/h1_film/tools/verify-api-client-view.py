@@ -20,6 +20,16 @@ def main():
     root = args.case
     values = {k: json.loads((root / f"{k}.json").read_text()) for k in ("context", "prepare", "job", "completion")}
     job, context = values["job"], values["context"]
+    intake_path = root / "intake.json"
+    if intake_path.exists():
+        from halospawns_api.schemas.h1film_intake import FilmIntake
+        intakes = json.loads(intake_path.read_text())
+        assert len(intakes) == 1
+        intake = FilmIntake.model_validate(intakes[0])
+        assert intake.recording_role == "client"
+        assert intake.source.model_dump(mode="json") == job["identity"]["source"]
+        assert intake.match_id == job["identity"]["match_id"]
+        assert intake.recorded_own_player == job["identity"]["recorded_own_player"]
     data = json.loads(args.catalog.read_text())
     manifest = next(m for m in data["manifests"] if m["release_id"] == job["identity"]["release"]["release_id"])
     data["policy"] = {"release_id": manifest["release_id"], "revision": job["identity"]["release"]["policy_revision"],

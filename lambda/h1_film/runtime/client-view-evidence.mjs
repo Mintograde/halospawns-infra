@@ -16,17 +16,20 @@ export function filmEvidence(e, profile) {
     hash_sample_count:e.hash_samples};
 }
 
-export async function inspectViewRecording(path) {
+export async function inspectViewRecording(path, {allowUnmatchedHost = false} = {}) {
   const envelope=await readEnvelope(path,{allowClientView:true});
   const profile=selectProfile(envelope);
   assert.equal(profile.id,'h1-performance-beta5-p9818-wasm-v1');
-  assert.ok(envelope.match_id !== '0000000000000000');
-  assert.ok(envelope.recorded_own_player <= 15);
+  const unmatchedHost = allowUnmatchedHost && envelope.recording_kind === 'host'
+    && (envelope.match_id === '0000000000000000' || envelope.recorded_own_player > 15);
+  assert.ok(unmatchedHost || envelope.match_id !== '0000000000000000');
+  assert.ok(unmatchedHost || envelope.recorded_own_player <= 15);
   const sourceHash=await sha256(path);
   const result={film:filmEvidence(envelope,profile.id), source_film_sha256:sourceHash,
     recording_role:envelope.recording_kind==='client-view'?'client':'host',
-    match_id:envelope.match_id, recorded_own_player:envelope.recorded_own_player,
+    match_id:envelope.match_id, recorded_own_player:envelope.recorded_own_player <= 15 ? envelope.recorded_own_player : null,
     first_update:envelope.first_update};
+  if(unmatchedHost) return result;
   if(result.recording_role==='client') {
     result.clocks=envelope.network.clocks.filter(c=>c.frame < envelope.first_update+envelope.ticks)
       .map(c=>({frame:c.frame-envelope.first_update,game_tick:c.game_tick}));

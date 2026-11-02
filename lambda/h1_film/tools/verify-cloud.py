@@ -158,6 +158,7 @@ def main():
     callback = []
     converted = []
     failures = []
+    intakes, reconciliations = [], []
     real_convert, real_execute = cloud.convert, cloud.execute
     real_products = cloud.build_products
     real_run_bounded = cloud.run_bounded
@@ -174,6 +175,15 @@ def main():
 
     def api(method, path, payload):
         assert method == "POST"
+        if path == "/v1/ingest/h1films/intake":
+            assert payload["source"] == source and payload["recording_role"] == "host"
+            assert payload["upload_id"] == job["upload_id"]
+            intakes.append(copy.deepcopy(payload))
+            return {"data": {"recording_role": "host", "pending": False}}
+        if path == "/v1/ingest/h1films/reconcile":
+            assert payload == {"upload_id": job["upload_id"]}
+            reconciliations.append(copy.deepcopy(payload))
+            return {"data": {"complete": True, "pending": False}}
         if path == "/v1/ingest/h1films/prepare":
             assert payload["source"] == source
             assert payload["film"]["scenario"] == binding["scenario"]
@@ -351,6 +361,16 @@ def main():
                 "batchItemFailures": []
             }
         assert callback[2] == callback[0]
+        assert len(reconciliations) == 3
+        if intakes:
+            # Retained-host inventory reads evidence without another simulation or callback.
+            record["body"] = json.dumps({"schema": "halospawns.h1FilmInspect.v1",
+                "upload_id": job["upload_id"], "source": source})
+            with patch.object(cloud, "convert", side_effect=AssertionError("Inspection simulated host")):
+                assert worker.handler({"Records": [record]}, context) == {"batchItemFailures": []}
+            assert len(callback) == 3 and len(intakes) == 3
+            assert all(item == intakes[0] for item in intakes)
+    (args.output / "intake.json").write_text(json.dumps(intakes, indent=2))
     payload = callback[0][1]
     assert payload["replay_file"]["sha256"] == source["sha256"]
     assert payload["replay_file"]["s3_version_id"] == source["s3_version_id"]

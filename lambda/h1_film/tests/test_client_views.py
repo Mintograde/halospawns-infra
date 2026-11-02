@@ -80,7 +80,9 @@ class ClientViewTests(unittest.TestCase):
             with patch.object(cloud, "api", return_value={"data": {**dispatch, "status": status, "job": job}}) as api, \
                  patch.object(cloud, "download") as download, patch.object(views, "convert") as convert:
                 views.execute(copy.deepcopy(dispatch), SimpleNamespace(get_remaining_time_in_millis=lambda: 900000))
-                self.assertEqual(api.call_count, 1)
+                self.assertEqual(api.call_count, 2)
+                self.assertEqual(api.call_args.args[1:], (
+                    "/v1/ingest/h1films/reconcile", {"upload_id": dispatch["upload_id"]}))
                 download.assert_not_called()
                 convert.assert_not_called()
 

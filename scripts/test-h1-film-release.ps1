@@ -45,7 +45,7 @@ foreach ($case in $cases) {
     $destination = Join-Path $archiveRoot $case.name
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
     foreach ($name in @('finalization.json', 'job.json', 'viewer-rebuild-completion.json',
-        'viewer-rebuild-job.json', 'full-reparse-completion.json', 'full-reparse-job.json', 'failure-status.json')) {
+        'viewer-rebuild-job.json', 'full-reparse-completion.json', 'full-reparse-job.json', 'failure-status.json', 'intake.json')) {
         Copy-Item -LiteralPath (Join-Path $output "$($case.name)/$name") -Destination $destination
     }
     Write-Host "Packaged initial/full/viewer callbacks and receipt retries passed: $($case.name)"
@@ -67,7 +67,7 @@ foreach ($case in $cases) {
         if ($LASTEXITCODE) { throw "Packaged client failed: $($case.name). Evidence: $output" }
         $clientDestination = Join-Path $archiveRoot "$($case.name)-client"
         New-Item -ItemType Directory -Path $clientDestination | Out-Null
-        foreach ($name in @('context.json', 'prepare.json', 'job.json', 'completion.json', 'verification.json', 'client.h1film', 'artifact', 'timeline')) {
+        foreach ($name in @('context.json', 'prepare.json', 'job.json', 'completion.json', 'verification.json', 'intake.json', 'client.h1film', 'artifact', 'timeline')) {
             Copy-Item -LiteralPath (Join-Path $output "$($case.name)-client/$name") -Destination $clientDestination
         }
         $clientCases += @{ name = "$($case.name)-client"; engine_profile = $case.engine_profile }
