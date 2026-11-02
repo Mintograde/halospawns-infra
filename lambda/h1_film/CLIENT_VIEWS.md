@@ -1,6 +1,6 @@
 # Beta 5 client-view replay tracks
 
-## Automatic intake (local, not deployed)
+## Automatic intake (deployed in dev, 2026-11-02)
 
 Normal `films/unprocessed/<upload-id>-<filename>.h1film` notifications now
 inspect Beta 5 flags before host preparation. Both roles use the normal upload
@@ -16,13 +16,14 @@ trusted queue. Observations, host artifact selection and relevant reviewed game
 changes create these events transactionally. `/reconcile {event_id}` saves bounded
 matching progress and exact client dispatch messages in the API outbox. Failed
 delivery uses SQS retries; duplicate events reuse the same attempt. Original and
-cached host completions drain events before acknowledging their SQS delivery.
+cached host completions and terminal client redeliveries drain events before
+acknowledging their SQS delivery.
 Waiting clients have no timer. The unshipped five-minute schedule/target/permission
 and `h1FilmReconcile.v1` handler were removed; no such rule exists in dev.
 
-A one-time retained-host inventory records 19 unsent events at migration time.
-After compatible rollout, unobserved hosts receive one `h1FilmInspect.v1` job
-each; these never rerun the simulator or change a verified host to failed.
+A one-time retained-host inventory recorded 19 unsent events at migration time.
+The rollout delivered their `h1FilmInspect.v1` jobs and verified all 19 host
+observations; these never rerun the simulator or change a verified host to failed.
 An empty `/reconcile` only flushes the outbox, not a scan of waiting clients.
 Usual SQS retention/DLQ recovery applies if delivery retries are exhausted.
 The app-api component adds explicit
@@ -33,15 +34,17 @@ API migrations `20261101010000_h1film_automatic_intake.sql` and
 `20261101020000_h1film_intake_events.sql` were applied and verified on linked dev
 on 2026-11-01 and are forward-only. Keep the consumer paused during coordinated
 API/routes and worker rollout until both understand the new event messages.
-Register a fresh immutable worker image through `RELEASES.md`; conversion
-recipes and defaults are unchanged. The code and Terraform remain local;
-the deployed version described below is the earlier explicit-attachment
-release. See API `docs/h1film-client-views.md` for status and ownership semantics.
-All 96 worker tests, eight map-processing Terraform tests, 1,917 API tests and
-47 isolated database cases pass. The migrations sent no processing messages;
-existing conversion/receipt counts and dev API health are preserved.
+Worker/default `20261102-r1` is active at policy revision 8 with API `live=225`
+(`107ab7e8`). Both HMAC routes and the queue consumer are enabled. Conversion
+recipes are unchanged. All 38 reconciliation events completed; queue/DLQ are
+empty. Rollout checks pass 97 local/packaged worker tests, 65 Node tests, 27
+focused API/database checks, nineteen host films/57 exact deployed-API callbacks
+and the short client conversion. All nineteen host artifacts are byte-identical;
+the full dev postplan is no-op. See `DEPLOYMENT.md` for evidence and the API
+document for ownership semantics. Retain compatible event readers and the
+outbox/status triggers on rollback.
 
-Status (2026-11-01): deployed in dev as worker/default `20261101-r1`, policy 7,
+Initial explicit-attachment release (2026-11-01): worker/default `20261101-r1`, policy 7,
 with API `live=224` and the applied client-view migration. Both supplied `-view`
 films pass native/WASM parity and produce viewer-revision-5 artifacts. See
 `DEPLOYMENT.md` for deployment evidence. Frontend adoption is handled separately.

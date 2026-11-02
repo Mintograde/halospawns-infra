@@ -1,5 +1,58 @@
 # H1 film Lambda integration
 
+## Automatic film intake deployed (2026-11-02 UTC)
+
+User-authorized dev worker/default **20261102-r1**, policy revision **8**, is
+active with API **live=225** (`107ab7e8e094f2761517e6c7203523e93d158b71`).
+All 192 deployed API Python files match that commit; ZIP SHA-256 is
+`efc1394e21e73a18b89078dbe53edbb92583212d8f2e428b022018048de07d5e`.
+The two previously applied automatic-intake/outbox migrations are verified.
+
+Image: `sha256:a5cec5751c6fe2615fa82d35042ae9e02052734e98e3bf802ecfdedd0b8c701a`.
+Built from committed `5daa3c4` in `.build/automatic-intake-release-source`.
+The registry remains `41d36b40833ee7caf61104d1c73f58fa6ebf6eb59b89c60ceb2498fb7b057720`:
+four profiles, sixteen exporters, Beta 5 host **12/4/5** and client **13/2/5**.
+All manifest fields except release ID/image digest are unchanged.
+
+Normal uploads detect host/client roles and retain unmatched clients. Events
+match verified host/map/recorder-clock evidence in either upload order, including
+different uploaders. Client completion and terminal redelivery flush committed
+events before acknowledging the queue message. No periodic rule is used.
+
+- 65 Node tests, 97 local/packaged worker tests and 27 focused API unit/database
+  checks pass, including both orders, cross-uploader matching and lost delivery.
+- Nineteen packaged host films/57 callbacks, intake evidence, failures and receipt
+  serialization pass the exact deployed API. All nineteen host viewer artifacts
+  remain byte-identical to `20261101-r1`.
+- The supplied short client passes automatic normal-prefix intake, conversion
+  (5,134 frames/43 hashes), immutable receipt retry and a post-commit outbox
+  failure followed by terminal redelivery. API verification checks original
+  source/world/timeline bytes and rejects changed intake evidence.
+- The first promotion stopped before worker installation because the offline
+  verifier lacked the API's new intake cursor. Verifier-only commit `d174bdb`
+  supplies the archived observation and checks mismatch rejection; the complete
+  guarded promotion then passed with the same immutable image.
+- Paused the consumer, applied only two HMAC routes (2/0/0), then promoted the
+  image/digest (0/1/0). First live health and registry/image checks passed before
+  activation; a mapping-only apply (0/1/0) restored the consumer. Signed routes
+  reach the application and unsigned requests return 401. Limits, concurrency
+  and queue settings remain unchanged.
+- A trusted empty reconcile flushed the legacy inventory. All 19 hosts now have
+  observations, all 38 reconciliation events completed and all 19 inspection
+  events were delivered. Queue/DLQ are empty and no worker failure was logged
+  during rollout. No host simulation was repeated.
+- Read-only checks preserve **76 conversions, 301 receipts, 232 H1 attempts and
+  220 map approvals**. The full dev postplan is no-op. No new game upload,
+  historical reparse, frontend deployment or prod action was submitted; live
+  browser acceptance remains with the user's frontend work.
+
+Evidence: `.build/automatic-intake-deploy/`, publication
+`.build/automatic-intake-release-source/.build/h1-contracts/20261102-r1-65a59c202a4e4532805e9f08ddc66f1e/`,
+and promotion `.build/h1-promotions/20261102-121937-ca521554b39947e7bbedf853be5351fd/`.
+Retain the forward-only migrations, outbox/status triggers and compatible
+API/worker event readers on rollback. A recipe-policy rollback does not authorize
+reinstalling a worker that cannot consume the new queue messages.
+
 ## Beta 5 client views deployed (2026-11-01 UTC)
 
 User-authorized dev worker/default **20261101-r1**, policy revision **7**, is
