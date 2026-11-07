@@ -1,5 +1,78 @@
 # H1 film Lambda integration
 
+## Beta 6.1 match replays deployed (2026-11-07 UTC)
+
+User-authorized dev worker/default **20261107-r2**, policy revision **9**, is
+active with API **live=226**, source `5e7830a8aa1d8547593cbd101eab3aa59e2cffad`.
+All 193 API Python files match that commit; ZIP SHA-256:
+`8634e7b9a33937aa5258b0d09304d71f6f412caaec7a9de75de2393652c88fd7`.
+API CI run `42389644960` passed and published through the normal code updater.
+Migration `20261107010000_h1film_match_replay.sql` is applied and verified on dev.
+
+Image: `sha256:82d47ea4b80527133e71f8b805c28c88dcaaac192add3bd933e35858ae757592`.
+Built from committed `ce2db8e` in `.build/beta61-release`. Registry:
+`cf7d51228d3307b5b34533e1f36f0d475e7066c816f0e760d21711971cd3892a`.
+Five profiles/seventeen exporters retain every prior pin. The new profile
+`h1-performance-beta6-p9839-wasm-v1` pins `beta-6.1` / `86c52285` and defaults
+to **14/4/6**. Beta 5 host **12/4/5** and separate client **13/2/5** remain.
+See [BETA6.md](BETA6.md) for engine/contract hashes and the data layout.
+
+New Beta 6 imports produce one revision-6 `H1MV0001` artifact containing host
+and embedded client worlds, clock mappings, trust/coverage, diagnostics, inputs
+and network observations. Host analytics remain authoritative. The API stores
+typed `h1film.match_replay` evidence and serves `h1_match`; the frontend reads
+the single file with bounded verified ranges. Frontend changes remain local
+and uncommitted. Additional presentation of the new diagnostic tables is
+separate from their complete export/storage.
+
+- All **70** Beta 5 approvals were transferred through the audited API service
+  in batches of 50/20, preserving source bindings, exact S3 versions/hashes and
+  lineage. All old approvals are unchanged. Release `halo1_pc_pb2_beta6` was
+  copied from Beta 5 and assigned at engine-settings revision **1**. Both map
+  listing paths return the same 70 assets with their original map origins.
+- The real Carousel film matches all **9,815 host / 9,816 client ticks** and
+  **82 hashes per view** between native and WASM. Upstream diagnostic/PAD
+  readers agree on **775,761 bytes across 26 entries**. Browser-codec full
+  decoding, normal session loading, perspective switching and ghosts pass.
+  Synthetic whole/thin two-part and standalone-host fixtures pass. Real
+  multiplayer/early-late client and maximum-size coverage remains additional
+  acceptance work; synthetic parts are copies of the solo client's recording.
+- **69 Node / 97 local and packaged worker tests**, **1,936 API unit tests**,
+  **27 focused API/database checks**, and **118 further PostgreSQL checks**
+  pass. Six local unit skips are four optional private-settings cases and two
+  unavailable native-extension cases; two database skips require optional
+  private producer fixtures. CI built/tested the native extension. Release
+  corpus checks independently exercise private producer callbacks.
+- **22 packaged cases / 66 exact deployed-API host-mode callbacks**, plus the
+  retained real Beta 5 client prepare/completion/source/world/timeline checks,
+  failures and immutable receipt retries pass. All **19 retained host viewer
+  artifacts remain byte-identical**, including initial/full/rebuild descriptors.
+  Frontend asset/session tests (91), perspective/memory tests (57, overlapping
+  the real-match cases), and the site build pass.
+- Candidate `20261107-r1` was published/registered but never installed. Its
+  promotion stopped at exact client-schema comparison: two snapshots retained
+  the old shared recipe maximum of 5. r2 changes those bounds to 6 and fixes
+  the snapshot helper; engines, registry and recipes are identical. Retain r1's
+  immutable records for audit. Docker credential-store and stale build-cache
+  failures were resolved locally; temporary push credentials were removed.
+- The guarded promotion applied only the worker image/digest (**0/1/0**).
+  The first live health check and every deployed engine/registry hash passed
+  before policy activation. API health is 200, consumers remain enabled and
+  queue/DLQ are empty. Limits, concurrency and queue configuration are unchanged.
+- Read-only before/after checks preserve **84 conversions, 309 receipts,
+  232 H1 attempts and all 220 old approvals**; total approvals are now **290**.
+  No game upload, historical reparse, frontend release or prod action occurred.
+- Full dev planning has no resource actions; the worker postplan is no-op.
+  Applied a guarded refresh-only API state plan (**0/0/0**) to record version
+  225 to 226 and its already-deployed computed metadata. The subsequent app-api
+  plan is also no-op; no API configuration or alias was changed by this refresh.
+
+Evidence: `.build/beta61-deploy/`, publication/corpus under
+`.build/beta61-release/.build/`, and successful promotion
+`.build/h1-promotions/20261107-164450-83a453c80a7d4be69760f1e67bc29a48/`.
+Keep the forward migration, revision-6 readers, match requirement, new engine
+and all previous recipes when rolling defaults back; never repin old attempts.
+
 ## Automatic film intake deployed (2026-11-02 UTC)
 
 User-authorized dev worker/default **20261102-r1**, policy revision **8**, is

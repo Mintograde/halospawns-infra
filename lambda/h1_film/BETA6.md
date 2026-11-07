@@ -79,6 +79,14 @@ reconstruction or playback fails closed.
 
 ## Dev rollout
 
+The first candidate, `20261107-r1`, was published and registered but stopped
+before installation: two retained client schema snapshots still capped the
+shared recipe definition at viewer revision 5. `20261107-r2` refreshes those
+bounds to match the API and retains the same registry, engines and recipes.
+The snapshot tool now refreshes client schemas alongside the host contract.
+Both immutable publication records remain available for audit. The map
+transfers prepared against r1 remain valid because their engine pins are equal.
+
 The user authorized worker releases, API git-push CI, migrations and local
 frontend changes. Deploy the compatible API and forward migration
 `20261107010000_h1film_match_replay.sql`; publish and register the worker.
