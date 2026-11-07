@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,6 +14,12 @@ def main():
     parser.add_argument("--api", type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    # Client identities/completions also embed the shared processing recipe.
+    # Refresh them whenever the API contract is snapshotted.
+    subprocess.run([
+        sys.executable, str(root / "tools/snapshot-client-view-contract.py"),
+        str(args.api / "src"),
+    ], check=True)
     source = args.api / "src/halospawns_api/schemas/h1films.py"
     sys.path.insert(0, str(args.api / "src"))
     models = runpy.run_path(str(source))
