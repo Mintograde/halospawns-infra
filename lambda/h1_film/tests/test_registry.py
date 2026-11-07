@@ -24,8 +24,8 @@ class RegistryTests(unittest.TestCase):
 
     def test_combat_exporters_preserve_both_profile_identities_and_old_pins(self):
         for profile in load_registry().values():
-            combat = select_exporter(profile, 10 if profile["port"] == "beta5" else 5)
-            if profile["port"] in ("beta4", "beta5"):
+            combat = select_exporter(profile, {"beta5": 10, "beta6": 14}.get(profile["port"], 5))
+            if profile["port"] in ("beta4", "beta5", "beta6"):
                 with self.assertRaisesRegex(ValueError, "exporter"):
                     select_exporter(profile, 4)
             else:

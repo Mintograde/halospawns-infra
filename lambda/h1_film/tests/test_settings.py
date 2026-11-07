@@ -24,7 +24,7 @@ class SettingsTests(unittest.TestCase):
         profile = next(profile for profile in load_registry().values() if profile["port"] == port)
         header_size, count, options_size, offsets = settings.LAYOUTS[port]
         words = [0] * 32
-        words[:8] = (0x314D4C46, 2, profile["protocol_revision"], 120, options_size, 32, 4, 0)
+        words[:8] = (0x314D4C46, profile["format"], profile["protocol_revision"], 120, options_size, 32, 4, 0)
         words[11], words[13], words[14], words[15], words[16], words[25] = 20, 120, 1, 1000, header_size, 1
         data = bytearray(header_size)
         data[128:133], data[256:260] = b"dread", b"test"
@@ -70,6 +70,8 @@ score_to_win = 999
             ][:count]
             if port == "beta5":
                 fields = settings.BETA5_VARIANT_FIELDS
+            if port == "beta6":
+                fields = settings.BETA6_VARIANT_FIELDS
             values = {"game_rules": 0, "score_to_win": 50, "teams": 1, "shields": 0,
                       "weapon_secondary": -1, "footstep_sounds": 1, "teammate_outlines": 1,
                       "os_brightness": 70, "fov_limit": 2, "powerup_waypoints": 3}
@@ -111,14 +113,14 @@ score_to_win = 999
                 self.assertEqual(fields["variant.name"]["value"], "selected")
                 self.assertEqual(fields["variant.score_to_win"]["value"], 50)
                 self.assertEqual(fields["variant.os_brightness"]["value"], 70)
-                if port == "beta5":
+                if port in ("beta5", "beta6"):
                     self.assertEqual(fields["variant.footstep_sounds"]["status"], "unavailable")
                     self.assertEqual(fields["variant.kill_restores"]["status"], "unavailable")
                 else:
                     self.assertIs(fields["variant.footstep_sounds"]["value"], True)
                 self.assertIs(fields["variant.teammate_outlines"]["value"], True)
                 self.assertEqual(fields["variant.weapon_secondary"]["value"], -1)
-                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port in ("beta4", "beta5") else None)
+                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port in ("beta4", "beta5", "beta6") else None)
                 self.assertEqual(fields["variant.fov_limit"].get("value"), None if port == "beta3" else 2)
 
     def test_timing_uses_binary_ticks_and_the_recorded_tick_rate(self):

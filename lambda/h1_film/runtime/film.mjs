@@ -3,9 +3,11 @@ import { open } from 'node:fs/promises';
 import * as format2 from './adapters/film-v2-120.mjs';
 import * as arena from './adapters/h1arena-v2-120.mjs';
 import * as beta5 from './adapters/beta5-v2-120.mjs';
+import * as beta6 from './adapters/beta6-v3-120.mjs';
 import * as beta4 from './adapters/beta4-v2-120.mjs';
 
 export function adapterFor(profile) {
+  if (profile.adapter === 'beta6-v3-120-v1') return beta6;
   if (profile.adapter === 'beta5-v2-120-v1') return beta5;
   if (profile.adapter === 'beta4-v2-120-v1') return beta4;
   if (profile.adapter === 'h1arena-v2-120-v1') return arena;
@@ -25,6 +27,7 @@ export async function readEnvelope(path, options = {}) {
     protocol = header.readUInt32LE(8);
     headerSize = header.readUInt32LE(64);
   } finally { await file.close(); }
+  if (format === 3 && protocol === 9839) return beta6.readEnvelope(path, options);
   assert.equal(format, 2, 'Unsupported film format');
   if (headerSize === 504 && protocol === 9818) return beta5.readEnvelope(path, options);
   if (headerSize === 480 && protocol === 9803) return beta4.readEnvelope(path);

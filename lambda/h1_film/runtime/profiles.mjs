@@ -16,8 +16,8 @@ export function validateRegistry(document) {
     const profile = { ...entry };
     assert.match(profile.id, ID, 'Invalid engine profile ID');
     assert.match(profile.port, ID, 'Invalid engine port');
-    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1', 'beta4-v2-120-v1', 'beta5-v2-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
-    if (profile.source !== undefined || ['h1arena-v2-120-v1', 'beta4-v2-120-v1', 'beta5-v2-120-v1'].includes(profile.adapter)) {
+    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1', 'beta4-v2-120-v1', 'beta5-v2-120-v1', 'beta6-v3-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
+    if (profile.source !== undefined || profile.adapter !== 'film-v2-120-v1') {
       assert.equal(profile.source?.project, 'h1arena', 'Missing source provenance');
       assert.match(profile.source.git_commit, /^[0-9a-f]{40}$/, 'Invalid source commit');
       assert.match(profile.source.sha256, /^[0-9a-f]{64}$/, 'Invalid source fingerprint');
@@ -26,7 +26,7 @@ export function validateRegistry(document) {
       assert.match(profile.source.git_date, /^\d{4}-\d{2}-\d{2}$/);
       Object.freeze(profile.source);
     }
-    assert.equal(profile.format, 2, 'Adapter requires format 2');
+    assert.equal(profile.format, profile.adapter === 'beta6-v3-120-v1' ? 3 : 2, 'Adapter format differs');
     assert.equal(profile.tick_rate, 120, 'Adapter requires 120 Hz');
     assert.ok(Number.isSafeInteger(profile.protocol_revision) && profile.protocol_revision > 0);
     assert.ok(typeof profile.build === 'string' && profile.build.length > 0

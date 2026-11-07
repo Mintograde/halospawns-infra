@@ -6,11 +6,14 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {inspectViewIdentity} from './inspect-view-pair.mjs';
 import {readEnvelope,verifyPlayback} from '../runtime/adapters/beta5-v2-120.mjs';
+import * as beta6 from '../runtime/adapters/beta6-v3-120.mjs';
 const [engineArg,filmArg,mapArg,outputArg,...flags]=process.argv.slice(2);
 assert.ok(outputArg,'Usage: node run-view-reference.mjs ENGINE FILM MAP NEW_OUTPUT [--capture]');
 const [engine,film,map,output]=[engineArg,filmArg,mapArg,outputArg].map(p=>resolve(p));
-const source=inspectViewIdentity(await readFile(film));
-const envelope=await readEnvelope(film,{allowClientView:true});
+const filmBytes=await readFile(film),format3=filmBytes.readUInt32LE(4)===3;
+const envelope=await (format3?beta6.readEnvelope:readEnvelope)(film,{allowClientView:true});
+const source=format3?{sha256:createHash('sha256').update(filmBytes).digest('hex'),size_bytes:filmBytes.length,
+  frame_count:envelope.ticks,map:envelope.map,match_id:envelope.match_id,recording_kind:envelope.recording_kind}:inspectViewIdentity(filmBytes);
 const sha=async path=>createHash('sha256').update(await readFile(path)).digest('hex');
 const mapHash=await sha(map);
 await mkdir(output); await mkdir(output+'/maps');
@@ -37,7 +40,7 @@ try {
   assert.ok(result.source_unchanged,'Source changed');
   assert.equal(await sha(output+'/input.h1film'),source.sha256,'Staged source changed');
   assert.equal(await sha(output+'/maps/'+source.map+'.map'),mapHash,'Staged map changed');
-  result.simulation=verifyPlayback(text,envelope);
+  result.simulation=(format3?beta6.verifyPlayback:verifyPlayback)(text,envelope);
   result.verified=true;
 } catch(error) {result.verified=false;result.validation_error=error.message;}
 await writeFile(output+'/summary.json',JSON.stringify(result,null,2)+'\n');

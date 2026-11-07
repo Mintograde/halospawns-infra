@@ -7,8 +7,8 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-
-RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1")
+RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1",
+                     "h1-performance-beta6-p9839-wasm-v1")
 
 
 def validate_roster_recovery(value: dict, *, engine_profile: str, ticks: int,
@@ -41,12 +41,13 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
             "source_tick", "initial_player_count", "local_player_count", "remote_player_mask"
         ))
         or value["source_tick"] != 0
-        or not 1 <= value["initial_player_count"] <= min(16 if roster_recovery else 8, player_count)
+        or not 1 <= value["initial_player_count"] <= min(
+            16 if roster_recovery or engine_profile == RECORDED_PROFILES[2] else 8, player_count)
         or not 0 <= value["local_player_count"] <= 4
         or not 0 < value["remote_player_mask"] <= (1 << value["initial_player_count"]) - 1
     ):
         raise ValueError("Invalid network host evidence")
-    if value["initial_player_count"] > 8 and (
+    if value["initial_player_count"] > 8 and engine_profile != RECORDED_PROFILES[2] and (
         value["initial_player_count"] != roster_recovery["initial_player_count"]
         or value["remote_player_mask"] != roster_recovery["initial_remote_mask"]
         or value["provenance"] != "initial_fnet_all_remote_v1"
@@ -92,6 +93,8 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
         return 480, 61
     if identity == (0x314D4C46, 2, 9818, 120) and words[16] == 504:
         return 504, 72
+    if identity == (0x314D4C46, 3, 9839, 120) and words[16] in (504, 536):
+        return words[16], 77
     raise ValueError("Unsupported recorded evidence adapter")
 
 
@@ -127,6 +130,9 @@ def resolved_variant(path: Path, *, encoding: dict) -> dict | None:
     if len(raw) != size:
         raise ValueError("Truncated resolved variant")
     fields = struct.unpack_from(f"<{field_count}i", raw, 128)
+    if field_count == 77:
+        # Beta 6 inserted flag-reset and ball-reset seconds before the retained fields.
+        fields = fields[:10] + fields[11:18] + fields[19:]
     mode = {0: (2, "slayer"), 1: (1, "ctf"), 3: (3, "oddball"), 4: (4, "king")}.get(fields[0])
     if mode is None or mode[0] != encoding["game_type"] or type(encoding["has_teams"]) is not bool:
         return None

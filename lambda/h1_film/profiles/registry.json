@@ -2,7 +2,8 @@
   "schema": "halospawns.h1EngineRegistry.v1",
   "build_matching": {
     "h1-performance-beta4-p9803-wasm-v1": "source_commit_suffix_v1",
-    "h1-performance-beta5-p9818-wasm-v1": "source_commit_suffix_v1"
+    "h1-performance-beta5-p9818-wasm-v1": "source_commit_suffix_v1",
+    "h1-performance-beta6-p9839-wasm-v1": "source_commit_suffix_v1"
   },
   "processing": {
     "defaults": {
@@ -28,6 +29,12 @@
         "exporter_revision": 12,
         "analytics_revision": 4,
         "viewer_revision": 5,
+        "max_players": 16
+      },
+      "h1-performance-beta6-p9839-wasm-v1": {
+        "exporter_revision": 14,
+        "analytics_revision": 4,
+        "viewer_revision": 6,
         "max_players": 16
       }
     },
@@ -267,6 +274,14 @@
           "viewer_revision": 5,
           "max_players": 16
         }
+      ],
+      "h1-performance-beta6-p9839-wasm-v1": [
+        {
+          "exporter_revision": 14,
+          "analytics_revision": 4,
+          "viewer_revision": 6,
+          "max_players": 16
+        }
       ]
     },
     "requirements": {
@@ -280,7 +295,8 @@
       "missing_map_size": "halospawns.h1MissingMapSize.v1",
       "initial_roster_recovery": "halospawns.h1InitialRosterRecovery.v1",
       "recorded_build": "halospawns.h1RecordedBuild.v1",
-      "client_view": "halospawns.h1ClientView.v1"
+      "client_view": "halospawns.h1ClientView.v1",
+      "match_replay": "halospawns.h1MatchReplay.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -376,6 +392,29 @@
       },
       "wasm_sha256": "6893f5cf29b242371bedff719d5c8e259b2453c4d49d739a613b1878e77e15fd",
       "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "id": "h1-performance-beta6-p9839-wasm-v1",
+      "format": 3,
+      "protocol_revision": 9839,
+      "tick_rate": 120,
+      "build": "Linux server",
+      "adapter": "beta6-v3-120-v1",
+      "port": "beta6",
+      "export_contract": "HSFT0001",
+      "transport_contract": "HSFT0002",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "source": {
+        "algorithm": "halospawns.sourceTreeSha256.v1",
+        "files": 12817,
+        "sha256": "03ecd5ff7150ec3648db1fe68489cee7cd40888525b62747d0819cdf0dbfb99e",
+        "project": "h1arena",
+        "git_commit": "86c52285a8ebe7d107bfafae64abe722b263cedf",
+        "git_date": "2026-11-06"
+      },
+      "wasm_sha256": "b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
     }
   ],
   "exporters": [
@@ -488,6 +527,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "0405e296d1d98f4c5c69de088c6e738dd5b9f301afabdbf50820bf2aae9e940b",
       "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 14,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
     }
   ]
 }

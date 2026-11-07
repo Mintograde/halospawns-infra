@@ -12,11 +12,11 @@ param(
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
-if ($ClientView -and ($Port -ne 'beta5' -or -not $NetworkReplayFixes)) { throw 'Client view requires beta5 network replay fixes.' }
+if ($ClientView -and ($Port -notin @('beta5', 'beta6') -or -not $NetworkReplayFixes)) { throw 'Client view requires beta5 network replay fixes.' }
 if ($RosterRecovery -and ($Port -ne 'beta5' -or -not $NetworkReplayFixes)) { throw 'Roster recovery requires beta5 network replay fixes.' }
-if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5')) { throw 'Finite world object filtering requires beta4 or beta5.' }
-if ($NetworkReplayFixes -and $Port -notin @('beta4', 'beta5')) { throw 'Network replay corrections require beta4 or beta5.' }
-if ($DamageAttribution -and ($Port -notin @('beta4', 'beta5') -or -not $Combat)) { throw 'Damage attribution requires beta4 or beta5 combat export.' }
+if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5', 'beta6')) { throw 'Finite world object filtering requires beta4 or beta5.' }
+if ($NetworkReplayFixes -and $Port -notin @('beta4', 'beta5', 'beta6')) { throw 'Network replay corrections require beta4 or beta5.' }
+if ($DamageAttribution -and ($Port -notin @('beta4', 'beta5', 'beta6') -or -not $Combat)) { throw 'Damage attribution requires beta4 or beta5 combat export.' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $worker = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $buildPath = [IO.Path]::GetFullPath($BuildDirectory)

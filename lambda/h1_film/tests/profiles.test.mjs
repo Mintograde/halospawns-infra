@@ -25,10 +25,10 @@ test('exporter revisions retain the simulation identity and reject unknown or re
   assert.equal(packed.transport_contract, 'HSFT0002');
   assert.equal(packed.export_contract, profile.export_contract);
   for (const retained of ENGINE_PROFILES) {
-    const combat = selectExporter(retained, retained.port === 'beta5' ? 10 : 5);
+    const combat = selectExporter(retained, {beta5:10,beta6:14}[retained.port] ?? 5);
     assert.equal(combat.id, retained.id);
     assert.equal(combat.transport_contract, 'HSFT0002');
-    if (['beta4', 'beta5'].includes(retained.port)) {
+    if (['beta4', 'beta5', 'beta6'].includes(retained.port)) {
       assert.throws(() => selectExporter(retained, 4), /Unknown exporter revision/);
     } else {
       assert.notEqual(combat.wasm_sha256, selectExporter(retained, 4).wasm_sha256);

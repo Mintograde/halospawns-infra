@@ -19,6 +19,8 @@ SCHEMA = "halospawns.h1FilmSettings.v1"
 MAX_DOCUMENT_BYTES = 256 * 1024
 MAX_TEXT_BYTES = 1024 * 1024
 LAYOUTS = {
+    "beta6": (504, 77, 13324, {"shot_delay_aim_ms": 12996, "input_pipeline_ticks": 13000,
+                            "aim_rate_hz": 13024, "shot_aim_ahead_ticks": 13004}),
     "beta5": (504, 72, 13152, {"shot_delay_aim_ms": 12836, "input_pipeline_ticks": 12840,
                             "aim_rate_hz": 12864, "shot_aim_ahead_ticks": 12844}),
     "beta3": (448, 57, 10352, {"shot_delay_aim_ms": 10168, "input_pipeline_ticks": 10172, "aim_rate_hz": 10188}),
@@ -54,6 +56,11 @@ os_tint_perp_b os_tint_par_r os_tint_par_g os_tint_par_b os_brightness os_type
 omit_first_spawn item_spawn_s camo_drop os_assassination teammate_outlines teammate_view
 teammate_respawn_timers fov_limit time_limit_min overtime overtime_timed overtime_length_min
 """.split()
+BETA6_VARIANT_FIELDS = list(BETA5_VARIANT_FIELDS)
+BETA6_VARIANT_FIELDS.insert(10, "ctf_flag_reset_s")
+BETA6_VARIANT_FIELDS.insert(18, "ball_reset_s")
+BETA6_VARIANT_FIELDS.extend(("smoke_rendering", "map_scripts_off", "alternating_powerups"))
+BETA6_VARIANT_ALIASES = {"footstep_sounds": "footstep_sounds_level", "kill_restores": "kill_restores_mode"}
 VARIANT_BOOLEANS = set("""
 ctf_assault ctf_flag_must_reset ctf_flag_at_home king_moving_hill ball_random_start
 teams shields fireteams infinite_grenades skip_first_draw motion_tracker
@@ -102,6 +109,10 @@ def catalogue() -> dict:
                                    "wall_jump", "crouch_slide") else "integer"
         unit = "boolean" if kind == "boolean" else "milliseconds" if key.endswith("_ms") else "engine_setting"
         add(f"tuning.{key}", kind, unit)
+    for key in BETA6_VARIANT_FIELDS:
+        name = BETA6_VARIANT_ALIASES.get(key, key)
+        if f"variant.{name}" not in definitions:
+            add(f"variant.{name}", unit="seconds" if name.endswith("_s") else "code")
     for key, unit in (("shot_delay_aim_ms", "milliseconds"), ("input_pipeline_ticks", "source_ticks"),
                       ("aim_rate_hz", "hertz"), ("shot_aim_ahead_ticks", "source_ticks")):
         add(f"timing.{key}", unit=unit, meaning="recorded_simulation_setting")
@@ -271,8 +282,8 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         words = struct.unpack_from("<32I", header)
         if words[:4] != (0x314D4C46, profile["format"], profile["protocol_revision"], profile["tick_rate"]):
             raise ValueError("Settings header differs from engine profile")
-        if words[16] != header_size or words[4] not in (
-            options_size, options_size + 4 if profile["port"] in ("beta4", "beta5") else options_size
+        if words[16] not in ((504, 536) if profile["port"] == "beta6" else (header_size,)) or words[4] not in (
+            options_size, options_size + 4 if profile["port"] in ("beta4", "beta5", "beta6") else options_size
         ):
             raise ValueError("Unsupported recorded settings layout")
         if not header_size <= words[17] <= size:
@@ -311,10 +322,14 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         ][:field_count]
         if profile["port"] == "beta5":
             variant_fields = BETA5_VARIANT_FIELDS
+        elif profile["port"] == "beta6":
+            variant_fields = BETA6_VARIANT_FIELDS
         for key in VARIANT_FIELDS:
             fields[f"variant.{key}"] = unavailable("not_supported")
         for index, key in enumerate(variant_fields):
-            if key not in VARIANT_FIELDS or (profile["port"] == "beta5" and key in ("footstep_sounds", "kill_restores")):
+            if profile["port"] == "beta6":
+                key = BETA6_VARIANT_ALIASES.get(key, key)
+            elif key not in VARIANT_FIELDS or (profile["port"] == "beta5" and key in ("footstep_sounds", "kill_restores")):
                 continue  # Beta5 changed these from booleans to sliders/enums.
             fields[f"variant.{key}"] = entry(f"variant.{key}", struct.unpack_from("<i", variant, 128 + index * 4)[0],
                                               "recorded_variant")
@@ -354,9 +369,15 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         raise ValueError("Settings tick count differs from verified envelope")
     if words[7] & 2:
         header_fields.update(initial_human_player_count=words[31] & 255, recorder_player_slot=(words[31] >> 8) & 255)
+        if profile["port"] == "beta6":
+            own = (struct.unpack_from("<I", header, 476)[0] >> 16) & 255
+            if own < 16:
+                header_fields["recorder_player_slot"] = own
+            else:
+                header_fields.pop("recorder_player_slot", None)
     else:
         header_fields["initial_human_player_count"] = words[25]
-    if profile["port"] in ("beta4", "beta5"):
+    if profile["port"] in ("beta4", "beta5", "beta6"):
         created = struct.unpack_from("<Q", header, 464)[0]
         if created:
             header_fields["created_utc"] = created

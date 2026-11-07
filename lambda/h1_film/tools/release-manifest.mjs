@@ -18,7 +18,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       assert.ok(recipe.exporter_revision === 1 || registry.exporters.some(exporter =>
         exporter.engine_profile === profile.id && exporter.revision === recipe.exporter_revision));
       assert.ok([1, 2, 3, 4].includes(recipe.analytics_revision));
-      assert.ok([2, 4, 5].includes(recipe.viewer_revision));
+      assert.ok([2, 4, 5, 6].includes(recipe.viewer_revision));
       assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
     }
   }

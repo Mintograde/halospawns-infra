@@ -461,6 +461,96 @@
       "reason": "not_recorded",
       "provenance": "recorded_configuration"
     },
+    "variant.ctf_flag_reset_s": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.ball_reset_s": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.footstep_sounds_level": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.pickup_sounds": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.teleporter_sounds": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.shield_sounds": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.weapon_drop_sounds": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.map_scenery_audio": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.weapon_sounds_all": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.ambience_volume": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.kill_restores_mode": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.time_limit_min": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.overtime": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.overtime_timed": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.overtime_length_min": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.smoke_rendering": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.map_scripts_off": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
+    "variant.alternating_powerups": {
+      "status": "unavailable",
+      "reason": "not_recorded",
+      "provenance": "none"
+    },
     "timing.shot_delay_aim_ms": {
       "status": "available",
       "value": 17,
@@ -498,7 +588,7 @@
     },
     "tuning.magnetism_adhesion": {
       "status": "available",
-      "value": 0,
+      "value": 0.0,
       "provenance": "recorded_configuration"
     },
     "weapon.pistol.autoaim_angle": {
