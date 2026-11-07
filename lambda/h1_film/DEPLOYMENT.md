@@ -1,5 +1,72 @@
 # H1 film Lambda integration
 
+## Beta 6 client terminal events and network bot settings deployed (2026-11-07 UTC)
+
+User-authorized dev worker/default **20261107-r4**, policy revision **11**, is
+active with unchanged API **live=226**. Image:
+`sha256:62b82f221e0597552b573c6895fa771f203b489c0dddafafccc75ffdd13324a7`.
+Built from committed `c3ca154` in `.build/nov7-multiplayer-release`. Runtime
+registry digest: `53ed1a55c858834f2431feecb0840af52554734d7b0eec85b92c9a5c585c8342`.
+Five profiles/eighteen exporters retain all old pins. New Beta 6 attempts use
+**15/4/6**; exporter 14 and its recipe remain available unchanged.
+
+The shared adapter counts closing client FNET changes applied by upstream at
+`tick_count`. It also distinguishes saved lobby bot options from the network
+roster. Exporter 15 adds upstream's missing network-playback guard to the WASM
+bot shim, preventing creation of unused lobby bots. Every seed, world-hash,
+refused-event and exact application-count check remains enabled.
+
+**Octagon is repaired. Dread and Prisoner remain rejected.** Octagon completes
+with all four client worlds on the packaged exporter 15 and on an explicit
+exporter-14 run of the same image, covering the old upload's frozen pin. Native
+and WASM match byte-for-byte for the 55,003-frame client that exposed the terminal
+event bug. The other two matches now reach player-4 client divergence that also
+occurs in the native reference: Dread at hash frame 480; Prisoner at seed frame
+2,757. Their hosts and all eight other clients pass. No failing world is omitted
+or marked verified. Full mismatch counts, hashes and the discarded native seat
+experiment are documented in [BETA6.md](BETA6.md).
+
+- **72 Node / 97 packaged worker tests**, all **23 packaged cases / 69 exact
+  deployed-API host-mode callbacks**, plus retained Beta 5 client preparation,
+  completion, original source/world/timeline and retry checks pass.
+- All **19 earlier-profile viewer artifacts are byte-identical**. The three
+  retained Beta 6 artifacts change only their manifest's WASM pin and consequent
+  manifest/container hashes; every world, diagnostic and input payload byte is
+  unchanged. Actual files, all entries and initial/full/rebuild descriptors
+  were compared, not merely fixture metadata.
+- Focused/full preplans contain only the H1 image and producer-digest update
+  (**0/1/0**). The guarded saved-plan apply changed that single Lambda; first
+  live health verified the image, registry and all engines before activation.
+  The full dev postplan, including `map-processing`, is **no-op**.
+- Read-only before/after snapshots preserve all **92 conversions, 310 receipts,
+  232 H1 attempts and 290 map approvals**, limits, concurrency and consumers.
+  API health is 200; queue and DLQ are empty.
+- No migration, API/frontend release, live upload/retry/reparse or prod action
+  was submitted. Existing attempts retain their original recipes. Keep the
+  compatible readers, migrations, all engines and recipe history on rollback.
+
+The AWS SSO token expired during preflight. A normal dev SSO login renewed it
+before the successful plans and promotion; no credential configuration changed.
+
+Commands (infra root unless noted):
+
+```powershell
+# Build in .build/nov7-multiplayer-release:
+pwsh -NoProfile -File scripts/publish-h1-film.ps1 -Tag 20261107-r4 -EngineRoot L:/bens_stuff/projects/halospawns-infra/.build/nov7-multiplayer-deploy/engines -PreviousRegistry L:/bens_stuff/projects/halospawns-infra/.build/nov7-multiplayer-deploy/previous-registry.json -BuildOnly
+# Root push; then complete publication in the release checkout:
+pwsh -NoProfile -File .build/beta61-deploy/push-image.ps1 -Tag 20261107-r4
+pwsh -NoProfile -File scripts/publish-h1-film.ps1 -Tag 20261107-r4 -ResumePublication -CorpusPath L:/bens_stuff/projects/halospawns-infra/.build/nov7-multiplayer-deploy/corpus.json
+# Root: reviewed plans, guarded activation, full postplan:
+atmos terraform plan map-processing -s dev
+pwsh -NoProfile -File scripts/plan.ps1 dev
+atmos workflow promote-dev --file h1-film
+pwsh -NoProfile -File scripts/plan.ps1 dev
+```
+
+Evidence: `.build/nov7-multiplayer-fix/`, `.build/nov7-multiplayer-deploy/`,
+publication `.build/nov7-multiplayer-release/.build/`, successful promotion
+`.build/h1-promotions/20261107-230238-ab3ef2e7d68a47c093222ab0341eb91f/`.
+
 ## Beta 6 FFA roster validation deployed (2026-11-07 UTC)
 
 User-authorized dev worker/default **20261107-r3**, policy revision **10**, is
