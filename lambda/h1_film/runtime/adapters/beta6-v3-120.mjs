@@ -128,7 +128,10 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
         assert.ok(players + joined.size <= 16, 'Participant roster exceeds converter limit');
         assert.ok(raw.readInt32LE(position + 16) >= 0, 'Invalid join respawn timer');
       }
-      if (type !== 3 && type !== 9 && type !== 13 && type !== 14 && type !== 15 && type !== 81 && type !== 82 && tick < firstTick + ticks) applications++;
+      // blampc_film_play_end applies the client changes keyed to tick_count
+      // after its last frame. Host films do not apply this closing boundary.
+      if (type !== 3 && type !== 9 && type !== 13 && type !== 14 && type !== 15 && type !== 81 && type !== 82
+        && (tick < firstTick + ticks || clientView && tick === ticks)) applications++;
       position += 8 + length;
       previous = tick;
     }
@@ -230,9 +233,14 @@ export async function readEnvelope(path, {allowClientView = false} = {}) {
     spans.push([trailer, end]);
     spans.sort((left, right) => left[0] - right[0]);
     for (let index = 1; index < spans.length; index++) assert.ok(spans[index - 1][1] <= spans[index][0], 'Overlapping sections');
-    const bots = words[4] === 13328 ? (await readBlock(file, words[18] + 13324, 4)).readUInt32LE(0) : 0;
-    assert.ok(words[4] === 13324 || (!network && bots > 0 && bots <= 11 && players + bots <= 12),
+    const configuredBots = words[4] === 13328 ? (await readBlock(file, words[18] + 13324, 4)).readUInt32LE(0) : 0;
+    assert.ok(words[4] === 13324 || (configuredBots > 0 && configuredBots <= 11
+      && (network || players + configuredBots <= 12)),
       'Invalid Beta 6.1 bot roster');
+    // record_begin preserves the local lobby setting even on a network client.
+    // blampc_bots_create_players returns before spawning on network playback;
+    // the recorded network roster already describes the actual participants.
+    const bots = network ? 0 : configuredBots;
     assert.ok(words[20] > 0 && words[20] <= 1024 * 1024, 'Invalid Beta 6.1 settings size');
     const settings = (await readBlock(file, words[19], words[20])).toString('utf8');
     const botSettings = new Map();
@@ -246,8 +254,8 @@ export async function readEnvelope(path, {allowClientView = false} = {}) {
       assert.ok(!botSettings.has(key), 'Duplicate Beta 6.1 bot setting');
       botSettings.set(key, field[2]);
     }
-    assert.equal(botSettings.get('bots') ?? '0', String(bots), 'Beta 6.1 bot count differs from recorded settings');
-    if (bots) {
+    assert.equal(botSettings.get('bots') ?? '0', String(configuredBots), 'Beta 6.1 bot count differs from recorded settings');
+    if (configuredBots) {
       assert.match(botSettings.get('bot_skill') ?? '', /^[0-3]$/, 'Invalid Beta 6.1 bot skill');
       const teams = (botSettings.get('bot_teams') ?? '').split(',').map(team => team.trim());
       assert.ok(teams.length <= 11 && teams.every(team => /^(auto|0|1)$/i.test(team)), 'Invalid Beta 6.1 bot teams');

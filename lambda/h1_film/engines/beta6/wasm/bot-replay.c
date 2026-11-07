@@ -45,7 +45,9 @@ void blampc_bots_create_players(void)
         machine_player_limit = configured_limit;
         limit_raised = 0;
     }
-    if (!requested_bots) return;
+    /* Match upstream: network recordings can carry unused local lobby bot
+     * settings, but their participants come exclusively from the film. */
+    if (!requested_bots || blampc_film_network_playback()) return;
     if (!blampc_film_playing() || blampc_net_boot_role() != BLAMPC_NET_ROLE_LOCAL
         || blampc_net_client_boot_pending()) abort();
     data_iterator_new(&iterator, player_data);

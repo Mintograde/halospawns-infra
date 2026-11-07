@@ -2,20 +2,31 @@
 
 The immutable profile `h1-performance-beta6-p9839-wasm-v1` pins upstream
 `beta-6.1`, commit `86c52285a8ebe7d107bfafae64abe722b263cedf`. Format 3,
-protocol 9839, 120 Hz; default recipe exporter 14 / analytics 4 / viewer 6.
+protocol 9839, 120 Hz; default recipe exporter 15 / analytics 4 / viewer 6.
 All four earlier profiles, engines and recipes remain unchanged.
 
 ## Engine pins
 
-- WASM: `b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c`
+- Exporter 15 WASM: `ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac`
+- Retained base/exporter 14 WASM: `b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c`
 - Glue: `722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917`
 - Source fingerprint: `03ecd5ff7150ec3648db1fe68489cee7cd40888525b62747d0819cdf0dbfb99e`
-- Port fingerprint: `430c02c15238b4f03f5764761fd77d0b2405641ffbc51f5b204f261568b2b127`
+- Exporter 15 port fingerprint: `37749550853f4cb4696178af407cd7b6fe9002a3d805b7e7e19851789f407a25`
+- Retained exporter 14 port fingerprint: `430c02c15238b4f03f5764761fd77d0b2405641ffbc51f5b204f261568b2b127`
 
 Build with `tools/build-engine.ps1 -Port beta6 -Combat -NetworkReplayFixes
 -DamageAttribution -FiniteWorldObjects -ClientView` against the pinned source.
 The engine includes upstream format-3/MTCH reading and thin-part restoration.
 Clean commit suffixes use the existing recorded-build matching contract.
+
+Exporter 15 brings the WASM bot shim into agreement with upstream's network-film
+guard: saved local lobby bot settings do not create players in network playback.
+The adapter validates those settings independently of the active recorded roster.
+Local films still create and validate their recorded bots. The shared adapter
+also counts closing client FNET changes at `frame_count`, which upstream applies
+in `blampc_film_play_end`; host changes retain their exclusive end boundary.
+The exact application-count, refused-event, seed and world-hash checks remain.
+Exporter 14 and its recipe are retained unchanged for persisted attempts.
 
 ## Single-file match replay
 
@@ -76,6 +87,34 @@ restored views match exactly. They contain two copies of the solo client, not
 two independently recorded players. Real multiplayer, early/late clients and
 maximum-size recordings remain additional acceptance opportunities. Invalid
 reconstruction or playback fails closed.
+
+### November 7 multiplayer recordings
+
+`2026-11-07 15-30-56 octagon_b.h1film` now passes complete conversion with all four
+embedded clients. Its player-1 view has two legitimate OWN_DELETE records at
+terminal frame 55,003: the old adapter expected 294,893 applications while both
+engines applied 294,895. Native/exporter-15 full exports of that view are
+byte-identical (`ba688aee34a6fc16b0ce5a99eec77908566b76cc0a70cc110b5fbf9c380b7c8f`),
+with all 459 recorded hashes matching and no refused events or seed mismatches.
+
+The supplied Dread and Prisoner hosts pass, as do all eight embedded views of
+players 0-3. Both player-4 views still fail independently in native and exporter
+15, after the saved-bot issue is corrected:
+
+| Film / part | First divergence | Seed mismatches | Hash mismatches | Refused changes |
+| --- | --- | --- | --- | --- |
+| Dread / client-0, 25,387 frames | Hash at frame 480 | 86 | 83/212 | 70 |
+| Prisoner / client-1, 67,917 frames | Seed at frame 2,757 | 112 | 76/566 | 71 |
+
+Whole-part sizes/checksums and original source/map hashes match. An isolated
+native experiment retaining only the recording client's local seats produces
+the same divergence counts; it is not part of the released engine. These two
+complete match uploads remain rejected. Do not omit their failed worlds, clear
+verification failures, or replace recorded hashes to make them pass. Further
+upstream playback/recording investigation is required. Local evidence is under
+`.build/nov7-multiplayer-fix/`, including restored parts, native/WASM summaries,
+per-part checks and the discarded seat experiment. See `DEPLOYMENT.md` for the
+release's packaged and deployed-API checks.
 
 ## Dev rollout
 
