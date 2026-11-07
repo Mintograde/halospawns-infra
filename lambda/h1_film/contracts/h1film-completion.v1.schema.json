@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 40982be8b97388c0238b36cc1b110dbe1c0317312c9a83f9f70f0cd812bcb33c",
+  "$comment": "Generated from API schemas/h1films.py SHA256 443a412466bbcb180564186989682b8bec4fe343ba5b91c9d3099d46338db8f9",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -100,7 +100,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 6,
+          "maximum": 7,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -198,6 +198,77 @@
       "title": "H1FilmRosterRecovery",
       "type": "object"
     },
+    "H1MatchFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "control_pushes": {
+          "maximum": 6912000,
+          "minimum": 1,
+          "title": "Control Pushes",
+          "type": "integer"
+        },
+        "first_mismatch_update": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "First Mismatch Update",
+          "type": "integer"
+        },
+        "hash_checks": {
+          "maximum": 40000,
+          "minimum": 1,
+          "title": "Hash Checks",
+          "type": "integer"
+        },
+        "hash_mismatches": {
+          "maximum": 40000,
+          "minimum": 0,
+          "title": "Hash Mismatches",
+          "type": "integer"
+        },
+        "network_applied": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Network Applied",
+          "type": "integer"
+        },
+        "network_refused": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Network Refused",
+          "type": "integer"
+        },
+        "played_ticks": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Played Ticks",
+          "type": "integer"
+        },
+        "reason": {
+          "const": "simulation_desync",
+          "title": "Reason",
+          "type": "string"
+        },
+        "seed_mismatches": {
+          "maximum": 432000,
+          "minimum": 0,
+          "title": "Seed Mismatches",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "played_ticks",
+        "seed_mismatches",
+        "hash_mismatches",
+        "hash_checks",
+        "control_pushes",
+        "first_mismatch_update",
+        "network_applied",
+        "network_refused"
+      ],
+      "title": "H1MatchFailure",
+      "type": "object"
+    },
     "H1MatchReplay": {
       "additionalProperties": false,
       "properties": {
@@ -217,7 +288,10 @@
           "type": "string"
         },
         "schema": {
-          "const": "halospawns.h1MatchReplay.v1",
+          "enum": [
+            "halospawns.h1MatchReplay.v1",
+            "halospawns.h1MatchReplay.v2"
+          ],
           "title": "Schema",
           "type": "string"
         },
@@ -228,7 +302,14 @@
         },
         "tracks": {
           "items": {
-            "$ref": "#/$defs/H1MatchTrack"
+            "anyOf": [
+              {
+                "$ref": "#/$defs/H1MatchTrack"
+              },
+              {
+                "$ref": "#/$defs/H1UnavailableTrack"
+              }
+            ]
           },
           "maxItems": 17,
           "minItems": 1,
@@ -344,6 +425,19 @@
           "title": "Source Film Sha256",
           "type": "string"
         },
+        "status": {
+          "anyOf": [
+            {
+              "const": "available",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
         "verified_hash_count": {
           "maximum": 40000,
           "minimum": 1,
@@ -367,6 +461,132 @@
         "alignment"
       ],
       "title": "H1MatchTrack",
+      "type": "object"
+    },
+    "H1UnavailableTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment": {
+          "enum": [
+            "recorded-client-clock-v1",
+            "unavailable",
+            "authoritative"
+          ],
+          "title": "Alignment",
+          "type": "string"
+        },
+        "diagnostic_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "maxProperties": 18,
+          "title": "Diagnostic Counts",
+          "type": "object"
+        },
+        "ends_early": {
+          "default": false,
+          "title": "Ends Early",
+          "type": "boolean"
+        },
+        "failure": {
+          "$ref": "#/$defs/H1MatchFailure"
+        },
+        "first_update": {
+          "maximum": 2147051647,
+          "minimum": 0,
+          "title": "First Update",
+          "type": "integer"
+        },
+        "frame_count": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^(host|client-(?:[0-9]|1[0-5]))$",
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs_trust": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputs Trust"
+        },
+        "messages_trust": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Messages Trust"
+        },
+        "recorded_own_player": {
+          "anyOf": [
+            {
+              "maximum": 15,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Own Player"
+        },
+        "role": {
+          "const": "client",
+          "title": "Role",
+          "type": "string"
+        },
+        "source_film_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Film Sha256",
+          "type": "string"
+        },
+        "status": {
+          "const": "unavailable",
+          "title": "Status",
+          "type": "string"
+        },
+        "verified_hash_count": {
+          "default": null,
+          "title": "Verified Hash Count",
+          "type": "null"
+        },
+        "world_sha256": {
+          "default": null,
+          "title": "World Sha256",
+          "type": "null"
+        }
+      },
+      "required": [
+        "status",
+        "id",
+        "role",
+        "source_film_sha256",
+        "frame_count",
+        "first_update",
+        "alignment",
+        "failure"
+      ],
+      "title": "H1UnavailableTrack",
       "type": "object"
     },
     "RecoveredPlayer": {

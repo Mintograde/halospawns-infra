@@ -2,8 +2,30 @@
 
 The immutable profile `h1-performance-beta6-p9839-wasm-v1` pins upstream
 `beta-6.1`, commit `86c52285a8ebe7d107bfafae64abe722b263cedf`. Format 3,
-protocol 9839, 120 Hz; default recipe exporter 15 / analytics 4 / viewer 6.
+protocol 9839, 120 Hz; new default recipe exporter 16 / analytics 4 / viewer 7.
 All four earlier profiles, engines and recipes remain unchanged.
+
+## Partial client availability
+
+The user authorized excluding desynchronized client worlds on 2026-11-07.
+Exporter 16 reuses exporter 15's exact engine bytes and adds a runtime policy:
+only a completed, source-bound embedded-client desync can become unavailable.
+Engine/encoder exits, complete ticks/hashes, recorded network application totals,
+source/map checksums and an explicit desync verdict are required. Unknown errors,
+timeouts, crashes, invalid source data and host failures still reject the match.
+
+Viewer 7 / `halospawns.h1MatchReplay.v2` / `H1MV0002` retains every original
+track ID, clocks, raw recorded inputs and diagnostic tables. Available tracks
+have fully verified worlds; unavailable clients carry bounded failure counts
+and the first mismatch update, with no world or verification claim. Host-only
+statistics remain authoritative. The frontend falls back to the host for these
+players and labels their client perspective unavailable. No partial prefix of a
+failed simulation is published. The old 14/4/6 and 15/4/6 recipes remain strict.
+
+API/worker requirements retain the v1 reader and add the v2 partial-match reader.
+The new API migration only extends the container format constraint. Preserve
+all versions, pins, approvals and stored attempts on rollback. See DEPLOYMENT.md
+for the activation status and real-film evidence.
 
 ## Engine pins
 

@@ -20,6 +20,8 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
+  const partial=sourceContract.profile_revision===7;
+  assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   async function add(id,kind,bytes,extra={}) {
@@ -94,6 +96,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     }
   }
   const host={id:'host',role:'host',source_film_sha256:digest(raw.subarray(match.host_offset,match.host_offset+match.host_size)),
+    ...(partial?{status:'available'}:{}),
     frame_count:report.envelope.ticks,first_update:report.envelope.first_update,viewer_revision:5,
     world:world('host/world',hostWorld),verification:report.simulation};
   await recorded(host,raw.subarray(match.host_offset,match.host_offset+match.host_size));tracks.push(host);
@@ -110,10 +113,12 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     assert.equal(c.id,`client-${index}`);
     const bytes=await readFile(join(directory,`${c.id}.h1film`));
     assert.equal(digest(bytes),c.source_film_sha256);
-    assert.equal(await sha256(join(directory,c.world)),c.world_sha256);
+    const unavailable=partial&&c.status==='unavailable';
+    if(!unavailable)assert.equal(await sha256(join(directory,c.world)),c.world_sha256);
     const track={id:c.id,role:'client',source_film_sha256:c.source_film_sha256,frame_count:c.envelope.ticks,
-      first_update:c.envelope.first_update,viewer_revision:5,world:world(`${c.id}/world`,join(directory,c.world)),
-      verification:c.verification,recorded_own_player:part.player,ends_early:Boolean(part.flags&1),
+      first_update:c.envelope.first_update,...(unavailable?{status:'unavailable',failure:c.failure}:
+        {...(partial?{status:'available'}:{}),viewer_revision:5,world:world(`${c.id}/world`,join(directory,c.world)),verification:c.verification}),
+      recorded_own_player:part.player,ends_early:Boolean(part.flags&1),
       recorded_trust:{inputs:part.inputs_trust,messages:part.messages_trust,reason:part.reason},
       clocks:c.envelope.network.clocks,alignment:{method:'unavailable',reason:'client_account_not_recorded'}};
     await recorded(track,bytes);

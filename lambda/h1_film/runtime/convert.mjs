@@ -12,6 +12,7 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
+import {ClientDesync,completedClientDesync} from './client-desync.mjs';
 import {inspectMatchFilm} from './match-film.mjs';
 
 export async function convertFilm(options) {
@@ -250,10 +251,16 @@ export async function convertFilm(options) {
     }
     report.engine_resources = JSON.parse(await readFile(join(stage, 'engine-metrics.json'), 'utf8'));
     const log = await readFile(join(stage, 'playback.log'), 'utf8');
-    report.simulation = adapter.verifyPlayback(log, native.envelope);
-    if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     assert.equal(await sha256(join(work, 'maps', native.envelope.map + '.map')), native.provenance.map_sha256);
     assert.equal(await sha256(join(work, 'input.h1film')), filmHash);
+    try { report.simulation = adapter.verifyPlayback(log, native.envelope); }
+    catch (error) {
+      const failure = profile.port==='beta6' && profile.exporter_revision>=16
+        && values['embedded-match'] && values['client-view'] && completedClientDesync(log,native.envelope);
+      if (failure) throw new ClientDesync(failure,error);
+      throw error;
+    }
+    if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');

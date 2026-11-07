@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {open,stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {sha256} from './engine-store.mjs';
-import {MATCH_REPLAY_SCHEMA,MATCH_REPLAY_MAGIC,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
+import {MATCH_REPLAY_SCHEMA,PARTIAL_MATCH_REPLAY_SCHEMA,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function writeMatchReplay(path,identity,tracks,entries) {
@@ -28,9 +28,11 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
     index.push({...entry,offset,size_bytes:size,sha256:bytes?sha(bytes):await sha256(path)});
     offset+=size;assert.ok(offset<=512*1024*1024,'Match replay exceeds size limit');
   }
-  const manifest={...identity,schema:MATCH_REPLAY_SCHEMA,tick_rate:120,authoritative_track:'host',tracks,entries:index};
+  const version=identity.sourceContract.profile_revision===7?2:1;
+  const schema=version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
+  const manifest={...identity,schema,tick_rate:120,authoritative_track:'host',tracks,entries:index};
   const raw=Buffer.from(JSON.stringify(manifest)),header=Buffer.alloc(64),size=64+raw.length+offset;
-  header.write(MATCH_REPLAY_MAGIC);header.writeUInt32LE(1,8);header.writeUInt32LE(64,12);
+  header.write(`H1MV000${version}`);header.writeUInt32LE(version,8);header.writeUInt32LE(64,12);
   header.writeUInt32LE(raw.length,16);header.writeUInt32LE(size,20);Buffer.from(sha(raw),'hex').copy(header,32);
   validateMatchReplay(manifest,readMatchReplayHeader(header));
   const file=await open(path,'wx'),hash=createHash('sha256');
@@ -50,5 +52,5 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
       assert.equal(check.digest('hex'),pin.sha256,'Entry changed during packing');
     }
   } finally {await file.close();}
-  return {schema:MATCH_REPLAY_SCHEMA,size_bytes:size,sha256:hash.digest('hex'),manifest_sha256:sha(raw),manifest};
+  return {schema,size_bytes:size,sha256:hash.digest('hex'),manifest_sha256:sha(raw),manifest};
 }

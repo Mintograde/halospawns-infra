@@ -9,11 +9,11 @@ from jsonschema import Draft202012Validator
 from . import analytics
 
 
-def assemble_match_replay(film, directory, host, work, deadline):
+def assemble_match_replay(film, directory, host, work, deadline, revision=6):
     from .cloud import NODE_ROOT, require, run_bounded, shared_parser
 
     shared = shared_parser()
-    contract = shared.load_pinned_contract(6)
+    contract = shared.load_pinned_contract(revision)
     output = work / "match.hsrv"
     request = work / "match-request.json"
     request.write_text(json.dumps({
@@ -37,9 +37,14 @@ def assemble_match_replay(film, directory, host, work, deadline):
         item = {key: track[key] for key in (
             "id", "role", "source_film_sha256", "frame_count", "first_update",
         )}
-        item.update(world_sha256=entries[track["world"]]["sha256"],
-                    verified_hash_count=track["verification"]["hash_checks"],
-                    alignment="authoritative" if track["role"] == "host"
+        if revision == 7:
+            item["status"] = track["status"]
+        if track.get("status") == "unavailable":
+            item["failure"] = track["failure"]
+        else:
+            item.update(world_sha256=entries[track["world"]]["sha256"],
+                        verified_hash_count=track["verification"]["hash_checks"])
+        item.update(alignment="authoritative" if track["role"] == "host"
                     else track["alignment"]["method"],
                     diagnostic_counts={t["name"]: t["count"] for t in track.get("tables", [])})
         if track["role"] == "client":
@@ -59,6 +64,8 @@ def assemble_match_replay(film, directory, host, work, deadline):
         uncompressed_size_bytes=result["size_bytes"], tick_count=host.tick_count,
         chunk_count=len(entries), manifest=manifest,
         metrics={**host.metrics, "match_pack_duration_ms": round((time.perf_counter()-started)*1000),
+                 **({"unavailable_client_count": sum(t.get("status") == "unavailable" for t in tracks)}
+                    if revision == 7 else {}),
                  "match_view_count": len(tracks), "artifact_bytes": result["size_bytes"],
                  "artifact_uncompressed_bytes": result["size_bytes"], "compression_ratio": 1},
     )

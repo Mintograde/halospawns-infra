@@ -1,0 +1,42 @@
+{
+  "artifact_kind": "viewer_replay_delta",
+  "format": "halospawns.h1MatchReplay.v2",
+  "media_type": "application/vnd.halospawns.replay-delta",
+  "outer_compression": "identity",
+  "container": {
+    "magic_ascii": "H1MV0002",
+    "version": 2,
+    "header_bytes": 64,
+    "byte_order": "little",
+    "manifest_compression": "identity",
+    "fields": {
+      "version": 8,
+      "header_bytes": 12,
+      "manifest_bytes": 16,
+      "total_bytes": 20,
+      "reserved_zero": [
+        24,
+        28
+      ],
+      "manifest_sha256": [
+        32,
+        32
+      ]
+    }
+  },
+  "body": "Contiguous entries indexed by byte offset relative to the end of the manifest; every entry has a SHA-256 pin.",
+  "worlds": {
+    "profile_revision": 5,
+    "format": "halospawns.viewerReplayDelta.v2",
+    "container_magic": "HSRDC002"
+  },
+  "authority": "Only the host world supplies match statistics; client worlds retain their original clocks and recorded trust results.",
+  "limits": {
+    "file_bytes": 536870912,
+    "manifest_bytes": 8388608,
+    "tracks": 17,
+    "entries": 512,
+    "frames_per_track": 432000
+  },
+  "client_failure": "Only completed source-bound desyncs omit a client world; track identity, failure evidence, recorded diagnostics and inputs remain. Host verification is mandatory."
+}

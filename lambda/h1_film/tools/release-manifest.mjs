@@ -18,7 +18,11 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       assert.ok(recipe.exporter_revision === 1 || registry.exporters.some(exporter =>
         exporter.engine_profile === profile.id && exporter.revision === recipe.exporter_revision));
       assert.ok([1, 2, 3, 4].includes(recipe.analytics_revision));
-      assert.ok([2, 4, 5, 6].includes(recipe.viewer_revision));
+      assert.ok([2, 4, 5, 6, 7].includes(recipe.viewer_revision));
+      if(recipe.viewer_revision===7) {
+        assert.equal(profile.port,'beta6');assert.ok(recipe.exporter_revision>=16);
+        assert.equal(requirements.partial_match_replay,'halospawns.h1MatchReplay.v2');
+      }
       assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
     }
   }

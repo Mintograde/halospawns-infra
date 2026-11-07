@@ -15,7 +15,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 6,
+          "maximum": 7,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"

@@ -8,6 +8,7 @@ import {inspectMatchFilm} from './match-film.mjs';
 import {fnv1a} from './format3-codec.mjs';
 import {readEnvelope} from './adapters/beta6-v3-120.mjs';
 import {sha256} from './engine-store.mjs';
+import {clientDesyncEvidence} from './client-desync.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
@@ -38,15 +39,24 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
     assert.equal(envelope.match_id,match.host.match_id,'Restored client match differs');
     const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
-    const converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
+    const track={id,part,envelope,source_film_sha256:await sha256(film)};
+    let converted;
+    try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
       'client-view':true,'embedded-match':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});
+    } catch(error) {
+      const failure=report.exporter_revision>=16 && clientDesyncEvidence(error);
+      if(!failure)throw error;
+      assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
+      tracks.push({...track,status:'unavailable',failure});continue;
+    }
     assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
     for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
-    tracks.push({id,part,envelope,source_film_sha256:await sha256(film),verification:converted.simulation,
+    tracks.push({...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
       world:`${id}/candidate/replay.120hz.hsrdc`,world_sha256:converted.encoding['120hz'].sha256});
   }
   const result={schema:'halospawns.h1MatchTracks.v1',source_film_sha256:match.sha256,match_id:match.host.match_id,
     version:match.version,tracks};
   await writeFile(join(stage,'match-tracks.json'),JSON.stringify(result),{flag:'wx'});
-  return {schema:result.schema,match_id:result.match_id,client_count:tracks.length};
+  return {schema:result.schema,match_id:result.match_id,client_count:tracks.length,
+    ...(report.exporter_revision>=16?{unavailable_client_count:tracks.filter(t=>t.status==='unavailable').length}:{})};
 }

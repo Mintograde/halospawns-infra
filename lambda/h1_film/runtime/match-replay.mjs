@@ -2,6 +2,8 @@
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 export const MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v1';
 export const MATCH_REPLAY_MAGIC='H1MV0001';
+export const PARTIAL_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v2';
+export const PARTIAL_MATCH_PROJECTION='e19c41417dd3c4e6843037a94fb8d993e4861bfd6d345a9965f82b4ed8effdbb';
 export const MATCH_REPLAY_HEADER_BYTES=64;
 export const MATCH_REPLAY_MAX_BYTES=512*1024*1024;
 export const MATCH_REPLAY_MAX_MANIFEST=8*1024*1024;
@@ -17,19 +19,22 @@ export async function hashBytes(bytes) {
 export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  check(new TextDecoder().decode(bytes.subarray(0,8))===MATCH_REPLAY_MAGIC&&v.getUint32(8,true)===1
+  const version=v.getUint32(8,true);
+  check([1,2].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
-  return {manifest_bytes,size_bytes,body_offset:64+manifest_bytes,
+  return {version,manifest_bytes,size_bytes,body_offset:64+manifest_bytes,
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  check(m?.schema===MATCH_REPLAY_SCHEMA&&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
+  const partial=m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(partial?2:1)
+    &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
   check(m.engine_profile==='h1-performance-beta6-p9839-wasm-v1'&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&m.tick_rate===120&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===6&&m.sourceContract.projection_sha256==='17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2',
+    &&m.sourceContract.profile_revision===(partial?7:6)&&m.sourceContract.projection_sha256===(partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -48,11 +53,24 @@ export function validateMatchReplay(m,header) {
   for(const [i,t] of m.tracks.entries()) {
     check(t&&t.id===(i===0?'host':`client-${i-1}`)&&!ids.has(t.id)&&t.role===(i===0?'host':'client'),'invalid track identity');ids.add(t.id);
     check(hash.test(t.source_film_sha256)&&integer(t.frame_count,1,432000)&&integer(t.first_update,0,2147051647),'invalid track coverage');
+    if(partial)check(['available','unavailable'].includes(t.status),'invalid view status');
+    else check(t.status===undefined&&t.failure===undefined,'unavailable views require revision 7');
+    if(t.status==='unavailable') {
+      check(i>0&&t.world===undefined&&t.viewer_revision===undefined&&t.verification===undefined,'unavailable world is playable');
+      const f=t.failure;
+      check(f?.reason==='simulation_desync'&&f.played_ticks===t.frame_count
+        &&integer(f.seed_mismatches,0,t.frame_count)&&integer(f.hash_checks,1,40000)
+        &&integer(f.hash_mismatches,0,f.hash_checks)&&(f.seed_mismatches>0||f.hash_mismatches>0)
+        &&integer(f.control_pushes,1,6912000)&&integer(f.first_mismatch_update,t.first_update,t.first_update+t.frame_count-1)
+        &&integer(f.network_applied,0,2147483647)&&integer(f.network_refused,0,2147483647),'invalid desync evidence');
+    } else {
+    check(t.failure===undefined,'verified world contains failure evidence');
     const world=entries.get(t.world);
     check(world?.kind==='world'&&world.compression==='identity'&&t.viewer_revision===5,'invalid world');
     check(world.id===`${t.id}/world`&&!worlds.has(world.id),'duplicate world');worlds.add(world.id);
     check(t.verification?.seed_mismatches===0&&t.verification.hash_mismatches===0
       &&t.verification.played_ticks===t.frame_count&&integer(t.verification.hash_checks,1,40000),'unverified world');
+    }
     const ref=(id,kind)=>{const e=entries.get(id);check(e&&e.id.startsWith(t.id+'/')&&e.kind===kind,'invalid table entry');return e;};
     check(!t.tables||Array.isArray(t.tables)&&t.tables.length<=18,'invalid tables');
     const tables=new Set();
