@@ -1,5 +1,69 @@
 # H1 film Lambda integration
 
+## Beta 6 FFA roster validation deployed (2026-11-07 UTC)
+
+User-authorized dev worker/default **20261107-r3**, policy revision **10**, is
+active with unchanged API **live=226**. Image:
+`sha256:da929a024b6f775d68f8dfc50872448373eac2992142897ecdc326d264806f28`.
+Built from committed `41b0065` in `.build/nov7-roster-release`. Registry remains
+`cf7d51228d3307b5b34533e1f36f0d475e7066c816f0e760d21711971cd3892a`;
+all five profiles, seventeen exporters, defaults and prior recipes are unchanged.
+Manifest fields differ from r2 only in release ID and image digest.
+
+The shared Beta 6 adapter now accepts RSTR team indices 0–15 plus NONE.
+The pinned engine uses `player_list_index` as `team_index` in FFA, so the old
+red/blue-only check incorrectly rejected valid multiplayer rosters. Fireteam
+and padding checks remain strict. No engine or artifact encoding changed.
+
+This fixes only the initial Dread/Prisoner rejection. Their later embedded-client
+bot/options validation failures and Octagon's application-count discrepancy
+remain open in `HANDOFFS.md`. These three complete match conversions still fail;
+no retry or upload mutation was submitted as part of this deployment.
+
+- **69 Node / 97 packaged worker tests**, all **22 packaged film cases / 66
+  exact deployed-API host-mode callbacks**, and the retained Beta 5 client
+  prepare/completion/source/world/timeline checks pass.
+- All **22 retained viewer artifacts are byte-identical** to r2, including
+  initial/full/rebuild descriptors. The packaged adapter accepts both original
+  uploaded Dread/Prisoner hashes; seven valid team cases pass and four invalid
+  team/fireteam/padding mutations remain rejected.
+- Focused and full dev preplans contain only the H1 image/producer-digest update
+  (**0/1/0**); the guarded saved-plan apply changes only `map-processing`'s
+  H1 Lambda. Focused and full dev postplans are **no-op**.
+- The first cold inventory health invocation timed out after 60 seconds,
+  stopping activation with policy 9 intact. Warm health verified every engine,
+  registry and image pin. A complete guarded workflow retry repeated exact API
+  checks, found a no-op worker plan, passed live health and activated policy 10.
+- Read-only before/after snapshots preserve all **86 conversions, 310 receipts,
+  232 H1 attempts and 290 map approvals**, limits, concurrency and consumer
+  configuration. API health is 200; queue and DLQ are empty. No migration,
+  API/frontend release, historical reparse or prod action occurred.
+
+Commands (from infra root unless noted):
+
+```powershell
+# Build from .build/nov7-roster-release, using engines extracted from r2:
+pwsh -NoProfile -File scripts/publish-h1-film.ps1 -Tag 20261107-r3 -EngineRoot L:/bens_stuff/projects/halospawns-infra/.build/nov7-roster-deploy/engines -PreviousRegistry L:/bens_stuff/projects/halospawns-infra/.build/nov7-roster-deploy/previous-registry.json -BuildOnly
+# Root: existing temporary-credential push helper, then complete publication in release checkout:
+pwsh -NoProfile -File .build/beta61-deploy/push-image.ps1 -Tag 20261107-r3
+pwsh -NoProfile -File scripts/publish-h1-film.ps1 -Tag 20261107-r3 -ResumePublication -CorpusPath L:/bens_stuff/projects/halospawns-infra/.build/nov7-roster-deploy/corpus.json
+# Root: plan, guarded apply/activation (rerun after cold health), full postplan:
+atmos terraform plan map-processing -s dev
+pwsh -NoProfile -File scripts/plan.ps1 dev
+atmos workflow promote-dev --file h1-film
+pwsh -NoProfile -File scripts/plan.ps1 dev
+```
+
+The workflow applied the saved plan with
+`terraform -chdir=components/terraform/map-processing apply -no-color L:\bens_stuff\projects\halospawns-infra\.build\h1-promotions\20261107-220050-d9777b3449194b939397da237f72fc8c\worker.planfile`.
+Local Docker initially ran out of space; clearing unused build cache allowed
+the build to finish. No volumes or application containers were removed.
+
+Evidence: `.build/nov7-roster-deploy/`, publication under
+`.build/nov7-roster-release/.build/`, successful promotion
+`.build/h1-promotions/20261107-220737-ac898c583a204d7ca73a72aabbd29557/`.
+Retain all Beta 6 readers, migrations, engines and old recipe pins on rollback.
+
 ## Beta 6.1 match replays deployed (2026-11-07 UTC)
 
 User-authorized dev worker/default **20261107-r2**, policy revision **9**, is
