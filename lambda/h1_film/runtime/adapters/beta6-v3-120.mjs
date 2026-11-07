@@ -216,7 +216,9 @@ export async function readEnvelope(path, {allowClientView = false} = {}) {
       assert.equal(roster.readUInt32LE(12),0,'Unknown roster fields');
       for(let slot=0;slot<players;slot++) {
         const row=roster.subarray(16+slot*28,44+slot*28);
-        assert.ok((row[0]<=1||row[0]===255)&&(row[1]<=3||row[1]===255)
+        // FFA stores player_list_index as team_index (game_engine_player_added),
+        // so all sixteen player indices are valid, in addition to NONE.
+        assert.ok((row[0]<16||row[0]===255)&&(row[1]<=3||row[1]===255)
           &&row.readUInt16LE(2)===0,'Invalid recorded team');
       }
     }
