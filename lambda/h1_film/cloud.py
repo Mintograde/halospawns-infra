@@ -184,7 +184,7 @@ def validate_job(job):
         and binding["scenario"] == film["scenario"]
     )
     missing_size = film.get("map_size_evidence") == "halospawns.h1MissingMapSize.v1"
-    require(not missing_size or (film["engine_profile"] == "h1-performance-beta5-p9818-wasm-v1" and film["map_size_bytes"] == 0))
+    require(not missing_size or (film["engine_profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1") and film["map_size_bytes"] == 0))
     require(missing_size or binding["raw_source"]["size_bytes"] == film["map_size_bytes"])
     validate_source(conversion["source"])
     validate_source(binding["raw_source"], raw_map=True)
@@ -549,7 +549,7 @@ def inspect_film(path, work, deadline, *, intake=None):
         env["ticks"] <= limits()["SOURCE_TICKS"]
         and env["players"] <= limits()["PLAYERS"]
     )
-    missing_size = env["map_bytes"] == 0 and result["profile"] == "h1-performance-beta5-p9818-wasm-v1"
+    missing_size = env["map_bytes"] == 0 and result["profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1")
     require(missing_size or 0 < env["map_bytes"] <= 256 * 1024**2)
     return {
         "engine_profile": result["profile"],

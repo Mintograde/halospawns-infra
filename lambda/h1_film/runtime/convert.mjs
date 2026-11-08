@@ -88,7 +88,7 @@ export async function convertFilm(options) {
   assert.ok((await stat(values.film)).size <= 512 * 1024 * 1024);
   const map = join(values.assets, 'maps', native.envelope.map + '.map');
   const actualMapSize = (await stat(map)).size;
-  const missingMapSize = profile.id === 'h1-performance-beta5-p9818-wasm-v1' && envelope.map_bytes === 0;
+  const missingMapSize = ['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0;
   if (missingMapSize) assert.ok(values['map-catalog'], 'Missing recorded size requires a reviewed map catalog');
   else assert.equal(actualMapSize, native.envelope.map_bytes, 'Map size differs from recorded cache');
   const filmHash = await sha256(values.film), mapHash = await sha256(map);

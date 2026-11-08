@@ -685,7 +685,23 @@ if __name__ == "__main__":
     unittest.main()
 
 class MissingMapSizeTests(unittest.TestCase):
-    def test_versioned_missing_size_is_beta5_only(self):
+    def test_beta6_inspection_preserves_missing_size_evidence(self):
+        envelope = {
+            'ticks': 84542, 'players': 4, 'map': 'dammy', 'map_bytes': 0,
+            'hash_samples': 705, 'format': 3, 'protocol_revision': 9839,
+            'tick_rate': 120, 'build': 'Linux server',
+        }
+        with patch.dict(os.environ, {**ENV, 'H1_MAX_PLAYERS': '16'}), \
+             patch.object(cloud, 'run_bounded', return_value=Path('unused')), \
+             patch.object(cloud.analytics, '_json', return_value={
+                 'envelope': envelope, 'profile': 'h1-performance-beta6-p9839-wasm-v1',
+             }):
+            result = cloud.inspect_film(Path('film'), Path('work'), time.monotonic() + 60)
+        self.assertEqual(result['map_size_bytes'], 0)
+        self.assertEqual(result['map_size_evidence'], 'halospawns.h1MissingMapSize.v1')
+        self.assertEqual(result['source_tick_count'], 84542)
+
+    def test_versioned_missing_size_is_reviewed_profiles_only(self):
         from jsonschema import Draft202012Validator
         schema = json.loads((cloud.PACKAGE / 'contracts/h1film-job.v1.schema.json').read_text())['$defs']['H1FilmEvidence']
         validate = Draft202012Validator(schema).is_valid
@@ -696,6 +712,8 @@ class MissingMapSizeTests(unittest.TestCase):
         film['map_size_evidence'] = 'halospawns.h1MissingMapSize.v1'
         self.assertFalse(validate(film))
         film['engine_profile'] = 'h1-performance-beta5-p9818-wasm-v1'
+        self.assertTrue(validate(film))
+        film['engine_profile'] = 'h1-performance-beta6-p9839-wasm-v1'
         self.assertTrue(validate(film))
         film['map_size_bytes'] = 100
         self.assertFalse(validate(film))

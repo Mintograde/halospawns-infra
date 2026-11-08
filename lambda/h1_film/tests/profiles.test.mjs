@@ -112,3 +112,15 @@ test('Beta 5 missing recorded size requires one exact profile/scenario binding',
   assert.throws(() => resolveMap(profile, {...envelope, map_bytes: 0}, catalog([map])), /unavailable/);
   assert.throws(() => resolveMap(beta5, {...film, map_bytes: 4096}, catalog([binding])), /unavailable/);
 });
+
+test('Beta 6 missing recorded size requires one exact profile/scenario binding', () => {
+  const beta6 = ENGINE_PROFILES.find(p => p.port === 'beta6');
+  const film = { ...beta6, map: 'dread', map_bytes: 0 };
+  const binding = { ...map, engine_profile: beta6.id };
+  assert.deepEqual(resolveMap(beta6, film, catalog([binding])), binding);
+  assert.throws(() => resolveMap(beta6, film, catalog([])), /unavailable/);
+  assert.throws(() => resolveMap(beta6, film, catalog([binding, {...binding, size_bytes: 4096}])), /Ambiguous/);
+  assert.throws(() => resolveMap(beta6, film, catalog([map])), /unavailable/);
+  assert.throws(() => resolveMap(profile, {...envelope, map_bytes: 0}, catalog([map])), /unavailable/);
+  assert.throws(() => resolveMap(beta6, {...film, map_bytes: 4096}, catalog([binding])), /unavailable/);
+});

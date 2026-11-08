@@ -224,7 +224,7 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
         recorded_size = report["envelope"]["map_bytes"]
         resolved_size = binding.get("size_bytes")
         missing_size = (
-            report["engine_profile"] == "h1-performance-beta5-p9818-wasm-v1"
+            report["engine_profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1")
             and type(recorded_size) is int and recorded_size == 0
         )
         if (

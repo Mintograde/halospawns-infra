@@ -311,6 +311,7 @@
       "network_host": "halospawns.h1NetworkHost.v2",
       "client_diagnostics": "halospawns.h1ClientDiagnostics.v1",
       "missing_map_size": "halospawns.h1MissingMapSize.v1",
+      "beta6_missing_map_size": "halospawns.h1MissingMapSize.v1",
       "initial_roster_recovery": "halospawns.h1InitialRosterRecovery.v1",
       "recorded_build": "halospawns.h1RecordedBuild.v1",
       "client_view": "halospawns.h1ClientView.v1",
