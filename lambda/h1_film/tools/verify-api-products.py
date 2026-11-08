@@ -31,6 +31,19 @@ def main():
     from halospawns_api.services.replay_ingest import _spatial_events_from_game_meta
     from halospawns_api.services.h1film_ingest import normalize_h1film_ingest
     from halospawns_api.h1film_contract import require_profile
+    from halospawns_api.config import ReplayViewerArtifactSettings
+    from halospawns_api.services.replay_viewer_artifacts import validated_pending_viewer_artifact
+
+    def validate_artifact(request):
+        manifest = request.viewer_artifact
+        pending = validated_pending_viewer_artifact(
+            upload_id=request.upload_id, manifest=manifest, h1film=request.h1film,
+            settings=ReplayViewerArtifactSettings(
+                bucket=manifest.s3_bucket, prefix="replays/derived/viewer/", serving_mode="legacy"
+            ),
+        )
+        assert pending.s3_key == manifest.s3_key
+        assert pending.sha256 == manifest.sha256
 
     def validate_job(path):
         job = H1FilmJob.model_validate_json(path.read_text(encoding="utf-8"))
@@ -54,6 +67,7 @@ def main():
     payload = json.loads(args.finalization.read_text(encoding="utf-8"))
     request = ReplayIngestRequest.model_validate(payload)
     request = normalize_h1film_ingest(request)
+    validate_artifact(request)
     assert ReplayIngestRequest.model_validate_json(request.model_dump_json(by_alias=True)).model_dump() == request.model_dump()
     failure_path = args.finalization.with_name("failure-status.json")
     if failure_path.exists():
@@ -76,6 +90,7 @@ def main():
         path = args.finalization.with_name(f"{mode}-completion.json")
         if path.exists():
             other = model.model_validate_json(path.read_text(encoding="utf-8"))
+            validate_artifact(other)
             if mode == "full-reparse":
                 other = normalize_h1film_ingest(other)
                 assert other.facts == request.facts
@@ -118,6 +133,7 @@ def main():
         "participants": len(participants),
         "native_analytics": request.metadata.get("native_analytics"),
         "settings_verified": settings_document is not None,
+        "artifact_storage_scope_verified": True,
         "network_host": request.h1film.network_host.model_dump() if request.h1film.network_host else None,
         "host_slots": [player.slot_index for player in request.participants if player.metadata.get("is_host")],
         "host_style": request.facts.game.get("game.host_style") if request.facts else None,

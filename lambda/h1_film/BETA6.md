@@ -1,5 +1,49 @@
 # Beta 6.1
 
+## Missing recorded map size
+
+The November 8 upload failures exposed nineteen recognized Beta 6 host films
+with a zero recorded map-cache size. Inspection succeeded, but the Python
+intake guard allowed this only for Beta 5 and rejected the films before prepare
+or simulation. The converter, analytics adapter and API evidence schema had
+the same Beta 5-only restriction.
+
+Beta 6 now uses the existing `halospawns.h1MissingMapSize.v1` evidence marker.
+The original zero remains frozen in the film evidence; the separately approved
+map binding retains its positive measured size, SHA-256 and S3 version.
+Resolution still requires one exact profile/scenario approval. Ambiguous maps,
+unreviewed profiles, missing markers, nonzero mismatches and changed map bytes
+remain rejected. Simulation and recorded-hash verification are unchanged.
+
+The additive release capability
+`beta6_missing_map_size: halospawns.h1MissingMapSize.v1` fences registration
+and activation against older API readers. Retain the compatible worker and API
+when rolling back policy; all existing engine/exporter/recipe pins remain.
+This correction requires no database migration. See `DEPLOYMENT.md` for the
+release and scoped recovery outcome.
+
+Some embedded clients also export an initial roster different from their film
+header. The encoder still rejects that world. For exporter 16 or later, only
+this exact roster rejection on an embedded Beta 6 client permits one bounded
+verification-only replay, with output discarded and the same source, map,
+engine and original deadline. Only a cleanly exited, complete simulation with
+the existing source-bound desync evidence can mark the client unavailable.
+A clean verdict, crash, timeout, incomplete evidence or other encoder error
+still rejects conversion. Hosts and the older strict recipes retain their
+existing behavior. The supplied Chillout client independently reproduces in
+native and WASM: first divergence at update 5,180, 11 seed mismatches and
+317 of 616 hash mismatches, with 432,199 network applications and 135 refusals.
+
+Live completion also exposed historical object-name compatibility: workers
+retain the `viewer-delta.v1.hsrv` suffix for match viewers 7/8. API 230 accepts
+that exact name alongside the container-version suffix only for the registered
+match tuples. Typed format/version, all contract hashes, upload/generation scope
+and content hash remain mandatory. The release checker now validates storage
+scope as well as schemas and analytics builders. Existing objects and saved
+completion manifests are preserved unchanged.
+
+## Compression research
+
 Offline compression research is available in
 [`tools/match-size-poc/README.md`](tools/match-size-poc/README.md).
 The lossless prototype reduces three complete multiplayer exports by 54–59%

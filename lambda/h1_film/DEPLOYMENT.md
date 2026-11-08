@@ -1,5 +1,110 @@
 # H1 film Lambda integration
 
+## Beta 6 missing-map-size recovery (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261108-r4**, policy revision **14**, is
+active with API **live=230**, source `4676153ba789bc1f913416d8c96755f226f289ff`.
+API 229 (`357cd76b`) first deployed the missing-map-size evidence/capability fix;
+API 230 adds the completion filename compatibility discovered during recovery.
+The worker was built from committed `440932b` in the isolated checkout
+`.build/missing-size-release-r4`. Image:
+`sha256:45b1b2ed922dc87280eb2d6dd8469a7911379cfa469808dd5af043d58014808e`.
+Registry digest:
+`357649101c6adb339d0533eb8f7386b1b77cbbbdf2a938e2b67b54d130cef1b0`.
+Five profiles/twenty exporters and every old recipe remain; new Beta 6 attempts
+still use **17/4/8**, `halospawns.h1MatchReplay.v3`, and `H1MV0003`.
+
+All nineteen supplied host films recorded a zero map-cache size. Intake,
+conversion, analytics and API evidence validation previously permitted that
+only for Beta 5. The reviewed Beta 6 profile now uses the existing
+`halospawns.h1MissingMapSize.v1` marker, preserving the original zero alongside
+the unique approved map's measured size, hash and source version. An additive
+`beta6_missing_map_size` release capability requires a compatible API before
+activation. Ambiguous or unapproved maps and mismatched bytes still reject.
+No database migration or engine binary change is needed.
+
+Packaged validation exposed an additional embedded-client roster rejection
+that stopped simulation before a complete desync verdict. The encoder remains
+strict. Only that exact rejection on an embedded Beta 6 client with exporter
+16 or later permits a verification-only replay using the same source, map,
+engine and original deadline. Output is discarded. Only completed, bounded,
+source-bound desync evidence can mark the client unavailable; other failures
+still reject conversion. Hosts and older strict recipes are unchanged.
+Native and WASM independently reproduce the supplied Chillout client's same
+11 seed mismatches and 317/616 hash mismatches, first divergence at update
+5,180. See [BETA6.md](BETA6.md) for the evidence and rollback constraints.
+
+Validation passed: **81 Node tests, 101 local/packaged worker tests, 44 packaged
+cases/132 exact API 229 schema/pure-builder callbacks**, failure/receipt checks and the retained
+Beta 5 client flow. All **75 viewer artifacts across the 25 retained cases are
+byte-identical** to r2. The nineteen affected cases verify all hosts and 46
+embedded clients; ten desynchronized client worlds remain explicitly
+unavailable with their original diagnostics, inputs and clocks preserved.
+API 229 validation passed **2,009 unit tests** (six skips), Ruff, six isolated
+PostgreSQL missing-size checks, and Linux native build/test/release CI run
+`42443403386`.
+
+Live recovery exposed a third issue after successful simulation: published
+workers retain `viewer-delta.v1.hsrv` in viewer-7/8 object names, while the API
+expected a suffix matching container 2/3. API 230 accepts the exact historical
+name only for registered 7/v2/2 and 8/v3/3 match tuples, retaining scope, hash,
+format and completion-proof checks. Objects and immutable manifests remain
+unchanged. The expanded release checker now runs storage validation in all
+three modes; it reproduces the original rejection and accepts the correction.
+API 230 passes **2,015 unit tests** (six skips), Ruff, and Linux native release
+CI `42448954682`. All **44 cases/132 callbacks** and the retained Beta 5 client
+pass the exact API 230 ZIP, including the added storage-scope validation.
+
+The guarded promotion changed only the H1 Lambda image and producer digest
+(0/1/0), verified live engines/registry, and activated policy 14. The separately
+guarded API state refreshes changed only version output 228 to 229 to 230. Before
+recovery, read-only comparison preserved all 95 conversions, 311 receipts,
+232 H1 attempts, 290 map approvals and operational settings. API health is
+200, and both queues were empty before the scoped replay.
+
+The user explicitly authorized requeueing these nineteen uploads. Their
+original S3 versions were retained and hashed byte-for-byte against the supplied
+local files. Each failed ticket had no conversion or completion. After checking
+the installed image, API version, policy and source pins, the original S3 event
+was republished once through the existing SNS/SQS intake path, with an audit
+of every message ID. All nineteen simulations produced durable artifacts and
+completion manifests. After API 230, the frozen initial jobs were synchronously
+invoked through the deployed worker to replay those saved completions and drain
+their reconciliation events; simulation and artifact writes were not repeated.
+
+**All nineteen uploads are processed with nineteen selected artifacts**, yielding
+**65 playable worlds and ten explicitly unavailable clients**. Each selected
+artifact matches its immutable completion manifest and exact S3 version.
+All client/diagnostic entry hashes and host chunk indexes match the packaged
+outputs; the host manifest differs only in its real upload ID, so whole-file
+hashes appropriately differ from the synthetic offline upload fixture.
+The original 95 conversions/311 receipts are unchanged, with totals now
+**114 conversions/330 receipts**. All **232 H1 attempts and 290 map approvals**,
+operational settings, source versions and frozen recipe pins are preserved.
+
+API health is 200 and the DLQ is empty. The processing queue has zero visible
+or delayed messages; **nineteen original deliveries remain in flight** under
+the unchanged 5,400-second visibility timeout, awaiting automatic idempotent
+receipt acknowledgement. Upload finalization is already complete. Do not
+replace their attempts, purge the queue or repin them. The complete six-component
+dev postplan is **no-op**, including API output 230. No frontend deployment or
+prod action was performed.
+
+Candidate `20261108-r3` failed the packaged roster case and was never installed
+or activated. Its immutable ECR image is retained. Evidence is under
+`.build/missing-size-deploy/`; the final corpus is
+`.build/missing-size-release-r4/.build/h1-contracts/20261108-r4-a1c007d1116e4a87922abb28cb9a8734/`.
+Guarded promotion evidence is under
+`.build/h1-promotions/20261108-044122-32fe91698d144d7986926147aef6482f/`.
+`requeue-audit.json` and `completion-retry-audit.json` record the scoped recovery;
+`manifest-verification.json`, `recovery-verification.json`, `after.json` and
+`operational-verification.json` record its outcome. Expanded API 230 checks are
+under `.build/missing-size-deploy/api230-check/`, with the final no-op plan in
+`final-postplan.log`.
+Publication used `scripts/publish-h1-film.ps1 -Tag 20261108-r4`, followed by
+`atmos workflow promote-dev --file h1-film`. Keep all compatible readers,
+capabilities, migrations, source versions and recipe pins on rollback.
+
 ## Lossless compact Beta 6 default deployed (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261108-r2**, policy revision **13**, is

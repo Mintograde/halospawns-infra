@@ -9,6 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$CatalogPath = (Resolve-Path -LiteralPath $CatalogPath).Path
 New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
 $root = (Resolve-Path -LiteralPath $OutputPath).Path
 function Invoke-Aws {
