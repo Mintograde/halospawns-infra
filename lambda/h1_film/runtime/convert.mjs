@@ -5,6 +5,7 @@ import { closeSync, openSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { devNull } from 'node:os';
 import { adapterFor, readEnvelope } from './film.mjs';
 import { resolveMap, selectProfile, selectExporter, validateRegistry, validateExporters } from './profiles.mjs';
 import { inspectEngine, resolveEngine, sha256 } from './engine-store.mjs';
@@ -12,7 +13,7 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
-import {ClientDesync,completedClientDesync} from './client-desync.mjs';
+import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
 import {inspectMatchFilm} from './match-film.mjs';
 
 export async function convertFilm(options) {
@@ -190,7 +191,7 @@ export async function convertFilm(options) {
       ...engineHashes, encoder_sha256: await sha256(values.encoder), node: process.version } };
   const kill = () => { for (const child of children) if (child.exitCode === null) child.kill('SIGKILL'); };
   const timer = setTimeout(() => { expired = true; kill(); }, timeout);
-  let monitor, monitorDone;
+  let monitor, monitorDone, engineArgs;
   const interrupted = () => { expired = true; kill(); };
   process.on('SIGINT', interrupted);
   process.on('SIGTERM', interrupted);
@@ -220,9 +221,10 @@ export async function convertFilm(options) {
       `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs', import.meta.url))}`,
       `--allow-fs-write=${work}`, `--allow-fs-write=${environment.H1_EXPORT_METRICS}`,
       '--import', new URL('./engine-permissions.mjs', import.meta.url).href] : [];
-    const engine = spawn(process.execPath, [...permissions, '--max-old-space-size=4096',
+    engineArgs = [...permissions, '--max-old-space-size=4096',
       '--import', new URL('./metrics.mjs', import.meta.url).href, values.engine,
-      '--film', playbackFilm, '--deterministic', '--ticks', String(native.envelope.ticks + 10), '--dump', 'NUL'],
+      '--film', playbackFilm, '--deterministic', '--ticks', String(native.envelope.ticks + 10), '--dump', 'NUL'];
+    const engine = spawn(process.execPath, engineArgs,
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });
     const simulated = completion(engine);
     if (process.platform === 'win32' && values['trusted-local']) {
@@ -352,6 +354,33 @@ export async function convertFilm(options) {
       await writeFile(join(stage, 'monitor.stop'), 'failed');
       await writeFile(join(stage, 'monitor.stop.validation'), 'failed');
       await monitorDone;
+    }
+    if (!expired && canVerifyRejectedClient(profile, values, report,
+      await readFile(join(stage, 'encode.log'), 'utf8'))) {
+      // Drain the same engine's export to the null device: never turn a roster
+      // rejection into a playable world, and never infer desync from that error.
+      // The original deadline and signal handlers still bound this extra run.
+      const logPath = join(stage, 'client-verification.log');
+      const logFd = openSync(logPath, 'wx'), sink = openSync(devNull, 'w');
+      const verificationEnv = {...environment};
+      verificationEnv.H1_EXPORT_METRICS = join(work, 'client-verification-metrics.json');
+      try {
+        assert.ok(!expired, 'Client verification timed out or was interrupted');
+        const child = spawn(process.execPath, engineArgs, {cwd: work,
+          env: verificationEnv, windowsHide: true, stdio: ['ignore', logFd, logFd, sink],
+          timeout: Math.max(1, Math.floor(timeout - (performance.now() - started))),
+          killSignal: 'SIGKILL'});
+        report.client_verification_exit = await completion(child);
+      } finally { closeSync(logFd); closeSync(sink); }
+      assert.ok(!expired, 'Client verification timed out or was interrupted');
+      assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Client source changed');
+      assert.equal(await sha256(join(work, 'maps', native.envelope.map + '.map')), mapHash, 'Client map changed');
+      const failure = report.client_verification_exit.code === 0
+        && completedClientDesync(await readFile(logPath, 'utf8'), native.envelope);
+      if (failure) {
+        report.client_verification_failure = failure;
+        error = new ClientDesync(failure, error);
+      }
     }
     report.status = 'failed';
     report.error = error.message;

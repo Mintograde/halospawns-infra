@@ -7,6 +7,16 @@ export class ClientDesync extends Error {
   }
 }
 
+// An encoder roster rejection is not itself desync evidence. Only these
+// embedded clients may run again without producing a world to obtain a full
+// playback verdict. Hosts, old strict recipes and other encoder errors fail.
+export function canVerifyRejectedClient(profile, values, report, encoderLog) {
+  return profile.port === 'beta6' && profile.exporter_revision >= 16
+    && values['embedded-match'] === true && values['client-view'] === true
+    && report.encoder_exit?.code === 1
+    && encoderLog.trim() === 'h1-film-encoder: film roster does not match engine export';
+}
+
 export function completedClientDesync(log, envelope) {
   if (/NOT ONE CONTROL PUSH|RECORDED BY ANOTHER BUILD|the gametype is resolved by NAME/.test(log)) return null;
   const played = [...log.matchAll(/\[film\] played (\d+) ticks? of/g)].at(-1);
