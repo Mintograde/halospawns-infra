@@ -1,5 +1,83 @@
 # H1 film Lambda integration
 
+## Strict three-shot gameplay metrics (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261108-r6**, policy **16**, is active
+with API **live=233**, source `52743338fc10eed616d8c83be306f1dd95ae6514`.
+API 232 (`cc07a08`) introduced the metrics contract; 233 also brings the bulk
+reparse resolver into line with reviewed Beta 6 missing-map-size intake.
+No migration is required. New Beta 5 attempts use **19/5/5**; Beta 6 uses
+**19/5/9**. All five profiles, 23 exporter entries and every old recipe remain.
+
+The immutable worker was built from `94316f4` in `.build/three-shot-release`:
+`sha256:eb36abcdab705233a38aab7b501eacf011453e50752ddd6e424230f41c503da4`.
+The mounted acceptance harness was updated by `201b669` to admit analytics 5;
+the published image was not changed. Required capability is
+`gameplay_metrics: halospawns.h1GameplayMetrics.v1`. See
+[GAMEPLAY_METRICS.md](GAMEPLAY_METRICS.md) for the definition and coverage rules.
+Intervening misses disqualify kills; unresolved shot identities remain unknown.
+
+Validation includes 103 Node, 106 packaged worker and 97 Rust encoder tests
+(one ignored), native/WASM byte parity for all 86,715 Beta 6 Octagon ticks/723
+hashes and 39,120 Beta 5 Dread ticks/326 hashes, all 13 packaged replay cases,
+39 exact API 233 callbacks, failure/receipt/storage-scope checks and the retained
+Beta 5 client flow. Five older viewer artifacts and all 540 logical payload
+entries across seven retained Beta 6 cases are unchanged, as are existing
+combat and game facts. Native Linux API CI `42510867283` passes 2,082 tests
+(295 skips); 85 focused local tests include isolated PostgreSQL verification of
+missing-size resolver evidence, exact sizes and ambiguity rejection.
+
+Frontend changes remain local/uncommitted: versioned metric readers, per-player
+counts/coverage and links to counted kills. Full frontend tests pass (1,784
+viewer, 794 site and 35 shared tests, one optional viewer fixture skip), as do
+the site and standalone builds. Real Chrome verifies Beta 6 counts 9/11/0/0
+and the example seek to source tick 39030; Beta 5 verifies .minto's count of 1
+and its seek to tick 7955. Links use 120 Hz source ticks with a two-second lead.
+Progressive completion now preserves the requested seek through final view
+setup, covered by regressions for both linked and embedded client views.
+Original user viewer work is preserved.
+
+Guarded promotion changed only the H1 image/producer digest; first live health
+passed. API output-only refreshes 231 to 232 to 233 are applied. The preactivation
+read-only guard preserved all 140 original conversions, 355 receipts, 232 H1
+attempts and 290 map approvals, along with limits, concurrency and queue settings.
+The user-authorized reparse selection is 73 distinct games (27 Beta 5, 46 Beta 6)
+in bounded audited batches, starting with Octagon replay
+`018dfe5f-82d7-412e-9e26-aab7239abb5a` / game
+`f43ff10d-e6b0-44ae-a84c-c0a31d1ae6a9`. All **73 attempts succeeded** across
+24 audited batches; every result is the currently selected viewer and current
+statistics generation. No failed attempt, duplicate dispatch or forced replay.
+
+The backfill yields **381 verified kills** (72 Beta 5, 309 Beta 6). There are
+198 participant totals with complete coverage and 178 explicitly partial
+totals; verified examples remain available for the latter. Beta 5 contributes
+58 complete/137 partial participant totals; Beta 6 contributes 140/41.
+Existing native/combat values, graph and occupancy hashes are unchanged.
+All 27 Beta 5 viewer files are byte-identical. Every retained Beta 6 track's
+world hash and original evidence field is unchanged. Nine scoreboard hashes
+change solely because native numeric JSON now spells whole numbers as integers
+(for example `0` instead of `0.0`). Restoring only the old native numeric
+representation reproduces each exact original PostgreSQL scoreboard hash,
+proving that names, teams, winners and all counters remain unchanged.
+
+The final read-only guard preserves all original conversions, receipts,
+attempts, approvals and operational settings. Totals are **140 conversions,
+428 receipts, 305 H1 attempts and 290 approvals**. API health is 200; worker
+image/provenance match; processing queue and DLQ are empty. The existing
+90-minute visibility timeout and concurrency remain unchanged.
+
+The canary's selected artifact is `96e39b4c-8596-4be7-bc25-6f343c97fa1b`,
+73,362,156 bytes, SHA-256
+`a5ba012c3e96fa9f48e3aed3b7bc070b36aaaafd5b5bf28dd7d60267434b1991`.
+Version-pinned CDN 206/range/CORS and full-file hash checks pass. All six dev
+component postplans are no-op, including the API version-output refresh.
+
+Evidence: `.build/three-shot/`, isolated release corpus
+`.build/three-shot-release/.build/h1-contracts/20261108-r6-962b34865d0749acb7e78849f292b847/`,
+and promotion `.build/h1-promotions/20261108-184036-64f2de8213ba4f6a9fadfb9233f3c299/`.
+Retain compatible native-v3/gameplay readers, capabilities, binaries, receipts
+and recipes on rollback. No frontend or prod deployment.
+
 ## Client roster availability and recovery (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261108-r5**, policy revision **15**, is
