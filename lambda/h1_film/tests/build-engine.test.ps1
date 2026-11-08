@@ -110,6 +110,21 @@ try {
     if (-not $recovery.roster_recovery -or $recoveryConfigure -notcontains '-DH1_ROSTER_RECOVERY=ON') {
         throw 'Roster recovery lost its explicit build pin.'
     }
+    $h1BuildTestState.candidate = Join-Path $root 'damage-attribution-v2'
+    & $builder -Source $source -Port beta5 -Combat -DamageAttribution -DamageAttributionV2 -BuildDirectory $h1BuildTestState.candidate -Jobs 1
+    $damageV2 = Get-Content -LiteralPath (Join-Path $h1BuildTestState.candidate 'build-candidate.json') -Raw | ConvertFrom-Json
+    $damageV2Configure = @($h1BuildTestState.commands | Where-Object { $_ -contains 'emcmake' })[-1]
+    if (-not $damageV2.damage_attribution_v2 -or $damageV2Configure -notcontains '-DH1_DAMAGE_ATTRIBUTION_V2=ON') {
+        throw 'Damage graph v2 lost its explicit build pin.'
+    }
+    foreach ($invalidPort in @('beta4', 'beta5')) {
+        try {
+            & $builder -Source $source -Port $invalidPort -DamageAttributionV2 -BuildDirectory (Join-Path $root 'invalid-damage-v2')
+            throw 'Invalid damage graph v2 build was accepted.'
+        } catch {
+            if ($_.Exception.Message -notlike '*requires beta5 or beta6 damage attribution*') { throw }
+        }
+    }
     foreach ($invalidPort in @('beta3', 'beta4', 'beta5')) {
         try {
             & $builder -Source $source -Port $invalidPort -RosterRecovery -BuildDirectory (Join-Path $root 'invalid-recovery')

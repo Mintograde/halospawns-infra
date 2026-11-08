@@ -57,8 +57,14 @@ raw evidence stream.
 
 ## Recipes and rollout
 
-- Beta 5: exporter 19 / analytics 5 / viewer 5.
-- Beta 6: exporter 19 / analytics 5 / viewer 9.
+Exporter 20 adds a gated damage-graph correction for Beta 5/6. Effect parts
+declared as decals are excluded before validating their handles. A stale
+grenade-scorch decal identifier in some maps previously invalidated every remote
+weapon mapping. All other references retain the existing bounds, identity,
+ambiguity and traversal checks. Exporter 19 and all earlier binaries remain.
+
+- Beta 5: exporter 20 / analytics 5 / viewer 5 (19 retained).
+- Beta 6: exporter 20 / analytics 5 / viewer 9 (19 retained).
 - Required capability: `gameplay_metrics: halospawns.h1GameplayMetrics.v1`.
 
 Every old binary and recipe remains. New full reparses create new immutable
@@ -66,3 +72,41 @@ generations; old attempts, receipts and artifacts stay pinned. The API needs no
 database migration. Keep native v3 and gameplay readers on policy rollback.
 Frontend changes remain local. Deployment and reparse evidence belongs in
 `DEPLOYMENT.md`.
+
+## A verified host replay can still have incomplete shot evidence
+
+Game `1ac30833-c145-4f66-b4ed-b53df5b79993` is a concrete example. Its exact
+retained source, SHA-256
+`0b0f59199ea62e9d29b437821d49afbc008df4e4950f169ff0244f2322466bd9`,
+completes 64,992 ticks and all 542 verification hashes. It contains original
+client accounts for slots 0, 1 and 2, but none for Seizen (slot 3). Scanning the
+146 supplied local films found no additional account for this match.
+
+The network model applies accepted client hit reports to the host world. The
+film records those damage effects and the inputs as consumed by the host;
+those inputs can be merged or repeated. A host projectile is not the original
+client projectile. This match demonstrates the distinction directly: host
+pistol discharge counts for slots 0/1/2 are 144/148/91, while their original
+client pull logs contain 147/152/92. Complete host verification therefore does
+not establish the original sequence of misses.
+
+Seizen has 14 evaluated kills, ten known not to qualify and four unresolved
+encounters. The unresolved lethal source ticks are 20923 (2:54.358), 51013
+(7:05.108), 55046 (7:38.717) and 61359 (8:31.325). The first has three accepted
+pistol hits from full normal vitality, but no original pull sequence to exclude
+intervening misses. This is not a verified count of one. The other encounters
+include extra damage or host firing observations, also without exact client
+discharge identities. The complete total must remain null.
+
+For exhaustive strict counts, recordings need uncapped original firing/pull
+logs for every participant, including misses, with stable joins to accepted
+damage reports. A playable client world is not required; the original account
+can remain useful even when that client's predicted simulation diverges.
+
+The separate exporter-20 attribution defect was reproduced with complete
+client accounts in games `26800ba4-a8bf-41c3-ad63-c4627433106d`,
+`bbfec5b6-684b-4dab-a6c9-e986fa7f2504` and
+`42355370-aa4a-4143-818d-20cbbf0d7dce`. Their network DEAL/verdict joins are
+exact, but the stale visual reference made the damage weapon unknown. That
+fix does not recover Seizen's absent client account. Private reproduction,
+source hashes and encounter evidence are in `.build/three-shot-investigation/`.

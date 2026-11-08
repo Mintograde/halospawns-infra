@@ -62,8 +62,11 @@ static void damage_fixture(void)
     damage_effect.events = (tag_block){1, &damage_event, NULL};
     damage_event.parts = (tag_block){3, damage_parts, NULL};
     damage_parts[0].reference.index = damage_handle(13);
+    damage_parts[0].reference.group_tag = HS_DAMAGE_TAG;
     damage_parts[1].reference.index = damage_handle(6);
+    damage_parts[1].reference.group_tag = HS_EFFECT_TAG;
     damage_parts[2].reference.index = damage_handle(14);
+    damage_parts[2].reference.group_tag = HS_DAMAGE_TAG;
     damage_projectiles[2].projectile.detonation_effect.index = damage_handle(6);
     grenade.projectile.index = damage_handle(5);
     globals.grenades = (tag_block){1, &grenade, NULL};
@@ -141,6 +144,22 @@ int main(void)
     assert(hs_damage_weapon(damage_handle(10)) == -1);
     damage_fixture();
     damage_tags_header.tag_count = 65537;
+    assert(hs_damage_weapon(damage_handle(10)) == -1);
+    /* A visual decal with a stale runtime handle cannot affect damage paths.
+     * Retained exporters still reproduce their original fail-closed behavior. */
+    damage_fixture();
+    damage_parts[2].reference.group_tag = 0x64656361;
+    damage_tags[14].group_tag = 0x64656361;
+    damage_tags[14].tag_index = 0x3c23d70a;
+#ifdef H1_DAMAGE_ATTRIBUTION_V2
+    assert(hs_damage_weapon(damage_handle(10)) >= 0);
+    assert(hs_damage_weapon(damage_handle(13)) >= 0);
+    damage_parts[2].reference.group_tag = 0x6f626a65; /* Generic object: may spawn a projectile. */
+    damage_reset_index();
+    assert(hs_damage_weapon(damage_handle(10)) == -1);
+    damage_parts[2].reference.group_tag = HS_DAMAGE_TAG;
+    damage_reset_index();
+#endif
     assert(hs_damage_weapon(damage_handle(10)) == -1);
     puts("damage attribution: remote vitality/deaths, tag graphs, ambiguity, cycles, bounds and shot isolation passed");
     return 0;

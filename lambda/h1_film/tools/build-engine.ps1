@@ -5,6 +5,7 @@ param(
     [switch]$Combat,
     [switch]$NetworkReplayFixes,
     [switch]$DamageAttribution,
+    [switch]$DamageAttributionV2,
     [switch]$FiniteWorldObjects,
     [switch]$RosterRecovery,
     [switch]$ClientView,
@@ -13,6 +14,7 @@ param(
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
+if ($DamageAttributionV2 -and ($Port -notin @('beta5', 'beta6') -or -not $DamageAttribution)) { throw 'Damage graph v2 requires beta5 or beta6 damage attribution.' }
 if ($ClientView -and ($Port -notin @('beta5', 'beta6') -or -not $NetworkReplayFixes)) { throw 'Client view requires beta5 network replay fixes.' }
 if ($RosterRecovery -and ($Port -ne 'beta5' -or -not $NetworkReplayFixes)) { throw 'Roster recovery requires beta5 network replay fixes.' }
 if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5', 'beta6')) { throw 'Finite world object filtering requires beta4 or beta5.' }
@@ -31,6 +33,7 @@ $sourceStage = "/cache/sources/$($inputs.source.sha256)"
 $variant = if ($Combat) { 'combat-v1' } else { 'standard' }
 if ($NetworkReplayFixes) { $variant += '-network-replay-v1' }
 if ($DamageAttribution) { $variant += '-damage-attribution-v1' }
+if ($DamageAttributionV2) { $variant += '-damage-attribution-v2' }
 if ($FiniteWorldObjects) { $variant += '-finite-world-objects-v1' }
 if ($RosterRecovery) { $variant += '-roster-recovery-v1' }
 if ($ClientView) { $variant += '-client-view-v1' }
@@ -54,6 +57,7 @@ $revisionArguments = if ($inputs.source.git_commit) { @("-DH1_SOURCE_COMMIT=$($i
 $combatFlag = if ($Combat) { 'ON' } else { 'OFF' }
 [string[]]$networkReplayArguments = if ($NetworkReplayFixes) { @('-DH1_NETWORK_REPLAY_FIXES=ON') } else { @() }
 [string[]]$damageArguments = if ($DamageAttribution) { @('-DH1_DAMAGE_ATTRIBUTION=ON') } else { @() }
+if ($DamageAttributionV2) { $damageArguments += '-DH1_DAMAGE_ATTRIBUTION_V2=ON' }
 [string[]]$finiteArguments = if ($FiniteWorldObjects) { @('-DH1_FINITE_WORLD_OBJECTS=ON') } else { @() }
 [string[]]$rosterArguments = if ($RosterRecovery) { @('-DH1_ROSTER_RECOVERY=ON') } else { @() }
 [string[]]$clientViewArguments = if ($ClientView) { @('-DH1_CLIENT_VIEW=ON') } else { @() }
@@ -77,6 +81,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     combat_contract = if ($Combat) { 'halospawns.h1CombatSource.v1' } else { $null }
     network_replay_fixes = [bool]$NetworkReplayFixes
     damage_attribution = [bool]$DamageAttribution
+    damage_attribution_v2 = [bool]$DamageAttributionV2
     finite_world_objects = [bool]$FiniteWorldObjects
     roster_recovery = [bool]$RosterRecovery
     client_view = [bool]$ClientView

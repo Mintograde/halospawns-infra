@@ -65,6 +65,12 @@ static void hs_damage_walk(int handle, int definition, int category, int depth)
             int part;
             for (part = 0; part < hs_damage_block(&event->parts); ++part) {
                 const effect_part_definition *entry = &((const effect_part_definition *)event->parts.address)[part];
+#ifdef H1_DAMAGE_ATTRIBUTION_V2
+                /* Decals cannot lead to damage. Some maps retain a stale runtime
+                 * handle for a grenade scorch mark. Do not let that visual-only
+                 * reference invalidate the graph; keep all other checks intact. */
+                if (entry->reference.group_tag == 0x64656361u /* deca */) continue;
+#endif
                 hs_damage_walk(entry->reference.index, definition, category, depth + 1);
             }
         }
