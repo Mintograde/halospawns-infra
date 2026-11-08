@@ -9,7 +9,7 @@ const manifest=r=>createReleaseManifest(r,'20261101-r1','sha256:'+'a'.repeat(64)
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,19);
+  assert.equal(value.defaults[profile].exporter_revision,20);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -27,10 +27,10 @@ test('historical manifests do not acquire a client recipe field',()=>{
   assert.equal(Object.hasOwn(manifest(old),'client_view_recipes'),false);
 });
 
-test('roster availability default retains the older Beta 6 recipes and exact simulation binaries',()=>{
+test('gameplay attribution default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:19,analytics_revision:5,viewer_revision:9,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:20,analytics_revision:5,viewer_revision:9,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});

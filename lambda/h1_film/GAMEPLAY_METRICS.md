@@ -118,3 +118,9 @@ client accounts in games `26800ba4-a8bf-41c3-ad63-c4627433106d`,
 exact, but the stale visual reference made the damage weapon unknown. That
 fix does not recover Seizen's absent client account. Private reproduction,
 source hashes and encounter evidence are in `.build/three-shot-investigation/`.
+
+The follow-up [host instrumentation study](HOST_SHOT_EVALUATION.md) covers 90
+distinct Beta 5/6 matches. Host timing estimates recovered 498/510 known kills;
+requiring host collisions recovered only 164/510. Neither can exclude a missing
+original client miss. The offline probe/evaluation tooling and ambiguity
+regressions are retained; the strict metric and deployed engines are unchanged.

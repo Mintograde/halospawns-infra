@@ -48,6 +48,26 @@ test('client copies without a host ledger preserve exact identity and misses',()
   assert.equal(result(fixture({ledger:false})).value,1);
   assert.equal(result(fixture({ledger:false,miss:true})).value,0);
 });
+test('identical host shots and accepted damage cannot exclude a missing client miss',()=>{
+  const clean=fixture(), missed=fixture({miss:true});
+  for(const f of [clean,missed]) {
+    f.events=f.events.flatMap(e=>e.kind===3?[{kind:0,source_tick:e.source_tick,
+      clock:e.clock,slot:0,physical:2,weapon,weapon_tag:tag,shot:e.deal},e]:[e]);
+  }
+  // Input merging can omit an original client discharge in the host simulation.
+  // The same three host fires and accepted hits admit two different exact counts.
+  assert.deepEqual(clean.events,missed.events);
+  assert.deepEqual(clean.source.ledger,missed.source.ledger);
+  assert.equal(result(clean).value,1);
+  assert.equal(result(missed).value,0);
+  for(const f of [clean,missed]) {
+    f.source.accounts=[];
+    const player=result(f);
+    assert.equal(player.value,null);
+    assert.equal(player.observed_count,0);
+    assert.equal(player.unknown_kills,1);
+  }
+});
 test('ordered binding requires the whole DEAL/verdict bijection, including non-damaging calls',()=>{
   const f=fixture();f.events.unshift({...f.events[0],deal:100});
   assert.equal(result(f).value,null);
