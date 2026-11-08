@@ -80,7 +80,8 @@ retained source, SHA-256
 `0b0f59199ea62e9d29b437821d49afbc008df4e4950f169ff0244f2322466bd9`,
 completes 64,992 ticks and all 542 verification hashes. It contains original
 client accounts for slots 0, 1 and 2, but none for Seizen (slot 3). Scanning the
-146 supplied local films found no additional account for this match.
+146 supplied local films and the version-pinned headers of all 61 retained Beta 6
+dev conversion sources found no additional account for this match.
 
 The network model applies accepted client hit reports to the host world. The
 film records those damage effects and the inputs as consumed by the host;
@@ -89,6 +90,13 @@ client projectile. This match demonstrates the distinction directly: host
 pistol discharge counts for slots 0/1/2 are 144/148/91, while their original
 client pull logs contain 147/152/92. Complete host verification therefore does
 not establish the original sequence of misses.
+
+This follows the pinned Beta 6 network model (`86c52285`):
+`src/host/blampc_net_universal_damage.c` documents that clients report their own
+hits and the host's copies of their projectiles deal no damage. Its report
+path covers host objects and shielded devices, not every shot into air or the
+map. `src/host/blampc_film.c` records accepted `DEAL` damage calls; their order
+does not supply the missing original discharge sequence.
 
 Seizen has 14 evaluated kills, ten known not to qualify and four unresolved
 encounters. The unresolved lethal source ticks are 20923 (2:54.358), 51013

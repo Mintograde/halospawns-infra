@@ -1,5 +1,109 @@
 # H1 film Lambda integration
 
+## Three-shot coverage investigation and damage attribution (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261108-r7**, policy **17**, is active
+with unchanged API **live=233** (`5274333`). No API release or migration is
+needed. New Beta 5 attempts use **20/5/5**; Beta 6 uses **20/5/9**. All five
+profiles, 25 exporter entries and every old recipe remain. The independently
+versioned three-shot definition is unchanged: intervening misses disqualify.
+
+The immutable image was built from committed `8888192` in isolated checkout
+`.build/three-shot-attribution-release`, using the final engine store
+`.build/three-shot-investigation/engines-final`:
+`sha256:eb4380bcfd38b68c91d0eaf0bd4947a9d61d4e628493f1da163e10d8b42aed6d`.
+The gated C change excludes only effect parts declared as visual decals before
+validating their handles. A stale grenade-scorch decal handle otherwise caused
+the damage graph to reject every remote weapon attribution on affected maps.
+All other reference, identity and ambiguity checks remain. Exporter 19 retains
+its original behavior and exact binaries.
+
+Validation passes 103 Node and 106 local/packaged worker tests, C regressions
+for both retained and corrected behavior, and build feature/pin tests. Four
+full native/WASM comparisons cover **305,675 ticks and 2,549 hashes** across
+Beta 5 Worthy and Beta 6 Dammy, Hang 'Em High and Downrush. All **21 packaged
+cases/63 exact API 233 callbacks**, failure/receipt/storage-scope checks and
+the retained Beta 5 client flow pass. The 13 retained corpus cases preserve
+six standalone artifacts and all **540** logical payload entries across seven
+Beta 6 cases. Existing combat values are unchanged except the affected Beta 5
+Dread case: 286 death weapons become known, while shot counts, damage totals,
+death identities, scores and world/evidence bytes remain unchanged.
+
+The guarded apply changed only the H1 worker image and producer digest; first
+live health passed. An initial promotion stopped before apply because the
+Terraform SDK tried to refresh an expired SSO token. The retry used the same
+still-valid AWS CLI role credentials through temporary provider files, checked
+the same dev account/principal and removed those files afterward. Every normal
+compatibility, plan, health and activation guard ran. Post-promotion checks
+preserve all 140 conversions, 428 receipts, 305 H1 attempts and 290 map approvals,
+along with limits, concurrency and queue settings.
+
+The first audited reparse, Dammy game
+`26800ba4-a8bf-41c3-ad63-c4627433106d` / replay
+`71dbce7a-89db-4694-a2dd-e79862148aa6`, succeeds with complete counts **2/2/2/7**.
+It matches the exact packaged source result and resolves 90 death weapons.
+All existing score, graph and occupancy hashes, shot counts, damage totals,
+death identities and original world/evidence fields are unchanged. Stats,
+scoreboard and combat API products agree. Its selected artifact is
+`3978ad18-0d35-4eb3-bf35-259aa2089df6`, 212,726,166 bytes, SHA-256
+`51c8f8064e1ed7b6a7f235279e5531e8ee9b449c03a8b2bbf6da884dbc26c1ef`.
+Version-pinned CDN 206/range/CORS and the full-file hash pass. Real Chrome shows
+all four complete counts and all 13 example links on desktop/mobile, without
+errors or panel overflow. All six dev component postplans are no-op.
+
+All **seven** selected games succeeded in four audited batches, with each new
+viewer/statistics generation selected. Their live combat/gameplay products
+exactly match the packaged results from the same pinned sources. The correction
+recovers **33 verified three-shot kills**, makes **11** more participant totals
+complete and resolves **1,049** death weapons. Five games also lose the API's
+`headshot_kills` unknown marker; every death kind and credited headshot value is
+then known, satisfying the existing API rule. All other unknown markers and
+native fields outside combat/gameplay remain unchanged. Existing known weapon
+and headshot values, shots/hits, damage totals, death identities, scoreboard,
+graph and occupancy hashes, Beta 5 viewer bytes and Beta 6 world/evidence fields
+are preserved. The initial comparison's unknown-marker difference was reviewed
+against the API rule and exact packaged combat before accepting it.
+
+Across the original 73-game selection, totals are now **414 verified kills**
+(86 Beta 5, 328 Beta 6), with **209 complete/167 partial** participant totals.
+All 66 unaffected games retain their exact counts and coverage. Original
+partial recordings and absent client accounts remain explicitly partial.
+
+Final read-only checks preserve every prior row/pin and operational setting.
+Totals are **145 conversions, 435 receipts, 312 H1 attempts and 290 approvals**;
+the processing queue and DLQ are empty and API health is 200. Five concurrent
+Beta 6 initial intakes created conversions at 20:17 UTC, before r7 promotion,
+under r6. They failed with `conversion_failed`; they have no new receipts and
+are outside this seven-game selection. Their frozen rows/pins are preserved.
+The immediate pre-reparse baseline already had 145 conversions; this reparse
+adds exactly seven receipts/attempts and no conversions. Their IDs and observed
+status are retained in `.build/three-shot-investigation/new-conversions.json`
+and `concurrent-upload-statuses.json`; no recovery was attempted for them.
+
+The reported Seizen game `1ac30833-c145-4f66-b4ed-b53df5b79993` remains a
+different case. Its exact source verifies all 64,992 ticks/542 hashes but has
+original client shot accounts only for slots 0/1/2. Seizen's slot 3 has 14
+evaluated kills: ten ruled out and four unresolved. Host inputs can be merged
+or repeated; host simulation cannot reconstruct an absent original client
+miss sequence. All 146 supplied local film headers and version-pinned headers
+of all 61 retained Beta 6 dev sources were searched without another account
+for this match. Exporter 20 preserves this game's exact combat/gameplay result,
+including counts 5/2/1/unknown. See [GAMEPLAY_METRICS.md](GAMEPLAY_METRICS.md)
+for encounter times, network source references and the required recorder data.
+
+Frontend changes remain local/uncommitted. Coverage now reports the unresolved
+kill count explicitly: Seizen shows “0 verified. 4 of 14 kills lack enough shot
+evidence to classify.” The focused component tests and both builds pass. Real
+Chrome verifies the actual Seizen result on desktop and mobile without errors
+or panel overflow. No frontend or prod deployment.
+
+Evidence: `.build/three-shot-investigation/`, packaged corpus
+`.build/three-shot-attribution-release/.build/h1-contracts/20261108-r7-00749571e88f4cfd931063518d70eb12/`,
+and guarded promotion
+`.build/h1-promotions/20261108-203859-1331bdce01644ad094b0c67c4f4e774c/`.
+Retain compatible readers, capabilities, every old binary and recipe, and all
+original artifacts on rollback.
+
 ## Strict three-shot gameplay metrics (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261108-r6**, policy **16**, is active
