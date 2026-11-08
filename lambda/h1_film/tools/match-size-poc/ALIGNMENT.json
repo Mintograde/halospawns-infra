@@ -1,0 +1,137 @@
+{
+  "source_sha256": "acea538a10ae04e8ff8991bab8d24386dce3981ef04beda04a2578068142f32b",
+  "first_frame": 32768,
+  "end_frame_exclusive": 40960,
+  "max_offset": 240,
+  "sample_stride": 4,
+  "pairs": [
+    {
+      "client": "client-1/world",
+      "player": 0,
+      "offset": -5,
+      "count": 839,
+      "total": 1928,
+      "fraction": 0.43516597510373445
+    },
+    {
+      "client": "client-1/world",
+      "player": 1,
+      "offset": -2,
+      "count": 52,
+      "total": 1928,
+      "fraction": 0.026970954356846474
+    },
+    {
+      "client": "client-1/world",
+      "player": 2,
+      "offset": -2,
+      "count": 118,
+      "total": 1928,
+      "fraction": 0.061203319502074686
+    },
+    {
+      "client": "client-1/world",
+      "player": 3,
+      "offset": -2,
+      "count": 15,
+      "total": 1928,
+      "fraction": 0.007780082987551867
+    },
+    {
+      "client": "client-2/world",
+      "player": 0,
+      "offset": 0,
+      "count": 22,
+      "total": 1928,
+      "fraction": 0.011410788381742738
+    },
+    {
+      "client": "client-2/world",
+      "player": 1,
+      "offset": -2,
+      "count": 152,
+      "total": 1928,
+      "fraction": 0.07883817427385892
+    },
+    {
+      "client": "client-2/world",
+      "player": 2,
+      "offset": 0,
+      "count": 118,
+      "total": 1928,
+      "fraction": 0.061203319502074686
+    },
+    {
+      "client": "client-2/world",
+      "player": 3,
+      "offset": 0,
+      "count": 15,
+      "total": 1928,
+      "fraction": 0.007780082987551867
+    },
+    {
+      "client": "client-3/world",
+      "player": 0,
+      "offset": 5,
+      "count": 23,
+      "total": 1928,
+      "fraction": 0.011929460580912862
+    },
+    {
+      "client": "client-3/world",
+      "player": 1,
+      "offset": 1,
+      "count": 51,
+      "total": 1928,
+      "fraction": 0.026452282157676348
+    },
+    {
+      "client": "client-3/world",
+      "player": 2,
+      "offset": -7,
+      "count": 108,
+      "total": 1928,
+      "fraction": 0.056016597510373446
+    },
+    {
+      "client": "client-3/world",
+      "player": 3,
+      "offset": 4,
+      "count": 15,
+      "total": 1928,
+      "fraction": 0.007780082987551867
+    },
+    {
+      "client": "client-4/world",
+      "player": 0,
+      "offset": 1,
+      "count": 22,
+      "total": 1928,
+      "fraction": 0.011410788381742738
+    },
+    {
+      "client": "client-4/world",
+      "player": 1,
+      "offset": 1,
+      "count": 52,
+      "total": 1928,
+      "fraction": 0.026970954356846474
+    },
+    {
+      "client": "client-4/world",
+      "player": 2,
+      "offset": 1,
+      "count": 118,
+      "total": 1928,
+      "fraction": 0.061203319502074686
+    },
+    {
+      "client": "client-4/world",
+      "player": 3,
+      "offset": -5,
+      "count": 13,
+      "total": 1928,
+      "fraction": 0.006742738589211619
+    }
+  ]
+}

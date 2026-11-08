@@ -1,9 +1,55 @@
 # Beta 6.1
 
+Offline compression research is available in
+[`tools/match-size-poc/README.md`](tools/match-size-poc/README.md).
+The lossless prototype reduces three complete multiplayer exports by 54–59%
+with roughly 1-3 seconds of local repacking. The approximately 80% target has
+not been reached. Full byte recovery,
+range checks, shared-pose experiments and processing tradeoffs are documented
+there. The versioned production format below replaces the experimental wrapper.
+
 The immutable profile `h1-performance-beta6-p9839-wasm-v1` pins upstream
 `beta-6.1`, commit `86c52285a8ebe7d107bfafae64abe722b263cedf`. Format 3,
-protocol 9839, 120 Hz; new default recipe exporter 16 / analytics 4 / viewer 7.
+protocol 9839, 120 Hz; new default recipe exporter 17 / analytics 4 / viewer 8.
 All four earlier profiles, engines and recipes remain unchanged.
+
+## Lossless compact match storage
+
+The user authorized making compact storage the standard for Beta 6+ on
+2026-11-08 UTC. Viewer 8 / `halospawns.h1MatchReplay.v3` / `H1MV0003`
+preserves every logical entry byte and hash from viewer 7. Exporter 17 reuses
+exporter 16's exact engine binaries and availability policy. Old 14/4/6,
+15/4/6 and 16/4/7 recipes remain pinned and supported. Future engine profiles
+must register this format explicitly; unknown recorded builds stay rejected.
+
+World entries retain their inner viewer-5 compression, hashes, clocks and
+direct byte ranges. Nonworld source sections use independently hashed 256 KiB
+Zstandard pages, falling back to identity when smaller. Expanded FNET, PAD and
+diagnostic tables are reconstructed from same-track original recorded sections;
+these derived entries consume no additional payload storage. There is no
+cross-client coordinate substitution, tick approximation or further quantization.
+
+Entry offsets address logical bytes; each entry's `storage` descriptor maps
+those bytes to physical blocks or one stored dependency. `logical_size_bytes`
+and the physical container size are validated independently, with a 512 MiB
+limit. Dependencies are acyclic and bound to original track references. The
+shared browser/Node reader verifies physical block hashes and original decoded
+entry/range hashes, bounds source reconstruction to 128 MiB, network blocks to
+16 MiB and its decoded cache to 32 MiB. Browser reconstruction yields and honors
+cancellation. World seeks do not reconstruct diagnostics.
+
+The three supplied multiplayer artifacts shrink by 54.0–58.6%; all 332 original
+entries and 332 reverse cold ranges match byte-for-byte. Local production
+packing takes 1.4–3.5 seconds, independent of simulation/encoding. The API adds
+the compact capability and an additive format/version/profile constraint.
+See `DEPLOYMENT.md` for the actual activation and complete packaged validation.
+Frontend changes remain local and uncommitted for user testing.
+
+Revision-8 pins:
+
+- Projection: `5501eb4b77cfca3aa76863bf33ff9819715ca22a07da6b7e5df51006a26783ef`
+- Manifest: `0b08473d1afc9c971e6d23eeb382a4a536f8efe101a13cfcb10942e43b30c211`
+- Encoding: `93ac8cc18444e40461cd3d6c1c71dfbf0e21b2f332db25185ebce7e32dbfbe69`
 
 ## Partial client availability
 
@@ -35,7 +81,7 @@ Revision-7 pins:
 
 ## Engine pins
 
-- Exporter 15/16 WASM: `ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac`
+- Exporter 15/16/17 WASM: `ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac`
 - Retained base/exporter 14 WASM: `b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c`
 - Glue: `722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917`
 - Source fingerprint: `03ecd5ff7150ec3648db1fe68489cee7cd40888525b62747d0819cdf0dbfb99e`

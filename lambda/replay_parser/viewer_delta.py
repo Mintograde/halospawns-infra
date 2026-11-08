@@ -24,6 +24,10 @@ VIEWER_ARTIFACT_KIND = "viewer_replay_delta"
 VIEWER_DELTA_FORMAT = "halospawns.viewerReplayDelta.v1"
 VIEWER_CONTAINER_VERSION = 1
 VIEWER_CONTRACT_PINS = {
+    8: (
+        "5501eb4b77cfca3aa76863bf33ff9819715ca22a07da6b7e5df51006a26783ef",
+        "0b08473d1afc9c971e6d23eeb382a4a536f8efe101a13cfcb10942e43b30c211",
+    ),
     1: (
         "573da0d397c796d686354b7269094409984304961f8c55ab03bb2e46180d21ec",
         "bdb2d119b7a44f59aad813d53de244acb504c811858d0b44f63e2e81242af5d1",
@@ -59,6 +63,7 @@ VIEWER_PROJECTION_SHA256, VIEWER_MANIFEST_SCHEMA_SHA256 = VIEWER_CONTRACT_PINS[
 VIEWER_ENCODING_SHA256 = "674d32449c4c9a116fe0da1ee7ca5d7a46367f4f8cdeceee5c8c817bdbc833cb"
 VIEWER_POSE_ENCODING_SHA256 = "9e5d0e7d0bccd7bf217eb889921b8936a08b3c9936dd75e25779f0b404bcf49c"
 VIEWER_POSE_16_ENCODING_SHA256 = "5518df313953e7158cd66afc04e7ef6345bec94f9ea05bfeabe4d83d6524a723"
+VIEWER_COMPACT_MATCH_ENCODING_SHA256 = "93ac8cc18444e40461cd3d6c1c71dfbf0e21b2f332db25185ebce7e32dbfbe69"
 VIEWER_PARTIAL_MATCH_ENCODING_SHA256 = "55c04603d2c7f12677819f6be9443a4e3b40c91a65f817ee55be1ef5c26dc15d"
 VIEWER_MATCH_ENCODING_SHA256 = "e330926579e3b6cfa18dd8591dc00d896f774aa4ae174b3d05bb934c507ac724"
 VIEWER_MEDIA_TYPE = "application/vnd.halospawns.replay-delta"
@@ -132,6 +137,8 @@ class PinnedViewerContract:
 
     @property
     def encoding_sha256(self) -> str:
+        if self.revision == 8:
+            return VIEWER_COMPACT_MATCH_ENCODING_SHA256
         if self.revision == 7:
             return VIEWER_PARTIAL_MATCH_ENCODING_SHA256
         if self.revision == 6:
@@ -309,10 +316,11 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
             format="halospawns.viewerReplayDelta.v2", container_version=2,
             encoding_sha256=VIEWER_POSE_16_ENCODING_SHA256 if revision == 5 else VIEWER_POSE_ENCODING_SHA256,
         )
-    if revision in (6, 7):
+    if revision in (6, 7, 8):
         expected_supported_encoding.update(
             format=f"halospawns.h1MatchReplay.v{revision - 5}", container_version=revision - 5,
-            encoding_sha256=VIEWER_PARTIAL_MATCH_ENCODING_SHA256 if revision == 7 else VIEWER_MATCH_ENCODING_SHA256,
+            encoding_sha256={6: VIEWER_MATCH_ENCODING_SHA256, 7: VIEWER_PARTIAL_MATCH_ENCODING_SHA256,
+                             8: VIEWER_COMPACT_MATCH_ENCODING_SHA256}[revision],
         )
     if {
         key: encoding_entry.get(key) for key in expected_supported_encoding
@@ -324,7 +332,7 @@ def _load_pinned_contract(revision: int) -> PinnedViewerContract:
         raise ViewerDeltaError("Pinned viewer delta encoding hash mismatch")
     if manifest_hash != manifest_pin:
         raise ViewerDeltaError("Pinned viewer manifest schema hash mismatch")
-    if revision in (6, 7):
+    if revision in (6, 7, 8):
         return PinnedViewerContract(projection, schema, encoding, manifest_schema)
     runtime_encoding = {
         "media_type": encoding.get("media_type"),

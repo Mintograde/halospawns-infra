@@ -1,0 +1,57 @@
+{
+  "artifact_kind": "viewer_replay_delta",
+  "format": "halospawns.h1MatchReplay.v3",
+  "media_type": "application/vnd.halospawns.replay-delta",
+  "outer_compression": "identity",
+  "container": {
+    "magic_ascii": "H1MV0003",
+    "version": 3,
+    "header_bytes": 64,
+    "byte_order": "little",
+    "manifest_compression": "identity",
+    "fields": {
+      "version": 8,
+      "header_bytes": 12,
+      "manifest_bytes": 16,
+      "total_bytes": 20,
+      "reserved_zero": [
+        24,
+        28
+      ],
+      "manifest_sha256": [
+        32,
+        32
+      ]
+    }
+  },
+  "body": "Entry offsets/sizes address logical bytes. Storage blocks address physical bytes relative to the manifest end. Derived entries reconstruct exact original bytes from same-track stored sources. World chunks remain identity ranges.",
+  "worlds": {
+    "profile_revision": 5,
+    "format": "halospawns.viewerReplayDelta.v2",
+    "container_magic": "HSRDC002"
+  },
+  "authority": "Only the host world supplies match statistics; client worlds retain their original clocks and recorded trust results.",
+  "limits": {
+    "file_bytes": 536870912,
+    "manifest_bytes": 8388608,
+    "tracks": 17,
+    "entries": 512,
+    "frames_per_track": 432000
+  },
+  "client_failure": "Only completed source-bound desyncs omit a client world; track identity, failure evidence, recorded diagnostics and inputs remain. Host verification is mandatory.",
+  "storage": {
+    "block_bytes": 262144,
+    "codec": "zstd",
+    "cache_bytes": 33554432,
+    "source_bytes": 134217728,
+    "network_block_bytes": 16777216,
+    "derived": [
+      "network",
+      "pad",
+      "account",
+      "ledger"
+    ],
+    "dependency_depth": 1,
+    "validation": "All original entry hashes and physical block hashes are retained; table and network range hashes bind decoded bytes."
+  }
+}

@@ -231,8 +231,8 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7), "unsupported_build")
-    require((request.profile_revision in (6, 7)) ==
+    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7, 8), "unsupported_build")
+    require((request.profile_revision in (6, 7, 8)) ==
             (job["conversion"]["film"]["engine_profile"] == "h1-performance-beta6-p9839-wasm-v1"),
             "unsupported_build")
     return request
@@ -613,7 +613,7 @@ def convert(job, film, work, deadline):
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
             "--viewer-revision",
-            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7)
+            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8)
                 else job["viewer_artifact_target"]["profile_revision"]),
             *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
               if job["conversion"]["engine"].get("exporter_revision") is not None else []),
@@ -630,7 +630,7 @@ def convert(job, film, work, deadline):
     ticks = job["conversion"]["film"]["source_tick_count"]
     encoding = analytics._json(directory / "candidate/encoding.json")
     require(encoding.get("verification") == {
-        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7) else "inline-lossless",
+        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7, 8) else "inline-lossless",
         "120hz": ticks, "30hz": None,
     }, "conversion_failed")
     return directory
@@ -782,7 +782,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     parts = shared.load_native_viewer_parts(
         directory / "candidate/parts-120",
         native_binary_path=extractor,
-        revision=5 if request.profile_revision in (6, 7) else request.profile_revision,
+        revision=5 if request.profile_revision in (6, 7, 8) else request.profile_revision,
     )
     container = shared.assemble_viewer_container(
         parts,
@@ -792,7 +792,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         if proof.get("created_utc") is not None else UNKNOWN_RECORDED_AT,
     )
     require(container.tick_count == proof["source_tick_count"])
-    if request.profile_revision in (6, 7):
+    if request.profile_revision in (6, 7, 8):
         from dataclasses import replace
 
         from .match_replay import assemble_match_replay

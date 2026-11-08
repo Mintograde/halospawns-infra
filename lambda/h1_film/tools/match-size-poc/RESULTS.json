@@ -1,0 +1,114 @@
+{
+  "schema": "halospawns.beta6CompressionStudy.v1",
+  "scope": "offline; all selected codecs lossless; no deployment or default change",
+  "cases": [
+    {
+      "name": "octagon",
+      "original_bytes": 177043708,
+      "compact_bytes": 72588599,
+      "reduction": 0.5899961663703971,
+      "pack_ms": 1414.6496,
+      "full_verify_ms": 1324.3492,
+      "source_sha256": "f35a695f5cd5aa53d8bf2fd32a26cafff7cb3db65c73a962fde86e97fd074af4",
+      "compact_sha256": "621d87099a9ff66a0cf5044717c45146673cdaa224bcfd3584fdf64bb7a7c70d",
+      "peak_rss_kib": 525548,
+      "range_checks": 96,
+      "max_cold_diagnostic_decode_ms": 20.859600000000228,
+      "max_cold_diagnostic_bytes": 452329,
+      "worlds": 5,
+      "world_ticks": 320353,
+      "pose": {
+        "ticks": 320353,
+        "old_pose_bytes": 20440045,
+        "new_pose_bytes": 19022451,
+        "pose_reduction": 0.06935376120747283,
+        "pose_encode_ms": 8478.122200000005,
+        "pose_decode_ms": 2094.4403999999868,
+        "all_pose_bytes_exact": true,
+        "column_sample_count": 15,
+        "sampled_old_base_bytes": 2753002,
+        "sampled_new_base_bytes": 1715168
+      },
+      "columns": {
+        "sampled_chunks": 15,
+        "ratio": 0.6230173461552153,
+        "max_encode_ms": 1548.6940000000004,
+        "mean_encode_ms": 512.2035799999996,
+        "max_decode_ms": 712.3056999999999,
+        "mean_decode_ms": 236.05702666666684
+      }
+    },
+    {
+      "name": "dread",
+      "original_bytes": 352861808,
+      "compact_bytes": 161241359,
+      "reduction": 0.5430467243992583,
+      "pack_ms": 2499.768,
+      "full_verify_ms": 2350.116,
+      "source_sha256": "acea538a10ae04e8ff8991bab8d24386dce3981ef04beda04a2578068142f32b",
+      "compact_sha256": "d22f0fce34f3fb142af5455906c0e31940d908c651e2e1d56cdfd375228c9713",
+      "peak_rss_kib": 832284,
+      "range_checks": 119,
+      "max_cold_diagnostic_decode_ms": 33.495200000000295,
+      "max_cold_diagnostic_bytes": 836673,
+      "worlds": 5,
+      "world_ticks": 408649,
+      "pose": {
+        "ticks": 408649,
+        "old_pose_bytes": 44403967,
+        "new_pose_bytes": 31299256,
+        "pose_reduction": 0.29512478018011323,
+        "pose_encode_ms": 14114.35020000001,
+        "pose_decode_ms": 3933.423700000003,
+        "all_pose_bytes_exact": true,
+        "column_sample_count": 15,
+        "sampled_old_base_bytes": 5425807,
+        "sampled_new_base_bytes": 3031413
+      },
+      "columns": {
+        "sampled_chunks": 15,
+        "ratio": 0.5587026962072186,
+        "max_encode_ms": 776.6954000000005,
+        "mean_encode_ms": 733.9731000000003,
+        "max_decode_ms": 303.761599999998,
+        "mean_decode_ms": 271.39032666666634
+      }
+    },
+    {
+      "name": "prisoner",
+      "original_bytes": 373605404,
+      "compact_bytes": 165282931,
+      "reduction": 0.557600266938323,
+      "pack_ms": 2677.4836,
+      "full_verify_ms": 2435.195,
+      "source_sha256": "cb5eab58797115d5ca107af12e426f5888ab24c532a5e21456a3e0053c805d84",
+      "compact_sha256": "252c1b5d621435868f198a902c71a0488f7ead888f467d5a85359b614324f280",
+      "peak_rss_kib": 867328,
+      "range_checks": 117,
+      "max_cold_diagnostic_decode_ms": 31.006000000000313,
+      "max_cold_diagnostic_bytes": 842907,
+      "worlds": 5,
+      "world_ticks": 339589,
+      "pose": {
+        "ticks": 339589,
+        "old_pose_bytes": 43315450,
+        "new_pose_bytes": 29441736,
+        "pose_reduction": 0.320294813975152,
+        "pose_encode_ms": 13807.985399999998,
+        "pose_decode_ms": 3493.2105,
+        "all_pose_bytes_exact": true,
+        "column_sample_count": 15,
+        "sampled_old_base_bytes": 5370094,
+        "sampled_new_base_bytes": 3105053
+      },
+      "columns": {
+        "sampled_chunks": 15,
+        "ratio": 0.5782120387464353,
+        "max_encode_ms": 1141.0305000000008,
+        "mean_encode_ms": 637.4324666666672,
+        "max_decode_ms": 369.84519999999975,
+        "mean_decode_ms": 227.89840666666666
+      }
+    }
+  ]
+}

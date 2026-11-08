@@ -1,0 +1,622 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "halospawns.h1MatchReplay.v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sourceContract",
+    "source_film_sha256",
+    "raw_map_sha256",
+    "engine_profile",
+    "wasm_sha256",
+    "glue_sha256",
+    "match_id",
+    "tick_rate",
+    "authoritative_track",
+    "tracks",
+    "entries",
+    "logical_size_bytes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "halospawns.h1MatchReplay.v3"
+    },
+    "sourceContract": {
+      "$ref": "#/$defs/sourceContract"
+    },
+    "source_film_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "raw_map_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "engine_profile": {
+      "const": "h1-performance-beta6-p9839-wasm-v1"
+    },
+    "wasm_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "glue_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "match_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{16}$"
+    },
+    "tick_rate": {
+      "const": 120
+    },
+    "authoritative_track": {
+      "const": "host"
+    },
+    "tracks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 17,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "role",
+          "source_film_sha256",
+          "frame_count",
+          "first_update",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(host|client-[0-9]+)$"
+          },
+          "role": {
+            "enum": [
+              "host",
+              "client"
+            ]
+          },
+          "source_film_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "frame_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 432000
+          },
+          "first_update": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147051647
+          },
+          "viewer_revision": {
+            "const": 5
+          },
+          "world": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "played_ticks",
+              "seed_mismatches",
+              "hash_mismatches",
+              "hash_checks",
+              "control_pushes"
+            ],
+            "properties": {
+              "played_ticks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 432000
+              },
+              "seed_mismatches": {
+                "const": 0
+              },
+              "hash_mismatches": {
+                "const": 0
+              },
+              "hash_checks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40000
+              },
+              "control_pushes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6912000
+              }
+            }
+          },
+          "recorded_own_player": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "ends_early": {
+            "type": "boolean"
+          },
+          "recorded_trust": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "inputs",
+              "messages",
+              "reason"
+            ],
+            "properties": {
+              "inputs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "messages": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 63
+              }
+            }
+          },
+          "clocks": {
+            "type": "array",
+            "maxItems": 432000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "frame",
+                "game_tick"
+              ],
+              "properties": {
+                "frame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 432000
+                },
+                "game_tick": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147051647
+                }
+              }
+            }
+          },
+          "alignment": {
+            "type": "object"
+          },
+          "account": {
+            "type": "object"
+          },
+          "recorded_sections": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "roster": {
+            "type": "object"
+          },
+          "pad": {
+            "type": "object"
+          },
+          "network": {
+            "type": "object"
+          },
+          "tables": {
+            "type": "array",
+            "maxItems": 18,
+            "items": {
+              "type": "object"
+            }
+          },
+          "status": {
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          },
+          "failure": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "played_ticks",
+              "seed_mismatches",
+              "hash_mismatches",
+              "hash_checks",
+              "control_pushes",
+              "first_mismatch_update",
+              "network_applied",
+              "network_refused"
+            ],
+            "properties": {
+              "reason": {
+                "const": "simulation_desync"
+              },
+              "played_ticks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 432000
+              },
+              "seed_mismatches": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 432000
+              },
+              "hash_mismatches": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40000
+              },
+              "hash_checks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40000
+              },
+              "control_pushes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6912000
+              },
+              "first_mismatch_update": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "network_applied": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              },
+              "network_refused": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647
+              }
+            },
+            "anyOf": [
+              {
+                "properties": {
+                  "seed_mismatches": {
+                    "minimum": 1
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "hash_mismatches": {
+                    "minimum": 1
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "available"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "viewer_revision",
+                "world",
+                "verification"
+              ],
+              "not": {
+                "required": [
+                  "failure"
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "failure"
+              ],
+              "properties": {
+                "role": {
+                  "const": "client"
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "viewer_revision"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "world"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "verification"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "compression",
+          "offset",
+          "size_bytes",
+          "sha256",
+          "storage"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9/_-]{0,120}$"
+          },
+          "kind": {
+            "enum": [
+              "world",
+              "client-account",
+              "host-ledger",
+              "raw-pad",
+              "network-observations",
+              "diagnostic-table",
+              "recorded-section"
+            ]
+          },
+          "compression": {
+            "const": "identity"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 536870912
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 536870912
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "index_size_bytes": {
+            "type": "integer",
+            "minimum": 33,
+            "maximum": 16777216
+          },
+          "index_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "storage": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "blocks"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "stored"
+                  },
+                  "blocks": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2048,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "logical_offset",
+                        "offset",
+                        "size_bytes",
+                        "decoded_size_bytes",
+                        "codec",
+                        "sha256"
+                      ],
+                      "properties": {
+                        "logical_offset": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 536870912
+                        },
+                        "offset": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 536870912
+                        },
+                        "size_bytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 536870912
+                        },
+                        "decoded_size_bytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 536870912
+                        },
+                        "codec": {
+                          "enum": [
+                            "identity",
+                            "zstd"
+                          ]
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "source",
+                  "blocks"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "network"
+                  },
+                  "source": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9/_-]{0,120}$"
+                  },
+                  "blocks": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 432000,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "offset",
+                        "size_bytes",
+                        "source_offset",
+                        "source_size_bytes",
+                        "count",
+                        "flags",
+                        "sha256"
+                      ],
+                      "properties": {
+                        "offset": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 536870912
+                        },
+                        "size_bytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 16777216
+                        },
+                        "source_offset": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 536870912
+                        },
+                        "source_size_bytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 536870912
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2097152
+                        },
+                        "flags": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "source",
+                  "field"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "pad",
+                      "account",
+                      "ledger"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9/_-]{0,120}$"
+                  },
+                  "field": {
+                    "type": "string",
+                    "pattern": "^[a-z_]{1,32}$"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "logical_size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 536870912
+    }
+  },
+  "$defs": {
+    "sourceContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "profile",
+        "profile_revision",
+        "projection_sha256",
+        "tick_count"
+      ],
+      "properties": {
+        "schema": {
+          "const": "halospawns.viewerReplay.v1"
+        },
+        "profile": {
+          "const": "frontend-default"
+        },
+        "profile_revision": {
+          "const": 8
+        },
+        "projection_sha256": {
+          "const": "5501eb4b77cfca3aa76863bf33ff9819715ca22a07da6b7e5df51006a26783ef"
+        },
+        "tick_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 432000
+        }
+      }
+    }
+  }
+}
