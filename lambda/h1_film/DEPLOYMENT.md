@@ -1,5 +1,62 @@
 # H1 film Lambda integration
 
+## Client roster availability candidate (2026-11-08, not deployed)
+
+The local 18/4/9 candidate handles upload
+`c76122dd-3063-4d91-b3e2-ed8f98b1d4e3` without publishing its inconsistent
+client world. `halospawns.h1MatchReplay.v4` / `H1MV0004` retains compact storage,
+original recorded evidence and a distinct, verified `roster_mismatch` reason.
+Host and client 2 are playable; client 0 retains its existing desync reason.
+All five profiles and prior twenty exporters remain, with exporter 18 reusing
+the exact exporter-17 simulation binaries. The old 17/4/8 attempt still fails
+under the candidate, demonstrating that persisted recipes are not reinterpreted.
+
+Local image `halospawns-h1-film:roster-candidate-20261108`, ID
+`sha256:2e774bb716686a7a153fb063021e7842fb51520b88dda0602ba77465193bde35`,
+was built with candidate release ID `20261108-r5`. This is an unpublished local
+image, not a registered or installed release; choose the next unused dated tag
+when publishing from the final committed source. Live remains worker/default
+`20261108-r4`, policy 14, API 230. No AWS mutation, upload retry or frontend
+deployment occurred for this work.
+
+Validation: 84 Node tests, 103 packaged worker tests, 96 Rust encoder tests (one
+ignored), 2,057 API unit tests (six skips), and 1,781 frontend tests (one optional
+fixture skip). Frontend standalone/site builds and real Chrome checks of both
+worlds and 26 record tables pass. Eleven retained packaged cases plus this film
+exercise initial/full/viewer callbacks and receipt retries, with the retained
+Beta 5 client flow. All 36 local API schema/pure-builder/storage-scope callbacks
+and the separate client callback pass under Lambda Python 3.12 using API 230's
+dependencies. These checks use the candidate API source, not the deployed API.
+Five older artifacts are identical; all 457 logical entries
+across six retained Beta 6 cases and their track evidence are unchanged. The
+additive artifact constraint migration passes isolated PostgreSQL checks.
+These are local measurements, not new Lambda timing or load claims.
+
+The final API snapshot refresh changes only generated source-hash comments
+relative to the tested image; `tested-source-comparison.json` verifies every
+packaged runtime/contract source against it. Rebuild from final committed source
+for release publication and rerun the normal exact-release acceptance workflow.
+
+Coordinated rollout order:
+
+1. Apply API migration `20261108020000_h1film_roster_match_replay.sql` and deploy
+   compatible API readers/capability gates. Validate callbacks against that exact
+   release ZIP and verify migration/health before worker activation.
+2. Keep the compatible frontend reader available for user testing; frontend
+   changes remain local/uncommitted under the existing frontend constraint.
+3. Follow `RELEASES.md`: publish the immutable worker manifest, install its
+   image/digest through the guarded workflow, then promote its default policy.
+   Required capability is `client_roster_mismatch: halospawns.h1MatchReplay.v4`.
+4. Recheck the retained source and current failed upload state before creating
+   a fresh 18/4/9 attempt for this upload. Preserve the old attempt/recipe and
+   failure evidence. Verify selected artifact, callbacks, health and postplan.
+
+Do not remove the new migration, reader, capability or exporter on policy
+rollback once its jobs/artifacts exist. The evidence root is
+`.build/film-c76122dd-investigation/`; packaged regression outputs are
+`.build/h1-contracts/20261108-r5-10fd9060e9ac46998781c703cddc841f/`.
+See `BETA6.md` for the classification boundary and source/engine pins.
+
 ## Beta 6 missing-map-size recovery (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261108-r4**, policy revision **14**, is

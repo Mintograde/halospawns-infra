@@ -20,9 +20,10 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8].includes(sourceContract.profile_revision);
+  const partial=[7,8,9].includes(sourceContract.profile_revision);
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
-  assert.equal(report.exporter_revision>=17,sourceContract.profile_revision===8,'Match storage differs from recipe');
+  assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
+  assert.equal(report.exporter_revision>=18,sourceContract.profile_revision===9,'Match roster policy differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   async function add(id,kind,bytes,extra={}) {

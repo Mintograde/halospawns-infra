@@ -14,6 +14,7 @@ import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
+import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm} from './match-film.mjs';
 
 export async function convertFilm(options) {
@@ -147,6 +148,8 @@ export async function convertFilm(options) {
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
   request.verify_incremental_state = Boolean(values['verify-incremental-state']);
+  request.client_roster_evidence = profile.port==='beta6' && profile.exporter_revision>=18
+    && values['embedded-match']===true && values['client-view']===true;
   assert.ok(!request.verify_incremental_state || request.incremental_state,
     '--verify-incremental-state requires incremental state');
   if (values.analytics) {
@@ -355,8 +358,8 @@ export async function convertFilm(options) {
       await writeFile(join(stage, 'monitor.stop.validation'), 'failed');
       await monitorDone;
     }
-    if (!expired && canVerifyRejectedClient(profile, values, report,
-      await readFile(join(stage, 'encode.log'), 'utf8'))) {
+    const encoderFailure=await readFile(join(stage, 'encode.log'), 'utf8');
+    if (!expired && canVerifyRejectedClient(profile, values, report, encoderFailure)) {
       // Drain the same engine's export to the null device: never turn a roster
       // rejection into a playable world, and never infer desync from that error.
       // The original deadline and signal handlers still bound this extra run.
@@ -375,11 +378,18 @@ export async function convertFilm(options) {
       assert.ok(!expired, 'Client verification timed out or was interrupted');
       assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Client source changed');
       assert.equal(await sha256(join(work, 'maps', native.envelope.map + '.map')), mapHash, 'Client map changed');
+      const verificationLog=await readFile(logPath, 'utf8');
       const failure = report.client_verification_exit.code === 0
-        && completedClientDesync(await readFile(logPath, 'utf8'), native.envelope);
+        && completedClientDesync(verificationLog, native.envelope);
       if (failure) {
         report.client_verification_failure = failure;
         error = new ClientDesync(failure, error);
+      } else if (report.client_verification_exit.code===0 && request.client_roster_evidence) {
+        const roster=completedClientRosterMismatch(verificationLog,native.envelope,encoderFailure);
+        if(roster) {
+          report.client_verification_failure=roster;
+          error=new ClientRosterMismatch(roster,error);
+        }
       }
     }
     report.status = 'failed';

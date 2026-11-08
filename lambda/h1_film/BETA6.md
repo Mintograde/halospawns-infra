@@ -1,5 +1,56 @@
 # Beta 6.1
 
+## Initial client roster availability (2026-11-08, local)
+
+The follow-up implementation preserves a usable match when an embedded client
+has a proven initial roster mismatch. New recipe **18/4/9** uses
+`halospawns.h1MatchReplay.v4` / `H1MV0004`, with the same lossless compact storage
+as v3 and an explicit `roster_mismatch` unavailable-view reason. All old recipes
+remain immutable. The engine WASM/glue are identical to exporter 17; no player
+slot is removed, merged or renumbered. This work is **not deployed**. Dev remains
+worker/default `20261108-r4`, policy 14, API 230, with default 17/4/8.
+
+Only the new embedded-client recipe requests structured encoder evidence for
+an initial count disagreement: a nonempty roster of at most sixteen distinct
+indices in 0-15, plus the original recorded count. The world still fails
+encoding. One verification-only replay uses the same source, map, engine and
+original deadline, rechecks source/map hashes, and must exit successfully with
+every recorded tick/hash/application accounted for, zero seed/hash mismatches
+and zero refused applications. A completed desync retains its separate existing
+reason. Host failures, crashes, timeouts, malformed rosters, incomplete evidence
+and unrelated encoder errors remain conversion failures.
+
+The supplied Prisoner film now converts with **two playable worlds**: host and
+client 2. Client 0 remains unavailable for desync; client 1 is unavailable for
+roster mismatch after all 48,778 ticks, 407 hashes and 295,717 applications pass.
+Native full-stream inspection confirms the extra slot 4 persists throughout
+the recording, with no object/body or activity counters. That observation is
+diagnostic, not a rule for discarding the slot. Original client sections,
+diagnostics, inputs, clocks and failure evidence remain in the artifact. The
+frontend labels the disabled perspective and excludes it from ghost selection.
+
+Validation includes 84 Node, 103 packaged worker, 96 Rust encoder (one ignored),
+2,057 API unit (six skipped), and 1,781 frontend tests (one optional fixture
+skip); both frontend builds pass. Twelve real/synthetic packaged cases include
+the supplied failure and eleven retained cases, plus the separate Beta 5 client
+flow. Five older-format artifacts are byte-identical; all 457 entries and track
+evidence across six retained Beta 6 cases are unchanged, as are the compared
+game/statistics/settings products. All 36 local API schema/pure-builder and
+storage-scope callback checks pass under Lambda Python 3.12 with the API 230
+dependency set; the separate retained Beta 5 client callback also passes.
+Chrome 156 opens both usable worlds, checks
+26 original record tables/ranges, and rejects unavailable-world access. The
+additive SQL constraint migration passes isolated PostgreSQL acceptance and
+rejection checks. An explicit retained 17/4/8 run still rejects this film.
+
+Rollout requires the additive API migration/readers, release capability
+`client_roster_mismatch: halospawns.h1MatchReplay.v4`, compatible frontend reader,
+then normal immutable worker publication and guarded promotion. The viewer-9
+object suffix is `viewer-delta.v4.hsrv`; old object names remain unchanged.
+Recovery requires a fresh attempt under 18/4/9; never repin the failed attempt.
+Evidence is in `.build/film-c76122dd-investigation/`; see `DEPLOYMENT.md` and
+handoff `20261108-infra-beta6-clean-client-roster`.
+
 ## Prisoner client roster investigation (2026-11-08)
 
 Upload `c76122dd-3063-4d91-b3e2-ed8f98b1d4e3`, local file
@@ -20,16 +71,17 @@ its producer, causing the secondary `Simulator failed / null !== 0` error.
 
 The bounded verification-only WASM replay and the independent native reference
 both finish all 48,778 client-1 ticks with zero seed/hash mismatches, all 407
-hash checks and 295,717 network applications with zero refusals. A clean verdict
-cannot be converted to unavailable-client evidence. The last embedded client
+hash checks and 295,717 network applications with zero refusals. Under the
+retained 17/4/8 policy, a clean verdict cannot become desync evidence. The last embedded client
 (`client-2`, player 2) independently passes native playback: 48,780 ticks and all
 407 hashes. Part lengths/checksums and source/map hashes remain valid.
 
 This is a reproducible roster/slot reconstruction inconsistency, not evidence
-that the entire recording is unusable. Recovery needs an explicit, verified
-roster reconciliation rule or upstream playback correction; hash success alone
-does not prove the duplicate slot is safe to publish or discard. No code change,
-deployment, retry, repinning or source mutation was performed for this diagnosis.
+that the entire recording is unusable. Publishing this client world would need
+verified roster reconciliation or an upstream correction; hash success alone
+does not prove the duplicate slot is safe to publish or discard. The follow-up
+above instead preserves the other verified worlds and records why this one is
+unavailable. No deployment, retry, repinning or source mutation was performed.
 Evidence: `.build/film-c76122dd-investigation/`, especially `diagnosis.json`,
 `exact-conversion/conversion.partial/client-1.partial/`, `first-rosters.json`
 and the two native reference summaries. See handoff

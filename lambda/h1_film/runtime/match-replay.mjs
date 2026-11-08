@@ -2,6 +2,8 @@
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 import {validateCompactStorage,compactRangeReader} from './compact-storage.mjs';
 export const COMPACT_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v3';
+export const ROSTER_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v4';
+export const ROSTER_MATCH_PROJECTION='648590bc0387f23240a6f1f8fb35653729a35d956a26f6fe27722200183c023f';
 export const COMPACT_MATCH_PROJECTION='5501eb4b77cfca3aa76863bf33ff9819715ca22a07da6b7e5df51006a26783ef';
 export const MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v1';
 export const MATCH_REPLAY_MAGIC='H1MV0001';
@@ -23,7 +25,7 @@ export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const version=v.getUint32(8,true);
-  check([1,2,3].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
+  check([1,2,3,4].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
@@ -31,13 +33,14 @@ export function readMatchReplayHeader(bytes) {
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  const compact=m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
-  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(compact?3:partial?2:1)
+  const roster=m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
+  const compact=roster||m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(roster?4:compact?3:partial?2:1)
     &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
   check(m.engine_profile==='h1-performance-beta6-p9839-wasm-v1'&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&m.tick_rate===120&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===(compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
+    &&m.sourceContract.profile_revision===(roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -62,11 +65,21 @@ export function validateMatchReplay(m,header) {
     if(t.status==='unavailable') {
       check(i>0&&t.world===undefined&&t.viewer_revision===undefined&&t.verification===undefined,'unavailable world is playable');
       const f=t.failure;
+      if(roster&&f?.reason==='roster_mismatch') {
+        check(f.played_ticks===t.frame_count&&f.seed_mismatches===0&&f.hash_mismatches===0&&f.network_refused===0
+          &&integer(f.hash_checks,1,40000)&&integer(f.control_pushes,1,6912000)&&integer(f.network_applied,0,2147483647)
+          &&integer(f.recorded_player_count,1,16)&&Array.isArray(f.exported_player_indices)
+          &&integer(f.exported_player_indices.length,1,16)&&f.exported_player_indices.length!==f.recorded_player_count
+          &&f.exported_player_indices.every(id=>integer(id,0,15))&&new Set(f.exported_player_indices).size===f.exported_player_indices.length
+          &&Object.keys(f).sort().join(',')==='control_pushes,exported_player_indices,hash_checks,hash_mismatches,network_applied,network_refused,played_ticks,reason,recorded_player_count,seed_mismatches',
+          'invalid roster mismatch evidence');
+      } else {
       check(f?.reason==='simulation_desync'&&f.played_ticks===t.frame_count
         &&integer(f.seed_mismatches,0,t.frame_count)&&integer(f.hash_checks,1,40000)
         &&integer(f.hash_mismatches,0,f.hash_checks)&&(f.seed_mismatches>0||f.hash_mismatches>0)
         &&integer(f.control_pushes,1,6912000)&&integer(f.first_mismatch_update,t.first_update,t.first_update+t.frame_count-1)
         &&integer(f.network_applied,0,2147483647)&&integer(f.network_refused,0,2147483647),'invalid desync evidence');
+      }
     } else {
     check(t.failure===undefined,'verified world contains failure evidence');
     const world=entries.get(t.world);
@@ -137,7 +150,7 @@ export async function openMatchReplay(readRange,expected={},codecs={}) {
   const manifest=validateMatchReplay(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(raw)),h);
   for(const key of ['source_film_sha256','raw_map_sha256','engine_profile']) if(expected[key]!==undefined) check(manifest[key]===expected[key],`source ${key} differs`);
   function entry(id) {const e=manifest.entries.find(e=>e.id===id);check(e,'unknown entry');return e;}
-  const compact=h.version===3?compactRangeReader(readRange,h,manifest,codecs,hashBytes):null;
+  const compact=h.version>=3?compactRangeReader(readRange,h,manifest,codecs,hashBytes):null;
   async function range(e,start,length) {
     check(integer(start,0,e.size_bytes)&&integer(length,1,e.size_bytes-start),'range outside entry');
     if(compact)return compact.range(e.id,start,length);

@@ -9,6 +9,7 @@ import {fnv1a} from './format3-codec.mjs';
 import {readEnvelope} from './adapters/beta6-v3-120.mjs';
 import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
+import {clientRosterEvidence} from './client-roster.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
@@ -44,7 +45,8 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
       'client-view':true,'embedded-match':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});
     } catch(error) {
-      const failure=report.exporter_revision>=16 && clientDesyncEvidence(error);
+      const failure=(report.exporter_revision>=16 && clientDesyncEvidence(error))
+        || (report.exporter_revision>=18 && clientRosterEvidence(error));
       if(!failure)throw error;
       assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
       tracks.push({...track,status:'unavailable',failure});continue;

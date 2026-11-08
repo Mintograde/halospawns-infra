@@ -1,5 +1,6 @@
 // Only a completed, source-bound simulation with an explicit desync verdict may
 // lose its client world. Crashes, timeouts, bad inputs and incomplete logs fail.
+import {rejectedClientRoster} from './client-roster.mjs';
 export class ClientDesync extends Error {
   constructor(evidence, cause) {
     super('Client simulation desynchronized', {cause});
@@ -14,7 +15,8 @@ export function canVerifyRejectedClient(profile, values, report, encoderLog) {
   return profile.port === 'beta6' && profile.exporter_revision >= 16
     && values['embedded-match'] === true && values['client-view'] === true
     && report.encoder_exit?.code === 1
-    && encoderLog.trim() === 'h1-film-encoder: film roster does not match engine export';
+    && (encoderLog.trim() === 'h1-film-encoder: film roster does not match engine export'
+      || profile.exporter_revision>=18 && rejectedClientRoster(encoderLog)!==null);
 }
 
 export function completedClientDesync(log, envelope) {

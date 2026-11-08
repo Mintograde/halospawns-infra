@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 09da4e6aee0e13abb14853d0f888fe74d9664f387d7ed8026ae6f7ce3bc42589",
+  "$comment": "Generated from API schemas/h1films.py SHA256 6143a72ce769bbc1046573dc018b1ced07aa3d5d95fe2b11eb7f61fa1646c31c",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -100,7 +100,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 8,
+          "maximum": 9,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -291,7 +291,8 @@
           "enum": [
             "halospawns.h1MatchReplay.v1",
             "halospawns.h1MatchReplay.v2",
-            "halospawns.h1MatchReplay.v3"
+            "halospawns.h1MatchReplay.v3",
+            "halospawns.h1MatchReplay.v4"
           ],
           "title": "Schema",
           "type": "string"
@@ -464,6 +465,89 @@
       "title": "H1MatchTrack",
       "type": "object"
     },
+    "H1RosterMismatchFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "control_pushes": {
+          "maximum": 6912000,
+          "minimum": 1,
+          "title": "Control Pushes",
+          "type": "integer"
+        },
+        "exported_player_indices": {
+          "items": {
+            "maximum": 15,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Exported Player Indices",
+          "type": "array"
+        },
+        "hash_checks": {
+          "maximum": 40000,
+          "minimum": 1,
+          "title": "Hash Checks",
+          "type": "integer"
+        },
+        "hash_mismatches": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Hash Mismatches",
+          "type": "integer"
+        },
+        "network_applied": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Network Applied",
+          "type": "integer"
+        },
+        "network_refused": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Network Refused",
+          "type": "integer"
+        },
+        "played_ticks": {
+          "maximum": 432000,
+          "minimum": 1,
+          "title": "Played Ticks",
+          "type": "integer"
+        },
+        "reason": {
+          "const": "roster_mismatch",
+          "title": "Reason",
+          "type": "string"
+        },
+        "recorded_player_count": {
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Recorded Player Count",
+          "type": "integer"
+        },
+        "seed_mismatches": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Seed Mismatches",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "played_ticks",
+        "seed_mismatches",
+        "hash_mismatches",
+        "hash_checks",
+        "control_pushes",
+        "network_applied",
+        "network_refused",
+        "recorded_player_count",
+        "exported_player_indices"
+      ],
+      "title": "H1RosterMismatchFailure",
+      "type": "object"
+    },
     "H1UnavailableTrack": {
       "additionalProperties": false,
       "properties": {
@@ -490,7 +574,22 @@
           "type": "boolean"
         },
         "failure": {
-          "$ref": "#/$defs/H1MatchFailure"
+          "discriminator": {
+            "mapping": {
+              "roster_mismatch": "#/$defs/H1RosterMismatchFailure",
+              "simulation_desync": "#/$defs/H1MatchFailure"
+            },
+            "propertyName": "reason"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/H1MatchFailure"
+            },
+            {
+              "$ref": "#/$defs/H1RosterMismatchFailure"
+            }
+          ],
+          "title": "Failure"
         },
         "first_update": {
           "maximum": 2147051647,

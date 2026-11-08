@@ -18,19 +18,21 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       assert.ok(recipe.exporter_revision === 1 || registry.exporters.some(exporter =>
         exporter.engine_profile === profile.id && exporter.revision === recipe.exporter_revision));
       assert.ok([1, 2, 3, 4].includes(recipe.analytics_revision));
-      assert.ok([2, 4, 5, 6, 7, 8].includes(recipe.viewer_revision));
+      assert.ok([2, 4, 5, 6, 7, 8, 9].includes(recipe.viewer_revision));
       if(profile.port==='beta6') {
         assert.equal(recipe.exporter_revision>=16,recipe.viewer_revision>=7);
-        assert.equal(recipe.exporter_revision>=17,recipe.viewer_revision===8);
+        assert.equal(recipe.exporter_revision>=17,recipe.viewer_revision>=8);
+        assert.equal(recipe.exporter_revision>=18,recipe.viewer_revision===9);
       }
       if(recipe.viewer_revision>=7) {
         assert.equal(profile.port,'beta6');assert.ok(recipe.exporter_revision>=16);
         assert.equal(requirements.partial_match_replay,'halospawns.h1MatchReplay.v2');
       }
-      if(recipe.viewer_revision===8) {
+      if(recipe.viewer_revision>=8) {
         assert.ok(recipe.exporter_revision>=17);
         assert.equal(requirements.compact_match_replay,'halospawns.h1MatchReplay.v3');
       }
+      if(recipe.viewer_revision===9) assert.equal(requirements.client_roster_mismatch,'halospawns.h1MatchReplay.v4');
       assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
     }
   }

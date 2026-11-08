@@ -3022,7 +3022,7 @@ def _viewer_artifact_key(
     prefix = _settings()["viewer_artifact_prefix"]
     filename = (
         f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{profile_revision}."
-        f"{artifact_sha256}.viewer-delta.v{2 if profile_revision in (4, 5) else 1}.hsrv"
+        f"{artifact_sha256}.viewer-delta.v{4 if profile_revision == 9 else 2 if profile_revision in (4, 5) else 1}.hsrv"
     )
     return f"{prefix}{upload_id}/generations/{generation_token}/{filename}"
 

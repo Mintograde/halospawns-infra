@@ -49,6 +49,8 @@ struct Request {
     typed_poses: bool,
     #[serde(default)]
     verify_incremental_state: bool,
+    #[serde(default)]
+    client_roster_evidence: bool,
 }
 fn default_analytics_revision() -> u8 {
     2
@@ -92,6 +94,7 @@ impl Request {
 #[derive(Default)]
 struct Observations {
     legacy_analytics: bool,
+    client_roster_evidence: bool,
     first_clock: Option<u64>,
     last_clock: Option<u64>,
     players: BTreeSet<u64>,
@@ -221,6 +224,20 @@ impl Observations {
         }
         let players = tick["players"].as_array().ok_or("missing players")?;
         if players.len() > h1_pose_codec::MAX_PLAYERS || (ordinal == 0 && players.len() != seats) {
+            // Report the actual initial indices without changing or encoding the world.
+            // Only the new embedded-client recipe requests this diagnostic. Invalid,
+            // empty, duplicate or unbounded rosters keep the ordinary hard failure.
+            let indices: Option<Vec<u64>> = players.iter().map(|p| p["player_index"].as_u64()).collect();
+            if self.client_roster_evidence && ordinal == 0 && !players.is_empty()
+                && players.len() <= h1_pose_codec::MAX_PLAYERS
+                && let Some(indices) = indices
+                && indices.iter().all(|&id| id < h1_pose_codec::MAX_PLAYERS as u64)
+                && indices.iter().copied().collect::<BTreeSet<_>>().len() == indices.len()
+            {
+                return Err(format!("client initial roster mismatch: {}", json!({
+                    "recorded_player_count": seats, "exported_player_indices": indices,
+                })).into());
+            }
             return Err("film roster does not match engine export".into());
         }
         let mut ids = BTreeSet::new();
@@ -443,6 +460,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     )?;
     let mut observations = Observations {
         legacy_analytics: request.analytics_revision == 1,
+        client_roster_evidence: request.client_roster_evidence,
         ..Default::default()
     };
     let mut native = (request.analytics_revision >= 3).then(native::NativeAnalytics::default);
@@ -657,6 +675,23 @@ fn main() {
 mod observation_tests {
     use super::*;
     #[test]
+    fn client_roster_evidence_is_bounded_and_never_accepts_a_world() {
+        for enabled in [false, true] {
+            for indices in [vec![0, 1, 2, 3, 4], vec![0, 0], vec![16, 1], vec![]] {
+                let mut observations = Observations { client_roster_evidence: enabled, ..Default::default() };
+                let mut tick = json!({"current_tick":0,"players":indices.iter().map(|id| json!({"player_index":id})).collect::<Vec<_>>()});
+                let error = observations.observe(&mut tick, 0, 4).unwrap_err().to_string();
+                if enabled && indices == vec![0, 1, 2, 3, 4] {
+                    let evidence: Value = serde_json::from_str(error.strip_prefix("client initial roster mismatch: ").unwrap()).unwrap();
+                    assert_eq!(evidence, json!({"recorded_player_count":4,"exported_player_indices":indices}));
+                } else {
+                    assert_eq!(error, "film roster does not match engine export");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn legacy_requests_keep_the_original_adapter_and_unknown_contracts_fail() {
         let value = json!({"ticks":1,"players":1,"map":"dread",
             "replay_id":"legacy","recorded_at":"2026-10-03T00:00:00Z"});
@@ -746,6 +781,7 @@ mod observation_tests {
             incremental_state: true,
             typed_poses: true,
             verify_incremental_state: false,
+            client_roster_evidence: false,
             analytics_revision: 2,
             combat_network_recording: false,
             ticks: 5,
@@ -985,6 +1021,7 @@ mod observation_tests {
                 incremental_state: true,
                 typed_poses: true,
                 verify_incremental_state: false,
+                client_roster_evidence: false,
                 analytics_revision: 2,
                 combat_network_recording: false,
                 ticks: 12,
