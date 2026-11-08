@@ -1,6 +1,64 @@
 # H1 film Lambda integration
 
-## Client roster availability candidate (2026-11-08, not deployed)
+## Client roster availability and recovery (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261108-r5**, policy revision **15**, is
+active with API **live=231**, source `0d8025b3761a4f95d1b6dea386e486dbd648ba3f`.
+Migration `20261108020000_h1film_roster_match_replay.sql` is applied and verified.
+New Beta 6 attempts use **18/4/9** and `halospawns.h1MatchReplay.v4` / `H1MV0004`.
+The worker was built from committed `1004660` in isolated checkout
+`.build/roster-match-release-r5`. Image digest:
+`sha256:8b8bf21f708399a55d1825e4c2620820688b484981302110a3f967566a82ed0c`.
+Live registry digest:
+`e3ef2b52693f9ecdb7b3c19254bcac8d9cc953244765ad1f8f1450c5206da514`.
+
+All twelve packaged cases/**36 exact API 231 callbacks**, receipt/failure and
+storage-scope checks, the retained Beta 5 client flow and first live health pass.
+Five older viewer artifacts are identical; all 457 logical entries and track
+evidence across six retained Beta 6 cases are unchanged. All 84 Node/103
+packaged worker/96 Rust encoder/2,057 API unit/1,781 frontend tests pass with the
+previously documented skips/ignore; frontend builds pass. API native Linux CI
+`42484924344` passed before publication. The initial local worker build exhausted
+Docker disk before any image publication; clearing unused build cache allowed
+the normal immutable build/publication to complete.
+
+The guarded promotion changed only the H1 image and producer digest (0/1/0).
+A separate saved-plan guard refreshed only API version output 230 to 231. All
+six final dev component plans are no-op. Existing limits, concurrency, queue
+configuration, 128 conversions, 343 receipts, 232 H1 attempts and 290 map
+approvals were preserved before recovery.
+
+The original failed upload `c76122dd-3063-4d91-b3e2-ed8f98b1d4e3` has an immutable
+17/4/8 initial conversion but no replay record to reparse. Recovery therefore
+created one fresh ticket through the deployed upload API, attributed to the
+verified original uploader, then conditionally uploaded the exact retained S3
+version's bytes through normal S3/SNS/SQS intake. The new object's metadata
+links it to the old upload/source version. The original failed ticket,
+conversion, recipe and source remain unchanged. Do not requeue that old job.
+
+- Recovered upload: `75c00a60-50e8-46f2-bc64-ca98c81caadb` (**processed**).
+- Replay: `d27dff76-56df-4e1d-baba-187224a725fb`.
+- Game: `3d2bf332-fe78-443c-bb0e-dd1bf5bd8a2c`.
+- Selected artifact: `98d33eaa-05dc-4da2-8a45-bcfc8a4092c5`, 51,080,974 bytes,
+  SHA-256 `4cfdb935f8686c83032394998ddc6f2c9f0ca94d8e2174b2add0e9cda22db24f`.
+
+The host and client 2 are playable. Client 0 remains unavailable for desync;
+client 1 carries verified `roster_mismatch` evidence. AWS reports completion
+after 118.815 seconds. The selected artifact matches the immutable completion
+and S3 version. All client/record entry hashes match the packaged result; the
+host index differs only by its real upload identity. Live API asset delivery,
+version-pinned CDN 206/range/CORS and full-file hash checks pass. Chrome 156
+opens both worlds and verifies 26 original record tables/ranges against the
+live API proof, including cancellation and unavailable-world rejection.
+
+Final totals are **129 conversions/344 receipts**, with all old rows/pins, 232
+attempts and 290 approvals unchanged. API health is 200; processing queue and
+DLQ are empty. Frontend remains local/uncommitted; no frontend or prod release.
+Retain the additive migration, compatible readers/capability and all recipes
+on policy rollback. Evidence: `.build/roster-match-deploy/` and promotion
+`.build/h1-promotions/20261108-134352-135b51412174401c9999e703c31630fd/`.
+
+## Client roster candidate validation (before the deployment above)
 
 The local 18/4/9 candidate handles upload
 `c76122dd-3063-4d91-b3e2-ed8f98b1d4e3` without publishing its inconsistent
@@ -15,9 +73,9 @@ Local image `halospawns-h1-film:roster-candidate-20261108`, ID
 `sha256:2e774bb716686a7a153fb063021e7842fb51520b88dda0602ba77465193bde35`,
 was built with candidate release ID `20261108-r5`. This is an unpublished local
 image, not a registered or installed release; choose the next unused dated tag
-when publishing from the final committed source. Live remains worker/default
-`20261108-r4`, policy 14, API 230. No AWS mutation, upload retry or frontend
-deployment occurred for this work.
+when publishing from the final committed source. At this stage live remained
+worker/default `20261108-r4`, policy 14, API 230. The deployment and recovery
+above supersede this candidate's pending rollout status.
 
 Validation: 84 Node tests, 103 packaged worker tests, 96 Rust encoder tests (one
 ignored), 2,057 API unit tests (six skips), and 1,781 frontend tests (one optional
@@ -37,7 +95,7 @@ relative to the tested image; `tested-source-comparison.json` verifies every
 packaged runtime/contract source against it. Rebuild from final committed source
 for release publication and rerun the normal exact-release acceptance workflow.
 
-Coordinated rollout order:
+Coordinated rollout requirements (completed above):
 
 1. Apply API migration `20261108020000_h1film_roster_match_replay.sql` and deploy
    compatible API readers/capability gates. Validate callbacks against that exact
@@ -47,9 +105,10 @@ Coordinated rollout order:
 3. Follow `RELEASES.md`: publish the immutable worker manifest, install its
    image/digest through the guarded workflow, then promote its default policy.
    Required capability is `client_roster_mismatch: halospawns.h1MatchReplay.v4`.
-4. Recheck the retained source and current failed upload state before creating
-   a fresh 18/4/9 attempt for this upload. Preserve the old attempt/recipe and
-   failure evidence. Verify selected artifact, callbacks, health and postplan.
+4. Recheck the retained source and failed upload state before creating a fresh
+   18/4/9 attempt. A failed initial conversion without a replay needs a fresh
+   upload ticket, as above. Preserve the old conversion/recipe and failure
+   evidence. Verify selected artifact, callbacks, health and postplan.
 
 Do not remove the new migration, reader, capability or exporter on policy
 rollback once its jobs/artifacts exist. The evidence root is

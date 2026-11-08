@@ -1,14 +1,15 @@
 # Beta 6.1
 
-## Initial client roster availability (2026-11-08, local)
+## Initial client roster availability (2026-11-08, deployed in dev)
 
 The follow-up implementation preserves a usable match when an embedded client
 has a proven initial roster mismatch. New recipe **18/4/9** uses
 `halospawns.h1MatchReplay.v4` / `H1MV0004`, with the same lossless compact storage
 as v3 and an explicit `roster_mismatch` unavailable-view reason. All old recipes
 remain immutable. The engine WASM/glue are identical to exporter 17; no player
-slot is removed, merged or renumbered. This work is **not deployed**. Dev remains
-worker/default `20261108-r4`, policy 14, API 230, with default 17/4/8.
+slot is removed, merged or renumbered. Dev worker/default **20261108-r5**, policy
+**15**, API **231** and the additive artifact migration are active. Every
+retained recipe remains supported, including the strict 17/4/8 recipe.
 
 Only the new embedded-client recipe requests structured encoder evidence for
 an initial count disagreement: a nonempty roster of at most sixteen distinct
@@ -17,8 +18,9 @@ encoding. One verification-only replay uses the same source, map, engine and
 original deadline, rechecks source/map hashes, and must exit successfully with
 every recorded tick/hash/application accounted for, zero seed/hash mismatches
 and zero refused applications. A completed desync retains its separate existing
-reason. Host failures, crashes, timeouts, malformed rosters, incomplete evidence
-and unrelated encoder errors remain conversion failures.
+reason. Host failures, crashes, timeouts, incomplete evidence and unrelated
+encoder errors remain conversion failures. Malformed roster evidence cannot
+receive the new roster-only classification.
 
 The supplied Prisoner film now converts with **two playable worlds**: host and
 client 2. Client 0 remains unavailable for desync; client 1 is unavailable for
@@ -35,21 +37,26 @@ skip); both frontend builds pass. Twelve real/synthetic packaged cases include
 the supplied failure and eleven retained cases, plus the separate Beta 5 client
 flow. Five older-format artifacts are byte-identical; all 457 entries and track
 evidence across six retained Beta 6 cases are unchanged, as are the compared
-game/statistics/settings products. All 36 local API schema/pure-builder and
-storage-scope callback checks pass under Lambda Python 3.12 with the API 230
-dependency set; the separate retained Beta 5 client callback also passes.
+game/statistics/settings products. All 36 exact deployed API 231 schema/pure-
+builder and storage-scope callback checks pass under Lambda Python 3.12;
+the separate retained Beta 5 client callback also passes.
 Chrome 156 opens both usable worlds, checks
 26 original record tables/ranges, and rejects unavailable-world access. The
 additive SQL constraint migration passes isolated PostgreSQL acceptance and
 rejection checks. An explicit retained 17/4/8 run still rejects this film.
 
-Rollout requires the additive API migration/readers, release capability
-`client_roster_mismatch: halospawns.h1MatchReplay.v4`, compatible frontend reader,
-then normal immutable worker publication and guarded promotion. The viewer-9
-object suffix is `viewer-delta.v4.hsrv`; old object names remain unchanged.
-Recovery requires a fresh attempt under 18/4/9; never repin the failed attempt.
-Evidence is in `.build/film-c76122dd-investigation/`; see `DEPLOYMENT.md` and
-handoff `20261108-infra-beta6-clean-client-roster`.
+The applied migration/readers and release capability
+`client_roster_mismatch: halospawns.h1MatchReplay.v4` precede the guarded worker
+promotion. Viewer 9 uses `viewer-delta.v4.hsrv`; old object names remain.
+The failed initial conversion has no replay to reparse, so authorized recovery
+created fresh upload `75c00a60-50e8-46f2-bc64-ca98c81caadb` from the exact retained
+source. It is processed with one selected artifact and both usable worlds.
+Original upload `c76122dd-3063-4d91-b3e2-ed8f98b1d4e3`, its failed conversion and
+recipe remain unchanged. Live CDN range/CORS/hash checks and Chrome playback
+pass; health is 200, queue/DLQ empty, and all six dev postplans are no-op.
+Frontend stays local/uncommitted. Evidence: `.build/film-c76122dd-investigation/`
+and `.build/roster-match-deploy/`; see `DEPLOYMENT.md` and handoff
+`20261108-infra-beta6-clean-client-roster`.
 
 ## Prisoner client roster investigation (2026-11-08)
 
@@ -81,7 +88,8 @@ that the entire recording is unusable. Publishing this client world would need
 verified roster reconciliation or an upstream correction; hash success alone
 does not prove the duplicate slot is safe to publish or discard. The follow-up
 above instead preserves the other verified worlds and records why this one is
-unavailable. No deployment, retry, repinning or source mutation was performed.
+unavailable. The initial diagnosis performed no deployment, retry, repinning
+or source mutation; the authorized recovery above followed separately.
 Evidence: `.build/film-c76122dd-investigation/`, especially `diagnosis.json`,
 `exact-conversion/conversion.partial/client-1.partial/`, `first-rosters.json`
 and the two native reference summaries. See handoff
@@ -115,9 +123,10 @@ this exact roster rejection on an embedded Beta 6 client permits one bounded
 verification-only replay, with output discarded and the same source, map,
 engine and original deadline. Only a cleanly exited, complete simulation with
 the existing source-bound desync evidence can mark the client unavailable.
-A clean verdict, crash, timeout, incomplete evidence or other encoder error
-still rejects conversion. Hosts and the older strict recipes retain their
-existing behavior. The supplied Chillout client independently reproduces in
+A clean verdict still rejects conversion under those retained 16/17 policies;
+only the new 18/4/9 contract above supports verified roster-mismatch evidence.
+Crashes, timeouts, incomplete evidence and other encoder errors still fail.
+Hosts and older strict recipes retain their behavior. The supplied Chillout client independently reproduces in
 native and WASM: first divergence at update 5,180, 11 seed mismatches and
 317 of 616 hash mismatches, with 432,199 network applications and 135 refusals.
 
