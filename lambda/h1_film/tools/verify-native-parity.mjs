@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { closeSync, createReadStream, openSync } from 'node:fs';
-import { copyFile, mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { readEnvelope } from '../runtime/film.mjs';
@@ -10,11 +10,13 @@ import { verifyPlayback as verifyBeta3 } from '../runtime/adapters/film-v2-120.m
 import { verifyPlayback as verifyArena } from '../runtime/adapters/h1arena-v2-120.mjs';
 import { verifyPlayback as verifyBeta5 } from '../runtime/adapters/beta5-v2-120.mjs';
 import { verifyPlayback as verifyBeta4 } from '../runtime/adapters/beta4-v2-120.mjs';
+import { verifyPlayback as verifyBeta6 } from '../runtime/adapters/beta6-v3-120.mjs';
 import { hashCanonicalStream } from './canonical-transport.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   native: { type: 'string' }, engine: { type: 'string' }, assets: { type: 'string' }, output: { type: 'string' },
   'compare-base-export': { type: 'boolean', default: false },
+  'discard-stream': { type: 'boolean', default: false },
 } });
 for (const key of ['native', 'engine', 'assets', 'output']) {
   assert.ok(values[key], `Missing --${key}`);
@@ -49,15 +51,21 @@ async function replay(kind, cwd, envelope) {
     closeSync(log);
     if (output !== undefined) closeSync(output);
   }
-  const verify = envelope.protocol_revision === 9818 ? verifyBeta5
+  const verify = envelope.protocol_revision === 9839 ? verifyBeta6 : envelope.protocol_revision === 9818 ? verifyBeta5
     : envelope.protocol_revision === 9803 ? verifyBeta4
     : envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);
-  if (!values['compare-base-export']) return { sha256: await sha256(stream), bytes: (await stat(stream)).size };
+  if (!values['compare-base-export']) {
+    const result = { sha256: await sha256(stream), bytes: (await stat(stream)).size };
+    if (values['discard-stream']) await unlink(stream);
+    return result;
+  }
   const handle = await open(stream, 'r');
   const header = Buffer.alloc(8);
   try { await handle.read(header, 0, 8, 0); } finally { await handle.close(); }
-  return hashCanonicalStream(createReadStream(stream), header.toString('ascii'), { omitCombat: true });
+  const result = await hashCanonicalStream(createReadStream(stream), header.toString('ascii'), { omitCombat: true });
+  if (values['discard-stream']) await unlink(stream);
+  return result;
 }
 
 const results = [];
@@ -67,7 +75,9 @@ for (const [index, input] of positionals.entries()) {
   await mkdir(join(cwd, 'maps'), { recursive: true });
   await copyFile(film, join(cwd, 'input.h1film'));
   const map = join(values.assets, 'maps', `${envelope.map}.map`);
-  assert.equal((await stat(map)).size, envelope.map_bytes);
+  // Missing recorded map size is supported by the reviewed Beta 5/6 adapters.
+  // The selected map's exact hash is always retained in this parity report.
+  if (envelope.map_bytes !== 0) assert.equal((await stat(map)).size, envelope.map_bytes);
   await copyFile(map, join(cwd, 'maps', `${envelope.map}.map`));
   const native = await replay('native', cwd, envelope);
   const wasm = await replay('wasm', cwd, envelope);

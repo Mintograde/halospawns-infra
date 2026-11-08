@@ -140,7 +140,7 @@
           "type": "integer"
         },
         "analytics_revision": {
-          "maximum": 4,
+          "maximum": 5,
           "minimum": 1,
           "title": "Analytics Revision",
           "type": "integer"

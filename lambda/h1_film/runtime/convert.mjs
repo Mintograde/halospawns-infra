@@ -16,13 +16,14 @@ import {convertMatchTracks} from './convert-match-tracks.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm} from './match-film.mjs';
+import {buildGameplayMetrics} from './gameplay-source.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
     analytics: false, ...options };
   const totalStarted = performance.now();
   const analyticsRevision = Number(values['analytics-revision'] ?? 2);
-  assert.ok([1, 2, 3, 4].includes(analyticsRevision), 'Unsupported analytics revision');
+  assert.ok([1, 2, 3, 4, 5].includes(analyticsRevision), 'Unsupported analytics revision');
   for (const key of ['film', 'assets', 'encoder', 'output']) {
     assert.ok(values[key], `Missing --${key}`);
     values[key] = resolve(values[key]);
@@ -267,6 +268,16 @@ export async function convertFilm(options) {
     }
     if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
+    if (analyticsRevision === 5) {
+      assert.ok(['beta5','beta6'].includes(profile.port) && profile.exporter_revision >= 19,
+        'Gameplay metrics require a registered gameplay exporter');
+      const encodingPath = join(stage,'candidate','encoding.json');
+      const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
+      encoding.native_analytics.gameplay = await buildGameplayMetrics({film:values.film,
+        evidence:join(stage,'candidate','gameplay.ndjson'),encoding});
+      encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
+      await save(encodingPath,encoding);
+    }
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');
       const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));

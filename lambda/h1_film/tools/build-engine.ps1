@@ -8,6 +8,7 @@ param(
     [switch]$FiniteWorldObjects,
     [switch]$RosterRecovery,
     [switch]$ClientView,
+    [switch]$Gameplay,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
@@ -33,6 +34,7 @@ if ($DamageAttribution) { $variant += '-damage-attribution-v1' }
 if ($FiniteWorldObjects) { $variant += '-finite-world-objects-v1' }
 if ($RosterRecovery) { $variant += '-roster-recovery-v1' }
 if ($ClientView) { $variant += '-client-view-v1' }
+if ($Gameplay) { $variant += '-gameplay-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -55,7 +57,8 @@ $combatFlag = if ($Combat) { 'ON' } else { 'OFF' }
 [string[]]$finiteArguments = if ($FiniteWorldObjects) { @('-DH1_FINITE_WORLD_OBJECTS=ON') } else { @() }
 [string[]]$rosterArguments = if ($RosterRecovery) { @('-DH1_ROSTER_RECOVERY=ON') } else { @() }
 [string[]]$clientViewArguments = if ($ClientView) { @('-DH1_CLIENT_VIEW=ON') } else { @() }
-& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @revisionArguments
+[string[]]$gameplayArguments = if ($Gameplay) { @('-DH1_GAMEPLAY_EXPORT=ON') } else { @() }
+& docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 & docker run @mounts $image cmake --build $cacheBuild --parallel $Jobs -- -k *> $log
@@ -77,6 +80,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     finite_world_objects = [bool]$FiniteWorldObjects
     roster_recovery = [bool]$RosterRecovery
     client_view = [bool]$ClientView
+    gameplay = [bool]$Gameplay
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

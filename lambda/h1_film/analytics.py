@@ -13,6 +13,7 @@ from typing import Any
 from .registry import profile_for_report
 from . import recorded
 from .combat import participant_counters, validate_combat_product
+from .gameplay import validate_gameplay
 
 ANALYTICS_SCHEMA = "halospawns.h1AnalyticsSource.v1"
 KNOWN_GAPS = {
@@ -72,11 +73,14 @@ def validate_native_product(product: dict, *, encoding: dict, report: dict) -> N
             points += len(series)
     if points > 16384:
         raise ValueError("Native timelines exceed combined point budget")
-    if encoding.get("analytics_revision") == 4:
-        if product.get("schema") != "halospawns.h1NativeAnalytics.v2":
-            raise ValueError("Analytics revision 4 requires native schema v2")
+    if encoding.get("analytics_revision") in (4, 5):
+        if product.get("schema") != f"halospawns.h1NativeAnalytics.v{encoding['analytics_revision'] - 2}":
+            raise ValueError("Analytics revisions 4/5 require native schemas v2/v3")
         validate_combat_product(product["combat"], encoding=encoding, report=report,
                                 attribution=product.get("kill_attribution"))
+        if encoding.get("analytics_revision") == 5:
+            validate_gameplay(product["gameplay"], product["combat"], slots,
+                              report["envelope"]["ticks"] if end is None else end + 1)
     elif product.get("schema") != "halospawns.h1NativeAnalytics.v1":
         raise ValueError("Retained analytics revisions require native schema v1")
 
@@ -134,8 +138,8 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     end = analytics.get("match_end_source_tick")
     if end is not None and (type(end) is not int or not 0 <= end < ticks):
         raise ValueError("Invalid H1 match-end boundary")
-    statistics_ticks = end + 1 if revision in (2, 3, 4) and end is not None else ticks
-    if type(revision) is not int or revision not in (1, 2, 3, 4):
+    statistics_ticks = end + 1 if revision in (2, 3, 4, 5) and end is not None else ticks
+    if type(revision) is not int or revision not in (1, 2, 3, 4, 5):
         raise ValueError("Unsupported H1 analytics revision")
     if analytics.get("analytics_revision", 1) != revision:
         raise ValueError("Inconsistent H1 analytics revision")
@@ -272,7 +276,7 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             opponent_matrices="Verified EVT1 can establish recorded kill pairs; damage attribution by opponent is not exported.",
             gametype_settings="Reviewed resolved variant fields may be available; complete runtime settings are not exported.",
         )
-    if encoding.get("analytics_revision") == 4:
+    if encoding.get("analytics_revision") in (4, 5):
         metadata["h1_film"]["known_gaps"].update(
             weapon_shots="Discharge lineage coverage is reported independently in native combat.",
             opponent_matrices="Applied damage and callback death coverage are reported independently in native combat.",

@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 6143a72ce769bbc1046573dc018b1ced07aa3d5d95fe2b11eb7f61fa1646c31c",
+  "$comment": "Generated from API schemas/h1films.py SHA256 8ef07977d3252dc818a14b216a9e4dae00413c6ee0aaab25d0c9c5eaa88ba112",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -83,7 +83,7 @@
       "additionalProperties": false,
       "properties": {
         "analytics_revision": {
-          "maximum": 4,
+          "maximum": 5,
           "minimum": 1,
           "title": "Analytics Revision",
           "type": "integer"
@@ -750,7 +750,8 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
       "title": "Analytics Revision",
       "type": "integer"

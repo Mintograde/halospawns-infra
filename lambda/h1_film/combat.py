@@ -7,7 +7,7 @@ import math
 
 def participant_counters(encoding, combat=None):
     result = {slot: dict(counters) for slot, counters in encoding.get("final_counters", {}).items()}
-    if encoding.get("analytics_revision") != 4:
+    if encoding.get("analytics_revision") not in (4, 5):
         return result
     if combat is None:
         combat = encoding["native_analytics"]["combat"]

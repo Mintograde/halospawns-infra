@@ -271,3 +271,6 @@ target_sources(h1-film PRIVATE "${H1_SOURCE}/host/blampc_crouch_slide_clip.c" "$
 set_source_files_properties("${H1_SOURCE}/host/blampc_film_effects.c" "${H1_SOURCE}/host/blampc_film_ledger.c" "${H1_SOURCE}/host/blampc_world_ping.c" PROPERTIES COMPILE_OPTIONS "-include${CMAKE_CURRENT_SOURCE_DIR}/host-platform.h")
 
 target_sources(h1-film PRIVATE "${H1_SOURCE}/host/blampc_film_arrival.c" "${H1_SOURCE}/host/blampc_film_blasts.c" "${H1_SOURCE}/host/blampc_film_netstrip.c")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/gameplay.cmake")
+hs_gameplay_target(h1-film)

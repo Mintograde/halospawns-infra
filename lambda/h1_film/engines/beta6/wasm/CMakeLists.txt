@@ -287,3 +287,6 @@ target_sources(h1-film PRIVATE
     "${H1_SOURCE}/host/blampc_glitch_180.c"
     "${H1_SOURCE}/host/blampc_blast_sphere.c")
 target_sources(h1-film PRIVATE "${H1_SOURCE}/host/platform/posix/blampc_film_kfbuild_posix.c")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/gameplay.cmake")
+hs_gameplay_target(h1-film)

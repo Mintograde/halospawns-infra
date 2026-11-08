@@ -23,7 +23,7 @@ extern void hs_original_game_statistics_record_kill(int, int, int, short);
 
 typedef struct { unsigned int shot; int weapon, owner; } hs_lineage;
 typedef struct { int handle; hs_lineage lineage; } hs_binding;
-typedef struct { char path[241]; int category; } hs_weapon;
+typedef struct { char path[241]; int category, definition; } hs_weapon;
 typedef struct { unsigned int id; int slot, weapon; } hs_shot;
 typedef struct {
     hs_lineage lineage;
@@ -84,6 +84,7 @@ static int hs_catalogue(int definition, int category)
     }
     strcpy(hs_weapons[hs_weapon_count].path, path);
     hs_weapons[hs_weapon_count].category = category;
+    hs_weapons[hs_weapon_count].definition = definition;
     return hs_weapon_count++;
 }
 
@@ -93,6 +94,10 @@ static hs_lineage hs_bound(hs_binding *bindings, int handle)
     hs_binding *binding = &bindings[(unsigned short)handle];
     return handle != -1 && binding->handle == handle ? binding->lineage : empty;
 }
+
+#ifdef H1_GAMEPLAY_EXPORT
+#include "gameplay.h"
+#endif
 
 void hs_combat_discharge(int weapon, int owner)
 {
@@ -105,6 +110,9 @@ void hs_combat_discharge(int weapon, int owner)
     hs_current.shot = ++hs_next_shot;
     if (hs_shot_count == 256) { hs_coverage[0] = 2; return; }
     hs_shots[hs_shot_count++] = (hs_shot){hs_current.shot, slot, hs_current.weapon};
+#ifdef H1_GAMEPLAY_EXPORT
+    hs_gameplay_shot(slot, player, hs_current.weapon, hs_current.shot);
+#endif
 }
 
 void weapon_trigger_fire(int weapon, short trigger)
@@ -254,6 +262,10 @@ void hs_combat_applied(const void *event, int object, int actual,
 #endif
     if (hs_damage_count == 1024) { hs_coverage[0] = hs_coverage[1] = 2; return; }
     hs_damages[hs_damage_count++] = (hs_damage){lineage, attacker, victim, relationship, shield, health};
+#ifdef H1_GAMEPLAY_EXPORT
+    hs_gameplay_damage(attacker, victim, object, damage, lineage, relationship,
+        shield_before, shield_after, health_before, health_after);
+#endif
 }
 
 void object_damage_aftermath(int object, damage_data *damage, unsigned int flags,
@@ -303,6 +315,9 @@ void hs_combat_death(int kind, int killer, int victim)
         death->weapon = hs_aftermath_lineage.weapon;
         if (kind == 0 && death->weapon >= 0) death->headshot = hs_aftermath_headshot;
     }
+#ifdef H1_GAMEPLAY_EXPORT
+    hs_gameplay_death(death);
+#endif
 }
 
 void game_statistics_record_kill(int object, int player, int owner, short team)
@@ -425,4 +440,7 @@ static void hs_combat_frame(int clock)
     hs_end();
     hs_shot_count = hs_damage_count = hs_death_count = 0;
     memset(hs_award_eligible, 0, sizeof hs_award_eligible);
+#ifdef H1_GAMEPLAY_EXPORT
+    hs_gameplay_frame();
+#endif
 }

@@ -26,7 +26,8 @@ option(H1_CLIENT_VIEW "Export client world recording frames independently of gam
 if(H1_CLIENT_VIEW)
     target_compile_definitions(blampc PRIVATE H1_CLIENT_VIEW=1)
 endif()
-target_sources(blampc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/math.c")
+# Beta 5 host translation units provide the CRT float functions. Adding the
+# older shim duplicates sqrtf/fabsf in a clean MSVC build.
 target_compile_definitions(blampc PRIVATE H1_FINITE_WORLD_OBJECTS=1)
 option(H1_DAMAGE_ATTRIBUTION "Resolve untracked damage through map tag references" OFF)
 if(H1_DAMAGE_ATTRIBUTION)
@@ -96,3 +97,6 @@ set_property(SOURCE "${H1_SOURCE}/host/main.c" TARGET_DIRECTORY blampc
 set_property(SOURCE "${H1_SOURCE}/engine/blam/object_cause_damage.c" TARGET_DIRECTORY blampc
     APPEND PROPERTY COMPILE_DEFINITIONS blampc_pgcr_stats_note_damage=hs_note_damage)
 set_target_properties(blampc PROPERTIES OUTPUT_NAME "h1-film-export")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/gameplay.cmake")
+hs_gameplay_target(blampc)

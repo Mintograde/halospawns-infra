@@ -86,7 +86,9 @@ def require(condition, reason="validation_failed"):
 
 
 def validate_schema(name, value):
-    version = 2 if name == "native-analytics" and value.get("schema") == "halospawns.h1NativeAnalytics.v2" else 1
+    version = {"halospawns.h1NativeAnalytics.v2": 2, "halospawns.h1NativeAnalytics.v3": 3}.get(
+        value.get("schema"), 1
+    ) if name == "native-analytics" else 1
     schema = analytics._json(PACKAGE / "contracts" / f"h1film-{name}.v{version}.schema.json")
     require(
         Draft202012Validator(schema, format_checker=FormatChecker()).is_valid(value)
@@ -154,6 +156,10 @@ def validate_job(job):
     profile = load_registry().get(film["engine_profile"])
     require(profile is not None, "unsupported_build")
     exporter = engine.get("exporter_revision")
+    if job.get("analytics_revision") == 5:
+        require(film["engine_profile"] in (
+            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1",
+        ) and (exporter or 1) >= 19, "unsupported_build")
     client_recipes = json.loads((PACKAGE / "profiles/registry.json").read_text())["processing"].get("client_view_recipes", {})
     require(not any(r["exporter_revision"] == exporter for r in client_recipes.get(film["engine_profile"], [])), "unsupported_build")
     recovery = film.get("roster_recovery")
@@ -692,6 +698,10 @@ def completion_proof(job, report, encoding):
 
 def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    if proof.get("analytics_revision") == 5:
+        require(proof["engine_profile"] in (
+            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1",
+        ) and (proof.get("exporter_revision") or 1) >= 19, "unsupported_build")
     recovery = proof.get("roster_recovery")
     require(recovery == pin["film"].get("roster_recovery"))
     if recovery is not None:

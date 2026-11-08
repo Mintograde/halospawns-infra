@@ -26,14 +26,14 @@
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 12,
-        "analytics_revision": 4,
+        "exporter_revision": 19,
+        "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 18,
-        "analytics_revision": 4,
+        "exporter_revision": 19,
+        "analytics_revision": 5,
         "viewer_revision": 9,
         "max_players": 16
       }
@@ -273,6 +273,12 @@
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 19,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ],
       "h1-performance-beta6-p9839-wasm-v1": [
@@ -305,6 +311,12 @@
           "analytics_revision": 4,
           "viewer_revision": 9,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 19,
+          "analytics_revision": 5,
+          "viewer_revision": 9,
+          "max_players": 16
         }
       ]
     },
@@ -324,7 +336,8 @@
       "match_replay": "halospawns.h1MatchReplay.v1",
       "partial_match_replay": "halospawns.h1MatchReplay.v2",
       "compact_match_replay": "halospawns.h1MatchReplay.v3",
-      "client_roster_mismatch": "halospawns.h1MatchReplay.v4"
+      "client_roster_mismatch": "halospawns.h1MatchReplay.v4",
+      "gameplay_metrics": "halospawns.h1GameplayMetrics.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -589,6 +602,20 @@
       "revision": 18,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 19,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "67b7ec00fa365b166fcfb2b753f0b154b1525f10b6686d50f396fd99aeededef",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 19,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "0780facc4526531740c3857069e0e79a78db6b4557dfc0aed08365fafba58c57",
       "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
     }
   ]

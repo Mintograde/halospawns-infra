@@ -4,6 +4,7 @@ mod artifact;
 mod fast_schema;
 mod native;
 mod combat;
+mod gameplay;
 mod recycle;
 mod sampling;
 mod text_equal;
@@ -84,7 +85,7 @@ impl Request {
         if !matches!(self.transport_contract.as_str(), "HSFT0001" | "HSFT0002") {
             return Err("unsupported engine transport contract".into());
         }
-        if !(1..=4).contains(&self.analytics_revision) {
+        if !(1..=5).contains(&self.analytics_revision) {
             return Err("unsupported analytics revision".into());
         }
         Ok(())
@@ -464,8 +465,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
     let mut native = (request.analytics_revision >= 3).then(native::NativeAnalytics::default);
-    let mut combat = (request.analytics_revision == 4)
+    let mut combat = (request.analytics_revision >= 4)
         .then(|| combat::Combat::new(request.combat_network_recording));
+    let mut gameplay = (request.analytics_revision == 5)
+        .then(|| gameplay::Evidence::new(&directory.join("gameplay.ndjson"))).transpose()?;
     let mut count = 0;
     let mut analytics = request
         .analytics_context
@@ -505,6 +508,10 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             combat.observe(&tick, count)?;
         }
         tick.as_object_mut().unwrap().remove("combat");
+        if let Some(gameplay) = &mut gameplay {
+            gameplay.observe(&tick, count)?;
+        }
+        tick.as_object_mut().unwrap().remove("gameplay");
         observations.observe_state(
             &mut tick,
             count,
@@ -593,6 +600,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let mut native_product = native.map(|native| native.product());
+    if let Some(gameplay) = gameplay { gameplay.finish()?; }
     if let Some(combat) = combat {
         let product = native_product.as_mut().unwrap();
         product["schema"] = json!("halospawns.h1NativeAnalytics.v2");
