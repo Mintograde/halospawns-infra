@@ -1,5 +1,85 @@
 # H1 film Lambda integration
 
+## Partial embedded-client availability deployed (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261107-r5**, policy revision **12**, is
+active with API **live=227**, source `72b00f1cd889b7402a00e7288e7e373aaa901de3`.
+The worker was built from committed `d066659` in the isolated checkout
+`.build/partial-match-release`. Image:
+`sha256:15d159ed0e58ddb3a23f55ed5f75e48c1137f1979b1eff074c4f9a7830972ccd`.
+Registry digest:
+`9bccedf04ff9a47d81bf0b0e166f4d99bb6f4fdf12baf51c731158f42bf5f032`.
+Five profiles/nineteen exporters retain every older pin. New Beta 6 attempts
+use **16/4/7**, `halospawns.h1MatchReplay.v2`, and `H1MV0002`. Exporter 16
+reuses exporter 15's exact simulation binaries; only the new recipe permits
+explicitly unavailable embedded-client worlds.
+
+Only a completed, source-bound embedded-client simulation with an explicit,
+bounded desync verdict can become unavailable. Its stable track identity,
+failure counts, original diagnostics, inputs and clocks remain in the artifact;
+it has no world payload or claim of verified hashes. The host is mandatory and
+every playable client must pass all integrity checks. Crashes, timeouts,
+corruption and incomplete simulation still reject conversion. Retained 14/4/6
+and 15/4/6 recipes remain strict. Both the original `match_replay` requirement
+and the additive `partial_match_replay` capability are advertised.
+
+The three supplied November 7 originals pass packaged conversion and exact
+deployed-API validation:
+
+| Film | Playable worlds | Unavailable client |
+| --- | --- | --- |
+| Dread | Host and four clients | `client-0`, player 4 |
+| Prisoner | Host and four clients | `client-1`, player 4 |
+| Octagon | Host and all four clients | None |
+
+All original client accounts and decoded diagnostic tables, including those
+for unavailable clients, are preserved byte-for-byte. These are offline
+conversions of the original files; existing uploaded attempts were not changed.
+New uploads use the promoted recipe. Retrying an old pinned attempt does not
+repin it to the partial-availability recipe.
+
+Validation passed: 74 Node tests, 98 local/packaged worker tests, all 25 packaged
+cases/75 exact API 227 callbacks, failure/receipt checks and the retained Beta 5
+client flow. API validation includes 1,972 local unit tests (four Windows-native
+skips), Ruff, the actual migrated constraint in isolated PostgreSQL, and
+successful Linux native build/test/release CI run `42426515161`. Nineteen earlier
+artifacts are byte-identical; four retained Beta 6 cases preserve every payload
+byte with only the new manifest contract/status fields changed. An explicit
+15/4/6 run on r5 still rejects Dread and produces byte-identical Octagon artifacts
+in all three modes. The published original-film outputs also match the audited
+candidate artifacts exactly.
+
+Local frontend readers support both container versions, validate availability
+evidence, fall back to the host, and disable unavailable perspectives and ghosts.
+The full viewer suite passes 1,775 tests with one optional fixture skip; an
+additional UI regression passes in the eight-test controls suite. Standalone
+and site production builds pass. Frontend work remains local and uncommitted.
+
+Migration `20261107020000_h1film_partial_match_replay.sql` is applied in dev,
+extending only the artifact format/version/profile constraint. The guarded
+promotion changed only the H1 Lambda image and producer digest (0/1/0); the
+separately reviewed API state refresh changed only version output 226 to 227.
+First live health and the complete six-component dev postplan pass with no
+changes. Before/after read-only checks preserve 95 conversions, 311 completion
+receipts, 232 H1 attempts, 290 map approvals and operational settings. Queue
+and DLQ are empty. No live upload, retry, historical reparse, frontend deployment
+or prod action was submitted.
+
+Retain the additive migration, v1/v2 readers, capabilities, all engines and all
+recipes on rollback. Underlying playback repair of the two unavailable client
+recordings remains separate work; no failed simulation is presented as verified.
+
+Evidence: `.build/partial-match-deploy/` contains migration, publication,
+promotion, preservation, diagnostic, artifact-parity and final-plan checks.
+The release corpus is under
+`.build/partial-match-release/.build/h1-contracts/20261107-r5-66cb9ac1e2ed4ee08f09787780419dd4/`;
+promotion evidence is under
+`.build/h1-promotions/20261108-000439-d422c67d050e4759bf40e4be1383faed/`.
+The publication used `scripts/publish-h1-film.ps1 -Tag 20261107-r5`, then
+`atmos workflow promote-dev --file h1-film`; `scripts/plan.ps1 dev` confirmed
+the final no-op state. The initial ECR push timed out and its retry succeeded
+before registration; no immutable tag was overwritten.
+
 ## Beta 6 client terminal events and network bot settings deployed (2026-11-07 UTC)
 
 User-authorized dev worker/default **20261107-r4**, policy revision **11**, is

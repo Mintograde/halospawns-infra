@@ -27,9 +27,15 @@ The new API migration only extends the container format constraint. Preserve
 all versions, pins, approvals and stored attempts on rollback. See DEPLOYMENT.md
 for the activation status and real-film evidence.
 
+Revision-7 pins:
+
+- Projection: `e19c41417dd3c4e6843037a94fb8d993e4861bfd6d345a9965f82b4ed8effdbb`
+- Manifest: `48c262a470909bdcbc5ac86ebc7cea602bf9a01d4c7db9943de7aab8e44701be`
+- Encoding: `55c04603d2c7f12677819f6be9443a4e3b40c91a65f817ee55be1ef5c26dc15d`
+
 ## Engine pins
 
-- Exporter 15 WASM: `ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac`
+- Exporter 15/16 WASM: `ab521a65d720ead578c5736762143edbb21ef61f6cb6ecfeee2204f777b17cac`
 - Retained base/exporter 14 WASM: `b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c`
 - Glue: `722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917`
 - Source fingerprint: `03ecd5ff7150ec3648db1fe68489cee7cd40888525b62747d0819cdf0dbfb99e`
@@ -50,7 +56,7 @@ in `blampc_film_play_end`; host changes retain their exclusive end boundary.
 The exact application-count, refused-event, seed and world-hash checks remain.
 Exporter 14 and its recipe are retained unchanged for persisted attempts.
 
-## Single-file match replay
+## Retained revision-6 single-file match replay
 
 `halospawns.h1MatchReplay.v1` (`H1MV0001`) is a revision-6 viewer container with
 a hashed JSON index and bounded, individually hashed entries. One artifact
@@ -107,8 +113,9 @@ callbacks. The sample's final single artifact is 4,620,033 bytes.
 Synthetic two-part fixtures exercise whole views and shared-network thin parts;
 restored views match exactly. They contain two copies of the solo client, not
 two independently recorded players. Real multiplayer, early/late clients and
-maximum-size recordings remain additional acceptance opportunities. Invalid
-reconstruction or playback fails closed.
+maximum-size recordings were additional acceptance opportunities at the initial
+rollout. The multiplayer results below add real coverage. Invalid reconstruction
+and all playable-world verification failures still fail closed.
 
 ### November 7 multiplayer recordings
 
@@ -131,12 +138,20 @@ players 0-3. Both player-4 views still fail independently in native and exporter
 Whole-part sizes/checksums and original source/map hashes match. An isolated
 native experiment retaining only the recording client's local seats produces
 the same divergence counts; it is not part of the released engine. These two
-complete match uploads remain rejected. Do not omit their failed worlds, clear
-verification failures, or replace recorded hashes to make them pass. Further
-upstream playback/recording investigation is required. Local evidence is under
+matches remain rejected under retained 14/4/6 and 15/4/6 recipes. The subsequently
+authorized 16/4/7 policy preserves each verified host and four passing clients,
+marking the player-4 client unavailable with its original recorded data. It does
+not clear failures or change recorded hashes. Repairing those client worlds
+still requires upstream playback/recording investigation. Local evidence is under
 `.build/nov7-multiplayer-fix/`, including restored parts, native/WASM summaries,
 per-part checks and the discarded seat experiment. See `DEPLOYMENT.md` for the
 release's packaged and deployed-API checks.
+
+Partial-artifact checks are in `.build/partial-match-deploy/artifact-audit.json`:
+Dread is 352,861,808 bytes and Prisoner 373,605,404 bytes, each with five playable
+worlds and one unavailable client. Octagon has five playable worlds and no
+unavailable client (177,043,708 bytes). Every original client account and decoded
+diagnostic table was compared byte-for-byte, including the failed clients.
 
 ## Dev rollout
 
