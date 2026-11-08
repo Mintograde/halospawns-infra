@@ -1,5 +1,40 @@
 # Beta 6.1
 
+## Prisoner client roster investigation (2026-11-08)
+
+Upload `c76122dd-3063-4d91-b3e2-ed8f98b1d4e3`, local file
+`a521028b-543f-4786-ab97-1ac8f2f62d70.h1film`, fails on worker `20261108-r4`
+with API 230. The exact retained S3 version and local file match SHA-256
+`eb2afa3659e54d977149893cc1833e1a9850bb0678dcd9b9a4fe13684c5f188a`
+(23,703,272 bytes); the approved Prisoner map also matches its frozen pin.
+AWS logged `conversion_failed` at 12:19:24 UTC after 75.1 seconds, using
+1,751 MiB of 3,008 MiB. This was neither a timeout nor an out-of-memory failure.
+
+The exact frozen job reproduces offline. The host verifies all 48,777 ticks and
+407 recorded hashes. Embedded `client-0` has 10 seed mismatches and 5/407 hash
+mismatches, first divergence at update 350; the existing policy correctly makes
+that track unavailable. The actual blocker is `client-1` (recorded player 1):
+its header declares four players, but the initial engine export contains five,
+with `Seizen` in slots 3 and 4. The encoder rejects the roster and terminates
+its producer, causing the secondary `Simulator failed / null !== 0` error.
+
+The bounded verification-only WASM replay and the independent native reference
+both finish all 48,778 client-1 ticks with zero seed/hash mismatches, all 407
+hash checks and 295,717 network applications with zero refusals. A clean verdict
+cannot be converted to unavailable-client evidence. The last embedded client
+(`client-2`, player 2) independently passes native playback: 48,780 ticks and all
+407 hashes. Part lengths/checksums and source/map hashes remain valid.
+
+This is a reproducible roster/slot reconstruction inconsistency, not evidence
+that the entire recording is unusable. Recovery needs an explicit, verified
+roster reconciliation rule or upstream playback correction; hash success alone
+does not prove the duplicate slot is safe to publish or discard. No code change,
+deployment, retry, repinning or source mutation was performed for this diagnosis.
+Evidence: `.build/film-c76122dd-investigation/`, especially `diagnosis.json`,
+`exact-conversion/conversion.partial/client-1.partial/`, `first-rosters.json`
+and the two native reference summaries. See handoff
+`20261108-infra-beta6-clean-client-roster`.
+
 ## Missing recorded map size
 
 The November 8 upload failures exposed nineteen recognized Beta 6 host films
