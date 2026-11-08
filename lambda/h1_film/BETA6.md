@@ -16,7 +16,9 @@ All four earlier profiles, engines and recipes remain unchanged.
 ## Lossless compact match storage
 
 The user authorized making compact storage the standard for Beta 6+ on
-2026-11-08 UTC. Viewer 8 / `halospawns.h1MatchReplay.v3` / `H1MV0003`
+2026-11-08 UTC. It is deployed in dev as worker/default `20261108-r2`, policy
+13, with API 228 and the additive artifact migration. Viewer 8 /
+`halospawns.h1MatchReplay.v3` / `H1MV0003`
 preserves every logical entry byte and hash from viewer 7. Exporter 17 reuses
 exporter 16's exact engine binaries and availability policy. Old 14/4/6,
 15/4/6 and 16/4/7 recipes remain pinned and supported. Future engine profiles
@@ -44,6 +46,25 @@ packing takes 1.4–3.5 seconds, independent of simulation/encoding. The API add
 the compact capability and an additive format/version/profile constraint.
 See `DEPLOYMENT.md` for the actual activation and complete packaged validation.
 Frontend changes remain local and uncommitted for user testing.
+
+Packaged release comparison against `20261107-r5` (local Docker, two CPUs,
+3,008 MiB; individual runs, not a controlled performance benchmark):
+
+| Film | Previous bytes | Compact bytes | Reduction | Initial packing, old → compact | Harness, old → compact |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Octagon | 177,043,708 | 73,362,140 | 58.6% | 1.62 → 2.28 s | 51.34 → 55.61 s |
+| Dread | 352,861,808 | 162,337,938 | 54.0% | 2.97 → 4.19 s | 113.78 → 110.72 s |
+| Prisoner | 373,605,404 | 166,388,094 | 55.5% | 3.24 → 4.19 s | 112.74 → 112.78 s |
+
+The harness includes simulation, all three product modes and receipt checks;
+these are not live Lambda timings. Initial packing adds 0.67-1.21 seconds.
+Across all three product modes, the added packing cost is 0.65-1.21 seconds.
+Whole-harness variation does not establish a speedup or a reliable slowdown.
+Chrome 156 separately verifies all 15 playable worlds and 58 representative
+record tables across these files; the slowest complete table reconstruction
+takes 1.45 seconds locally, while world seeks do not decode those tables.
+Evidence: `.build/compact-match-deploy/processing-comparison.json` and
+`browser-verification.json`.
 
 Revision-8 pins:
 

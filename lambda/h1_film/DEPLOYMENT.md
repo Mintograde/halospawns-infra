@@ -1,5 +1,89 @@
 # H1 film Lambda integration
 
+## Lossless compact Beta 6 default deployed (2026-11-08 UTC)
+
+User-authorized dev worker/default **20261108-r2**, policy revision **13**, is
+active with API **live=228**, source `f3319fef77d02b1475976b087acf1cdef763239b`.
+The worker was built from committed `02142ba` in the isolated checkout
+`.build/compact-match-release-r2`. Image:
+`sha256:c6e0df5c8e16c13c278fc56773c0145001328d6444137b7b5633ae6af1924a6b`.
+Registry digest:
+`6102c5c0f9e4a69a7e89e4d98736766a7890f7c605ff2b2e773f3b76fa7b1207`.
+Five profiles/twenty exporters retain every older pin. New Beta 6 attempts use
+**17/4/8**, `halospawns.h1MatchReplay.v3`, and `H1MV0003`. This is the standard
+format for subsequent Beta 6+ profiles, which still require explicit immutable
+engine registration and validation. Unknown recorded builds remain rejected.
+
+Exporter 17 reuses exporter 16's exact simulation binaries and partial-client
+availability policy. Every logical payload byte, original hash, per-client
+clock and unavailable-client diagnostic survives. Original record sections use
+independent 256 KiB Zstandard pages; redundant expanded tables reconstruct from
+their same-track recorded source. Worlds retain their exact existing bytes and
+direct ranges. There is no cross-client pose substitution or extra quantization.
+The browser/Node readers validate bounded blocks and decoded hashes, enforce a
+32 MiB cache and support cancellation. See [BETA6.md](BETA6.md) for the format
+pins, limits and measured processing comparison.
+
+The original multiplayer Octagon/Dread/Prisoner artifacts shrink by **58.6%,
+54.0% and 55.5%**, respectively. Initial packing adds **0.67-1.21 seconds** in
+individual local packaged runs; total harness times remain comparable. These
+are not live Lambda timings or a controlled performance benchmark. The original
+approximately 80% reduction target is not reached.
+
+Validation passed: **79 Node tests, 100 local/packaged worker tests, 25 packaged
+cases/75 exact API 228 callbacks**, failure/receipt checks and the retained
+Beta 5 client flow. All **19 older artifacts are byte-identical**, and all
+**420 payload entries across six Beta 6 cases** match their previous bytes.
+The three large samples additionally pass 332 reverse cold ranges and match
+the independently audited transcodes exactly. An explicit retained **16/4/7**
+Octagon run on this image produces byte-identical artifacts in all three modes.
+Old recipes, jobs and retries remain pinned.
+
+API validation includes 1,996 local unit tests (four Windows-native skips),
+Ruff, four isolated PostgreSQL migration/release tests and successful Linux
+native build/test/release CI run `42437921193`. The additive migration
+`20261108010000_h1film_compact_match_replay.sql` is applied in dev and admits
+the exact v3/container-3/viewer-8 tuple while retaining all earlier formats.
+Release registration and activation require the additive compact capability.
+The four API-owned frozen recipe schemas were refreshed to admit viewer 8;
+a regression test checks every registered recipe against all four snapshots.
+
+Local frontend readers pass all 1,778 viewer tests (one optional fixture skip)
+and standalone/site builds. Chrome 156 verifies all 15 playable world tail
+seeks and 58 representative record tables across the three multiplayer films,
+including exact reconstructed ranges, bounded caching and cancellation. The
+slowest complete table reconstruction takes 1.45 seconds locally; world seeks
+avoid that work. **Frontend changes remain local and uncommitted.**
+
+The guarded promotion changed only the H1 Lambda image and producer digest
+(0/1/0); first live health verified all profiles, exporters and release pins.
+The separately reviewed API state refresh changed only version output 227 to
+228. Read-only before/after checks preserve all **95 conversions, 311 receipts,
+232 H1 attempts and 290 map approvals**, as well as limits, concurrency and
+consumer configuration. API health is 200; queue and DLQ are empty.
+The complete six-component dev postplan is **no-op**, including `app-api` and
+`map-processing`.
+No live upload, retry, historical reparse, frontend deployment or prod action
+was submitted. Retain the additive migration, all reader capabilities, engines
+and recipes on rollback.
+
+Candidate `20261108-r1` was never registered, installed or activated: publication
+caught the stale viewer-7 bound in the frozen job schema. Its image remains
+immutable. The corrected r2 candidate reran the complete suite. A Docker disk
+limit was resolved by pruning unused build cache; an ECR credential-helper RPC
+failure was bypassed with a temporary credential file removed after publication.
+No global credential configuration, images, containers or volumes were removed.
+
+Evidence: `.build/compact-match-deploy/` contains publication,
+processing comparison, payload parity, browser checks, promotion, preservation
+and final-plan logs. The complete release corpus is under
+`.build/compact-match-release-r2/.build/h1-contracts/20261108-r2-9c231fbb8ed34352ad82644c4b763bdf/`;
+promotion evidence is under
+`.build/h1-promotions/20261108-025454-3f7ed0cb791a408e815e90f98f342619/`.
+Publication used `scripts/publish-h1-film.ps1 -Tag 20261108-r2`, followed by
+`atmos workflow promote-dev --file h1-film`. API migration logs are in the
+API checkout's `.build/compact-migration-{dry-run,apply}.log`.
+
 ## Partial embedded-client availability deployed (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261107-r5**, policy revision **12**, is
