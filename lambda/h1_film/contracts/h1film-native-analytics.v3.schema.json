@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 706476319125fc27e32dd7d0becdd361f8f19e76ddb516e1d83acff327c63ec8",
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 80db185405fc756096881fdd35a3dde35b6b67f7698cebc41d4e77b4dc33e408",
   "$defs": {
     "GameplayCoverage": {
       "additionalProperties": false,
@@ -33,6 +33,43 @@
         "reason"
       ],
       "title": "GameplayCoverage",
+      "type": "object"
+    },
+    "GameplayEstimates": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "examples": {
+          "items": {
+            "$ref": "#/$defs/GameplayExample"
+          },
+          "maxItems": 8192,
+          "title": "Examples",
+          "type": "array"
+        },
+        "method": {
+          "const": "host_sequence_previous_12",
+          "title": "Method",
+          "type": "string"
+        },
+        "schema": {
+          "const": "halospawns.h1GameplayEstimates.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "method",
+        "count",
+        "examples"
+      ],
+      "title": "GameplayEstimates",
       "type": "object"
     },
     "GameplayExample": {
@@ -133,6 +170,17 @@
       "properties": {
         "coverage": {
           "$ref": "#/$defs/GameplayCoverage"
+        },
+        "estimates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GameplayEstimates"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "evaluated_kills": {
           "maximum": 8192,

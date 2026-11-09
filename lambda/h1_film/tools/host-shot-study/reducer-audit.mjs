@@ -13,7 +13,7 @@ const edits=[
           || (encounter?.slot>=0 && encounter.slot!==e.slot) || (!!e.weapon && !pistol(e.weapon)),
         hit_count:encounter?.hits.length??0,incomplete:!!encounter?.unknown,
         hit_ids:encounter?.hits??[]}; decisionTrace.push(decision);`],
- ['if (encounter.unknown || !e.weapon) { player.unknown_kills++; continue; }',"if (encounter.unknown || !e.weapon) { decision.outcome='unknown'; player.unknown_kills++; continue; }"],
+ ["classification.status = 'unknown'; player.unknown_kills++; continue;", "classification.status = 'unknown'; decision.outcome='unknown'; player.unknown_kills++; continue;"],
  ['      player.observed_count++;',"      decision.outcome='positive'; player.observed_count++;"],
  ['|| (!starts && e.before.some((v,i) => v > encounter.after[i]))) encounter.valid = false;',
   '|| (!starts && e.before.some((v,i) => v > encounter.after[i]))) { encounter.valid = false; encounter.otherDisqualifier=true; }'],

@@ -22,6 +22,10 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.ok(['beta5','beta6'].includes(profile.port)&&recipe.exporter_revision>=19);
         assert.equal(requirements.gameplay_metrics,'halospawns.h1GameplayMetrics.v1');
       }
+      if(recipe.exporter_revision>=21) {
+        assert.ok(['beta5','beta6'].includes(profile.port) && recipe.analytics_revision===5);
+        assert.equal(requirements.gameplay_estimates,'halospawns.h1GameplayEstimates.v1');
+      }
       assert.ok([2, 4, 5, 6, 7, 8, 9].includes(recipe.viewer_revision));
       if(profile.port==='beta6') {
         assert.equal(recipe.exporter_revision>=16,recipe.viewer_revision>=7);

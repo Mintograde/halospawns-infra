@@ -6,7 +6,8 @@ import {createHash} from 'node:crypto';
 import {inspectMatchFilm} from './match-film.mjs';
 import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {TABLES,decodeDiagnosticRow,pairShotVerdicts,linkedPull} from './diagnostics-codec.mjs';
-import {deriveGameplayMetrics} from './gameplay-metrics.mjs';
+import {classifyGameplayMetrics} from './gameplay-metrics.mjs';
+import {addGameplayEstimates} from './gameplay-estimates.mjs';
 
 function rows(account,kind,name) {
   const t=account?.tables.find(t=>t.name===name);
@@ -133,7 +134,7 @@ export function bindGameplayShots(events,{ledger,accounts}) {
   });
 }
 
-export async function buildGameplayMetrics({film,evidence,encoding}) {
+export async function buildGameplayMetrics({film,evidence,encoding,includeEstimates=false}) {
   for(const kind of ['shot','damage','death']) assert.notEqual(
     encoding.native_analytics.combat[`${kind}_coverage`].reason,'capped',
     'Gameplay metrics require uncapped combat evidence');
@@ -147,7 +148,8 @@ export async function buildGameplayMetrics({film,evidence,encoding}) {
     assert.ok(events.length<=400000,'Gameplay event limit exceeded');
   }
   const source=recordedGameplaySources(await readFile(film));
-  return deriveGameplayMetrics({events:bindGameplayShots(events,source),slots:encoding.players,
-    deaths:encoding.native_analytics.combat.deaths,partialRecording:encoding.source_first_clock!==0
-      || encoding.analytics.match_end_source_tick===null});
+  const args={events,slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,
+    partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
+  const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(events,source)});
+  return includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
 }

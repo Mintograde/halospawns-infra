@@ -57,3 +57,30 @@ class GameplayTests(unittest.TestCase):
         player = self.native["gameplay"]["metrics"][0]["players"][0]
         player.update(value=None, coverage={"status": "partial", "reason": "partial_recording"})
         self.validate(self.native)
+
+    def test_estimates_preserve_unknown_totals_and_validate_combat_examples(self):
+        player = self.native["gameplay"]["metrics"][0]["players"][0]
+        player["estimates"] = {
+            "schema": "halospawns.h1GameplayEstimates.v1", "method": "host_sequence_previous_12",
+            "count": 1, "examples": player["examples"],
+        }
+        player.update(value=None, observed_count=0, unknown_kills=1, examples=[],
+                      coverage={"status": "partial", "reason": "missing_shot_evidence"})
+        self.validate(self.native)
+        for change in ("count", "unknown", "death", "overlap", "method"):
+            with self.subTest(change=change):
+                native = copy.deepcopy(self.native)
+                candidate = native["gameplay"]["metrics"][0]["players"][0]
+                if change == "count":
+                    candidate["estimates"]["count"] = 0
+                elif change == "unknown":
+                    candidate["unknown_kills"] = 0
+                elif change == "death":
+                    candidate["estimates"]["examples"][0]["kill_event_index"] = 99
+                elif change == "overlap":
+                    candidate.update(observed_count=1, evaluated_kills=2,
+                                     examples=copy.deepcopy(candidate["estimates"]["examples"]))
+                else:
+                    candidate["estimates"]["method"] = "unknown"
+                with self.assertRaises((ValueError, cloud.FilmError)):
+                    self.validate(native)

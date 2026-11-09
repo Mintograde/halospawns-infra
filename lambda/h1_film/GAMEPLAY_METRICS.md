@@ -57,6 +57,26 @@ raw evidence stream.
 
 ## Recipes and rollout
 
+Exporter 21 adds separately labelled review estimates using the exact exporter-20
+simulation binaries. New recipes are 21/5/5 and 21/5/9, with required capability
+`gameplay_estimates: halospawns.h1GameplayEstimates.v1`. Each player's optional
+`estimates` object carries that schema, method `host_sequence_previous_12`,
+candidate `count`, and combat-bound `examples`. The original exact fields and
+coverage remain unchanged. Old recipes omit this object, preserving old outputs
+and receipt identities. No additional engine geometry hooks are enabled.
+
+The estimator accepts only unresolved kills from the exact analysis. It joins
+accepted damage to a unique preceding host discharge of the same owner and
+weapon within 12 ticks, consumes each discharge once per report, and applies the
+same fresh-target/unassisted/consecutive-shot reducer. Every host firearm
+discharge advances the sequence, including misses and other weapons. A known
+exact disqualification always excludes a candidate. Unknown association,
+relationship or weapon evidence cannot manufacture one. Since original client
+misses may be absent, these examples are estimates, never verified counts.
+Frontend counts that include them carry an asterisk and link to each candidate.
+
+The original 20/5/5 and 20/5/9 recipes and every earlier recipe remain:
+
 Exporter 20 adds a gated damage-graph correction for Beta 5/6. Effect parts
 declared as decals are excluded before validating their handles. A stale
 grenade-scorch decal identifier in some maps previously invalidated every remote
@@ -123,4 +143,5 @@ The follow-up [host instrumentation study](HOST_SHOT_EVALUATION.md) covers 90
 distinct Beta 5/6 matches. Host timing estimates recovered 498/510 known kills;
 requiring host collisions recovered only 164/510. Neither can exclude a missing
 original client miss. The offline probe/evaluation tooling and ambiguity
-regressions are retained; the strict metric and deployed engines are unchanged.
+regressions are retained. The subsequent user-authorized review feature exposes
+estimates separately, without changing the strict definition or the simulation binaries.

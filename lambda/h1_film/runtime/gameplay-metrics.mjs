@@ -9,9 +9,15 @@ const finitePair = v => Array.isArray(v) && v.length === 2 && v.every(Number.isF
 // A versioned reducer over ordered, source-bound observations. A source adapter
 // resolves discharge identity; this layer never guesses links from time/distance.
 export function deriveGameplayMetrics({events, slots, deaths, partialRecording = false}) {
+  return classifyGameplayMetrics({events,slots,deaths,partialRecording}).product;
+}
+
+// Internal classifications let other evidence adapters propose review candidates
+// without changing a verified result or reviving a known disqualified kill.
+export function classifyGameplayMetrics({events, slots, deaths, partialRecording = false}) {
   const players = new Map(slots.map(slot => [slot, {slot_index:slot, value:0, observed_count:0,
     evaluated_kills:0, unknown_kills:0, coverage:{status:'complete',reason:null}, examples:[]} ]));
-  const shots = new Map(), sequences = new Map(), encounters = new Map();
+  const shots = new Map(), sequences = new Map(), encounters = new Map(), classifications = [];
   let deathIndex = 0, lastTick = -1;
   for (const e of events) {
     assert.ok(Number.isSafeInteger(e.source_tick) && e.source_tick >= lastTick, 'Unordered gameplay events');
@@ -57,11 +63,16 @@ export function deriveGameplayMetrics({events, slots, deaths, partialRecording =
       if (e.relationship !== 0) continue;
       const player = players.get(e.slot); assert.ok(player, 'Unknown gameplay killer');
       player.evaluated_kills++;
+      const classification = {slot_index:e.slot,kill_event_index:index,status:'disqualified'};
+      classifications.push(classification);
       if (!encounter || !encounter.valid || (encounter.slot >= 0 && encounter.slot !== e.slot)
         || (e.weapon && !pistol(e.weapon))) continue;
-      if (encounter.unknown || !e.weapon) { player.unknown_kills++; continue; }
+      if (encounter.unknown || !e.weapon) {
+        classification.status = 'unknown'; player.unknown_kills++; continue;
+      }
       if (encounter.hits.length !== 3) continue;
       player.observed_count++;
+      classification.status = 'verified';
       player.examples.push({kill_event_index:index,victim_slot:e.victim,
         start_source_tick:encounter.start,end_source_tick:e.source_tick});
     } else assert.equal(e.kind,3,'Unknown gameplay event kind');
@@ -72,5 +83,6 @@ export function deriveGameplayMetrics({events, slots, deaths, partialRecording =
       reason:p.unknown_kills?'missing_shot_evidence':'partial_recording'};
     p.value = p.coverage.status === 'complete' ? p.observed_count : null;
   }
-  return {schema:GAMEPLAY_SCHEMA,metrics:[{id:THREE_SHOT_ID,definition_version:1,players:[...players.values()]}]};
+  return {product:{schema:GAMEPLAY_SCHEMA,metrics:[{id:THREE_SHOT_ID,definition_version:1,players:[...players.values()]}]},
+    classifications};
 }

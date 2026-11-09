@@ -22,14 +22,24 @@ def validate_gameplay(product, combat, slots, stop):
                     or player["evaluated_kills"] != kills[player["slot_index"]]
                     or len(player["examples"]) != observed):
                 raise ValueError("Gameplay counts contradict coverage or combat kills")
-            last = -1
-            for example in player["examples"]:
+            lists = [player["examples"]]
+            estimates = player.get("estimates")
+            if estimates is not None:
+                if (estimates["count"] != len(estimates["examples"])
+                        or estimates["count"] > unknown
+                        or {e["kill_event_index"] for e in player["examples"]}
+                        & {e["kill_event_index"] for e in estimates["examples"]}):
+                    raise ValueError("Gameplay estimates contradict unresolved/verified kills")
+                lists.append(estimates["examples"])
+            for examples in lists:
+                indices = [e["kill_event_index"] for e in examples]
+                if indices != sorted(set(indices)):
+                    raise ValueError("Gameplay examples must be ordered and distinct")
+            for example in [e for examples in lists for e in examples]:
                 death = deaths.get(example["kill_event_index"])
                 if not (death and death["kind"] == "kill" and death["killer_slot"] == player["slot_index"]
                         and death["victim_slot"] == example["victim_slot"]
                         and death["source_tick"] == example["end_source_tick"]
                         and 0 <= example["start_source_tick"] <= example["end_source_tick"] < stop
-                        and example["kill_event_index"] > last
                         and weapons.get(death["weapon_id"], "").replace("\\", "/").lower() == "weapons/pistol/pistol"):
                     raise ValueError("Gameplay example differs from its verified pistol kill")
-                last = example["kill_event_index"]
