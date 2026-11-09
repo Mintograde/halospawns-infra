@@ -1,5 +1,32 @@
 # Beta 6.1
 
+## Unsupported embedded builds (2026-11-09, implementation)
+
+The six November 8 evening films have the supported `86c52285` host and three
+clients, plus player 0's `2026-11-08 - ec92e0bb` client. That commit was absent
+from the local checkout and both GitHub remotes when investigated. The original
+21/5/9 attempts reject this unknown simulation identity after converting the
+supported worlds; no unknown build is aliased to a known engine.
+
+New Beta 6 recipe **22/5/10** shares the exact exporter-21 binaries and adds
+`halospawns.h1MatchReplay.v5` / `H1MV0005`. After complete structural validation,
+thin-part restoration, size/checksum checks and source binding, an embedded
+client whose build does not match the selected host engine becomes unavailable
+with `unsupported_build`, its exact recorded label and numeric film identity.
+This decision is relative to the immutable host profile, not a future global
+engine registry. No client simulation, world or verification count is claimed.
+The original source remains retained, and original clocks, inputs, diagnostic
+tables and network records remain in the compact artifact.
+
+Only embedded client build incompatibility takes this path. The host must
+simulate and verify completely; supported clients still follow the existing
+strict validation/desync/roster rules. Corrupt sources, unsupported layouts,
+timeouts, crashes and missing engine binaries still fail. Older recipes remain
+strict and preserve their original artifacts. The additive API migration and
+`unsupported_client_build: halospawns.h1MatchReplay.v5` reader capability precede
+activation; compatible frontend readers remain local. Deployment and the six
+source-preserving recovery results are recorded in `DEPLOYMENT.md`.
+
 ## Initial client roster availability (2026-11-08, deployed in dev)
 
 The follow-up implementation preserves a usable match when an embedded client

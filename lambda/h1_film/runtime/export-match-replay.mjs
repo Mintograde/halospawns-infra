@@ -10,6 +10,9 @@ import {unpackMszip} from './adapters/beta5-v2-120.mjs';
 import {unpackNetworkColumns} from './format3-codec.mjs';
 import {writeMatchReplay} from './pack-match-replay.mjs';
 import {sha256} from './engine-store.mjs';
+import {unsupportedClientBuild} from './client-build.mjs';
+import {profileById,BUILD_MATCHING} from './profiles.mjs';
+import {readEnvelope} from './adapters/beta6-v3-120.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function exportMatchReplay({film,directory,hostWorld,output,sourceContract}) {
@@ -20,10 +23,11 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8,9].includes(sourceContract.profile_revision);
+  const partial=[7,8,9,10].includes(sourceContract.profile_revision);
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
-  assert.equal(report.exporter_revision>=18,sourceContract.profile_revision===9,'Match roster policy differs from recipe');
+  assert.equal(report.exporter_revision>=18,sourceContract.profile_revision>=9,'Match roster policy differs from recipe');
+  assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   async function add(id,kind,bytes,extra={}) {
@@ -115,6 +119,12 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     assert.equal(c.id,`client-${index}`);
     const bytes=await readFile(join(directory,`${c.id}.h1film`));
     assert.equal(digest(bytes),c.source_film_sha256);
+    if(c.failure?.reason==='unsupported_build') {
+      const envelope=await readEnvelope(join(directory,`${c.id}.h1film`),{allowClientView:true});
+      assert.deepEqual(c.envelope,envelope,'Unsupported client source envelope differs');
+      assert.deepEqual(c.failure,unsupportedClientBuild(envelope,profileById(report.engine_profile),
+        report.exporter_revision,BUILD_MATCHING[report.engine_profile]),'Unsupported client build evidence differs');
+    }
     const unavailable=partial&&c.status==='unavailable';
     if(!unavailable)assert.equal(await sha256(join(directory,c.world)),c.world_sha256);
     const track={id:c.id,role:'client',source_film_sha256:c.source_film_sha256,frame_count:c.envelope.ticks,

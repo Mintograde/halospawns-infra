@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 8ef07977d3252dc818a14b216a9e4dae00413c6ee0aaab25d0c9c5eaa88ba112",
+  "$comment": "Generated from API schemas/h1films.py SHA256 7efc76a1c4b004b06147b810aa51dee55be451503e2e068b12a9deff52e63477",
   "$defs": {
     "H1FilmEngine": {
       "additionalProperties": false,
@@ -308,7 +308,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 9,
+          "maximum": 10,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"

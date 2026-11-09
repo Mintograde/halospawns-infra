@@ -10,6 +10,8 @@ import {readEnvelope} from './adapters/beta6-v3-120.mjs';
 import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
 import {clientRosterEvidence} from './client-roster.mjs';
+import {unsupportedClientBuild} from './client-build.mjs';
+import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
@@ -41,6 +43,11 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     assert.equal(envelope.match_id,match.host.match_id,'Restored client match differs');
     const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
     const track={id,part,envelope,source_film_sha256:await sha256(film)};
+    const unsupported=unsupportedClientBuild(envelope,profileById(report.engine_profile),
+      report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
+    if(unsupported) {
+      tracks.push({...track,status:'unavailable',failure:unsupported});continue;
+    }
     let converted;
     try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
       'client-view':true,'embedded-match':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});

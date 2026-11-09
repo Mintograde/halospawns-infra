@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 8ef07977d3252dc818a14b216a9e4dae00413c6ee0aaab25d0c9c5eaa88ba112",
+  "$comment": "Generated from API schemas/h1films.py SHA256 7efc76a1c4b004b06147b810aa51dee55be451503e2e068b12a9deff52e63477",
   "$defs": {
     "H1FilmNetworkHost": {
       "additionalProperties": false,
@@ -100,7 +100,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 9,
+          "maximum": 10,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -292,7 +292,8 @@
             "halospawns.h1MatchReplay.v1",
             "halospawns.h1MatchReplay.v2",
             "halospawns.h1MatchReplay.v3",
-            "halospawns.h1MatchReplay.v4"
+            "halospawns.h1MatchReplay.v4",
+            "halospawns.h1MatchReplay.v5"
           ],
           "title": "Schema",
           "type": "string"
@@ -577,7 +578,8 @@
           "discriminator": {
             "mapping": {
               "roster_mismatch": "#/$defs/H1RosterMismatchFailure",
-              "simulation_desync": "#/$defs/H1MatchFailure"
+              "simulation_desync": "#/$defs/H1MatchFailure",
+              "unsupported_build": "#/$defs/H1UnsupportedBuildFailure"
             },
             "propertyName": "reason"
           },
@@ -587,6 +589,9 @@
             },
             {
               "$ref": "#/$defs/H1RosterMismatchFailure"
+            },
+            {
+              "$ref": "#/$defs/H1UnsupportedBuildFailure"
             }
           ],
           "title": "Failure"
@@ -687,6 +692,50 @@
         "failure"
       ],
       "title": "H1UnavailableTrack",
+      "type": "object"
+    },
+    "H1UnsupportedBuildFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "maximum": 3,
+          "minimum": 3,
+          "title": "Format",
+          "type": "integer"
+        },
+        "protocol_revision": {
+          "maximum": 9839,
+          "minimum": 9839,
+          "title": "Protocol Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "const": "unsupported_build",
+          "title": "Reason",
+          "type": "string"
+        },
+        "recorded_build": {
+          "maxLength": 63,
+          "minLength": 1,
+          "pattern": "^[\\x20-\\x7e]+$",
+          "title": "Recorded Build",
+          "type": "string"
+        },
+        "tick_rate": {
+          "maximum": 120,
+          "minimum": 120,
+          "title": "Tick Rate",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "recorded_build",
+        "format",
+        "protocol_revision",
+        "tick_rate"
+      ],
+      "title": "H1UnsupportedBuildFailure",
       "type": "object"
     },
     "RecoveredPlayer": {
