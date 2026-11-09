@@ -1,5 +1,93 @@
 # H1 film Lambda integration
 
+## Unsupported embedded clients in the six November 8 films (2026-11-09 UTC)
+
+The reported Downrush, Dread, Dammy, Prisoner, Hangemhigh and Chillout sources
+have a supported `86c52285` host and three supported clients. Their fourth
+client is player 0 (`.minto`), recorded by `2026-11-08 - ec92e0bb`. That source
+commit was absent from the local engine checkout and both fetched remotes.
+Original 21/5/9 conversions finish the supported worlds, then reject the
+unknown client engine. The original six failures are retained as evidence.
+
+New Beta 6 recipe **22/5/10** uses the exact exporter-21 binaries and match
+v5 (`H1MV0005`). A structurally validated, source-bound embedded client whose
+build does not match the frozen host profile has an explicit `unsupported_build`
+reason with the exact recorded label and numeric identity. It has no simulated
+world or verification claim. Host and supported clients must still verify;
+corrupt sources, unknown layouts, missing binaries, crashes and timeouts fail.
+Original client clocks, inputs, diagnostics and network records are preserved.
+All five profiles, 28 exporters and every old recipe remain; Beta 5 stays
+21/5/5 and separate client views stay 13/2/5. See [BETA6.md](BETA6.md).
+
+API **live=235**, source `f4df889d401fe2cd577260ae5ae941631e23f7c8`, is deployed
+through CI `42555011377` (2,124 tests, 295 skipped, Rust and Ruff pass).
+Migration `20261109010000_h1film_unsupported_client_build.sql` is applied,
+adding only the v5/container-5/viewer-10 artifact tuple. The release capability
+is `unsupported_client_build: halospawns.h1MatchReplay.v5`; old recipes reject
+this new proof. The API version-output refresh 234 to 235 has zero resource
+actions. Local unit and isolated PostgreSQL constraint tests pass.
+
+The immutable **20261109-r2** worker image was built from committed `dc23b04`
+in isolated checkout `.build/unsupported-client-release`:
+`sha256:d794a07ddb43b4c484abae3b6e11a300d39dd1e944a9ccebfbe7d1e738b2f62e`.
+All 112 Node and 107 local/packaged worker tests pass. All 21 retained packaged cases
+preserve ten standalone viewer artifacts, 860 Beta 6 payload entries, tracks,
+and all exact/native statistics, including the existing starred estimates.
+Explicit retained exporter-21 Beta 5/6 runs on the new image produce identical
+viewer bytes and analytics. Six local candidate conversions pass all three
+callback modes and receipt retries, with 24 playable worlds and six unsupported
+client views; all 457,259 authoritative ticks and 3,813 hashes verify.
+
+Local frontend readers, 1,788 viewer tests (one optional fixture skipped), and
+both builds pass. Chrome 156 opens and seeks the tails of all 24 candidate
+worlds, verifies 120 original record representations and ranges, and checks
+unavailable-world rejection, cancellation and bounded caching. Frontend work
+remains local/uncommitted. Original source downloads were version-pinned and
+hash-verified against all six local files before recovery.
+
+All **27 packaged cases/81 exact API 235 callbacks** pass, including failure,
+receipt and artifact-storage checks, plus the separate retained Beta 5 client
+flow. The guarded image/digest-only apply and first live engine health check
+pass. Worker/default **20261109-r2**, policy **19**, is active in dev. Promotion
+evidence is `.build/h1-promotions/20261109-034310-6f0a963a3a894192839ccf159e5ba593/`.
+
+All **six fresh recovery uploads are processed**, with selected artifacts under
+22/5/10 and policy 19. The original six failed requests, frozen 21/5/9 identities
+and original version-pinned source objects are preserved. Each new source is
+byte-identical to its original and carries recovery lineage in S3 metadata.
+There are **24 playable worlds and six unsupported `.minto` client worlds**.
+Every live artifact matches the packaged client worlds, original record bytes,
+track evidence, participants and native statistics; host indexes differ only
+by the new replay ID. All six API asset responses, CDN range/CORS checks and
+full artifact hashes pass.
+
+| Film | Original failed upload | New processed upload | Game |
+| --- | --- | --- | --- |
+| Dread | `24d6c11d-04ae-4a1d-9202-e5ca65e9fb49` | `d22e869b-6786-4a3f-a00f-1debac14ea1b` | `322759dc-68b9-4384-ab29-4ba92eeffb34` |
+| Downrush | `4e1de11f-359e-4d01-bfc7-59c741333f97` | `5ccc7369-768f-4aa4-81c0-1cdcdd8d076e` | `51c062ca-24aa-4403-a1f8-caaeaaa54a8e` |
+| Dammy | `718f3945-f007-418c-8c44-3ceb0cd24eb0` | `d53101c3-3725-42c4-a9b0-58e3ddaaaf52` | `0122ff17-1849-49ec-9298-bd52cdea8bca` |
+| Chillout | `77cdec09-9baf-44a1-a130-32807d464d2d` | `054a422c-8e8e-4a80-a9dc-0d5b26b83f40` | `e7e608c4-9415-4c63-a965-f0162898742a` |
+| Prisoner | `bf5dce1f-1711-43f7-9018-e455fd9cda4b` | `2cdddbeb-8003-4d8e-9f98-168db186430e` | `d76d9023-e5dd-428e-b122-ea009eb84018` |
+| Hangemhigh | `4575f537-a5f2-497e-a008-9b3023d31861` | `7aab855b-2495-4e26-ada9-e5975760cbac` | `49a5d019-ab3c-498b-a67d-90c3382f7312` |
+
+Real Chrome opens the recovered Dread game and fully loads its selected replay
+from the live CDN, showing `.minto` from the host world. Four worlds are enabled;
+the unsupported client is disabled, excluded from ghosts, and has the exact
+build tooltip. Desktop/mobile checks show no errors or panel overflow. The
+game exposes complete three-shot counts 1/2/0/3, total 6. The other original
+gameplay products and starred-estimate behavior remain unchanged.
+
+All six dev component postplans are no-op. Final read-only guards preserve the
+prior 151 conversions, 477 receipts, 354 H1 attempts and 290 approvals, all old
+pins and operational settings. Totals are now **157 conversions/483 receipts**;
+attempts and approvals are unchanged. Queue/DLQ are empty; API health is 200.
+No frontend or prod deployment occurred. Evidence is under
+`.build/nov8-six-conversion-failures/` and
+`.build/unsupported-client-release/.build/h1-contracts/20261109-r2-22ce2ad45b8c46ea9a30f46c8b44b44a/`.
+Keep the additive migration, compatible readers/capability and every old recipe
+on rollback. The unknown client engine needs its exact source before its own
+world can be simulated; its player remains visible from supported worlds.
+
 ## Starred three-shot review candidates (2026-11-09 UTC)
 
 User-authorized worker/default **20261109-r1**, policy **18**, is active in dev

@@ -1,6 +1,6 @@
 # Beta 6.1
 
-## Unsupported embedded builds (2026-11-09, implementation)
+## Unsupported embedded builds (2026-11-09, deployed in dev)
 
 The six November 8 evening films have the supported `86c52285` host and three
 clients, plus player 0's `2026-11-08 - ec92e0bb` client. That commit was absent
@@ -26,6 +26,21 @@ strict and preserve their original artifacts. The additive API migration and
 `unsupported_client_build: halospawns.h1MatchReplay.v5` reader capability precede
 activation; compatible frontend readers remain local. Deployment and the six
 source-preserving recovery results are recorded in `DEPLOYMENT.md`.
+
+Worker/default **20261109-r2**, policy **19**, and API **235** are active in dev.
+The additive migration is applied; all 27 packaged cases/81 exact deployed-API
+callbacks, the retained Beta 5 client flow and first live health check pass.
+All 21 old cases retain their exact statistics, ten standalone viewer artifacts
+and all 860 Beta 6 payload entries. Explicit old exporter-21 Beta 5/6 runs also
+retain byte-identical artifacts. Keep the migration, compatible readers and
+every recipe on rollback; the unknown engine needs exact source before its
+client world can be simulated.
+
+All six source-preserving recoveries are now processed in dev, each with a
+verified host and three playable clients. The unsupported player remains
+watchable from the host. Live CDN bytes/statistics match the packaged results;
+the local Dread UI verifies host fallback, the exact unavailable reason and
+desktop/mobile presentation. All original requests and pins remain intact.
 
 ## Initial client roster availability (2026-11-08, deployed in dev)
 
