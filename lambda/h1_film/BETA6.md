@@ -1,6 +1,6 @@
 # Beta 6.1
 
-## Authorized `ec92e0bb` client compatibility (2026-11-09, implementation)
+## Authorized `ec92e0bb` client compatibility (2026-11-09, deployed in dev)
 
 The user confirmed that `2026-11-08 - ec92e0bb` should be functionally equivalent
 to canonical Beta 6 and explicitly authorized an exception. New recipe
@@ -18,6 +18,27 @@ intake remain strict. Recipes through 22 keep their original behavior and
 artifacts; the global source-commit matching rules and canonical profile are
 unchanged. The wire contract stays match v5, so existing API/frontend readers
 remain sufficient. Validation and deployment results are in `DEPLOYMENT.md`.
+
+Worker/default **20261109-r3**, policy **20**, is active with unchanged API
+**235**. All six requested clients pass **457,259 ticks and 3,813 recorded
+hashes**, with zero mismatches. All 113 Node/107 worker tests and fifteen
+packaged cases/45 exact deployed-API callbacks pass, including the separate
+retained Beta 5 client flow. Nine older artifacts and all 584 existing payload
+entries across the six affected films are unchanged. The explicit 22/5/10
+recipe still produces its original unavailable client and byte-identical
+artifact on the new image. Chrome opens/seeks all thirty candidate worlds.
+This authorized exception supersedes the earlier requirement to obtain
+`ec92e0bb` source for these exact embedded clients; unrelated builds still
+follow the existing compatibility rules.
+
+All six existing games have selected successful full reparses with **thirty
+playable worlds and no unavailable clients**. Their complete native statistics,
+prior records/worlds and source pins are unchanged. Live API/CDN/range/hash and
+Chrome Dread checks pass, including `.minto`'s own client perspective on desktop
+and mobile. The original failed uploads and prior generations are retained.
+All six dev postplans are no-op and queue/DLQ are empty. Totals are 157
+conversions/489 receipts, 360 attempts and 290 approvals. No API code/migration
+or frontend code change was required; frontend work stays local/uncommitted.
 
 ## Unsupported embedded builds (2026-11-09, deployed in dev)
 

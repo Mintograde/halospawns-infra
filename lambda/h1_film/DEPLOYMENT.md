@@ -1,5 +1,66 @@
 # H1 film Lambda integration
 
+## Canonical Beta 6 compatibility for `ec92e0bb` clients (2026-11-09 UTC)
+
+The user explicitly authorized the exact `2026-11-08 - ec92e0bb` client build
+to use the canonical Beta 6 simulation. New recipe **23/5/10** admits it only
+for an embedded client at format 3 / protocol 9839 / 120 Hz, with canonical
+source `86c52285a8ebe7d107bfafae64abe722b263cedf`. The film bytes and recorded
+label remain unchanged; the client report records the explicit compatibility
+rule and canonical source. All normal ticks, hashes, seeds, network, roster and
+map checks remain mandatory. Global build matching, authoritative/separate
+client intake and recipes through 22 retain their behavior. See `BETA6.md` and
+`COMPATIBILITY.md` for the precise exception.
+
+All six previously unavailable client worlds now pass the existing simulation:
+**457,259 ticks and 3,813 recorded hashes**, with zero mismatches. All thirty
+worlds are playable. The 584 existing world/record entries, first four tracks,
+source identities, participant data, settings and complete native analytics
+are identical to revision 22; each film adds only the final client's world and
+its verified availability. Chrome 156 opens/seeks all thirty worlds, verifies
+120 original record representations/ranges, and passes cache/cancellation
+checks. All 113 Node and 107 local worker tests pass.
+
+The immutable release **20261109-r3** is built from committed `bffed7e` in
+`.build/compatible-client-release`, using the exact exporter-22 binaries:
+`sha256:bead8638f81935dc80bf02df8aa7961952d945edc86bee1aa7fb78944240886b`.
+All five profiles, 29 exporters and every old recipe are retained. Beta 5 stays
+21/5/5 and separate clients 13/2/5. Match v5 is unchanged, so existing API 235
+and local frontend readers remain sufficient. Explicit retained 22/5/10 Dread
+on this image produces its original byte-identical artifact, analytics and
+unavailable-client proof, with old recipe/new producer provenance preserved.
+
+All **15 packaged cases/45 exact API callbacks** pass, covering all five profiles, thin and
+standalone films, complete multiplayer, verified desync and roster failures,
+the separate retained Beta 5 client flow and all six requested films. The nine
+older cases retain byte-identical artifacts and exact statistics. The six
+affected cases retain all 584 existing entries and add six verified worlds.
+The guarded image/digest-only apply and first live health check pass.
+Worker/default **20261109-r3**, policy **20**, is active in dev; API **235**
+is unchanged. No migration or API/frontend deployment is required. Promotion
+evidence is `.build/h1-promotions/20261109-043830-48ef08aadb8a4fb19975537856b2414b/`.
+All **six audited full reparses succeeded and are selected**, using the same
+replay/game IDs from the recovery below. Each has five available worlds,
+including `.minto`'s own `client-3` world: **30 playable worlds, none unavailable**.
+Every new client world matches its packaged result and verifies all recorded
+ticks/hashes. All previous payload bytes, track/source evidence and complete
+native statistics/product hashes are unchanged; the new viewer/statistics
+generations align. All six API asset, CDN 206/range/CORS and full artifact hash
+checks pass. Chrome fully loads live Dread, selects `.minto`'s own world, enables
+all five perspectives and checks ghost selection and desktop/mobile layout
+with zero errors. Dread retains complete three-shot counts 1/2/0/3, total 6.
+
+All six component postplans are no-op. Read-only before/after checks preserve
+every prior conversion, receipt, attempt and approval, including the six
+original failed uploads and all old recipe/source pins. Totals are **157
+conversions, 489 receipts, 360 H1 attempts and 290 map approvals**. Operational
+settings are unchanged; queue/DLQ are empty and API health passes. There is no
+new API release, migration or frontend code change for this exception. Existing
+frontend work remains local/uncommitted; no frontend or production deployment.
+Keep match-v5 readers/migration, all engines and all recipes on rollback.
+Private evidence is under `.build/beta6-ec92-compatibility/`; the previous
+source-preserving recovery and stable game/replay IDs are recorded below.
+
 ## Unsupported embedded clients in the six November 8 films (2026-11-09 UTC)
 
 The reported Downrush, Dread, Dammy, Prisoner, Hangemhigh and Chillout sources
