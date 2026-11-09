@@ -1,5 +1,85 @@
 # H1 film Lambda integration
 
+## Starred three-shot review candidates (2026-11-09 UTC)
+
+User-authorized worker/default **20261109-r1**, policy **18**, is active in dev
+with API **live=234**, source `4a000b8053fda504c384599d95dd7b5e67b1c430`.
+CI `42542317715` passes 2,107 tests (295 skipped), Rust checks and Ruff. No
+migration is needed. Beta 5 defaults to **21/5/5**, Beta 6 to **21/5/9**;
+all five profiles, 27 exporter entries and every old recipe remain.
+
+The image was built from committed `0d85df6` in isolated checkout
+`.build/three-shot-estimates-release`:
+`sha256:171d40332ae9f45600699bbec4c5d09f580af3b370f03fdd8c064ebedb8b52f9`.
+Exporter 21 uses the exact exporter-20 WASM/glue binaries. The new required
+capability is `gameplay_estimates: halospawns.h1GameplayEstimates.v1`.
+The host-only `host_sequence_previous_12` adapter supplies separately labelled
+review candidates only for kills left unknown by the exact reducer. Known
+disqualifications, including recorded intervening misses, always win. Exact
+values, observed counts, unknown counts, coverage and verified examples stay
+unchanged. Old recipes omit estimates, preserving receipt serialization.
+See [GAMEPLAY_METRICS.md](GAMEPLAY_METRICS.md) for the evidence contract.
+
+All 90 saved study cases reproduce 510 verified kills and 513 candidate kills,
+with exact-product and prototype parity. Validation passes 110 Node tests,
+107 local/packaged worker tests, 2,105 local API unit tests, 797 site tests and
+both frontend builds. All 21 new packaged cases/63 exact API 234 callbacks,
+failure/receipt/storage checks and the retained Beta 5 client flow pass. All
+21 prior release cases/63 callbacks and the prior client also pass API 234.
+The new products preserve every exact native analytic field, ten standalone
+viewer artifacts and all 860 logical payload entries in eleven Beta 6 cases.
+Explicit retained exporter-20 Beta 5/6 conversions retain identical analytics
+and byte-identical viewer artifacts, with their original release pins.
+
+The guarded deployment changes only the worker image and producer digest;
+first live health passes. A guarded refresh records API output 233 to 234 with
+zero resource actions. All six dev component postplans are no-op. The immediate
+post-deployment snapshot preserves all prior rows/pins and operational settings.
+
+The audited selection contains 42 processed games (24 Beta 5, 18 Beta 6),
+including 156 player appearances with unresolved kills. They retain 155
+verified kills before reparse. The first game,
+`1ac30833-c145-4f66-b4ed-b53df5b79993`, succeeded with a new selected generation:
+eight verified kills and one estimate, belonging to Seizen at source tick
+20923 (2:54). Its strict counts remain 5/2/1/unknown and every exact analytic,
+score/graph/occupancy hash and world/evidence field is unchanged. Stats,
+scoreboard and combat API responses agree; CDN range/CORS and full hash pass.
+Selected artifact `f8e86fb8-9a28-4ebe-b29c-fdd77c52386a` is 91,704,110 bytes,
+SHA-256 `8192b1cbc054b2d954652df622efc6c24be76758ca914e28f17cd21ead150230`.
+All **42** user-authorized reparses succeeded in fifteen audited batches; their
+new viewer and statistics generations are selected. They expose **485 estimated
+kills across 40 games and 133 player appearances**. All 155 verified kills and
+every exact analytic field, existing scoreboard/graph/occupancy hash, standalone
+viewer byte and Beta 6 world/evidence field remain unchanged. The other 31
+processed games retain their exact native products. Across the original 73
+games, verified kills remain **414**, with **209 complete/167 partial** player
+totals. Estimates do not make those exact totals complete.
+
+Final checks preserve all original rows/pins and operational settings. Totals
+are **145 conversions, 477 receipts, 354 H1 attempts and 290 approvals**;
+the reparse adds exactly 42 receipts/attempts and no conversions. Queue and
+DLQ are empty; API health is 200. The five unrelated failed initial uploads
+from the preceding investigation remain untouched.
+
+Local frontend totals and individual estimated kill links carry an asterisk,
+with a verified/estimated breakdown and an estimated-only filter. Seizen shows
+`1*` and the game `Total 9*`. Real Chrome verifies desktop/mobile layout,
+the filter, complete replay loading, Seizen selection and the seek to 2:51
+(source tick 20611, two seconds before the first hit). A Beta 5 game separately
+passes all seven starred links and its `Total 7*`, retaining unknown players
+with zero candidates. Both browser checks have no errors or panel overflow.
+Frontend stays local/uncommitted; no frontend or prod deployment.
+The searchable `.build/three-shot-estimates/starred-kills.html` and matching
+CSV/JSON list all 485 candidates with player names, kill times and direct local
+game/replay links. The HTML list and its filter pass a real Chrome check.
+
+Evidence: `.build/three-shot-estimates/`, packaged corpus
+`.build/three-shot-estimates-release/.build/h1-contracts/20261109-r1-c696760e17674710b54a8c5a4f33e064/`,
+and promotion `.build/h1-promotions/20261109-011302-c048794b4da746c28f59257164eefd70/`.
+Retain estimate readers/capability, every old recipe and all original artifacts
+on rollback. Missing original client misses still prevent these candidates
+from being treated as exact counts.
+
 ## Three-shot coverage investigation and damage attribution (2026-11-08 UTC)
 
 User-authorized dev worker/default **20261108-r7**, policy **17**, is active
