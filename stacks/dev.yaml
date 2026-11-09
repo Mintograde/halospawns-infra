@@ -159,8 +159,8 @@ components:
       vars:
         h1_film:
           enabled: true
-          image_tag: 20261109-r3
-          default_release: 20261109-r3
+          image_tag: 20261109-r4
+          default_release: 20261109-r4
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

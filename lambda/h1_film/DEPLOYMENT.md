@@ -1,5 +1,83 @@
 # H1 film Lambda integration
 
+## Full-shield three-shot headshot definition 2 (2026-11-09 UTC)
+
+The user's corrected rule admits any positive remaining health at full normal
+shields before the first hit, but requires a headshot on shot three. A confirmed
+headshot counts even below the bodyshot-lethal health threshold. Bodyshot
+finishers are excluded. Misses, assistance, other damage, victim lifetime changes
+and recovery retain their disqualifying behavior. The existing engine hook
+observes the actual instant-headshot branch; no threshold inference or engine
+instrumentation change is needed. See `GAMEPLAY_METRICS.md`.
+
+New exporter **24** selects metric definition **2** for both exact counts and
+starred review candidates, with Beta 5 **24/5/5** and Beta 6 **24/5/10**. Required
+capability `three_shot_headshot: halospawns.h1GameplayMetrics.v1` gates release
+registration and activation. Worker and API validators bind the definition to
+the frozen exporter and require every exact/estimated example's combat death
+to have `headshot: true`. Native v3/gameplay v1 remain the outer contracts.
+All five profiles, **31 exporters**, every old recipe and separate Beta 5
+**13/2/5** client views remain. The exact Beta 5 exporter-21 and Beta 6
+exporter-23 simulation binaries are reused; the `ec92e0bb` exception is retained.
+Definition 1 keeps its original full-health/full-shields rule and outputs.
+
+The 90-match source-bound study retains all **510** exact kills and adds **39**
+partial-health headshots (**549** total), including a target starting at about
+1.27% health. Estimates change **513 to 542**; unresolved kills change **1,490
+to 1,417**. All old definition-1 products are identical and every definition-2
+exact or estimated example has confirmed headshot evidence. These are study
+totals, distinct from the live inventory below.
+
+API **236**, source `95b968a`, is deployed through CI **42621347972** (2,146 tests,
+295 skips, Ruff and Rust/native checks pass). Local checks pass **119 Node**,
+**108 worker**, **2,144 API unit** and **798 site** tests plus both frontend
+builds. Worker **20261109-r4**, source `911e4f3`, is published at
+`sha256:2dd3f98cceb948804efaa7036f97995aa24b61e362332b77c9894fe975dcc7cc`.
+All **19 packaged cases/57 callbacks** and the retained separate Beta 5 client
+flow pass the worker and exact deployed-API checks. The five non-match artifacts
+are byte-identical;
+all **1,262 entries across fourteen Beta 6 matches** and all other native
+statistics/settings are unchanged. Explicit retained 21/5/5 and 23/5/10 runs
+produce original byte-identical artifacts and complete definition-1 analytics.
+
+The guarded apply changed only the worker image/digest. The first cold health
+probe reached the 60-second wrapper timeout; the warm probe and complete guarded
+retry pass. Worker/default **20261109-r4**, policy **21**, is active with API
+**236**. Promotion evidence is
+`.build/h1-promotions/20261109-133734-70821a4207cb4a25a13aa96035fdb577/`.
+All **79 audited full reparses across 30 batches succeeded and are selected**
+(27 Beta 5, 52 Beta 6), covering **400** player appearances. Verified kills
+increase **451 to 489** (+38); starred estimates increase **485 to 513** (+28).
+Every old verified and estimated example is retained. All exact and estimated
+finishers have confirmed headshot evidence. Unresolved kills decrease **1,413
+to 1,340**, affecting 154 player appearances in 41 games (previously 156 in 42).
+There are 234 complete and 166 partial player totals; partial recordings account
+for the additional partial totals without unresolved observed kills. Forty
+games/134 player appearances contain starred candidates. All other native
+statistics, scoreboards, graphs, occupancy, track evidence and world bytes are
+unchanged. New viewer/statistics generations align with their original sources.
+Fresh inventory finds all 79 processed Beta 5/6 games on definition 2, with no
+old current definitions or active attempts remaining.
+
+Canary game `bbfec5b6-684b-4dab-a6c9-e986fa7f2504` adds a
+confirmed headshot on a target starting at 16.535% health, kill event 14 at
+source tick 10698. It changes from 2 verified/8 estimated to 3 verified/9 estimated.
+API stats/scoreboard/combat and CDN range/CORS/full hash checks pass. Chrome
+checks both definitions, the updated description, total 12*, kaiser's new 1:29
+verified replay link at time=10386/player=3, all nine starred-only links and
+mobile bounds with zero errors.
+
+Read-only before/after guards preserve all old conversions, receipts, attempts,
+map approvals and operational settings. Totals are **157 conversions, 568
+receipts, 439 H1 attempts and 290 approvals**. Queue/DLQ are empty, all 79 new
+reconciliation events completed and API health passes. Private evidence is
+`.build/three-shot-headshot-v2/`; release
+artifacts are in `.build/three-shot-headshot-release/`. The API state-only
+version refresh 235 to 236 and all six component no-op postplans are complete.
+No migration or frontend/prod deployment occurred. Frontend descriptions select
+the retained or new metric definition
+and remain local/uncommitted.
+
 ## Canonical Beta 6 compatibility for `ec92e0bb` clients (2026-11-09 UTC)
 
 The user explicitly authorized the exact `2026-11-08 - ec92e0bb` client build
