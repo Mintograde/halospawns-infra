@@ -26,13 +26,13 @@
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 21,
+        "exporter_revision": 24,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 23,
+        "exporter_revision": 24,
         "analytics_revision": 5,
         "viewer_revision": 10,
         "max_players": 16
@@ -291,6 +291,12 @@
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 24,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ],
       "h1-performance-beta6-p9839-wasm-v1": [
@@ -353,6 +359,12 @@
           "analytics_revision": 5,
           "viewer_revision": 10,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 24,
+          "analytics_revision": 5,
+          "viewer_revision": 10,
+          "max_players": 16
         }
       ]
     },
@@ -375,7 +387,8 @@
       "client_roster_mismatch": "halospawns.h1MatchReplay.v4",
       "gameplay_metrics": "halospawns.h1GameplayMetrics.v1",
       "gameplay_estimates": "halospawns.h1GameplayEstimates.v1",
-      "unsupported_client_build": "halospawns.h1MatchReplay.v5"
+      "unsupported_client_build": "halospawns.h1MatchReplay.v5",
+      "three_shot_headshot": "halospawns.h1GameplayMetrics.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -694,6 +707,20 @@
     {
       "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
       "revision": 23,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "957e61126a0a87a3d988b6994948422893bdb9c4b86ea4237e89457fe1b967bf",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 24,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "87f98cde31cd35c689b4faf35d99a6b4be5545d4805935ef26e30217620c408e",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 24,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "957e61126a0a87a3d988b6994948422893bdb9c4b86ea4237e89457fe1b967bf",
       "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"

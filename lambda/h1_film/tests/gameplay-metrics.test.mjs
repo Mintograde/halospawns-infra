@@ -66,3 +66,50 @@ test('a prior damaged life does not contaminate a new fresh target',()=>{
 test('death mismatch fails closed',()=>{
   const f=fixture();f.deaths[0].victim_slot=2;assert.throws(()=>result(f),/differ/);
 });
+
+function headshotFixture(health=1,headshot=1) {
+  const f=fixture();f.definitionVersion=2;f.events.at(-1).headshot=headshot;
+  for(const e of f.events)if(e.kind===1){e.before[1]=health;e.after[1]=e.after[0]===0&&e.source_tick===40?0:health;}
+  return f;
+}
+
+test('definition 2 admits partial-health and critically low-health headshot finishers',()=>{
+  for(const health of [1,0.75,0.25,0.001]) {
+    const f=headshotFixture(health);assert.equal(result(f).value,1);
+    assert.equal(deriveGameplayMetrics(f).metrics[0].definition_version,2);
+    assert.equal(result({...f,definitionVersion:1}).value,health===1?1:0);
+  }
+});
+
+test('definition 2 excludes body finishers even when shot evidence is missing',()=>{
+  for(const health of [1,0.25,0.001]) {
+    const f=headshotFixture(health,0);assert.equal(result(f).value,0);
+    f.events[3].discharge=null;assert.equal(result(f).value,0);
+    assert.equal(result(f).unknown_kills,0);
+  }
+});
+
+test('definition 2 never invents a headshot from missing finisher evidence',()=>{
+  for(const flag of [-1,null,undefined]) {
+    const f=headshotFixture(0.25,flag);f.events.at(-1).headshot=flag;
+    assert.equal(result(f).value,null);assert.equal(result(f).unknown_kills,1);
+    assert.equal(result(f).observed_count,0);
+  }
+});
+
+test('definition 2 retains full-normal-shield, consecutive-shot and unassisted requirements',()=>{
+  for(const shield of [0.99,2]) {
+    const f=headshotFixture(0.25);f.events[1].before[0]=shield;assert.equal(result(f).value,0);
+  }
+  for(const change of [{slot:2},{relationship:3,slot:-1},{before:[0.6,0.25]},{before:[0.5,0.3]},{unit:101}]) {
+    const f=headshotFixture(0.25);Object.assign(f.events[3],change);assert.equal(result(f).value,0);
+  }
+  const f=headshotFixture(0.25);f.events.splice(2,0,{kind:0,source_tick:10,slot:0,weapon,discharge:'miss',domain:'local'});
+  assert.equal(result(f).value,0);
+});
+
+test('retained definition 1 does not acquire the new headshot gate',()=>{
+  const f=headshotFixture(1,0);f.definitionVersion=1;assert.equal(result(f).value,1);
+  assert.deepEqual(deriveGameplayMetrics(f),deriveGameplayMetrics(fixture()));
+  assert.throws(()=>deriveGameplayMetrics({...f,definitionVersion:3}),/definition/);
+});

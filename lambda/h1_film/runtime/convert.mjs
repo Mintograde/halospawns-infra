@@ -280,7 +280,8 @@ export async function convertFilm(options) {
       const encodingPath = join(stage,'candidate','encoding.json');
       const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
       encoding.native_analytics.gameplay = await buildGameplayMetrics({film:values.film,
-        evidence:join(stage,'candidate','gameplay.ndjson'),encoding,includeEstimates:profile.exporter_revision>=21});
+        evidence:join(stage,'candidate','gameplay.ndjson'),encoding,includeEstimates:profile.exporter_revision>=21,
+        definitionVersion:profile.exporter_revision>=24?2:1});
       encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
       await save(encodingPath,encoding);
     }

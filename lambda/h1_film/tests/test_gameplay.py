@@ -35,6 +35,21 @@ class GameplayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate(self.native)
 
+    def test_definition_two_requires_its_frozen_exporter_and_headshot_examples(self):
+        self.native["gameplay"]["metrics"][0]["definition_version"] = 2
+        with self.assertRaisesRegex(ValueError, "frozen exporter"):
+            self.validate(self.native)
+        self.report["exporter_revision"] = 24
+        self.native["combat"]["deaths"][0]["headshot"] = True
+        self.validate(self.native)
+        for headshot in (False, None):
+            self.native["combat"]["deaths"][0]["headshot"] = headshot
+            with self.assertRaisesRegex(ValueError, "verified pistol kill"):
+                self.validate(self.native)
+        self.native["gameplay"]["metrics"][0]["definition_version"] = 1
+        with self.assertRaisesRegex(ValueError, "frozen exporter"):
+            self.validate(self.native)
+
     def test_counts_coverage_and_examples_must_reconcile(self):
         for change in ("count", "unknown", "death", "slot", "window"):
             with self.subTest(change=change):

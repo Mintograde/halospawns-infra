@@ -66,3 +66,14 @@ test('duplicate damage callbacks reuse one discharge and other players do not br
     {...args.events[0],slot:1,physical:1,shot:9,source_tick:20,clock:20});
   assert.equal(player(addGameplayEstimates(exact(args),args)).estimates.count,1);
 });
+
+test('definition 2 estimates require a headshot and allow low-health targets',()=>{
+  for(const headshot of [1,0,-1]) {
+    const args=fixture();args.definitionVersion=2;args.events.at(-1).headshot=headshot;
+    for(const e of args.events)if(e.kind===1){e.before[1]=0.01;e.after[1]=e.source_tick===80?0:0.01;}
+    const product=addGameplayEstimates(exact(args),args);
+    assert.equal(product.metrics[0].definition_version,2);
+    assert.equal(player(product).estimates.count,headshot===1?1:0);
+    assert.equal(player(product).unknown_kills,headshot===0?0:1);
+  }
+});

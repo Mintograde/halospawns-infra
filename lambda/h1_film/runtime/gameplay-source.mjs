@@ -134,7 +134,7 @@ export function bindGameplayShots(events,{ledger,accounts}) {
   });
 }
 
-export async function buildGameplayMetrics({film,evidence,encoding,includeEstimates=false}) {
+export async function buildGameplayMetrics({film,evidence,encoding,includeEstimates=false,definitionVersion=1}) {
   for(const kind of ['shot','damage','death']) assert.notEqual(
     encoding.native_analytics.combat[`${kind}_coverage`].reason,'capped',
     'Gameplay metrics require uncapped combat evidence');
@@ -148,7 +148,7 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
     assert.ok(events.length<=400000,'Gameplay event limit exceeded');
   }
   const source=recordedGameplaySources(await readFile(film));
-  const args={events,slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,
+  const args={events,slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,definitionVersion,
     partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
   const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(events,source)});
   return includeEstimates ? addGameplayEstimates(exact,args) : exact.product;

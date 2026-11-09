@@ -3,17 +3,27 @@
 Analytics 5 / native v3 adds `halospawns.h1GameplayMetrics.v1`. Metric IDs,
 definition versions, participant coverage and replay examples form the shared
 contract for future reducers. Existing native metrics and combat are retained.
-The first definition is `pistol_three_shot_kills` version 1.
+The metric is `pistol_three_shot_kills`. Definition 2 adds partial-health targets
+and requires an observed headshot finisher; definition 1 remains frozen for old recipes.
 
 ## Counting rule
 
-The victim starts at normalized health and normal shields of 1. Exactly three
+Definition 2 requires normal shields of 1 before the first hit and any positive
+remaining health. The third shot must trigger the engine's instant-headshot kill
+branch. A confirmed headshot counts even when a body shot would also have been
+lethal; bodyshot finishers never count. Missing headshot evidence remains unknown.
+No health cutoff or inferred damage threshold is used. The existing engine hook
+observes the actual headshot branch, including accepted host network damage.
+API and worker validators independently require the referenced combat death's
+`headshot: true` for both verified examples and starred review candidates.
+
+Exactly three
 distinct, consecutive pistol discharges from one opponent must kill that victim.
 Intervening misses and other weapon discharges disqualify the kill. Other damage
 (including self/environment/team damage), a different victim object lifetime,
 or vitality recovery during the encounter also disqualify it. Duplicate damage
-callbacks from a single discharge count once. A fully restored victim starts a
-new encounter; overshields are not normal fresh shields. Grenade throws do not
+callbacks from a single discharge count once. Restored full normal shields start
+a new encounter; overshields are not normal fresh shields. Grenade throws do not
 advance the firearm sequence, but grenade damage disqualifies the encounter.
 
 The sequence is defined by the first through lethal discharge, not a guessed
@@ -23,6 +33,9 @@ details. The complete count is null for partial recordings or unresolved
 potential kills, while `observed_count` and verified examples remain visible.
 Examples reference combat event indices, victim slots and first-hit/kill source
 ticks (120 Hz). Match-ending deaths count; postgame events do not.
+
+Retained definition 1 requires normalized health and normal shields both equal
+to 1 and has no explicit headshot check. Old results and recipes retain that rule.
 
 ## Evidence and extension points
 
@@ -56,6 +69,25 @@ ordering and match bounds. Public payloads contain counts and examples, not the
 raw evidence stream.
 
 ## Recipes and rollout
+
+Exporter 24 selects definition 2 for both exact counts and review estimates.
+Beta 5 uses 24/5/5 and Beta 6 uses 24/5/10. Required capability
+`three_shot_headshot: halospawns.h1GameplayMetrics.v1` prevents activation on an
+older API. The existing native-v3 and gameplay-v1 containers are unchanged;
+the API checks the definition against the frozen exporter. Engine binaries,
+viewer formats and all recipes through 23 remain unchanged. Separate Beta 5
+client views retain 13/2/5. No migration is required.
+
+The retained 90-match Beta 5/6 corpus verifies the production reducer for both
+definitions. All definition-1 products are unchanged, including estimates.
+Definition 2 retains all 510 exact kills and adds 39 partial-health headshots
+(549 total); starred candidates increase from 513 to 542. Unresolved kills
+decrease from 1,490 to 1,417 because confirmed bodyshot finishers can now be
+excluded even when their discharge sequence is unavailable. Every exact and
+starred example has the existing engine/combat headshot evidence. The smallest
+starting health among new exact examples is approximately 0.0127, which remains
+eligible because the finisher is a headshot. Private source-bound results are in
+`.build/three-shot-headshot-v2/corpus-products.json`.
 
 Exporter 21 adds separately labelled review estimates using the exact exporter-20
 simulation binaries. New recipes are 21/5/5 and 21/5/9, with required capability

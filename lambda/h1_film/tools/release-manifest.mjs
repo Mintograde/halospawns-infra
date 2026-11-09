@@ -26,6 +26,8 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.ok(['beta5','beta6'].includes(profile.port) && recipe.analytics_revision===5);
         assert.equal(requirements.gameplay_estimates,'halospawns.h1GameplayEstimates.v1');
       }
+      if(recipe.exporter_revision>=24)
+        assert.equal(requirements.three_shot_headshot,'halospawns.h1GameplayMetrics.v1');
       assert.ok([2, 4, 5, 6, 7, 8, 9, 10].includes(recipe.viewer_revision));
       if(profile.port==='beta6') {
         assert.equal(recipe.exporter_revision>=16,recipe.viewer_revision>=7);

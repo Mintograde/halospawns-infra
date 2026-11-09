@@ -3,18 +3,20 @@ import assert from 'node:assert/strict';
 export const GAMEPLAY_SCHEMA = 'halospawns.h1GameplayMetrics.v1';
 export const THREE_SHOT_ID = 'pistol_three_shot_kills';
 const pistol = weapon => weapon?.replaceAll('\\','/').toLowerCase() === 'weapons/pistol/pistol';
-const fresh = vitality => vitality.every(n => n === 1);
+const fresh = (vitality, version) => version === 1 ? vitality.every(n => n === 1)
+  : vitality[0] === 1 && vitality[1] > 0;
 const finitePair = v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite);
 
 // A versioned reducer over ordered, source-bound observations. A source adapter
 // resolves discharge identity; this layer never guesses links from time/distance.
-export function deriveGameplayMetrics({events, slots, deaths, partialRecording = false}) {
-  return classifyGameplayMetrics({events,slots,deaths,partialRecording}).product;
+export function deriveGameplayMetrics(args) {
+  return classifyGameplayMetrics(args).product;
 }
 
 // Internal classifications let other evidence adapters propose review candidates
 // without changing a verified result or reviving a known disqualified kill.
-export function classifyGameplayMetrics({events, slots, deaths, partialRecording = false}) {
+export function classifyGameplayMetrics({events, slots, deaths, partialRecording = false, definitionVersion = 1}) {
+  assert.ok([1,2].includes(definitionVersion),'Unsupported three-shot definition');
   const players = new Map(slots.map(slot => [slot, {slot_index:slot, value:0, observed_count:0,
     evaluated_kills:0, unknown_kills:0, coverage:{status:'complete',reason:null}, examples:[]} ]));
   const shots = new Map(), sequences = new Map(), encounters = new Map(), classifications = [];
@@ -30,7 +32,7 @@ export function classifyGameplayMetrics({events, slots, deaths, partialRecording
     } else if (e.kind === 1) {
       assert.ok(players.has(e.victim) && finitePair(e.before) && finitePair(e.after), 'Invalid gameplay damage');
       let encounter = encounters.get(e.victim);
-      const starts = fresh(e.before);
+      const starts = fresh(e.before,definitionVersion);
       if (starts) {
         encounter = {slot:e.slot, unit:e.unit, start:e.source_tick, after:e.after,
           valid:true, unknown:false, hits:[], lastSequence:null, domain:null};
@@ -67,7 +69,11 @@ export function classifyGameplayMetrics({events, slots, deaths, partialRecording
       classifications.push(classification);
       if (!encounter || !encounter.valid || (encounter.slot >= 0 && encounter.slot !== e.slot)
         || (e.weapon && !pistol(e.weapon))) continue;
-      if (encounter.unknown || !e.weapon) {
+      // The engine records the actual instant-headshot branch, independently of
+      // remaining health. A body finisher is excluded even with missing shots;
+      // absent headshot evidence cannot establish a qualifying kill.
+      if (definitionVersion === 2 && e.headshot === 0) continue;
+      if (encounter.unknown || !e.weapon || (definitionVersion === 2 && e.headshot !== 1)) {
         classification.status = 'unknown'; player.unknown_kills++; continue;
       }
       if (encounter.hits.length !== 3) continue;
@@ -83,6 +89,6 @@ export function classifyGameplayMetrics({events, slots, deaths, partialRecording
       reason:p.unknown_kills?'missing_shot_evidence':'partial_recording'};
     p.value = p.coverage.status === 'complete' ? p.observed_count : null;
   }
-  return {product:{schema:GAMEPLAY_SCHEMA,metrics:[{id:THREE_SHOT_ID,definition_version:1,players:[...players.values()]}]},
+  return {product:{schema:GAMEPLAY_SCHEMA,metrics:[{id:THREE_SHOT_ID,definition_version:definitionVersion,players:[...players.values()]}]},
     classifications};
 }

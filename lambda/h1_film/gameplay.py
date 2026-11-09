@@ -3,11 +3,13 @@
 from collections import Counter
 
 
-def validate_gameplay(product, combat, slots, stop):
+def validate_gameplay(product, combat, slots, stop, *, definition_version=1):
     deaths = {event["event_index"]: event for event in combat["deaths"]}
     kills = Counter(event["killer_slot"] for event in deaths.values() if event["kind"] == "kill")
     weapons = {weapon["weapon_id"]: weapon["tag_path"] for weapon in combat["weapons"]}
     for metric in product["metrics"]:
+        if metric["definition_version"] != definition_version:
+            raise ValueError("Gameplay definition differs from the frozen exporter")
         players = metric["players"]
         if {player["slot_index"] for player in players} != set(slots) or len(players) != len(slots):
             raise ValueError("Gameplay slots differ from the verified roster")
@@ -38,6 +40,7 @@ def validate_gameplay(product, combat, slots, stop):
             for example in [e for examples in lists for e in examples]:
                 death = deaths.get(example["kill_event_index"])
                 if not (death and death["kind"] == "kill" and death["killer_slot"] == player["slot_index"]
+                        and (definition_version != 2 or death.get("headshot") is True)
                         and death["victim_slot"] == example["victim_slot"]
                         and death["source_tick"] == example["end_source_tick"]
                         and 0 <= example["start_source_tick"] <= example["end_source_tick"] < stop

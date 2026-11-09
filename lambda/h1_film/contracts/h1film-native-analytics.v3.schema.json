@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 80db185405fc756096881fdd35a3dde35b6b67f7698cebc41d4e77b4dc33e408",
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 cd8b1c63f64de0827f3a66b1407ef2f5ef19330b13c2e184367673b20008c063",
   "$defs": {
     "GameplayCoverage": {
       "additionalProperties": false,
@@ -113,7 +113,10 @@
       "additionalProperties": false,
       "properties": {
         "definition_version": {
-          "const": 1,
+          "enum": [
+            1,
+            2
+          ],
           "title": "Definition Version",
           "type": "integer"
         },
