@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesProfile, validateBuildMatching } from './build-identity.mjs';
+import {compatibleClientBuild} from './client-build.mjs';
 
 export const REGISTRY_SCHEMA = 'halospawns.h1EngineRegistry.v1';
 const ID = /^[a-z0-9][a-z0-9-]{0,95}$/;
@@ -88,8 +89,9 @@ export function assertRetainedExporters(current, previous) {
   }
 }
 
-export function selectProfile(envelope, profiles = ENGINE_PROFILES, buildMatching = BUILD_MATCHING) {
-  const matches = profiles.filter(profile => matchesProfile(profile, envelope, buildMatching[profile.id]));
+export function selectProfile(envelope, profiles = ENGINE_PROFILES, buildMatching = BUILD_MATCHING, playback = {}) {
+  const matches = profiles.filter(profile => matchesProfile(profile, envelope, buildMatching[profile.id])
+    ||(playback.embeddedClient===true&&compatibleClientBuild(envelope,profile,playback.exporterRevision)));
   assert.equal(matches.length, 1, 'Unsupported film engine profile');
   return matches[0];
 }
@@ -115,8 +117,8 @@ export function verifyEngine(profile, hashes) {
 // This catalog is trusted deployment/API input, never a browser-supplied map ID.
 // Format 2 records a name and size, not a cryptographic map hash. A reviewed
 // build-to-map binding plus clean simulation hashes is required for exactness.
-export function resolveMap(profile, envelope, catalog, buildMatching = BUILD_MATCHING) {
-  selectProfile(envelope, [profile], buildMatching);
+export function resolveMap(profile, envelope, catalog, buildMatching = BUILD_MATCHING, playback = {}) {
+  selectProfile(envelope, [profile], buildMatching, playback);
   assert.equal(catalog.schema, 'halospawns.h1FilmMapCatalog.v1');
   assert.ok(Array.isArray(catalog.maps) && catalog.maps.length <= 4096, 'Invalid map catalog');
   assert.match(envelope.map, /^[a-zA-Z0-9_-]+$/, 'Invalid scenario name');

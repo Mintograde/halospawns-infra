@@ -27,10 +27,10 @@ test('historical manifests do not acquire a client recipe field',()=>{
   assert.equal(Object.hasOwn(manifest(old),'client_view_recipes'),false);
 });
 
-test('unsupported client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
+test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:22,analytics_revision:5,viewer_revision:10,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:23,analytics_revision:5,viewer_revision:10,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -38,6 +38,8 @@ test('unsupported client default retains the older Beta 6 recipes and exact simu
     {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===20),revision:21});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===22),
     {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===21),revision:22});
+  assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===23),
+    {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===22),revision:23});
   const bad=structuredClone(registry);delete bad.processing.requirements.compact_match_replay;
   assert.throws(()=>manifest(bad));
   const missing=structuredClone(registry);delete missing.processing.requirements.client_roster_mismatch;

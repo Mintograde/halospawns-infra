@@ -1,5 +1,16 @@
 # H1 Film Compatibility
 
+## Explicit Beta 6 embedded-client exception (2026-11-09)
+
+User-authorized recipe 23/5/10 accepts only the exact embedded client label
+`2026-11-08 - ec92e0bb`, format 3 / protocol 9839 / 120 Hz, with the canonical
+`86c52285a8ebe7d107bfafae64abe722b263cedf` engine. It does not rewrite the film
+or assert that the commits are identical. Normal full simulation verification
+is mandatory. No other label, dirty suffix, host/standalone intake, profile or
+older recipe gains this exception. Source and map hashes, canonical engine pins
+and the original recorded label remain separate. See `BETA6.md` and the six-film
+acceptance/deployment record in `DEPLOYMENT.md`.
+
 ## PB2 recorder label matching (deployed, 2026-10-31 UTC)
 
 `halospawns.h1RecordedBuild.v1` separates recorded labels from canonical engine

@@ -17,6 +17,7 @@ import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './clie
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
+import {compatibleClientBuild} from './client-build.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -59,8 +60,10 @@ export async function convertFilm(options) {
     buildMatching = validateBuildMatching(profiles, candidate.build_matching);
     exporters = validateExporters(candidate, profiles);
   }
-  const profile = selectExporter(selectProfile(envelope, profiles, buildMatching), values['exporter-revision'] === undefined
-    ? undefined : Number(values['exporter-revision']), exporters);
+  const playback = {embeddedClient:values['embedded-match']===true&&values['client-view']===true,
+    exporterRevision:values['exporter-revision']===undefined?undefined:Number(values['exporter-revision'])};
+  const profile = selectExporter(selectProfile(envelope, profiles, buildMatching, playback),
+    playback.exporterRevision, exporters);
   const adapter = adapterFor(profile);
   if(values['client-view']) assert.ok(['beta5','beta6'].includes(profile.port)&&profile.exporter_revision>=13,
     'Client view requires a new candidate exporter pin');
@@ -100,7 +103,7 @@ export async function convertFilm(options) {
   if (values['map-catalog']) {
     assert.ok((await stat(values['map-catalog'])).size <= 4 * 1024 * 1024, 'Map catalog too large');
     mapBinding = resolveMap(profile, native.envelope,
-      JSON.parse(await readFile(values['map-catalog'], 'utf8')), buildMatching);
+      JSON.parse(await readFile(values['map-catalog'], 'utf8')), buildMatching, playback);
     assert.equal(actualMapSize, mapBinding.size_bytes, 'Raw map size differs from catalog');
     assert.equal(mapHash, mapBinding.sha256, 'Raw map differs from its catalog binding');
   }
@@ -189,6 +192,9 @@ export async function convertFilm(options) {
     engine_profile: profile.id, export_contract: profile.export_contract,
     ...(values['candidate-registry'] ? { candidate_registry: true } : {}),
     ...(profile.exporter_revision === undefined ? {} : { exporter_revision: profile.exporter_revision }),
+    ...(playback.embeddedClient&&compatibleClientBuild(envelope,profile,profile.exporter_revision)?{
+      client_build_compatibility:{rule:'beta6_ec92e0bb_client_v1',recorded_build:envelope.build,
+        canonical_source_commit:profile.source.git_commit}}:{}),
     ...(mapBinding ? { map_binding: mapBinding } : {}),
     provenance: { film_sha256: native.provenance.film_sha256, map_sha256: native.provenance.map_sha256,
       ...(profile.source ? { engine_source: profile.source } : {}),

@@ -1,5 +1,24 @@
 # Beta 6.1
 
+## Authorized `ec92e0bb` client compatibility (2026-11-09, implementation)
+
+The user confirmed that `2026-11-08 - ec92e0bb` should be functionally equivalent
+to canonical Beta 6 and explicitly authorized an exception. New recipe
+**23/5/10** admits that exact recorded label only for embedded client views at
+format 3 / protocol 9839 / 120 Hz, using canonical source
+`86c52285a8ebe7d107bfafae64abe722b263cedf`. It retains the exact exporter-22
+WASM/glue, original film bytes/label and reviewed map binding. A client report
+records `beta6_ec92e0bb_client_v1` and both recorded/canonical identities.
+
+The exception changes engine selection only. Complete playback, every recorded
+hash, seed, network application and roster check still applies. Existing
+verified desync/roster availability rules remain; unknown labels and modified
+suffixes do not acquire compatibility. Authoritative intake and separate client
+intake remain strict. Recipes through 22 keep their original behavior and
+artifacts; the global source-commit matching rules and canonical profile are
+unchanged. The wire contract stays match v5, so existing API/frontend readers
+remain sufficient. Validation and deployment results are in `DEPLOYMENT.md`.
+
 ## Unsupported embedded builds (2026-11-09, deployed in dev)
 
 The six November 8 evening films have the supported `86c52285` host and three
