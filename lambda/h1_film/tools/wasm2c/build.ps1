@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Wasm,
     [Parameter(Mandatory)][string]$Profile,
     [Parameter(Mandatory)][string]$BuildDirectory,
+    [ValidateRange(1, 1000)][int]$ExporterRevision = 1,
     [switch]$OmitHudOdds
 )
 $ErrorActionPreference = 'Stop'
@@ -11,8 +12,14 @@ if (Test-Path -LiteralPath $directory) { throw 'Use a new native experiment dire
 $registry = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../profiles/registry.json') -Raw | ConvertFrom-Json
 $profiles = @($registry.profiles | Where-Object id -EQ $Profile)
 if ($profiles.Count -ne 1) { throw 'Expected one retained profile.' }
+$expectedHash = $profiles[0].wasm_sha256
+if ($ExporterRevision -ne 1) {
+    $exporters = @($registry.exporters | Where-Object { $_.engine_profile -eq $Profile -and $_.revision -eq $ExporterRevision })
+    if ($exporters.Count -ne 1) { throw 'Expected one retained exporter.' }
+    $expectedHash = $exporters[0].wasm_sha256
+}
 $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($sourceHash -ne $profiles[0].wasm_sha256) { throw 'WASM does not match the retained profile.' }
+if ($sourceHash -ne $expectedHash) { throw 'WASM does not match the retained profile/exporter.' }
 New-Item -ItemType Directory -Path $directory | Out-Null
 $image = 'halospawns-h1-wasm2c-build:experiment'
 function Invoke-Checked {
@@ -42,6 +49,7 @@ $versions = Invoke-Checked docker ($mounts + @('dpkg-query', '--show', 'wabt', '
 @{
     status = 'offline_experiment_not_a_registered_engine'
     profile = $Profile
+    exporter_revision = $ExporterRevision
     wasm_sha256 = $sourceHash
     builder_image_id = $builderId
     package_versions = $versions
