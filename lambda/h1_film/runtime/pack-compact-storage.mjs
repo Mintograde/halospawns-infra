@@ -37,7 +37,8 @@ export async function packCompactStorage(index,tracks,entries,scratch,matchId) {
       derive(table.entry,{kind,source,field:table.name},accounts.get(source).tables.find(v=>v.name===table.name).bytes);
     }
   }
-  const physical=[];let offset=0;
+  const physical=[];let offset=0,bufferedBytes=0;
+  const bufferLimit=16*1024*1024;
   for(const e of index) {
     if(e.storage)continue;const source=sources.get(e.id),blocks=[];
     if(e.kind==='world') {
@@ -47,9 +48,17 @@ export async function packCompactStorage(index,tracks,entries,scratch,matchId) {
       const bytes=await get(e.id);
       for(let at=0;at<bytes.length;at+=262144) {
         const raw=bytes.subarray(at,at+262144),packed=zstdCompressSync(raw,{params:{[constants.ZSTD_c_compressionLevel]:6,[constants.ZSTD_c_checksumFlag]:1}}),use=packed.length<raw.length,payload=use?packed:raw;
-        const path=join(scratch,`${physical.length}.bin`),pin=sha(payload);await writeFile(path,payload,{flag:'wx'});
+        const pin=sha(payload);let storage;
+        if(payload.length<=bufferLimit-bufferedBytes) {
+          // Own a bounded buffer: an identity slice may otherwise retain its
+          // entire much larger input allocation until final assembly completes.
+          bufferedBytes+=payload.length;storage={bytes:Buffer.from(payload)};
+        } else {
+          const path=join(scratch,`${physical.length}.bin`);
+          await writeFile(path,payload,{flag:'wx'});storage={path};
+        }
         blocks.push({logical_offset:at,offset,size_bytes:payload.length,decoded_size_bytes:raw.length,codec:use?'zstd':'identity',sha256:pin});
-        physical.push({path,size_bytes:payload.length,sha256:pin});offset+=payload.length;
+        physical.push({...storage,size_bytes:payload.length,sha256:pin});offset+=payload.length;
       }
     }
     e.storage={kind:'stored',blocks};

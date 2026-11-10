@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {orderedPool} from './ordered-pool.mjs';
 import {readFile,writeFile,stat} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {spawn} from 'node:child_process';
@@ -15,9 +16,9 @@ import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
-  const match=inspectMatchFilm(bytes),tracks=[];
+  const match=inspectMatchFilm(bytes);
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
-  for(const part of match.parts) {
+  const tracks=await orderedPool(match.parts,Number(values['client-concurrency'] ?? 1),async part => {
     const id=`client-${part.index}`,film=join(stage,`${id}.h1film`);
     if(part.rest.flags&1) {
       // Use the pinned upstream restorer for the RNET shared-message representation.
@@ -46,7 +47,7 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     const unsupported=unsupportedClientBuild(envelope,profileById(report.engine_profile),
       report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
     if(unsupported) {
-      tracks.push({...track,status:'unavailable',failure:unsupported});continue;
+      return {...track,status:'unavailable',failure:unsupported};
     }
     let converted;
     try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
@@ -56,13 +57,13 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
         || (report.exporter_revision>=18 && clientRosterEvidence(error));
       if(!failure)throw error;
       assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
-      tracks.push({...track,status:'unavailable',failure});continue;
+      return {...track,status:'unavailable',failure};
     }
     assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
     for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
-    tracks.push({...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
-      world:`${id}/candidate/replay.120hz.hsrdc`,world_sha256:converted.encoding['120hz'].sha256});
-  }
+    return {...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
+      world:`${id}/candidate/replay.120hz.hsrdc`,world_sha256:converted.encoding['120hz'].sha256};
+  });
   const result={schema:'halospawns.h1MatchTracks.v1',source_film_sha256:match.sha256,match_id:match.host.match_id,
     version:match.version,tracks};
   await writeFile(join(stage,'match-tracks.json'),JSON.stringify(result),{flag:'wx'});

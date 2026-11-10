@@ -11,33 +11,34 @@ export function fnv1a(bytes) {
 // by payload groups sorted by (kind,size), with keyed XOR history per block.
 export function unpackNetworkColumns(bytes,count) {
   assert.ok(Number.isSafeInteger(count)&&count>0&&count<=bytes.length/8,'Invalid network column count');
-  const records=[],groups=new Map();
+  // Store offsets/rows and direct group references instead of allocating a
+  // record object and Buffer slice for every network application.
+  const offsets=new Uint32Array(count),rows=new Uint32Array(count),recordGroups=new Array(count),groups=new Map();
+  const out=Buffer.alloc(bytes.length);
   let tick=0,at=0;
   for(let i=0;i<count;i++) {
-    let delta=0,head=0;
-    for(let j=0;j<4;j++) {delta+=(bytes[j*count+i]*2**(8*j));head+=(bytes[(4+j)*count+i]*2**(8*j));}
+    const delta=(bytes[i]|bytes[count+i]<<8|bytes[2*count+i]<<16|bytes[3*count+i]<<24)>>>0;
+    const head=(bytes[4*count+i]|bytes[5*count+i]<<8|bytes[6*count+i]<<16|bytes[7*count+i]<<24)>>>0;
     tick+=delta;
     assert.ok(tick<=0xffffffff,'Network clock overflow');
     const type=head&65535,size=head>>>16,key=type*65536+size;
     assert.ok(at+8+size<=bytes.length,'Invalid network column payload');
-    if(!groups.has(key)) groups.set(key,{count:0,history:new Map()});
-    const group=groups.get(key),row=group.count++;
-    records.push({tick,type,size,at,row,key});at+=8+size;
+    let group=groups.get(key);
+    if(!group) {group={count:0,size,keySize:type===67?1:type===68?4:0,history:new Map()};groups.set(key,group);}
+    offsets[i]=at+8;rows[i]=group.count++;recordGroups[i]=group;
+    out.writeUInt32LE(tick,at);out.writeUInt32LE(head,at+4);at+=8+size;
   }
   assert.equal(at,bytes.length,'Trailing network columns');
   at=8*count;
   for(const [key,group] of [...groups].sort((a,b)=>a[0]-b[0])) {group.base=at;at+=group.count*(key%65536);}
-  const out=Buffer.alloc(bytes.length);
-  for(const r of records) {
-    const g=groups.get(r.key),p=out.subarray(r.at+8,r.at+8+r.size);
-    out.writeUInt32LE(r.tick,r.at);out.writeUInt16LE(r.type,r.at+4);out.writeUInt16LE(r.size,r.at+6);
-    for(let j=0;j<r.size;j++) p[j]=bytes[g.base+j*g.count+r.row];
-    const keySize=r.type===67?1:r.type===68?4:0;
+  for(let i=0;i<count;i++) {
+    const g=recordGroups[i],offset=offsets[i],row=rows[i],{size,keySize}=g;
+    for(let j=0;j<size;j++) out[offset+j]=bytes[g.base+j*g.count+row];
     if(keySize) {
-      assert.ok(r.size>=keySize,'Truncated keyed network record');
-      const key=p.readUIntLE(0,keySize),previous=g.history.get(key);
-      if(previous) for(let j=keySize;j<r.size;j++) p[j]^=previous[j];
-      g.history.set(key,p);
+      assert.ok(size>=keySize,'Truncated keyed network record');
+      const key=keySize===1?out[offset]:out.readUInt32LE(offset),previous=g.history.get(key);
+      if(previous!==undefined) for(let j=keySize;j<size;j++) out[offset+j]^=out[previous+j];
+      g.history.set(key,offset);
     }
   }
   return out;

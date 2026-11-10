@@ -23,6 +23,9 @@ export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
     analytics: false, ...options };
   const totalStarted = performance.now();
+  const clientConcurrency = Number(values['client-concurrency'] ?? 1);
+  assert.ok(Number.isInteger(clientConcurrency) && clientConcurrency >= 1 && clientConcurrency <= 16,
+    'Client concurrency must be an integer between 1 and 16');
   const analyticsRevision = Number(values['analytics-revision'] ?? 2);
   assert.ok([1, 2, 3, 4, 5].includes(analyticsRevision), 'Unsupported analytics revision');
   for (const key of ['film', 'assets', 'encoder', 'output']) {
@@ -173,6 +176,14 @@ export async function convertFilm(options) {
     BLAMPC_FILM_VIEW_DELIVERED: '1', BLAMPC_STATS_DIR: join(work, 'stats'),
     BLAMPC_FILM_DIR: join(work, 'films'), H1_EXPORT_HANDLE: '3',
     H1_EXPORT_METRICS: join(stage, 'engine-metrics.json') });
+  const exportBufferBytes = Number(values['export-buffer-bytes'] ??
+    (process.platform === 'linux' && profile.port === 'beta6' ? 65536 : 0));
+  assert.ok(Number.isSafeInteger(exportBufferBytes) && (exportBufferBytes === 0 ||
+    (exportBufferBytes >= 4096 && exportBufferBytes <= 1024 * 1024)), 'Invalid export buffer size');
+  if (exportBufferBytes) {
+    assert.equal(process.platform, 'linux', 'Buffered export requires the Linux blocking pipe');
+    environment.H1_EXPORT_BUFFER_BYTES = String(exportBufferBytes);
+  }
   const engineLog = openSync(join(stage, 'playback.log'), 'wx');
   const encoderLog = openSync(join(stage, 'encode.log'), 'wx');
   let logsClosed = false;
@@ -201,7 +212,7 @@ export async function convertFilm(options) {
       ...engineHashes, encoder_sha256: await sha256(values.encoder), node: process.version } };
   const kill = () => { for (const child of children) if (child.exitCode === null) child.kill('SIGKILL'); };
   const timer = setTimeout(() => { expired = true; kill(); }, timeout);
-  let monitor, monitorDone, engineArgs;
+  let monitor, monitorDone, engineArgs, matchConversion;
   const interrupted = () => { expired = true; kill(); };
   process.on('SIGINT', interrupted);
   process.on('SIGTERM', interrupted);
@@ -228,6 +239,7 @@ export async function convertFilm(options) {
     const permissions = values['engine-permissions'] ? ['--permission',
       `--allow-fs-read=${work}`, `--allow-fs-read=${dirname(values.engine)}`,
       `--allow-fs-read=${fileURLToPath(new URL('./metrics.mjs', import.meta.url))}`,
+      `--allow-fs-read=${fileURLToPath(new URL('./export-write-buffer.mjs', import.meta.url))}`,
       `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs', import.meta.url))}`,
       `--allow-fs-write=${work}`, `--allow-fs-write=${environment.H1_EXPORT_METRICS}`,
       '--import', new URL('./engine-permissions.mjs', import.meta.url).href] : [];
@@ -237,6 +249,12 @@ export async function convertFilm(options) {
     const engine = spawn(process.execPath, engineArgs,
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });
     const simulated = completion(engine);
+    if (values['overlap-host'] && profile.port === 'beta6' && !values['client-view']) {
+      // Every view uses its own work directory and verified engine/map/source pins.
+      // Capture failures immediately, but do not publish until host and clients pass.
+      matchConversion = convertMatchTracks(stage, values, report, convertFilm, started + timeout)
+        .then(value => ({ok: true, value}), error => ({ok: false, error}));
+    }
     if (process.platform === 'win32' && values['trusted-local']) {
       monitor = spawn('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('../tools/measure-windows.ps1', import.meta.url)),
         '-RunnerId', String(process.pid), '-EngineId', String(engine.pid), '-EncoderId', String(encoder.pid),
@@ -275,6 +293,7 @@ export async function convertFilm(options) {
     if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
     if (analyticsRevision === 5) {
+      const gameplayStarted = performance.now();
       assert.ok(['beta5','beta6'].includes(profile.port) && profile.exporter_revision >= 19,
         'Gameplay metrics require a registered gameplay exporter');
       const encodingPath = join(stage,'candidate','encoding.json');
@@ -284,6 +303,7 @@ export async function convertFilm(options) {
         definitionVersion:profile.exporter_revision>=24?2:1});
       encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
       await save(encodingPath,encoding);
+      report.timing.gameplay_seconds = (performance.now() - gameplayStarted) / 1000;
     }
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');
@@ -359,7 +379,15 @@ export async function convertFilm(options) {
         });
     }
     if(profile.port==='beta6'&&!values['client-view']) {
-      report.match_tracks=await convertMatchTracks(stage,values,report,convertFilm,started+timeout);
+      const matchStarted = performance.now();
+      if (matchConversion) {
+        const result = await matchConversion;
+        if (!result.ok) throw result.error;
+        report.match_tracks = result.value;
+      } else {
+        report.match_tracks=await convertMatchTracks(stage,values,report,convertFilm,started+timeout);
+      }
+      report.timing.match_wait_seconds = (performance.now() - matchStarted) / 1000;
       assert.ok(!expired,'Match conversion timed out');
     }
     report.timing.total_seconds = (performance.now() - totalStarted) / 1000;
@@ -416,6 +444,8 @@ export async function convertFilm(options) {
     await save(join(stage, 'report.json'), report);
     throw new Error(`${error.message}\nDiagnostics: ${stage}`, { cause: error });
   } finally {
+    // A failed host must not leave client children running past this conversion.
+    if (matchConversion) await matchConversion;
     clearTimeout(timer);
     process.off('SIGINT', interrupted);
     process.off('SIGTERM', interrupted);

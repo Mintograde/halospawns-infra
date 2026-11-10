@@ -58,7 +58,7 @@ function stableCallback(value, report) {
     'chunk_encode_duration_ms', 'chunk_write_duration_ms', 'compression_and_assembly_duration_ms',
     'compression_duration_ms', 'native_finalization_duration_ms', 'native_viewer_duration_ms',
     'process_peak_rss_kib', 'process_tree_peak_rss_kib', 'source_projection_duration_ms',
-    'tick_hash_duration_ms', 'tmp_used_bytes', 'validation_duration_ms',
+    'tick_hash_duration_ms', 'tmp_used_bytes', 'validation_duration_ms', 'match_pack_duration_ms',
   ]) {
     if (metrics) delete metrics[field];
   }

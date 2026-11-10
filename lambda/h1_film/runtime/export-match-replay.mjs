@@ -30,11 +30,21 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
+  // Compact packing immediately consumes these entries. Keep a bounded amount
+  // of intermediate data in memory instead of writing and rereading it.
+  let bufferedBytes=0;
+  const bufferLimit=128*1024*1024;
   async function add(id,kind,bytes,extra={}) {
     assert.ok(bytes.length>0);
-    const path=join(scratch,`${entries.length}.bin`);
-    await writeFile(path,bytes,{flag:'wx'});
-    entries.push({id,kind,compression:'identity',path,...extra});return id;
+    let storage;
+    if(sourceContract.profile_revision>=8&&bytes.length<=bufferLimit-bufferedBytes) {
+      // A small slice must not pin a much larger decompressed/source buffer.
+      bufferedBytes+=bytes.length;storage={bytes:Buffer.from(bytes)};
+    } else {
+      const path=join(scratch,`${entries.length}.bin`);
+      await writeFile(path,bytes,{flag:'wx'});storage={path};
+    }
+    entries.push({id,kind,compression:'identity',...storage,...extra});return id;
   }
   function world(id,path) {entries.push({id,kind:'world',compression:'identity',path});return id;}
   function section(bytes,at) {
