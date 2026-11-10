@@ -1,5 +1,63 @@
 # H1 film Lambda integration
 
+## Dev H1 concurrency increased to fifty (2026-11-10 UTC)
+
+The user's requested concurrency increase is applied: **reserved executions
+5 to 50**, with an explicit **SQS maximum concurrency of 50**. This raises the
+ceiling for simultaneous queued jobs tenfold. Each invocation retains one
+message per batch and processes its replay worlds sequentially at 3,008 MB.
+Worker/default **20261110-r1**, policy **22**, API **236**, image/engine pins,
+timeouts, source limits, queue visibility and retry behavior remain unchanged.
+
+Before the change, CloudWatch's preceding 24 hours show the worker reaching
+concurrency **5** and **2,557 throttled invocation attempts**, across 343 actual
+invocations. Throttles can include repeated attempts for the same queued work.
+The API peaked at concurrency **8**, with zero throttles or function errors.
+The live regional account limit is **1,000**; unreserved capacity changes from
+**993 to 948**, leaving the other two existing reservations intact.
+
+The queue cap keeps SQS invocation demand within the function reservation,
+following [AWS's SQS scaling guidance](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-scaling.html).
+The optional Terraform setting preserves old configurations that omit it;
+validation requires an integer from 2 through the reserved limit. The reviewed
+reservation ceiling is now 50. Foundation/disabled-consumer gates, one-message
+batches, partial batch failure reporting and the dev-only resource gate remain.
+
+All **12 Terraform tests pass**. Focused and full preplans show exactly **0 add /
+2 change / 0 destroy**: the H1 function reservation and its existing event source
+mapping's scaling configuration. All other components are no-op. A saved-plan
+guard checks those exact values and rejects other resource/property changes
+before apply. The apply reports **0 added / 2 changed / 0 destroyed**. Live reads
+confirm both limits at 50 and the same enabled mapping; worker registry/image
+health and API health pass. Queue/DLQ are empty. The focused postplan and all
+six full-dev component postplans are no-op.
+
+Changed configuration is in `stacks/dev.yaml`,
+`components/terraform/map-processing/h1-film.tf` and its `tests/h1-film.tftest.hcl`.
+Evidence, before/after snapshots and CloudWatch metrics are in
+`.build/h1-concurrency-50/`. No replay batch or historical reparse was submitted;
+this verifies the settings rather than measuring sustained throughput at fifty.
+There is no AWS/profile/session blocker. The initial private saved-plan command
+failed during local argument parsing before any AWS mutation; quoting its
+arguments fixed the retry.
+
+Commands run, from the infra root (plans run before and after the apply):
+
+```powershell
+terraform -chdir=components/terraform/map-processing test -no-color
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+./.build/h1-concurrency-50/apply.ps1
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+```
+
+The private apply wrapper inspects the saved plan before executing:
+
+```powershell
+terraform -chdir=components/terraform/map-processing apply -no-color L:/bens_stuff/projects/halospawns-infra/.build/h1-concurrency-50/worker.planfile
+```
+
 ## Beta 6 worker processing optimizations (2026-11-10 UTC)
 
 Worker/default **20261110-r1**, policy **22**, is deployed and active in dev with

@@ -123,12 +123,13 @@ run "intake_supports_five_concurrent_films" {
       aws_lambda_function.h1_film[0].reserved_concurrent_executions == 5 &&
       aws_lambda_event_source_mapping.h1_film[0].enabled &&
       aws_lambda_event_source_mapping.h1_film[0].batch_size == 1 &&
+      length(aws_lambda_event_source_mapping.h1_film[0].scaling_config) == 0 &&
       contains(aws_lambda_event_source_mapping.h1_film[0].function_response_types, "ReportBatchItemFailures")
     )
     error_message = "Five concurrent invocations must retain one film per invocation and partial failure reporting."
   }
 }
-run "concurrency_above_five_is_rejected" {
+run "intake_supports_fifty_concurrent_films_with_queue_cap" {
   command = plan
   variables {
     h1_film = {
@@ -137,7 +138,76 @@ run "concurrency_above_five_is_rejected" {
       memory_mb            = 3008
       intake_configured    = true
       event_source_enabled = true
-      reserved_concurrency = 6
+      reserved_concurrency = 50
+      maximum_concurrency  = 50
+    }
+  }
+  assert {
+    condition = (
+      aws_lambda_function.h1_film[0].reserved_concurrent_executions == 50 &&
+      aws_lambda_event_source_mapping.h1_film[0].scaling_config[0].maximum_concurrency == 50 &&
+      aws_lambda_event_source_mapping.h1_film[0].enabled &&
+      aws_lambda_event_source_mapping.h1_film[0].batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.h1_film[0].function_response_types, "ReportBatchItemFailures")
+    )
+    error_message = "Fifty concurrent films must keep the queue cap within the reservation and preserve per-message failures."
+  }
+}
+run "queue_cap_above_reservation_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 5
+      maximum_concurrency  = 6
+    }
+  }
+  expect_failures = [var.h1_film]
+}
+run "queue_cap_below_aws_minimum_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 5
+      maximum_concurrency  = 1
+    }
+  }
+  expect_failures = [var.h1_film]
+}
+run "fractional_queue_cap_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 5
+      maximum_concurrency  = 4.5
+    }
+  }
+  expect_failures = [var.h1_film]
+}
+run "concurrency_above_fifty_is_rejected" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      event_source_enabled = true
+      reserved_concurrency = 51
     }
   }
   expect_failures = [var.h1_film]

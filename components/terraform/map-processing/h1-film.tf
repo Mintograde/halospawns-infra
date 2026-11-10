@@ -11,6 +11,7 @@ variable "h1_film" {
     intake_configured    = optional(bool, false)
     event_source_enabled = optional(bool, false)
     reserved_concurrency = optional(number, 0)
+    maximum_concurrency  = optional(number)
     max_size_bytes       = optional(number, 536870912)
     max_source_ticks     = optional(number, 432000)
     max_players          = optional(number, 16)
@@ -19,12 +20,21 @@ variable "h1_film" {
 
   validation {
     condition = (
-      var.h1_film.reserved_concurrency >= 0 && var.h1_film.reserved_concurrency <= 5 &&
+      var.h1_film.reserved_concurrency >= 0 && var.h1_film.reserved_concurrency <= 50 &&
       floor(var.h1_film.reserved_concurrency) == var.h1_film.reserved_concurrency &&
       (var.h1_film.intake_configured || (!var.h1_film.event_source_enabled && var.h1_film.reserved_concurrency == 0)) &&
       (!var.h1_film.event_source_enabled || var.h1_film.reserved_concurrency > 0)
     )
-    error_message = "Consumer activation requires a configured intake and reserved concurrency of 1-5; the foundation stays at zero."
+    error_message = "Consumer activation requires a configured intake and reserved concurrency of 1-50; the foundation stays at zero."
+  }
+
+  validation {
+    condition = var.h1_film.maximum_concurrency == null ? true : (
+      var.h1_film.maximum_concurrency >= 2 &&
+      var.h1_film.maximum_concurrency <= var.h1_film.reserved_concurrency &&
+      floor(var.h1_film.maximum_concurrency) == var.h1_film.maximum_concurrency
+    )
+    error_message = "SQS maximum concurrency must be a whole number from 2 to the function's reserved concurrency, or omitted."
   }
 
   validation {
@@ -235,6 +245,13 @@ resource "aws_lambda_event_source_mapping" "h1_film" {
   enabled                 = var.h1_film.event_source_enabled
   batch_size              = 1
   function_response_types = ["ReportBatchItemFailures"]
+
+  dynamic "scaling_config" {
+    for_each = var.h1_film.maximum_concurrency == null ? [] : [var.h1_film.maximum_concurrency]
+    content {
+      maximum_concurrency = scaling_config.value
+    }
+  }
 }
 
 output "h1_film_foundation" {
@@ -246,6 +263,7 @@ output "h1_film_foundation" {
     image_tag                      = var.h1_film.image_tag
     mode                           = local.h1_film_intake ? "intake" : "foundation"
     reserved_concurrent_executions = var.h1_film.reserved_concurrency
+    maximum_concurrency            = var.h1_film.maximum_concurrency
     intake_enabled                 = var.h1_film.event_source_enabled
   } : null
 }
