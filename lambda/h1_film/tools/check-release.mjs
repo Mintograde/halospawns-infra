@@ -10,6 +10,14 @@ const { values } = parseArgs({ options: {
   'engine-root': { type: 'string' }, 'previous-registry': { type: 'string' },
 } });
 assert.ok(values['engine-root'], 'Use --engine-root <private release directory>');
+const presentation = JSON.parse(await readFile(new URL('../contracts/h1film-settings-presentation.v1.json', import.meta.url), 'utf8'));
+const legacySettings = new Set(['beta3', 'h1arena', 'beta4', 'beta5']);
+for (const profile of ENGINE_PROFILES.filter(profile => !legacySettings.has(profile.port))) {
+  const metadata = presentation.profiles[profile.id];
+  assert.ok(metadata, `Generate and sync settings presentation before releasing ${profile.id}`);
+  assert.equal(metadata.source_commit, profile.source.git_commit);
+  assert.equal(metadata.source_sha256, profile.source.sha256);
+}
 const retained = validateRegistry(JSON.parse(await readFile(
   new URL('../tests/fixtures/retained-profiles.json', import.meta.url), 'utf8')));
 assertRetainedProfiles(ENGINE_PROFILES, retained);

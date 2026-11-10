@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { open } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { verifyPlayback as verifyBasePlayback } from './film-v2-120.mjs';
+import {classifyNetworkHost,readHostRosterEvidence} from '../network-host.mjs';
 import {observeDamageOwner} from '../roster-recovery.mjs';
 import {unpackNetworkColumns,inspectTickBlocks} from '../format3-codec.mjs';
 
@@ -166,11 +167,13 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
         local_player_count: 0, remote_player_mask: initialDropMask, host_slots: [] };
     }
   }
+  if(recoveryContext.botAwareHost)host=classifyNetworkHost({players,localPlayers,initialDropMask,observedRemoteMask,
+    firstTick,initialRosterChanged,initialMaskChanged,rosterEvidence:recoveryContext.rosterEvidence});
   return { records: count, applications, blocks: words[6], participant_count: players + joined.size,
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path, {allowClientView = false} = {}) {
+export async function readEnvelope(path, {allowClientView = false,botAwareHost = false} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -267,8 +270,17 @@ export async function readEnvelope(path, {allowClientView = false} = {}) {
     assert.equal(Boolean(netSize), universal, 'FNET section and film flags disagree');
     // Beta 6.1 inserted flag/ball reset settings: teamplay is 19 and fireteams 25.
     const variant = words[22] === 436 ? await readBlock(file,words[21],436) : undefined;
+    let rosterEvidence;
+    if(botAwareHost&&network&&!clientView) {
+      const limit=Math.min(size,...spans.map(span=>span[0]).filter(offset=>offset>=end),
+        ...(words[16]===536?[(await readBlock(file,512,8)).readUInt32LE(0)+(await readBlock(file,512,8)).readUInt32LE(4)]:[]));
+      const firstSample=await readBlock(file,trailer+8,16);
+      assert.equal(firstSample.readUInt32LE(0),words[10],'First recorded hash tick differs');
+      rosterEvidence=await readHostRosterEvidence(file,{at:end,limit,firstTick:words[10],
+        firstHash:firstSample.readBigUInt64LE(8),players});
+    }
     const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25], {
-      teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+19*4) === 0
+      botAwareHost,rosterEvidence,teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+19*4) === 0
         && variant.readInt32LE(128+25*4) === 0 && head.readUInt32LE(472) === 0),
     }, clientView) : undefined;
     if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;

@@ -1,5 +1,246 @@
 # H1 film Lambda integration
 
+## Missing embedded-client match IDs deployed (2026-11-10 UTC)
+
+Dev worker/default **20261110-r5**, policy **25**, is active with unchanged
+API **240**. Source `1c5cbf8f138fd0a1d3eab090b7f6ec1c0336b1d9` was built in the
+isolated `.build/missing-match-release` checkout; immutable image digest is
+`sha256:81f12a7542b9400d834a1e38333fc2576d0b2c297f1d5eb2bb23a0e3ca241431`.
+New Beta 6/7 recipes are **27/5/10** and **27/5/11**, using exact exporter-26
+simulation binaries and existing viewer contracts. All six profiles, 36 exporter
+entries, older recipes and 360 map approvals remain. Beta 5 stays 24/5/5.
+
+The format-3 container reader now follows pinned Beta 6.1
+`blampc_film_bake.c::same_match`: an absent client ID is compatible; conflicting
+nonzero IDs fail. Host identity, original client IDs/bytes, checksums, restoration
+identity, source/build/map validation and all simulation checks remain enforced.
+The shared exporter policy applies to 27 and later without per-engine allowlists.
+Inspection, gameplay extraction, client conversion and match export all use it;
+older frozen recipes remain strict. See `COMPATIBILITY.md` for future-engine
+guidance and the distinction between absent identity and verified playback.
+
+All **158 Node** and **110 packaged worker** tests pass. **16 packaged cases /
+48 exact API callback modes**, receipt retries and the separate Beta 5 client
+flow pass against API 240. All **15** existing complete viewer artifacts,
+analytics/settings and host evidence are identical to r4. Explicit retained
+26/5/10 and 26/5/11 reproduce the old bytes. The packaged image still rejects
+this missing-ID film under exporter 26 and preserves its zero ID under 27.
+
+The guarded apply changed only the H1 image and producer digest; first live
+health and engine checks pass. All six dev postplans are no-op. No API release,
+migration or frontend/production deployment is required. Memory/concurrency stay
+3008 MB/50; worlds run sequentially. Publication, comparisons and recovery
+evidence are in `.build/upload-eaac7cdd/`; promotion evidence is in
+`.build/h1-promotions/20261110-212441-659aece9f3b64694b8d3e5bf705c4ae2/`.
+
+Fresh normal upload **e318bc4d-65fe-4581-9611-4ebce42a77af** is processed as game
+**96a14c7d-5ca6-480d-88f3-2ac87a480368**, replay
+`2905a867-e479-4071-96ec-96487b3a8700`. It uses the exact retained 29,579,806-byte
+source of failed upload `eaac7cdd-8b30-40de-bdcc-a3c9a4ed732d`, SHA-256
+`cf27effed843179cca53fe9c8c5677185b09b7648f3f5243cdb1b6b3f57ed9ac`.
+The original failed record and frozen 26/5/10 conversion remain unchanged.
+The host and all four clients verify **238,269 ticks / 1,986 hashes**, with zero
+seed/hash mismatches. PoopyTX's client retains its zero match ID, original source
+hash, **44,400-frame** duration and early-stop flag. Its absent clock account
+remains explicitly unaligned; no missing frames or timing are synthesized.
+
+The selected 105,313,801-byte artifact has SHA-256
+`c95d090218249791e6bcad7dfb9c43c8182db9facf26dc1e0d51f113e8207253`.
+Live API/CDN range, CORS and full-hash checks pass. All client worlds and recorded
+payload entries match the packaged reference; host metadata differs only in its
+new replay identity, and statistics match. Real Chrome opens the live bytes
+with API-supplied proof, decodes each world's final chunk and checks 26 record
+representations/ranges, including the short client. The actual game-detail
+component using deployed responses passes at 1440/390 pixels: Neutral, four
+players, no Host tags, valid replay links and no non-default settings or raw
+numeric code labels. Frontend remains local/uncommitted.
+
+Queue/DLQ are empty and API health is 200. Before/after guards preserve all
+253 original conversions, 663 receipts, 440 H1 attempts and 360 map approvals;
+final totals are **254/664/440/360**. No other upload was recovered or game
+reparsed. Keep the current worker and every recipe available on policy rollback;
+existing attempts continue to use their frozen recipe.
+
+## Bot-aware Beta 6/7 host modes deployed (2026-11-10 UTC)
+
+Dev worker/default **20261110-r4**, policy **24**, is active with API **240**
+(`2a8213a236261172cacd77f9c193ced3669963f0`, successful CI
+[42883035119](https://github.com/Mintograde/halospawns-api/actions/runs/42883035119)).
+All 195 packaged Python files and 45 contract files match that source; API ZIP
+SHA-256 is `68bf5312035dd3237d1dfdef8aca254f7eaf867f7c6e7687bd98f6f925c89c4e`.
+The worker was built from committed `3318be2` in `.build/bot-host-release`;
+its immutable image is
+`sha256:4f8cb95ae42a26debb1bb97ad48c306dc98a16474e8a4ef004ceb0970a6ed1a8`.
+
+Exporter **26** adds `halospawns.h1NetworkHostBots.v1` and separates hosted bots
+from human host slots. New Beta 6/7 recipes are **26/5/10** and **26/5/11**,
+using the exact prior simulation binaries. All six profiles, 34 exporters,
+every older recipe, and all 360 map approvals remain. Beta 5 stays 24/5/5.
+The API requires the new capability at registration and activation. No database
+migration or frontend response change is required. Keep the compatible reader
+and every registered recipe on rollback.
+
+FNET drop bits identify remote humans; hosted bots also lack a bit. The former
+classifier therefore left some dedicated games unknown and could mistake a
+single bot for a human host. The new evidence uses the actual START bot count,
+the original host-rounds local mask, or a positively remote slot zero under
+the reviewed Beta 6/7 player creation order. Lobby bot settings, player names,
+the viewing-client header and the Linux build label are not sufficient proof.
+Ambiguous or contradictory initial rosters stay unknown. See `NETWORK_HOSTS.md`.
+
+All **143 Node**, **110 local/packaged worker**, and **2,191 API unit** tests
+(six skips), API lint and CI pass. The packaged image passes **15 host cases /
+45 exact deployed-API callback modes**, plus the separate Beta 5 client flow.
+Coverage includes every engine and local, network, player-hosted, Linux
+dedicated, bot and embedded-client scenarios. Thirteen common complete viewer
+artifacts and their stable analytics/settings remain identical. Explicit
+retained Beta 6 24/5/10 and Beta 7 25/5/11 also reproduce their original bytes
+and host evidence. One private corpus entry initially paired a Carousel film
+with Dread; validation rejected it. The corrected Carousel case passed with
+the same immutable image, and all successful case evidence was retained.
+
+User-authorized Worthy game **5fd1a62e-6547-41d9-a76e-94575ee67f98** now reports
+**Neutral**. Audited batch `4d3acd19-3527-45fb-aaea-a6fb4c02416b` created full
+attempt `30f01d01-6ca9-4bcd-886a-f467e3c85f08`, which succeeded and is selected.
+The retained source hash is
+`a5881884e1a0de839c59e7b6ae457ac3866273d03593f786a9332aff57ca2d51`.
+Its initial roster has remote mask 49, six players, bots in slots 1/2/3 and
+zero human hosts; the viewing client joins later as slot 6. Bots receive no Host
+tag. All five worlds verify **213,755 ticks / 1,783 hashes** with no mismatches.
+The complete selected **125,268,394-byte** viewer remains byte-identical:
+`2a68dbb46f98dc76a8b20fc868c03a27ff00904db593079060973ac112631c75`.
+All 98 payload entries, statistics, graphs, occupancy and recorded settings
+remain unchanged. Original source/conversion/receipt/attempt/artifact pins remain.
+
+Live API, CDN range/CORS/full hash and Chrome checks pass. The actual frontend
+component, supplied with deployed API responses, shows Neutral at 1440 and
+390 pixels, all seven scoreboard participants without a Host tag, and the
+existing non-default Bots value 3. Frontend stays local/uncommitted; there was
+no frontend or production deployment. No other historical game was reparsed.
+
+The guarded worker apply changed only its image and producer digest; first
+live health and engine verification pass. API output refresh 239 to 240 had
+zero resource actions. All six full-dev postplans are no-op; API health is 200
+and queue/DLQ are empty. Read-only before/after guards preserve all original
+**231 conversions, 641 receipts, 439 H1 attempts and 360 map approvals**;
+final totals are **231/642/440/360**. Memory/concurrency stay 3008 MB/50 and
+worlds run sequentially. Evidence is in `.build/host-mode-worthy/` and
+`.build/h1-promotions/20261110-192830-5bd9fd93ebe846878b326d7619d9ed65/`.
+
+## Beta 6/7 settings presentation deployed (2026-11-10 UTC)
+
+Dev API **239** (`e910bb8f37337979173f75027f085096e86aec06`, successful CI
+[42875357345](https://github.com/Mintograde/halospawns-api/actions/runs/42875357345))
+serves source-generated setting labels, enum choices, units and preset defaults
+through the existing settings catalogue endpoint. API 238 introduced the reader;
+239 preserves FFA/CTF/FOV capitalization. All 194 packaged Python files and 45
+contract files match the committed source; final ZIP SHA-256 is
+`b17b65549f840a200b35ecb6cfb99e5924aa42b1f60149f9f29a35147849999f`.
+
+The exact Beta 6/7 source trees generate all seven presets and 77/78 variant
+defaults. The frontend consumes API metadata, retaining a generated fallback.
+Engine release checks now require source-bound metadata for future profiles.
+The workflow is documented in `SETTINGS_PRESENTATION.md`; generator source is
+committed as `e6f7028`. Worker/default **20261110-r3**, policy **23**, all six
+engine profiles, 32 exporters, recipes and all 70-map engine sets remain unchanged.
+
+The read-only audit covers **124 Beta 6 games and one Beta 7 game**. No available
+numeric code remains unlabeled. Two games have eleven active deviations in total.
+All **505 historical settings snapshots** retain their exact document hashes;
+there was no database migration, mutation, upload, reparse or worker deployment.
+All 137 Node tests, 2,162 API unit tests (six skips), 815 site tests, focused
+metadata/loader checks, lint and both frontend production builds pass.
+
+Chrome checks using the deployed API responses pass at 1440 and 390 pixels for
+Beta 6 game `4cd46456-eb61-45d6-a7b4-ae6750c826e3` (ten deviations) and Beta 7 game
+`5fd1a62e-6547-41d9-a76e-94575ee67f98` (three bots, one deviation). Names, default
+values, non-default filtering, source selection and layout pass without page
+errors. Frontend changes remain local/uncommitted and undeployed.
+
+Guarded API output refreshes 237→238→239 have zero resource actions. API health
+passes, queue/DLQ are empty, and the worker image is unchanged. Evidence is in
+`.build/settings-followup/` and the frontend's
+`smoke-runs/settings-beta67-20261110/`. No production action occurred.
+
+## Beta 7 deployed in dev (2026-11-10 UTC)
+
+Worker/default **20261110-r3**, policy **23**, is active with API **237**
+(`205b8cc82552060ede2a0d7970e01e166e4f9788`). The worker was built from committed
+`2db789b` in the isolated `.build/beta7-release` checkout. Its immutable image is
+`sha256:c70d7ed93e7df89a7cf10218c7a780b125e3c57b0e660ecd05f2ea2ffcdbad8f`.
+The API was deployed through successful CI run
+[42850151366](https://github.com/Mintograde/halospawns-api/actions/runs/42850151366);
+all 194 packaged Python files match the committed source. Additive migration
+`20261110010000_h1film_beta7.sql` is applied. The API version-output refresh from
+236 to 237 had zero resource actions.
+
+New profile **h1-performance-beta7-p9844-wasm-v1** pins upstream `beta-7` /
+`9eb48a465a70f711eaa61db3248f82dc46421924`, format 3 / protocol 9844 / 120 Hz.
+Its default recipe is **25/5/11**. Viewer 11 adds
+`halospawns.h1MatchReplay.v6` / `H1MV0006`, retaining compact storage, host and
+recorded client worlds, diagnostics, original inputs/clocks, explicit unavailable
+views and three-shot definition 2. All six profiles, 32 exporter entries and
+every previous recipe remain; Beta 5/6 defaults stay 24/5/5 and 24/5/10.
+
+The new port handles the changed options/variant layout, weapon-set setting,
+FNET records and client event, 16-player recorded rosters, up to 15 hosted bots
+and 11 local bots. An idle diagnostic account's original unassigned player
+sentinel is preserved separately from its verified embedded-film identity.
+The exact Beta 6 `ec92e0bb` exception stays confined to Beta 6. See `BETA7.md`
+for source changes, bounds and reproducible validation evidence.
+
+All **70 Beta 6 map approvals** were transferred through the audited service,
+in frozen 50/20 batches, preserving raw object/version/hash, GLB/exporter pins,
+origin releases and lineage. The resulting map IDs match the complete Beta
+4/5/6 sets. Release **halo1_pc_pb2_beta7** shares those assets and is assigned
+to the new engine at settings revision **1**. Both release-map listing and
+collection queries return the same 70 maps. All 290 original approvals remain;
+the total is now **360**. No map assets were duplicated or reuploaded.
+
+Validation includes **136 Node**, **109 packaged worker**, **12 Terraform**,
+**1,790 viewer** and **802 site** tests, plus both frontend builds and API CI.
+Exact-source native recorders generated solo, four local players, local bots,
+player-hosted network and Linux dedicated cases, including 15 bots plus a client.
+Eight hosts and three client worlds match complete native/WASM exports across
+**18,010 ticks / 156 recorded hashes**, with no mismatches. No player-supplied
+Beta 7 film was available; real-player Beta 7 recordings remain additional
+coverage beyond these generated recordings and the retained older-film corpus.
+
+Candidate **20261110-r2** passed 27 packaged cases and the separate Beta 5 client
+flow. All 19 older viewer artifacts, stable analytics/callbacks and explicit
+retained 21/23 recipes were unchanged. Its exact API check then rejected an
+incorrect encoding fingerprint in viewer-11 callback metadata; promotion stopped
+before any worker installation or default activation. **Do not promote r2.**
+API 237 correctly rejected that descriptor and needed no further API release.
+
+The r3 correction changes only the Python encoding-fingerprint selector, with
+a canonical-document hash regression check for every supported match revision.
+The final image passes **13 packaged cases / 39 exact API 237 callback modes**,
+covering all eight Beta 7 scenarios and every older engine, plus the separate
+Beta 5 client flow. All eight Beta 7 replay files/statistics and all five final
+older-engine artifacts remain byte-identical to their respective references.
+The full 27-case descriptor precheck separately validates 81 modes: the older
+19 callbacks are untouched; the eight Beta 7 expected descriptors differ only
+in the corrected pin. Exact final r3 callbacks are the promotion authority.
+The local frontend accepts those actual r3 descriptors, verifies every payload
+entry and decodes all five checked host/client worlds through its range reader.
+
+The guarded apply changed only the H1 image and producer-digest environment
+value. First live worker health, engine/registry verification and API health
+(200) pass. All six full-dev component postplans are no-op. Queue/DLQ are empty.
+Read-only before/after checks preserve all
+**230 conversions, 640 receipts, 439 H1 attempts** and all old map rows/pins.
+Memory remains 3,008 MB, reserved and SQS maximum concurrency remain 50, and
+worlds still run sequentially. No live test upload, historical reparse, frontend
+deployment or production action was performed. Frontend changes remain local
+and uncommitted; hosted Beta 7 playback requires those compatible readers.
+
+Evidence is under `.build/beta7-deploy/`, `.build/beta7-final-parity-r2/`,
+`.build/beta7-client-parity/`, `.build/beta7-wasm-final/`, the r2/r3 publications
+in `.build/beta7-release/.build/h1-releases/`, and successful promotion
+`.build/h1-promotions/20261110-165228-ca2ddcece43141d98ceda0e98c7cbb0f/`.
+Retain the migration, readers, new engine and all recipes on policy rollback.
+
 ## Dev H1 concurrency increased to fifty (2026-11-10 UTC)
 
 The user's requested concurrency increase is applied: **reserved executions

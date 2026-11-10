@@ -18,7 +18,7 @@ export function unpackRowColumns(bytes,count,stride,keyOffset,keySize=1) {
 
 // Expand the recorded LDC1 v12 tables to the same typed rows as the v11 reader.
 // Original bytes remain available to the caller for lossless archive storage.
-export function readClientAccount(bytes) {
+export function readClientAccount(bytes,{allowUnassignedPlayer=false}={}) {
   assert.ok(bytes.length>=160&&bytes.length<=128*1024*1024,'Invalid client account size');
   const u=n=>bytes.readUInt32LE(n);
   assert.ok(u(0)===0x3143444c&&u(4)===12&&u(8)===160&&u(20)===14,'Unsupported client account');
@@ -42,7 +42,9 @@ export function readClientAccount(bytes) {
     tables[6]={count:seen,stride:28,bytes:unpackRowColumns(raw.subarray(aim*28),seen,28,22)};
   }
   const own=bytes.readInt32LE(28);
-  assert.ok(own>=0&&own<16,'Invalid diagnostic recording player');
+  // Upstream starts this at -1 and sets it only after an own hit/shot/pull.
+  // The Beta 7 contract retains that sentinel; it never supplies an identity.
+  assert.ok((own>=0&&own<16)||(allowUnassignedPlayer&&own===-1),'Invalid diagnostic recording player');
   return {version:12,flags:u(12),clock_period:u(16),own_machine_slot:bytes.readInt32LE(24),own_player:own,
     host_rules:{tolerance:Number.isFinite(bytes.readFloatLE(32))?bytes.readFloatLE(32):null,
       steps:u(36),refusal_codes_version:u(40)},

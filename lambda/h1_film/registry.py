@@ -31,13 +31,13 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict]:
             ):
                 raise ValueError(f"Invalid engine profile {key}")
         expected = {
-            "format": 3 if entry.get("adapter") == "beta6-v3-120-v1" else 2,
+            "format": 3 if entry.get("adapter") in ("beta6-v3-120-v1", "beta7-v3-120-v1") else 2,
             "tick_rate": 120,
             "export_contract": "HSFT0001",
             "analytics_contract": "halospawns.h1AnalyticsSource.v1",
             "map_cache_version": 7,
         }
-        if entry.get("adapter") not in ("film-v2-120-v1", "h1arena-v2-120-v1", "beta4-v2-120-v1", "beta5-v2-120-v1", "beta6-v3-120-v1"):
+        if entry.get("adapter") not in ("film-v2-120-v1", "h1arena-v2-120-v1", "beta4-v2-120-v1", "beta5-v2-120-v1", "beta6-v3-120-v1", "beta7-v3-120-v1"):
             raise ValueError("Unsupported engine adapter contract")
         if entry.get("transport_contract", "HSFT0001") not in ("HSFT0001", "HSFT0002"):
             raise ValueError("Unsupported engine transport")

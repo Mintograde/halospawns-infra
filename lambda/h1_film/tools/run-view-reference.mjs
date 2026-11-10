@@ -6,12 +6,13 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {inspectViewIdentity} from './inspect-view-pair.mjs';
 import {readEnvelope,verifyPlayback} from '../runtime/adapters/beta5-v2-120.mjs';
+import {readEnvelope as readFormat3} from '../runtime/film.mjs';
 import * as beta6 from '../runtime/adapters/beta6-v3-120.mjs';
 const [engineArg,filmArg,mapArg,outputArg,...flags]=process.argv.slice(2);
 assert.ok(outputArg,'Usage: node run-view-reference.mjs ENGINE FILM MAP NEW_OUTPUT [--capture]');
 const [engine,film,map,output]=[engineArg,filmArg,mapArg,outputArg].map(p=>resolve(p));
 const filmBytes=await readFile(film),format3=filmBytes.readUInt32LE(4)===3;
-const envelope=await (format3?beta6.readEnvelope:readEnvelope)(film,{allowClientView:true});
+const envelope=await (format3?readFormat3:readEnvelope)(film,{allowClientView:true});
 const source=format3?{sha256:createHash('sha256').update(filmBytes).digest('hex'),size_bytes:filmBytes.length,
   frame_count:envelope.ticks,map:envelope.map,match_id:envelope.match_id,recording_kind:envelope.recording_kind}:inspectViewIdentity(filmBytes);
 const sha=async path=>createHash('sha256').update(await readFile(path)).digest('hex');

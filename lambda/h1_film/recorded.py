@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import struct
+import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1",
-                     "h1-performance-beta6-p9839-wasm-v1")
+                     "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1")
 
 
 def validate_roster_recovery(value: dict, *, engine_profile: str, ticks: int,
@@ -30,7 +31,11 @@ def validate_roster_recovery(value: dict, *, engine_profile: str, ticks: int,
 
 
 def validate_network_host(value: dict, *, engine_profile: str, player_count: int,
-                          roster_recovery: dict | None = None) -> None:
+                          roster_recovery: dict | None = None, exporter: int = 1) -> None:
+    if isinstance(value, dict) and value.get("provenance") == "initial_fnet_bot_roster_v1":
+        validate_bot_network_host(value, engine_profile=engine_profile,
+                                  player_count=player_count, exporter=exporter)
+        return
     if (
         engine_profile not in RECORDED_PROFILES
         or not isinstance(value, dict)
@@ -42,12 +47,12 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
         ))
         or value["source_tick"] != 0
         or not 1 <= value["initial_player_count"] <= min(
-            16 if roster_recovery or engine_profile == RECORDED_PROFILES[2] else 8, player_count)
+            16 if roster_recovery or engine_profile in RECORDED_PROFILES[2:] else 8, player_count)
         or not 0 <= value["local_player_count"] <= 4
         or not 0 < value["remote_player_mask"] <= (1 << value["initial_player_count"]) - 1
     ):
         raise ValueError("Invalid network host evidence")
-    if value["initial_player_count"] > 8 and engine_profile != RECORDED_PROFILES[2] and (
+    if value["initial_player_count"] > 8 and engine_profile not in RECORDED_PROFILES[2:] and (
         value["initial_player_count"] != roster_recovery["initial_player_count"]
         or value["remote_player_mask"] != roster_recovery["initial_remote_mask"]
         or value["provenance"] != "initial_fnet_all_remote_v1"
@@ -62,6 +67,47 @@ def validate_network_host(value: dict, *, engine_profile: str, player_count: int
         or (value["provenance"] == "initial_fnet_all_remote_v1") != (len(slots) == 0)
     ):
         raise ValueError("Network host slots disagree with initial remote mask and local seats")
+
+
+def validate_bot_network_host(value: dict, *, engine_profile: str, player_count: int,
+                              exporter: int) -> None:
+    def require(condition):
+        if not condition:
+            raise ValueError("Invalid bot-aware network host evidence")
+
+    require(engine_profile in RECORDED_PROFILES[2:] and exporter >= 26)
+    require(set(value) == {"provenance", "source_tick", "initial_player_count", "local_player_count",
+                           "remote_player_mask", "host_slots", "bot_slots", "roster_evidence"})
+    require(all(type(value[key]) is int for key in (
+        "source_tick", "initial_player_count", "local_player_count", "remote_player_mask")))
+    count, locals_count, remote = (value[key] for key in (
+        "initial_player_count", "local_player_count", "remote_player_mask"))
+    require(value["source_tick"] == 0 and 1 <= count <= min(16, player_count)
+            and 0 <= locals_count <= min(4, count) and 0 <= remote < 1 << count)
+    locals_mask = (1 << locals_count) - 1
+    require(not remote & locals_mask)
+    for key in ("host_slots", "bot_slots"):
+        require(isinstance(value[key], list) and all(type(slot) is int for slot in value[key]))
+    require(value["host_slots"] == list(range(locals_count)))
+    require(value["bot_slots"] == [slot for slot in range(count)
+                                   if not (remote | locals_mask) & (1 << slot)])
+    bots = len(value["bot_slots"])
+    require(bots <= (11 if engine_profile == RECORDED_PROFILES[2] else 15))
+    evidence = value["roster_evidence"]
+    require(isinstance(evidence, dict))
+    kind = evidence.get("kind")
+    if kind == "start_item_v1":
+        require(set(evidence) == {"kind", "bot_count", "world_hash"}
+                and type(evidence["bot_count"]) is int and evidence["bot_count"] == bots
+                and isinstance(evidence["world_hash"], str)
+                and re.fullmatch(r"[0-9a-f]{16}", evidence["world_hash"]) is not None)
+    elif kind == "host_rounds_v1":
+        require(set(evidence) == {"kind", "local_player_mask"}
+                and type(evidence["local_player_mask"]) is int
+                and evidence["local_player_mask"] == locals_mask and locals_mask > 0)
+    else:
+        require(kind == "initial_remote_player_v1" and set(evidence) == {"kind"}
+                and locals_count == 0 and bool(remote & 1))
 
 
 def recording_utc(report: dict) -> int | None:
@@ -95,6 +141,8 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
         return 504, 72
     if identity == (0x314D4C46, 3, 9839, 120) and words[16] in (504, 536):
         return words[16], 77
+    if identity == (0x314D4C46, 3, 9844, 120) and words[16] in (504, 536):
+        return words[16], 78
     raise ValueError("Unsupported recorded evidence adapter")
 
 
@@ -130,7 +178,7 @@ def resolved_variant(path: Path, *, encoding: dict) -> dict | None:
     if len(raw) != size:
         raise ValueError("Truncated resolved variant")
     fields = struct.unpack_from(f"<{field_count}i", raw, 128)
-    if field_count == 77:
+    if field_count in (77, 78):
         # Beta 6 inserted flag-reset and ball-reset seconds before the retained fields.
         fields = fields[:10] + fields[11:18] + fields[19:]
     mode = {0: (2, "slayer"), 1: (1, "ctf"), 3: (3, "oddball"), 4: (4, "king")}.get(fields[0])

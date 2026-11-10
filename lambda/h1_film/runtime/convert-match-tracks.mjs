@@ -5,9 +5,9 @@ import {join,dirname} from 'node:path';
 import {spawn} from 'node:child_process';
 import {openSync,closeSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {inspectMatchFilm} from './match-film.mjs';
+import {inspectMatchFilm,matchFilmPolicy,recordedMatchIdsCompatible} from './match-film.mjs';
 import {fnv1a} from './format3-codec.mjs';
-import {readEnvelope} from './adapters/beta6-v3-120.mjs';
+import {readEnvelope} from './film.mjs';
 import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
 import {clientRosterEvidence} from './client-roster.mjs';
@@ -16,7 +16,8 @@ import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
-  const match=inspectMatchFilm(bytes);
+  const policy=matchFilmPolicy(report.exporter_revision);
+  const match=inspectMatchFilm(bytes,policy);
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
   const tracks=await orderedPool(match.parts,Number(values['client-concurrency'] ?? 1),async part => {
     const id=`client-${part.index}`,film=join(stage,`${id}.h1film`);
@@ -41,7 +42,8 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     if(part.rest.fnv1a)assert.equal(fnv1a(await readFile(film)),part.rest.fnv1a,'Restored client checksum differs');
     const envelope=await readEnvelope(film,{allowClientView:true});
     assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
-    assert.equal(envelope.match_id,match.host.match_id,'Restored client match differs');
+    assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
+    assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
     const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
     const track={id,part,envelope,source_film_sha256:await sha256(film)};
     const unsupported=unsupportedClientBuild(envelope,profileById(report.engine_profile),

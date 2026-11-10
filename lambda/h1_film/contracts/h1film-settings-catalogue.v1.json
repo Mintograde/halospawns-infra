@@ -2,6 +2,7 @@
   "schema": "halospawns.h1FilmSettingsCatalogue.v1",
   "revision": 1,
   "definitions": {
+    "variant.weapon_set": {"type":"integer","unit":"code","scope":"match","meaning":"configured"},
     "variant.name": {"type":"string","unit":"text","scope":"match","meaning":"configured"},
     "variant.game_rules": {"type":"integer","unit":"code","scope":"match","meaning":"configured"},
     "variant.score_to_win": {"type":"integer","unit":"count","scope":"match","meaning":"configured"},

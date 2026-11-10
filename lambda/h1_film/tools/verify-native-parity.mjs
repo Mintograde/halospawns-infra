@@ -51,7 +51,7 @@ async function replay(kind, cwd, envelope) {
     closeSync(log);
     if (output !== undefined) closeSync(output);
   }
-  const verify = envelope.protocol_revision === 9839 ? verifyBeta6 : envelope.protocol_revision === 9818 ? verifyBeta5
+  const verify = [9839,9844].includes(envelope.protocol_revision) ? verifyBeta6 : envelope.protocol_revision === 9818 ? verifyBeta5
     : envelope.protocol_revision === 9803 ? verifyBeta4
     : envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);

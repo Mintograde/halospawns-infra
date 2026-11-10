@@ -23,7 +23,8 @@
               "engine_profile": {
                 "enum": [
                   "h1-performance-beta5-p9818-wasm-v1",
-                  "h1-performance-beta6-p9839-wasm-v1"
+                  "h1-performance-beta6-p9839-wasm-v1",
+                  "h1-performance-beta7-p9844-wasm-v1"
                 ]
               },
               "map_size_evidence": {

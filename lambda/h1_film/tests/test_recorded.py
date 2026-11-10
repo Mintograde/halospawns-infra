@@ -10,6 +10,22 @@ from h1_film import recorded
 
 
 class RecordedTests(unittest.TestCase):
+    def test_bot_host_classification_is_partitioned_and_recipe_bound(self):
+        value = {"provenance": "initial_fnet_bot_roster_v1", "source_tick": 0,
+                 "initial_player_count": 6, "local_player_count": 0,
+                 "remote_player_mask": 49, "host_slots": [], "bot_slots": [1, 2, 3],
+                 "roster_evidence": {"kind": "initial_remote_player_v1"}}
+        for profile in recorded.RECORDED_PROFILES[2:]:
+            recorded.validate_network_host(value, engine_profile=profile, player_count=7, exporter=26)
+            with self.assertRaises(ValueError):
+                recorded.validate_network_host(value, engine_profile=profile, player_count=7, exporter=25)
+        for change in ({"host_slots": [1]}, {"bot_slots": [1, 2]}, {"source_tick": True},
+                       {"remote_player_mask": 48}, {"remote_player_mask": 64},
+                       {"roster_evidence": {"kind": "lobby_bots", "bot_count": 3}}):
+            with self.assertRaises(ValueError):
+                recorded.validate_network_host({**value, **change},
+                    engine_profile=recorded.RECORDED_PROFILES[3], player_count=7, exporter=26)
+
     def test_recorded_utc_is_profile_scoped_and_uses_both_words(self):
         report = {"engine_profile": "h1-performance-beta4-p9803-wasm-v1", "envelope": {}}
         self.assertIsNone(recorded.recording_utc(report))
@@ -43,6 +59,24 @@ class RecordedTests(unittest.TestCase):
             self.assertEqual(result["score_to_win"], 25)
             self.assertEqual(result["respawn_seconds"], 5)
             self.assertEqual(result["suicide_penalty_seconds"], 10)
+            self.assertEqual(result["motion_tracker"], "all")
+
+    def test_beta7_resolved_record_retains_reset_field_offsets(self):
+        words = [0] * 32
+        words[:4] = (0x314D4C46, 3, 9844, 120)
+        words[16], words[17], words[21], words[22] = 504, 944, 504, 440
+        data = bytearray(944)
+        struct.pack_into("<32I", data, 0, *words)
+        for index, value in {0: 0, 1: 50, 10: 99, 18: 98, 20: 5, 21: 10,
+                             23: 1, 32: 1, 77: 7}.items():
+            struct.pack_into("<i", data, 504 + 128 + index * 4, value)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.h1film"
+            path.write_bytes(data)
+            result = recorded.resolved_variant(path, encoding={"game_type": 2, "has_teams": True})
+            self.assertEqual(result["respawn_seconds"], 5)
+            self.assertEqual(result["suicide_penalty_seconds"], 10)
+            self.assertTrue(result["shields_enabled"])
             self.assertEqual(result["motion_tracker"], "all")
 
     def test_h1arena_resolved_record_retains_reviewed_offsets(self):

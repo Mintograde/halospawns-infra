@@ -4,22 +4,23 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {writeMatchReplay} from '../runtime/pack-match-replay.mjs';
-import {openMatchReplay,validateMatchReplay,readMatchReplayHeader,PARTIAL_MATCH_PROJECTION,UNSUPPORTED_MATCH_PROJECTION} from '../runtime/match-replay.mjs';
+import {openMatchReplay,validateMatchReplay,readMatchReplayHeader,PARTIAL_MATCH_PROJECTION,UNSUPPORTED_MATCH_PROJECTION,BETA7_MATCH_PROJECTION} from '../runtime/match-replay.mjs';
 
 const identity={sourceContract:{schema:'halospawns.viewerReplay.v1',profile:'frontend-default',profile_revision:6,
   projection_sha256:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2',tick_count:2},
   source_film_sha256:'1'.repeat(64),raw_map_sha256:'2'.repeat(64),engine_profile:'h1-performance-beta6-p9839-wasm-v1',
   wasm_sha256:'3'.repeat(64),glue_sha256:'4'.repeat(64),match_id:'0123456789abcdef'};
 
-test('unsupported clients retain their recorded build without simulation claims under revision 10 only',async()=>{
+for(const beta7 of [false,true])test(`unsupported clients retain source-bound build evidence for Beta ${beta7?7:6}`,async()=>{
   const dir=await mkdtemp(join(tmpdir(),'h1-unsupported-'));
   try {
     const ts=tracks().slice(0,2).map(t=>({...t,status:'available'}));
     const t=ts[1];t.status='unavailable';delete t.world;delete t.verification;delete t.viewer_revision;
-    t.failure={reason:'unsupported_build',recorded_build:'2026-11-08 - ec92e0bb',format:3,protocol_revision:9839,tick_rate:120};
+    t.failure={reason:'unsupported_build',recorded_build:'2026-11-08 - ec92e0bb',format:3,protocol_revision:beta7?9844:9839,tick_rate:120};
     const world=Buffer.alloc(40);world.write('HSRDC002');world.writeUInt32LE(1,16);
-    const path=join(dir,'match.hsrv'),packed=await writeMatchReplay(path,{...identity,sourceContract:{...identity.sourceContract,
-      profile_revision:10,projection_sha256:UNSUPPORTED_MATCH_PROJECTION}},ts,
+    const path=join(dir,'match.hsrv'),packed=await writeMatchReplay(path,{...identity,
+      engine_profile:beta7?'h1-performance-beta7-p9844-wasm-v1':identity.engine_profile,sourceContract:{...identity.sourceContract,
+      profile_revision:beta7?11:10,projection_sha256:beta7?BETA7_MATCH_PROJECTION:UNSUPPORTED_MATCH_PROJECTION}},ts,
       [{id:'host/world',kind:'world',compression:'identity',bytes:world}]);
     const bytes=await readFile(path),h=readMatchReplayHeader(bytes.subarray(0,64));
     const reader=await openMatchReplay(async(start,length)=>bytes.subarray(start,start+length));
@@ -28,6 +29,8 @@ test('unsupported clients retain their recorded build without simulation claims 
     for(const change of [m=>m.tracks[1].world='host/world',m=>m.tracks[1].verification={},
       m=>m.tracks[1].failure.played_ticks=2,m=>m.tracks[1].failure.recorded_build='',
       m=>m.tracks[1].failure.tick_rate=30,m=>m.tracks[0]={...m.tracks[1],id:'host',role:'host'},
+      m=>m.tracks[1].failure.protocol_revision=beta7?9839:9844,
+      m=>m.engine_profile=beta7?identity.engine_profile:'h1-performance-beta7-p9844-wasm-v1',
       m=>m.schema='halospawns.h1MatchReplay.v4']) {
       const bad=structuredClone(packed.manifest);change(bad);assert.throws(()=>validateMatchReplay(bad,h));
     }

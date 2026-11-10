@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--release-manifest", type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3, 4, 5), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
-    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), default=4)
+    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), default=4)
     state_mode = parser.add_mutually_exclusive_group()
     state_mode.add_argument("--generic-state", action="store_true")
     state_mode.add_argument("--verify-incremental-state", action="store_true")

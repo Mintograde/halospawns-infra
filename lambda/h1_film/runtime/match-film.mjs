@@ -5,7 +5,18 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {fnv1a} from './format3-codec.mjs';
 
-export function inspectMatchFilm(bytes) {
+// Beta 6.1 blampc_film_bake.c::same_match treats zero as an absent ID. Keep
+// this format-level rule shared by later engines; old frozen recipes stay strict.
+export function matchFilmPolicy(exporterRevision) {
+  return {allowMissingClientMatchId:Number.isInteger(exporterRevision)&&exporterRevision>=27};
+}
+
+export function recordedMatchIdsCompatible(a,b,{allowMissingClientMatchId=false}={}) {
+  if(!/^[0-9a-f]{16}$/.test(a)||!/^[0-9a-f]{16}$/.test(b))return false;
+  return a===b || (allowMissingClientMatchId&&(a==='0000000000000000'||b==='0000000000000000'));
+}
+
+export function inspectMatchFilm(bytes,policy={}) {
   assert.ok(bytes.length >= 504 && bytes.length <= 512*1024*1024, 'Invalid film size');
   const u = n => bytes.readUInt32LE(n);
   const range = (offset, size, end=bytes.length) => assert.ok(offset <= end && size <= end-offset, 'Section outside bounds');
@@ -74,7 +85,8 @@ export function inspectMatchFilm(bytes) {
     const client=envelope(offset,size);
     assert.ok(client.flags&64,'Part is not a client world');
     assert.equal(u(offset+64),504,'Nested client match');
-    for(const key of ['format','protocol_revision','tick_rate','map','match_id'])assert.equal(client[key],host[key],`Client ${key} differs`);
+    for(const key of ['format','protocol_revision','tick_rate','map'])assert.equal(client[key],host[key],`Client ${key} differs`);
+    assert.ok(recordedMatchIdsCompatible(client.match_id,host.match_id,policy),'Client match_id differs');
     assert.ok(client.frame_count>0&&client.frame_count<=432000,'Invalid client frame count');
     parts.push({index:i,player:u(at),offset,size,account_offset:accountOffset,account_size:accountSize,
       inputs_trust:u(at+20),messages_trust:u(at+24),flags:u(at+28),

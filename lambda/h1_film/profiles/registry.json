@@ -3,7 +3,8 @@
   "build_matching": {
     "h1-performance-beta4-p9803-wasm-v1": "source_commit_suffix_v1",
     "h1-performance-beta5-p9818-wasm-v1": "source_commit_suffix_v1",
-    "h1-performance-beta6-p9839-wasm-v1": "source_commit_suffix_v1"
+    "h1-performance-beta6-p9839-wasm-v1": "source_commit_suffix_v1",
+    "h1-performance-beta7-p9844-wasm-v1": "source_commit_suffix_v1"
   },
   "processing": {
     "defaults": {
@@ -32,9 +33,15 @@
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 24,
+        "exporter_revision": 27,
         "analytics_revision": 5,
         "viewer_revision": 10,
+        "max_players": 16
+      },
+      "h1-performance-beta7-p9844-wasm-v1": {
+        "exporter_revision": 27,
+        "analytics_revision": 5,
+        "viewer_revision": 11,
         "max_players": 16
       }
     },
@@ -365,6 +372,38 @@
           "analytics_revision": 5,
           "viewer_revision": 10,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 26,
+          "analytics_revision": 5,
+          "viewer_revision": 10,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 27,
+          "analytics_revision": 5,
+          "viewer_revision": 10,
+          "max_players": 16
+        }
+      ],
+      "h1-performance-beta7-p9844-wasm-v1": [
+        {
+          "exporter_revision": 25,
+          "analytics_revision": 5,
+          "viewer_revision": 11,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 26,
+          "analytics_revision": 5,
+          "viewer_revision": 11,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 27,
+          "analytics_revision": 5,
+          "viewer_revision": 11,
+          "max_players": 16
         }
       ]
     },
@@ -388,7 +427,9 @@
       "gameplay_metrics": "halospawns.h1GameplayMetrics.v1",
       "gameplay_estimates": "halospawns.h1GameplayEstimates.v1",
       "unsupported_client_build": "halospawns.h1MatchReplay.v5",
-      "three_shot_headshot": "halospawns.h1GameplayMetrics.v1"
+      "three_shot_headshot": "halospawns.h1GameplayMetrics.v1",
+      "beta7": "halospawns.h1Beta7.v1",
+      "network_host_bots": "halospawns.h1NetworkHostBots.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -507,6 +548,29 @@
       },
       "wasm_sha256": "b44b2ca35378f7b8e9f58f5380f19f5302572ed19ec6dc2d794cac2397e7dc9c",
       "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "id": "h1-performance-beta7-p9844-wasm-v1",
+      "format": 3,
+      "protocol_revision": 9844,
+      "tick_rate": 120,
+      "build": "Linux server",
+      "adapter": "beta7-v3-120-v1",
+      "port": "beta7",
+      "export_contract": "HSFT0001",
+      "transport_contract": "HSFT0002",
+      "analytics_contract": "halospawns.h1AnalyticsSource.v1",
+      "map_cache_version": 7,
+      "source": {
+        "project": "h1arena",
+        "git_commit": "9eb48a465a70f711eaa61db3248f82dc46421924",
+        "git_date": "2026-11-10",
+        "algorithm": "halospawns.sourceTreeSha256.v1",
+        "files": 12924,
+        "sha256": "b44e6af3703378afc3bfce6a9a82ae6af742f4cc5447db940e6069eadd4e2a11"
+      },
+      "wasm_sha256": "9f392777632fbb237642b6547246d0a370cbfe9592110f3c9fd8ad755a72a281",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
     }
   ],
   "exporters": [
@@ -724,6 +788,41 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "957e61126a0a87a3d988b6994948422893bdb9c4b86ea4237e89457fe1b967bf",
       "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 25,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "9f392777632fbb237642b6547246d0a370cbfe9592110f3c9fd8ad755a72a281",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 26,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "957e61126a0a87a3d988b6994948422893bdb9c4b86ea4237e89457fe1b967bf",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 26,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "9f392777632fbb237642b6547246d0a370cbfe9592110f3c9fd8ad755a72a281",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 27,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "957e61126a0a87a3d988b6994948422893bdb9c4b86ea4237e89457fe1b967bf",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 27,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "9f392777632fbb237642b6547246d0a370cbfe9592110f3c9fd8ad755a72a281",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
     }
   ]
 }

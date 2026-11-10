@@ -15,7 +15,7 @@ import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
-import {inspectMatchFilm} from './match-film.mjs';
+import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
 import {compatibleClientBuild} from './client-build.mjs';
 
@@ -46,7 +46,9 @@ export async function convertFilm(options) {
       'Client view is a viewer-only track; authoritative analytics are host-owned');
     assert.equal(Number(values['viewer-revision']),5,'Client view requires viewer revision 5');
   }
-  const envelope = await readEnvelope(values.film,{allowClientView:Boolean(values['client-view'])});
+  const envelopeOptions={allowClientView:Boolean(values['client-view']),
+    botAwareHost:Number(values['exporter-revision'])>=26};
+  const envelope = await readEnvelope(values.film,envelopeOptions);
   if(values['client-view']) assert.equal(envelope.recording_kind,'client-view','Expected a client-view recording');
   const native = values.reference
     ? JSON.parse(await readFile(join(values.reference, 'report.json'), 'utf8'))
@@ -68,11 +70,11 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles, buildMatching, playback),
     playback.exporterRevision, exporters);
   const adapter = adapterFor(profile);
-  if(values['client-view']) assert.ok(['beta5','beta6'].includes(profile.port)&&profile.exporter_revision>=13,
+  if(values['client-view']) assert.ok(['beta5','beta6','beta7'].includes(profile.port)&&profile.exporter_revision>=13,
     'Client view requires a new candidate exporter pin');
   const registry = JSON.parse(await readFile(values['candidate-registry'] || new URL('../profiles/registry.json', import.meta.url), 'utf8'));
   const clientRecipes = registry.processing?.client_view_recipes?.[profile.id] ?? [];
-  if (values['client-view'] && !values['candidate-registry'] && !(profile.port==='beta6'&&values['embedded-match'])) {
+  if (values['client-view'] && !values['candidate-registry'] && !(['beta6','beta7'].includes(profile.port)&&values['embedded-match'])) {
     assert.ok(clientRecipes.some(r => r.exporter_revision === profile.exporter_revision && r.analytics_revision === analyticsRevision
       && r.viewer_revision === 5 && r.max_players >= envelope.players), 'Unregistered client-view recipe');
   } else if (!values['client-view']) {
@@ -97,7 +99,7 @@ export async function convertFilm(options) {
   assert.ok((await stat(values.film)).size <= 512 * 1024 * 1024);
   const map = join(values.assets, 'maps', native.envelope.map + '.map');
   const actualMapSize = (await stat(map)).size;
-  const missingMapSize = ['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0;
+  const missingMapSize = ['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1', 'h1-performance-beta7-p9844-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0;
   if (missingMapSize) assert.ok(values['map-catalog'], 'Missing recorded size requires a reviewed map catalog');
   else assert.equal(actualMapSize, native.envelope.map_bytes, 'Map size differs from recorded cache');
   const filmHash = await sha256(values.film), mapHash = await sha256(map);
@@ -126,13 +128,13 @@ export async function convertFilm(options) {
   await copyFile(map, join(work, 'maps', native.envelope.map + '.map'));
   await copyFile(values.film, join(work, 'input.h1film'));
   let playbackFilm='input.h1film';
-  if(profile.port==='beta6'&&!values['client-view']) {
+  if(['beta6','beta7'].includes(profile.port)&&!values['client-view']) {
     const bytes=await readFile(join(work,playbackFilm));
     if(bytes.readUInt32LE(64)===536) {
-      const match=inspectMatchFilm(bytes);
+      const match=inspectMatchFilm(bytes,matchFilmPolicy(profile.exporter_revision));
       playbackFilm='authoritative.h1film';
       await writeFile(join(work,playbackFilm),bytes.subarray(match.host_offset,match.host_offset+match.host_size),{flag:'wx'});
-      assert.deepEqual(await readEnvelope(join(work,playbackFilm)),envelope,'Embedded host envelope differs');
+      assert.deepEqual(await readEnvelope(join(work,playbackFilm),envelopeOptions),envelope,'Embedded host envelope differs');
     }
   }
   if (values.reference) await copyFile(join(values.reference, 'request.json'), join(stage, 'request.json'));
@@ -155,7 +157,7 @@ export async function convertFilm(options) {
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
   request.verify_incremental_state = Boolean(values['verify-incremental-state']);
-  request.client_roster_evidence = profile.port==='beta6' && profile.exporter_revision>=18
+  request.client_roster_evidence = ['beta6','beta7'].includes(profile.port) && profile.exporter_revision>=18
     && values['embedded-match']===true && values['client-view']===true;
   assert.ok(!request.verify_incremental_state || request.incremental_state,
     '--verify-incremental-state requires incremental state');
@@ -177,7 +179,7 @@ export async function convertFilm(options) {
     BLAMPC_FILM_DIR: join(work, 'films'), H1_EXPORT_HANDLE: '3',
     H1_EXPORT_METRICS: join(stage, 'engine-metrics.json') });
   const exportBufferBytes = Number(values['export-buffer-bytes'] ??
-    (process.platform === 'linux' && profile.port === 'beta6' ? 65536 : 0));
+    (process.platform === 'linux' && ['beta6','beta7'].includes(profile.port) ? 65536 : 0));
   assert.ok(Number.isSafeInteger(exportBufferBytes) && (exportBufferBytes === 0 ||
     (exportBufferBytes >= 4096 && exportBufferBytes <= 1024 * 1024)), 'Invalid export buffer size');
   if (exportBufferBytes) {
@@ -249,7 +251,7 @@ export async function convertFilm(options) {
     const engine = spawn(process.execPath, engineArgs,
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });
     const simulated = completion(engine);
-    if (values['overlap-host'] && profile.port === 'beta6' && !values['client-view']) {
+    if (values['overlap-host'] && ['beta6','beta7'].includes(profile.port) && !values['client-view']) {
       // Every view uses its own work directory and verified engine/map/source pins.
       // Capture failures immediately, but do not publish until host and clients pass.
       matchConversion = convertMatchTracks(stage, values, report, convertFilm, started + timeout)
@@ -285,7 +287,7 @@ export async function convertFilm(options) {
     assert.equal(await sha256(join(work, 'input.h1film')), filmHash);
     try { report.simulation = adapter.verifyPlayback(log, native.envelope); }
     catch (error) {
-      const failure = profile.port==='beta6' && profile.exporter_revision>=16
+      const failure = ['beta6','beta7'].includes(profile.port) && profile.exporter_revision>=16
         && values['embedded-match'] && values['client-view'] && completedClientDesync(log,native.envelope);
       if (failure) throw new ClientDesync(failure,error);
       throw error;
@@ -294,13 +296,13 @@ export async function convertFilm(options) {
     report.status = 'simulation_verified_pending_artifact_comparison';
     if (analyticsRevision === 5) {
       const gameplayStarted = performance.now();
-      assert.ok(['beta5','beta6'].includes(profile.port) && profile.exporter_revision >= 19,
+      assert.ok(['beta5','beta6','beta7'].includes(profile.port) && profile.exporter_revision >= 19,
         'Gameplay metrics require a registered gameplay exporter');
       const encodingPath = join(stage,'candidate','encoding.json');
       const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
       encoding.native_analytics.gameplay = await buildGameplayMetrics({film:values.film,
         evidence:join(stage,'candidate','gameplay.ndjson'),encoding,includeEstimates:profile.exporter_revision>=21,
-        definitionVersion:profile.exporter_revision>=24?2:1});
+        definitionVersion:profile.exporter_revision>=24?2:1,exporterRevision:profile.exporter_revision});
       encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
       await save(encodingPath,encoding);
       report.timing.gameplay_seconds = (performance.now() - gameplayStarted) / 1000;
@@ -378,7 +380,7 @@ export async function convertFilm(options) {
           source_tick_count: native.envelope.ticks, source_tick_rate: profile.tick_rate,
         });
     }
-    if(profile.port==='beta6'&&!values['client-view']) {
+    if(['beta6','beta7'].includes(profile.port)&&!values['client-view']) {
       const matchStarted = performance.now();
       if (matchConversion) {
         const result = await matchConversion;

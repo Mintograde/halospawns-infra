@@ -1,6 +1,94 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 7efc76a1c4b004b06147b810aa51dee55be451503e2e068b12a9deff52e63477",
+  "$comment": "Generated from API schemas/h1films.py SHA256 8777e00183cf5737b17e53feb5eab6f65dd622728002a15dfa00dcbe0c0c7add",
   "$defs": {
+    "H1FilmBotNetworkHost": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_slots": {
+          "items": {
+            "maximum": 15,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 15,
+          "title": "Bot Slots",
+          "type": "array"
+        },
+        "host_slots": {
+          "items": {
+            "maximum": 15,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "title": "Host Slots",
+          "type": "array"
+        },
+        "initial_player_count": {
+          "maximum": 16,
+          "minimum": 1,
+          "title": "Initial Player Count",
+          "type": "integer"
+        },
+        "local_player_count": {
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Local Player Count",
+          "type": "integer"
+        },
+        "provenance": {
+          "const": "initial_fnet_bot_roster_v1",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "remote_player_mask": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Remote Player Mask",
+          "type": "integer"
+        },
+        "roster_evidence": {
+          "discriminator": {
+            "mapping": {
+              "host_rounds_v1": "#/$defs/HostRoundsRoster",
+              "initial_remote_player_v1": "#/$defs/HostRemoteFirstRoster",
+              "start_item_v1": "#/$defs/HostStartRoster"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/HostStartRoster"
+            },
+            {
+              "$ref": "#/$defs/HostRoundsRoster"
+            },
+            {
+              "$ref": "#/$defs/HostRemoteFirstRoster"
+            }
+          ],
+          "title": "Roster Evidence"
+        },
+        "source_tick": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provenance",
+        "source_tick",
+        "initial_player_count",
+        "local_player_count",
+        "remote_player_mask",
+        "host_slots",
+        "bot_slots",
+        "roster_evidence"
+      ],
+      "title": "H1FilmBotNetworkHost",
+      "type": "object"
+    },
     "H1FilmNetworkHost": {
       "additionalProperties": false,
       "properties": {
@@ -100,7 +188,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 10,
+          "maximum": 11,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -293,7 +381,8 @@
             "halospawns.h1MatchReplay.v2",
             "halospawns.h1MatchReplay.v3",
             "halospawns.h1MatchReplay.v4",
-            "halospawns.h1MatchReplay.v5"
+            "halospawns.h1MatchReplay.v5",
+            "halospawns.h1MatchReplay.v6"
           ],
           "title": "Schema",
           "type": "string"
@@ -704,8 +793,10 @@
           "type": "integer"
         },
         "protocol_revision": {
-          "maximum": 9839,
-          "minimum": 9839,
+          "enum": [
+            9839,
+            9844
+          ],
           "title": "Protocol Revision",
           "type": "integer"
         },
@@ -736,6 +827,71 @@
         "tick_rate"
       ],
       "title": "H1UnsupportedBuildFailure",
+      "type": "object"
+    },
+    "HostRemoteFirstRoster": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "initial_remote_player_v1",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "HostRemoteFirstRoster",
+      "type": "object"
+    },
+    "HostRoundsRoster": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "host_rounds_v1",
+          "title": "Kind",
+          "type": "string"
+        },
+        "local_player_mask": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Local Player Mask",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "local_player_mask"
+      ],
+      "title": "HostRoundsRoster",
+      "type": "object"
+    },
+    "HostStartRoster": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_count": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Bot Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "start_item_v1",
+          "title": "Kind",
+          "type": "string"
+        },
+        "world_hash": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "World Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "bot_count",
+        "world_hash"
+      ],
+      "title": "HostStartRoster",
       "type": "object"
     },
     "RecoveredPlayer": {
@@ -909,10 +1065,14 @@
           "$ref": "#/$defs/H1FilmNetworkHost"
         },
         {
+          "$ref": "#/$defs/H1FilmBotNetworkHost"
+        },
+        {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Network Host"
     },
     "played_tick_count": {
       "maximum": 432000,

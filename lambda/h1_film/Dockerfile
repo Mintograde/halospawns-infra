@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt --target "${LAMBDA_TASK_
 COPY lambda/h1_film/package.json lambda/h1_film/handler.mjs lambda/h1_film/convert.mjs ${LAMBDA_TASK_ROOT}/
 COPY lambda/h1_film/runtime ${LAMBDA_TASK_ROOT}/runtime/
 COPY lambda/h1_film/profiles ${LAMBDA_TASK_ROOT}/profiles/
+COPY lambda/h1_film/contracts/h1film-settings-presentation.v1.json ${LAMBDA_TASK_ROOT}/contracts/h1film-settings-presentation.v1.json
 COPY lambda/h1_film/tools/check-release.mjs ${LAMBDA_TASK_ROOT}/tools/check-release.mjs
 COPY lambda/h1_film/tests/fixtures/retained-profiles.json ${LAMBDA_TASK_ROOT}/tests/fixtures/retained-profiles.json
 COPY --from=encoder /target/x86_64-unknown-linux-gnu/release/h1-film-encoder ${LAMBDA_TASK_ROOT}/bin/h1-film-encoder

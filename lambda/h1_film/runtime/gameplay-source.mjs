@@ -3,7 +3,7 @@ import {readFile,stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {createInterface} from 'node:readline';
 import {createHash} from 'node:crypto';
-import {inspectMatchFilm} from './match-film.mjs';
+import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {TABLES,decodeDiagnosticRow,pairShotVerdicts,linkedPull} from './diagnostics-codec.mjs';
 import {classifyGameplayMetrics} from './gameplay-metrics.mjs';
@@ -28,9 +28,10 @@ function account11(bytes) {
   return {tables,own_machine_slot:bytes.readInt32LE(24),own_player:bytes.readInt32LE(28)};
 }
 
-export function recordedGameplaySources(raw) {
+export function recordedGameplaySources(raw,exporterRevision) {
   const beta6=raw.readUInt32LE(4)===3;
-  const match=beta6?inspectMatchFilm(raw):null;
+  const accountOptions={allowUnassignedPlayer:beta6&&raw.readUInt32LE(8)===9844};
+  const match=beta6?inspectMatchFilm(raw,matchFilmPolicy(exporterRevision)):null;
   const host=match?raw.subarray(match.host_offset,match.host_offset+match.host_size):raw;
   const section=(b,at)=>{
     const start=b.readUInt32LE(at),size=b.readUInt32LE(at+4);
@@ -43,7 +44,7 @@ export function recordedGameplaySources(raw) {
     const hash=createHash('sha256').update(bytes).digest('hex');
     if(seen.has(hash)) return;
     seen.add(hash);
-    const account=beta6?readClientAccount(bytes):account11(bytes);
+    const account=beta6?readClientAccount(bytes,accountOptions):account11(bytes);
     accounts.push({...account,hash});
   }
   add(section(host,496));
@@ -134,7 +135,7 @@ export function bindGameplayShots(events,{ledger,accounts}) {
   });
 }
 
-export async function buildGameplayMetrics({film,evidence,encoding,includeEstimates=false,definitionVersion=1}) {
+export async function buildGameplayMetrics({film,evidence,encoding,includeEstimates=false,definitionVersion=1,exporterRevision}) {
   for(const kind of ['shot','damage','death']) assert.notEqual(
     encoding.native_analytics.combat[`${kind}_coverage`].reason,'capped',
     'Gameplay metrics require uncapped combat evidence');
@@ -147,7 +148,7 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
     for(const event of frame.events) events.push({...event,source_tick:frame.source_tick});
     assert.ok(events.length<=400000,'Gameplay event limit exceeded');
   }
-  const source=recordedGameplaySources(await readFile(film));
+  const source=recordedGameplaySources(await readFile(film),exporterRevision);
   const args={events,slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,definitionVersion,
     partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
   const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(events,source)});

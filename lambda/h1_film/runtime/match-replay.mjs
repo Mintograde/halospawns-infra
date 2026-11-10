@@ -1,6 +1,8 @@
 // Browser-safe range reader for the single-file H1 match replay container.
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 import {validateCompactStorage,compactRangeReader} from './compact-storage.mjs';
+export const BETA7_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v6';
+export const BETA7_MATCH_PROJECTION='e04e97f3b3c129672bf41800eece0a69bd3c7372e1da26e87b16f7caddeddfbb';
 export const UNSUPPORTED_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v5';
 export const UNSUPPORTED_MATCH_PROJECTION='bdae0bedb45694b5de75d9c6d37860526ef21926e09cbbb774afd0fad6e56f66';
 export const COMPACT_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v3';
@@ -27,7 +29,7 @@ export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const version=v.getUint32(8,true);
-  check([1,2,3,4,5].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
+  check([1,2,3,4,5,6].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
@@ -35,14 +37,14 @@ export function readMatchReplayHeader(bytes) {
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  const unsupported=m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
+  const beta7=m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
   const compact=roster||m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
-  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(unsupported?5:roster?4:compact?3:partial?2:1)
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
     &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
-  check(m.engine_profile==='h1-performance-beta6-p9839-wasm-v1'&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
+  check(m.engine_profile===(beta7?'h1-performance-beta7-p9844-wasm-v1':'h1-performance-beta6-p9839-wasm-v1')&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&m.tick_rate===120&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===(unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
+    &&m.sourceContract.profile_revision===(beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -69,7 +71,7 @@ export function validateMatchReplay(m,header) {
       const f=t.failure;
       if(unsupported&&f?.reason==='unsupported_build') {
         check(typeof f.recorded_build==='string'&&/^[\x20-\x7e]{1,63}$/.test(f.recorded_build)
-          &&f.format===3&&f.protocol_revision===9839&&f.tick_rate===120
+          &&f.format===3&&f.protocol_revision===(m.engine_profile==='h1-performance-beta7-p9844-wasm-v1'?9844:9839)&&f.tick_rate===120
           &&Object.keys(f).sort().join(',')==='format,protocol_revision,reason,recorded_build,tick_rate',
           'invalid unsupported build evidence');
       } else if(roster&&f?.reason==='roster_mismatch') {

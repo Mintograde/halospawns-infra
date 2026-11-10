@@ -9,7 +9,7 @@ import {unpackMszip} from './adapters/beta5-v2-120.mjs';
 import {unpackNetworkColumns} from './format3-codec.mjs';
 const sha=b=>createHash('sha256').update(b).digest('hex');
 
-export async function packCompactStorage(index,tracks,entries,scratch,matchId) {
+export async function packCompactStorage(index,tracks,entries,scratch,matchId,accountOptions={}) {
   const pins=new Map(index.map(e=>[e.id,e])),sources=new Map(entries.map(e=>[e.id,e]));
   const get=async id=>{const e=sources.get(id);assert.ok(e);const b=e.bytes??await readFile(e.path);assert.equal(b.length,pins.get(id).size_bytes);assert.equal(sha(b),pins.get(id).sha256);return b;};
   const derive=(id,storage,bytes)=>{const e=pins.get(id);assert.ok(e);assert.equal(bytes.length,e.size_bytes);assert.equal(sha(bytes),e.sha256,'derived entry differs');e.storage=storage;};
@@ -33,7 +33,7 @@ export async function packCompactStorage(index,tracks,entries,scratch,matchId) {
     const accounts=new Map();
     for(const table of t.tables??[])if(table.count) {
       const kind=table.kind==='ledger'?'ledger':'account',source=kind==='ledger'?t.recorded_sections.ledger:t.alignment?.account_entry??t.account?.original;
-      if(!accounts.has(source))accounts.set(source,kind==='ledger'?readHostLedger(await get(source),matchId):readClientAccount(await get(source)));
+      if(!accounts.has(source))accounts.set(source,kind==='ledger'?readHostLedger(await get(source),matchId):readClientAccount(await get(source),accountOptions));
       derive(table.entry,{kind,source,field:table.name},accounts.get(source).tables.find(v=>v.name===table.name).bytes);
     }
   }

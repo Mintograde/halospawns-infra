@@ -14,7 +14,7 @@ export function compatibleClientBuild(envelope,profile,revision) {
 }
 
 export function unsupportedClientBuild(envelope,profile,revision,rule) {
-  if(profile.id!=='h1-performance-beta6-p9839-wasm-v1'||revision<22
+  if(!['h1-performance-beta6-p9839-wasm-v1','h1-performance-beta7-p9844-wasm-v1'].includes(profile.id)||revision<22
     ||envelope.recording_kind!=='client-view'
     ||!['format','protocol_revision','tick_rate'].every(key=>envelope[key]===profile[key])
     ||typeof envelope.build!=='string'||!/^[\x20-\x7e]{1,63}$/.test(envelope.build)

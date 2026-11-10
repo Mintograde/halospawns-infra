@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {inspectMatchFilm} from './match-film.mjs';
+import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {readRawPad} from './format3-pad.mjs';
 import {unpackMszip} from './adapters/beta5-v2-120.mjs';
@@ -12,22 +12,24 @@ import {writeMatchReplay} from './pack-match-replay.mjs';
 import {sha256} from './engine-store.mjs';
 import {unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
-import {readEnvelope} from './adapters/beta6-v3-120.mjs';
+import {readEnvelope} from './film.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function exportMatchReplay({film,directory,hostWorld,output,sourceContract}) {
   const report=JSON.parse(await readFile(join(directory,'report.json'),'utf8'));
   assert.equal(report.status,'simulation_and_encoding_verified');
-  const raw=await readFile(film),match=inspectMatchFilm(raw);
+  const raw=await readFile(film),match=inspectMatchFilm(raw,matchFilmPolicy(report.exporter_revision));
   assert.equal(match.sha256,report.provenance.film_sha256);
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8,9,10].includes(sourceContract.profile_revision);
+  const partial=[7,8,9,10,11].includes(sourceContract.profile_revision);
+  const accountOptions={allowUnassignedPlayer:sourceContract.profile_revision===11};
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
   assert.equal(report.exporter_revision>=18,sourceContract.profile_revision>=9,'Match roster policy differs from recipe');
   assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
+  assert.equal(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1',sourceContract.profile_revision===11,'Match source differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   // Compact packing immediately consumes these entries. Keep a bounded amount
@@ -119,7 +121,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   const hostAccountOffset=raw.readUInt32LE(match.host_offset+496),hostAccountSize=raw.readUInt32LE(match.host_offset+500);
   if(hostAccountSize&&!match.parts.some(p=>p.account_offset===match.host_offset+hostAccountOffset&&p.account_size===hostAccountSize)) {
     const bytes=raw.subarray(match.host_offset+hostAccountOffset,match.host_offset+hostAccountOffset+hostAccountSize);
-    const account=readClientAccount(bytes);
+    const account=readClientAccount(bytes,accountOptions);
     host.account={...Object.fromEntries(Object.entries(account).filter(([key])=>key!=='tables')),
       original:await add('host/recorded/account','client-account',bytes)};
     await tables(host,'client',account);
@@ -145,8 +147,9 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
       clocks:c.envelope.network.clocks,alignment:{method:'unavailable',reason:'client_account_not_recorded'}};
     await recorded(track,bytes);
     if(part.account_size) {
-      const accountBytes=raw.subarray(part.account_offset,part.account_offset+part.account_size),account=readClientAccount(accountBytes);
-      assert.equal(account.own_player,part.player,'Account player differs');
+      const accountBytes=raw.subarray(part.account_offset,part.account_offset+part.account_size),account=readClientAccount(accountBytes,accountOptions);
+      if(!(accountOptions.allowUnassignedPlayer&&account.own_player===-1))
+        assert.equal(account.own_player,part.player,'Account player differs');
       const account_entry=await add(`${c.id}/recorded/account`,'client-account',accountBytes);
       const clock=account.tables.find(t=>t.name==='clock');
       const rows=Array.from({length:clock.count},(_,i)=>[clock.bytes.readInt32LE(i*8),clock.bytes.readInt32LE(i*8+4)]);

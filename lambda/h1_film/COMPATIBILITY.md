@@ -1,5 +1,30 @@
 # H1 Film Compatibility
 
+## Missing embedded-client match IDs (exporter 27)
+
+Beta 6.1's pinned `blampc_film_bake.c::same_match` treats a zero match ID as
+absent: two present IDs must agree. Exporter 27 applies that format-level rule
+to embedded clients in both MTCH versions. The authoritative host still needs
+a nonzero ID. The recorded client header and source bytes remain unchanged;
+restoration must reproduce the client's original ID exactly. Container bounds,
+checksums, player identity, map/build matching, simulation and hash verification
+remain mandatory. A shorter client recording keeps its recorded coverage.
+
+The shared `matchFilmPolicy(exporterRevision)` enables this behavior for 27 and
+later, independently of engine/profile/protocol names. Container inspection,
+gameplay source extraction, restored-client validation and replay export all
+use the frozen job's exporter revision. Future format-3 engines should reuse
+these shared paths and choose a new exporter revision; do not copy strict ID
+comparisons into a new adapter. Regression tests cover MTCH 1/2, current and
+future protocol numbers, complete/short clients, missing IDs and conflicting
+nonzero IDs. This does not admit unregistered engine builds or protocols.
+
+New Beta 6/7 recipes are 27/5/10 and 27/5/11 with exact exporter-26 simulation
+binaries and existing viewer/API contracts. Older recipes retain strict matching.
+The failed upload `eaac7cdd-8b30-40de-bdcc-a3c9a4ed732d` is the real regression
+case: three clients have the host ID; the fourth has zero and ends early.
+Use a fresh normal upload for recovery; never rewrite its frozen exporter-26 job.
+
 ## Explicit Beta 6 embedded-client exception (2026-11-09)
 
 User-authorized recipe 23/5/10 accepts only the exact embedded client label
