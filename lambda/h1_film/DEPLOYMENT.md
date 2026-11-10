@@ -1,5 +1,86 @@
 # H1 film Lambda integration
 
+## Beta 6 worker processing optimizations (2026-11-10 UTC)
+
+Worker/default **20261110-r1**, policy **22**, is deployed and active in dev with
+unchanged API **236**. The immutable image was built from committed `8eeafba`
+in the isolated `.build/beta6-performance-release` checkout:
+`sha256:5db6e54bc3a40378b9efddf5d173099805ea85450d4584c61603e2b25bfb784f`.
+The guarded promotion changed only the H1 worker image and producer digest;
+the first live registry/engine/provenance health check passed.
+
+Linux Beta 6 exports now combine small writes in a 64 KiB owned synchronous
+buffer. Short writes and final flush failures remain checked. Compact match
+packing keeps bounded intermediate entries (128 MiB) and compressed blocks
+(16 MiB) in owned buffers, spilling excess to scratch files; worlds still
+stream from files. Network column reconstruction uses typed row/offset arrays.
+All simulation checks, independent artifact validation, clocks, diagnostics,
+unavailable-client evidence and temporal fidelity remain intact.
+
+The worker stays **3,008 MB**, x86-64, **900 seconds**, **8,192 MB** temporary
+storage and reserved concurrency **5**, with sequential world processing.
+Optional CLI concurrency controls stay disabled in the cloud path. The local
+fan-out and AOT experiments are not deployed. A paired offline sequential
+Downrush run measured **89.65 to 81.51 seconds (9.1% less stage time)** for the
+write buffer on top of the earlier packing changes; this is not a hosted
+Lambda latency measurement. See `BETA6_PERFORMANCE.md` for scope and evidence.
+
+All five profiles, **31 exporters**, binaries, contracts and recipes are
+unchanged. Beta 5 remains **24/5/5**, Beta 6 **24/5/10**, and separate Beta 5
+clients **13/2/5**. All earlier recipes, metric definitions and the exact
+`ec92e0bb` exception remain available. No API release, migration, frontend/prod
+deployment, live test upload or historical reparse was submitted.
+
+Validation passes **128 Node tests**, **108 packaged worker tests**, and all
+nine new focused Node tests against the actual image runtime. All **19 packaged
+replay cases/57 exact deployed-API callbacks**, failure/receipt retries and the
+separate Beta 5 client preparation/completion flow pass. All nineteen complete
+viewer artifacts and complete analytics are identical to `20261109-r4`;
+callbacks differ only in operational timings and release provenance. Explicit
+retained **21/5/5** and **23/5/10** outputs and definition-1 analytics are also
+identical. The separate Beta 5 client world is byte-identical; timeline content
+is identical after accounting for independently generated fixture attempt and
+host-artifact IDs.
+
+Read-only before/after checks preserve every existing row and pin: **224
+conversions, 635 receipts, 439 H1 attempts and 290 map approvals**. Operational
+settings and event-source configuration remain unchanged. Queue/DLQ are empty
+and API health returns 200. The focused postplan and all **six full-dev
+component postplans are no-op**.
+
+Private evidence is `.build/beta6-performance-deploy/`, including exact artifact
+and callback comparisons, retained-recipe results, plans and history snapshots.
+Publication evidence is
+`.build/beta6-performance-release/.build/h1-releases/20261110-r1-publication/`;
+promotion evidence is
+`.build/h1-promotions/20261110-032236-2a566f0f83aa4bd08c957ea80911561d/`.
+The deployment configuration changes only `map-processing.vars.h1_film.image_tag`
+and `default_release` in `stacks/dev.yaml`. Runtime/test changes are recorded
+by source commit `8eeafba`.
+
+Exact entry points, from the infra root (the publication wrapper uses temporary
+ECR authentication and invokes the isolated checkout's publisher):
+
+```powershell
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+./.build/beta6-performance-deploy/publish.ps1
+atmos workflow promote-dev --file h1-film
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+```
+
+Both preplans show **0 add / 1 change / 0 destroy**, confined to the H1 Lambda;
+the other five components are no-op. Promotion repeats the focused plan, checks
+the saved JSON plan against its image-only allowlist, then runs:
+
+```powershell
+terraform -chdir=components/terraform/map-processing apply -no-color L:/bens_stuff/projects/halospawns-infra/.build/h1-promotions/20261110-032236-2a566f0f83aa4bd08c957ea80911561d/worker.planfile
+```
+
+The apply reports **0 added / 1 changed / 0 destroyed**. There is no AWS account,
+profile or session blocker. Keep all recipes and readers on policy rollback.
+
 ## Full-shield three-shot headshot definition 2 (2026-11-09 UTC)
 
 The user's corrected rule admits any positive remaining health at full normal
