@@ -2166,6 +2166,20 @@ class ReplayParserNativeExtractorTests(unittest.TestCase):
         self.assertIs(result, parsed)
         native.assert_called_once_with(source_path, binary_path=binary_path)
 
+    def test_native_roster_evidence_reaches_game_metadata_without_fabricating_it(self) -> None:
+        for evidence in (None, {"version": 1, "stable": False, "bot_count": 0, "initial_player_count": 2}):
+            with self.subTest(evidence=evidence):
+                document = self._native_document()
+                if evidence is not None:
+                    document["stats_roster"] = evidence
+                parsed = handler._parsed_replay_from_document(
+                    handler._replay_document_from_native(document), parse_started=0,
+                )
+                if evidence is None:
+                    self.assertNotIn("stats_roster", parsed.game["metadata"])
+                else:
+                    self.assertEqual(parsed.game["metadata"]["stats_roster"], evidence)
+
     def test_native_with_fallback_uses_existing_ijson_parser_after_failure(self) -> None:
         parsed = _minimal_parsed_replay()
         with tempfile.TemporaryDirectory() as tmp:

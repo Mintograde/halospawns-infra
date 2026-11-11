@@ -219,6 +219,9 @@ struct Replay {
 
 #[derive(Debug, Default)]
 struct Ticks {
+    stats_roster: Option<Vec<String>>,
+    roster_changed: bool,
+    roster_ended: bool,
     count: u64,
     first: Option<Value>,
     last: Option<Value>,
@@ -234,6 +237,41 @@ struct Ticks {
 
 impl Ticks {
     fn absorb(&mut self, tick: Tick) {
+        if !self.roster_ended {
+            let mut roster = Vec::new();
+            for player in &tick.players {
+                if player
+                    .derived_stats
+                    .as_ref()
+                    .and_then(|stats| optional_bool(&stats.is_hostman.value))
+                    == Some(true)
+                {
+                    continue;
+                }
+                if player.player_quit.value != serde_json::json!(0)
+                    && player.player_quit.value != serde_json::json!(false)
+                {
+                    self.roster_changed = true;
+                }
+                roster.push(
+                    serde_json::json!([
+                        player.player_index.value,
+                        player.name.value,
+                        player.player_name.value,
+                        player.team.value
+                    ])
+                    .to_string(),
+                );
+            }
+            roster.sort();
+            if roster.is_empty() || self.stats_roster.as_ref().is_some_and(|old| *old != roster) {
+                self.roster_changed = true;
+            }
+            if self.stats_roster.is_none() {
+                self.stats_roster = Some(roster);
+            }
+            self.roster_ended = optional_bool(&tick.game_ended_this_tick.value) == Some(true);
+        }
         let tick_index = self.count;
         self.count = self.count.saturating_add(1);
         if self.first_network_game_client.is_none()
@@ -1066,6 +1104,7 @@ struct SpatialOutput {
 
 #[derive(Serialize)]
 struct ExtractorOutput {
+    stats_roster: Value,
     schema: &'static str,
     parser: ParserMetadata<'static>,
     parse_duration_ms: u128,
@@ -1162,6 +1201,9 @@ fn extract_replay(reader: impl Read) -> Result<ExtractorOutput, Box<dyn Error>> 
         gametype_settings: replay.gametype_settings,
         network_game_client,
         participant_context: replay.participant_context,
+        stats_roster: serde_json::json!({"version": 1,
+            "stable": ticks.count > 0 && !ticks.roster_changed, "bot_count": 0,
+            "initial_player_count": ticks.stats_roster.as_ref().map_or(0, Vec::len)}),
         first_tick: ticks.first.unwrap_or(Value::Object(Map::new())),
         last_tick: ticks.last.unwrap_or(Value::Object(Map::new())),
         spawn_points: ticks.spawn_points,
@@ -1527,6 +1569,29 @@ mod tests {
         assert_eq!(output.count, 3);
         assert_eq!(output.first.as_ref().unwrap()["game_type"], "first");
         assert_eq!(output.last.as_ref().unwrap()["game_type"], "last");
+    }
+
+    #[test]
+    fn roster_changes_are_detected_across_the_recording() {
+        let tick = |name: &str, quit: i32, ended: bool| -> Tick {
+            serde_json::from_value(serde_json::json!({"players": [{
+                "player_index": 0, "name": name, "team": 0, "player_quit": quit
+            }], "game_ended_this_tick": ended})).unwrap()
+        };
+        let mut stable = Ticks::default();
+        stable.absorb(tick("A", 0, false));
+        stable.absorb(tick("A", 0, true));
+        stable.absorb(tick("A", 1, false));
+        assert!(!stable.roster_changed);
+        let mut changed = Ticks::default();
+        changed.absorb(tick("A", 0, false));
+        changed.absorb(tick("B", 0, false));
+        changed.absorb(tick("A", 0, true));
+        assert!(changed.roster_changed);
+        let mut departed = Ticks::default();
+        departed.absorb(tick("A", 0, false));
+        departed.absorb(tick("A", 1, false));
+        assert!(departed.roster_changed);
     }
 
     #[test]

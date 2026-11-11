@@ -1379,6 +1379,7 @@ def _replay_document_from_native(value: Any) -> dict[str, Any]:
         parser_metadata["native_extractor_version"] = extractor_version
 
     return {
+        "stats_roster": _native_json_mapping(document.get("stats_roster")),
         "summary": _native_json_mapping(document.get("summary")),
         "game_meta_players": _game_meta_players_from_native(raw_game_meta),
         "callback_game_meta": callback_game_meta,
@@ -1623,6 +1624,8 @@ def _parsed_replay_from_document(
         team_stats=team_stats,
         gametype_settings=gametype_settings,
     )
+    if replay_document.get("stats_roster"):
+        game["metadata"]["stats_roster"] = replay_document["stats_roster"]
     facts = _facts_from_replay(
         gametype_settings=gametype_settings,
         participants=participants,

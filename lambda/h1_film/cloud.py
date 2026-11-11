@@ -869,6 +869,15 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     )
     payload.update(source_kind="h1film", h1film=proof,
                    h1film_settings=film_settings)
+    roster_path = work / "stats-roster.json"
+    run_bounded(
+        ["node", str(Path(os.environ.get("H1_NODE_ROOT", "/var/task")) / "runtime/stats-roster.mjs"),
+         str(film), str(proof.get("match_start_source_tick") or 0),
+         str(proof.get("match_end_source_tick") if proof.get("match_end_source_tick") is not None
+             else proof["source_tick_count"])],
+        work, deadline - 30, output_name=roster_path.name,
+    )
+    payload.setdefault("metadata", {})["stats_roster"] = json.loads(roster_path.read_text())
     if proof["analytics_revision"] >= 3:
         native = encoding["native_analytics"]
         validate_schema("native-analytics", native)

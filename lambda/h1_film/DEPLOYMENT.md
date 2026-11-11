@@ -1,5 +1,52 @@
 # H1 film Lambda integration
 
+## Name statistics roster evidence deployed (2026-11-11 UTC)
+
+Dev API **241** (`37e3b40`, CI **43042850988**) and H1 worker/default
+**20261111-r1**, policy **26**, support whole-match, zero-bot, stable-roster
+statistics for unlinked in-game names. H1 image digest:
+`sha256:5f07d795356662a2cdc479e4fdbb778613e01768bceead10ea9383236167bf55`.
+All existing engine binaries, recipes, source pins and receipts remain.
+
+The new source inspector checks FNET join/leave/team-change events within match
+bounds, ignores post-result departures and retains explicit bot evidence.
+`metadata.stats_roster` is additive and API-validated against source/match proof.
+Xbox parser **stats-20261111**, digest
+`sha256:a2f06f4e19e4c1b9648dcf2f4d79152d5ab5f7db5d8f382bb8aafedaa15d77b4`,
+checks every recorded roster through the result, excluding hostman spectators.
+Both Lambda updates used guarded saved plans affecting only their images and
+the H1 producer digest; deployed H1 health/provenance and Xbox image state pass.
+
+The API-owned migration is applied. A source-only audit updates 275 H1 and 89
+Xbox existing games with exact metadata fences, preserving scores and replay
+selections. Final guards verify all 364 metadata records differ only by the
+audited evidence. Dev retains 365 games, five canonical players, 1,437
+participants, 304 H1 conversions and 714 completion receipts. No source was
+reparsed/requeued or new game uploaded for this rollout. Default public totals
+are 242 games/95 identities: 220 2v2, 21 1v1, one 3v3; 4v4/8-player-FFA are empty.
+
+Validation: 2,194 API tests/301 skips, six isolated PostgreSQL cases and CI;
+160 H1 Node and 110 packaged worker tests; 16 packaged cases/48 exact deployed
+API callbacks, retries and retained Beta 5 client flow; 23 Rust and 84 packaged
+Xbox tests (three skips), plus actual stable/unstable Xbox source canaries.
+All 16 retained H1 replay/analytics object sets have identical payload bytes.
+Manifest differences are only roster evidence, release provenance and runtime
+metrics. Frontend has 833 passing site tests, 62 shared-catalog tests, passing
+builds and live Chrome checks for cumulative/player/map statistics, filter
+changes, empty rankings and scoreboard name links at desktop/mobile widths.
+Frontend stays local/uncommitted; name separation admin surfaces are deferred.
+
+Evidence: `.build/stats-*.log`, `.build/stats-product-comparison.json`,
+`.build/h1-contracts/20261111-r1-75eb931fe6274692b1d204563ec66227/`,
+`.build/h1-promotions/20261111-150256-4a063463e39e4dd48f51ddabc61af40f/`,
+API `.build/stats/` and frontend `smoke-runs/name-stats-20261111/`.
+Keep the additive views and compatible readers on rollback. No prod action.
+
+Film/replay queues and DLQs are empty. All six dev postplans are no-op after
+refreshing only the API version output from 240 to 241; that saved refresh plan
+changed zero resources. `.build/stats-postplans.log` and
+`.build/stats-api-postplan.log` record the final infrastructure checks.
+
 ## Missing embedded-client match IDs deployed (2026-11-10 UTC)
 
 Dev worker/default **20261110-r5**, policy **25**, is active with unchanged
