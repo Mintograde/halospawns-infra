@@ -27,7 +27,9 @@ def handler(event, context):
             env={**cloud.child_environment(), "H1_WORKER_MODE": "foundation"},
             check=True,
             capture_output=True,
-            timeout=60,
+            # Inventory reads every retained binary. A cold Lambda image can
+            # spend longer than a minute fetching this growing immutable set.
+            timeout=180,
         )
         health = json.loads(result.stdout)
         health.update(mode=mode, intake_enabled=mode == "intake")
