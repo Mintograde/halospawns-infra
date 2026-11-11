@@ -1,5 +1,143 @@
 # H1 film Lambda integration
 
+## Native pistol counters deployed (2026-11-11 UTC)
+
+Dev API **247** (`01b747c6b2e046131d6eb5bf0ac5b0f7dbff66b7`, CI
+**43085556999**) and worker/default **20261111-r3**, policy **27**, export the
+original game's paired pistol shots/hits for career accuracy. Worker sources
+are `3f13b06` (counter export) and `c8b7e62` (bounded inventory health timeout).
+The immutable image digest is
+`sha256:55017a64b2d0e6865d31815ae507de2705070a34d68992e96368316cc2e68bd9`.
+See [PISTOL_ACCURACY.md](PISTOL_ACCURACY.md) for the game-source trace, counting
+rule, match-end cutoff, null semantics and reader capability.
+
+Six new exporter-28 entries retain every old recipe and all six profiles,
+for **42 exporters**. Defaults are Beta 3/Arena **28/4/4**, Beta 4 **28/4/5**,
+Beta 5 **28/5/5**, Beta 6 **28/5/10**, and Beta 7 **28/5/11**. Client-view
+recipes, analytics revisions and viewer formats remain. Career, player, map,
+category, gametype, records and ranking queries prefer paired native counters,
+using summed hits / summed shots. Three-shot definitions and calculations are
+unchanged. No migration or prod action. Frontend help changes remain local.
+
+All six native/WASM comparisons pass: **321,743 ticks / 2,683 hashes**, with
+identical counter products. Beta 4 uses the bot recording for native parity;
+the known Weld native-reference limitation in `BETA4.md` remains. Packaged Weld
+WASM still verifies all 88,043 ticks / 734 hashes. Final r3 passes **16 packaged
+cases / 48 exact API callbacks**, receipt retries, the separate Beta 5 client
+flow, and six retained recipes. Existing native analytics, **410 match payload
+entries**, four legacy full viewer files and separate client artifacts remain
+identical. Tests pass: **161 Node**, **111 packaged worker**, **100 Rust** (one
+opt-in profiling test ignored), **2,219 API CI** (314 skipped), 13 isolated
+PostgreSQL cases, **843 site**, both frontend builds, and ten final help tests.
+
+Candidate r2 was installed but never activated: its complete retained-engine
+inventory exceeded the old 60-second health subprocess timeout three times.
+The final r3 changes only that bound to 180 seconds and the promotion CLI read
+timeout to 210 seconds. Its first full live health passes in **120.734 seconds**,
+with all engine/encoder hashes verified before activation. The failed r2
+release and promotion evidence remain. Memory **3008 MB**, worker concurrency
+**50**, SQS concurrency **50**, batch size **1**, sequential worlds and the
+900-second worker timeout remain unchanged.
+
+The authorized backfill freezes **275** existing completed PB2 games (32 Beta 3,
+19 Beta 4, 27 Beta 5, 146 Beta 6, 51 Beta 7). Its original 97-batch plan is retained;
+after the first 34 batches, only undispatched sources were regrouped into
+46 batches of at most eight replays / 230 MiB of source verification. One
+three-game recovery batch gives 81 audited batches / 278 attempts before the
+late-arrival follow-up below. The
+Worthy canary `5fd1a62e-6547-41d9-a76e-94575ee67f98` is selected successfully:
+seven measured participant pairs, 1,328 pistol shots / 598 hits; all old native
+analytics, scoreboard/graph/occupancy hashes and 98 replay payload entries are
+identical. Live API/CDN range, CORS and full-file hash checks pass, with all five
+views verified (213,755 ticks / 1,783 hashes).
+
+All **278 games** are now successfully reprocessed and selected. A fresh
+inventory found three additional Beta 7 games processed by r1 during the build;
+their independent before snapshots and one extra audited batch are retained.
+Final totals are **82 batches / 281 attempts**: 278 successful selected
+generations and the three preserved failures described below. All **1,197
+participant pairs** are measured, totaling 238,059 pistol shots / 96,201 hits.
+Every prior native product, including three-shot results, is identical after
+removing only `pistol_accuracy`. Scoreboard, graph and occupancy hashes match;
+all **78 legacy full viewer files** and **19,910 entries across 200 match files**
+retain their bytes. No processed H1 game lacks the new product.
+
+The default PB2 2v2 scope now has **218 games / 872 appearances**, including two
+qualifying late arrivals. Pistol accuracy is available for **all 80 players /
+25 maps**, previously five players / eight maps, with zero partial pistol
+appearances. Its totals are **170,633 shots / 67,681 hits (39.7%)**. `.minto`'s
+seven-game profile now shows **1,623 shots / 611 hits (37.6%)**, with unchanged
+other totals. Live API-backed Chrome checks pass at 1600/390 px without errors
+or overflow. All original history rows and the late-arrival baseline remain;
+final counts are **307 conversions / 995 receipts / 721 H1 attempts / 360 map
+approvals**. The three newly uploaded games account for the conversion increase.
+The final worker/API configuration matches its pins, and queue/DLQ are empty.
+
+Initial API **246** (`10ee8d9`, CI **43073155672**) rejected three completed
+Beta 5 simulations because an older summary reports synthetic zero shots fired
+for departed players missing from its final shot graph. The encoder's actual
+PGCR pair was valid. Dispatch stopped; all 92 successful generations and their
+old products compared identically. API 247 checks fired against the legacy
+summary only when that participant's shot graph exists, while retaining the
+hit bound, paired availability, roster, match coverage, and worker PGCR bounds.
+Both new regressions, all 2,219 unit tests and all three retained real callbacks
+pass. The exact deployed API ZIP also passes all 48 packaged callback modes and
+the separate client flow. Fresh audited attempts recover all three games;
+their original failures, completion manifests and source pins remain. All 95
+games then compare identically apart from the new pistol product. Existing
+overall statistics and three-shot results are unchanged. The underlying legacy
+graph omission is a separate retained limitation, not a rewritten statistic.
+
+Commands and infrastructure scope (dev account/profile only):
+
+```powershell
+scripts/publish-h1-film.ps1 -Tag 20261111-r3 `
+  -EngineRoot L:/bens_stuff/projects/halospawns-infra/.build/beta7-deploy/engines `
+  -PreviousRegistry L:/bens_stuff/projects/halospawns-infra/.build/pistol-counters/previous-registry.json `
+  -CorpusPath L:/bens_stuff/projects/halospawns-infra/.build/stats-corpus.json
+scripts/promote-h1-film.ps1 -Stack dev
+scripts/plan.ps1 dev app-api
+.build/pistol-counters/refresh-api-state.ps1
+.build/pistol-counters/refresh-api-state-247.ps1
+scripts/plan.ps1 dev map-processing
+scripts/plan.ps1 dev app-api
+scripts/plan.ps1 dev
+```
+
+Promotion internally runs the focused map-processing plan, then
+`terraform -chdir=components/terraform/map-processing plan -no-color
+-var-file=dev-map-processing.terraform.tfvars.json -out=<evidence>/worker.planfile`.
+It validates the saved JSON and applies that exact plan with
+`terraform -chdir=components/terraform/map-processing apply -no-color
+<evidence>/worker.planfile`. Both r2 and r3 plans changed only
+`aws_lambda_function.h1_film[0]` image and producer digest (0 add / 1 change /
+0 destroy). API CI owns its code deployment. The API refresh script saves
+`terraform -chdir=components/terraform/app-api plan -refresh-only -no-color
+-var-file=dev-app-api.terraform.tfvars.json
+-out=L:/bens_stuff/projects/halospawns-infra/.build/pistol-counters/api-refresh.planfile`,
+checks zero resource actions and only version output 245 -> 246, then applies
+that saved file with `terraform -chdir=components/terraform/app-api apply
+-no-color <saved-file>`. Apply reports zero resource changes. The second refresh
+uses `api247-refresh.planfile`, checks output 246 -> 247 against the exact
+deployed API hash, and also changes zero resources. Final focused
+map-processing/app-api and all **six** aggregate dev plans are no-op.
+No AWS/profile/session blocker remains.
+
+Evidence is under `.build/pistol-counters/`, final publication
+`.build/h1-releases/20261111-r3-publication/`, final packaged corpus
+`.build/h1-contracts/20261111-r3-8a4ad10e47f24e25a1072ac92a6edeae/`, and promotion
+`.build/h1-promotions/20261111-184627-c8ee27ee38ef44a2800fd063a5a42b07/`.
+API 247 package checks are in `.build/pistol-counters/api247-contracts/`;
+browser evidence is in sibling frontend `smoke-runs/pistol-counters-20261111/`.
+Changed infra paths are `stacks/dev.yaml`, `scripts/promote-h1-film.ps1`, and
+the H1 encoder, private engine export/roster/build flag, native schema readers,
+registry, release capability checks, tests and documentation. API schema/service
+readers and the shared career/ranking SQL changed in the API repo; local frontend
+edits are limited to pistol explanations in `CareerTotals`, `StatsHelp` and
+`PaceHelp`, preserving the user's other local work.
+Retain the `pistol_accuracy` reader capability, immutable old generations and
+every engine/recipe on rollback.
+
 ## Name statistics roster evidence deployed (2026-11-11 UTC)
 
 Dev API **241** (`37e3b40`, CI **43042850988**) and H1 worker/default
