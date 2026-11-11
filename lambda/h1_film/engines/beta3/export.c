@@ -367,6 +367,25 @@ void hs_export_tick(FILE *out, int frame)
     }
     hs_end();
     metadata(); spawns(); network();
+#ifdef H1_PISTOL_COUNTERS
+    /* Native PGCR bookkeeping, independent of projectile attribution. Removed
+     * by the encoder before viewer/30 Hz serialization. */
+    hs_begin("pistol_counters", 0);
+    if (player_data && player_data->data) {
+        for (i = 0; i < player_data->count; ++i) {
+            const player_datum *p = DATA_ARRAY_ELEMENT(player_data, player_datum, i);
+            int participant;
+            if (!p->identifier) continue;
+            participant = hs_participant(((unsigned int)(unsigned short)p->identifier << 16) | i);
+            hs_begin(NULL, 1);
+            hs_int("slot_index", participant);
+            hs_int("shots_fired", hs_pgcr_value(participant, 5, blampc_pgcr_stats_pistol_shots_fired(i)));
+            hs_int("shots_hit", hs_pgcr_value(participant, 6, blampc_pgcr_stats_pistol_shots_hit(i)));
+            hs_end();
+        }
+    }
+    hs_end();
+#endif
 #ifdef H1_COMBAT_EXPORT
     hs_combat_frame(tick);
 #endif

@@ -10,6 +10,7 @@ param(
     [switch]$RosterRecovery,
     [switch]$ClientView,
     [switch]$Gameplay,
+    [switch]$PistolCounters,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
@@ -38,6 +39,7 @@ if ($FiniteWorldObjects) { $variant += '-finite-world-objects-v1' }
 if ($RosterRecovery) { $variant += '-roster-recovery-v1' }
 if ($ClientView) { $variant += '-client-view-v1' }
 if ($Gameplay) { $variant += '-gameplay-v1' }
+if ($PistolCounters) { $variant += '-pistol-counters-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -62,6 +64,7 @@ if ($DamageAttributionV2) { $damageArguments += '-DH1_DAMAGE_ATTRIBUTION_V2=ON' 
 [string[]]$rosterArguments = if ($RosterRecovery) { @('-DH1_ROSTER_RECOVERY=ON') } else { @() }
 [string[]]$clientViewArguments = if ($ClientView) { @('-DH1_CLIENT_VIEW=ON') } else { @() }
 [string[]]$gameplayArguments = if ($Gameplay) { @('-DH1_GAMEPLAY_EXPORT=ON') } else { @() }
+if ($PistolCounters) { $gameplayArguments += '-DH1_PISTOL_COUNTERS=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -86,6 +89,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     roster_recovery = [bool]$RosterRecovery
     client_view = [bool]$ClientView
     gameplay = [bool]$Gameplay
+    pistol_counters = [bool]$PistolCounters
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

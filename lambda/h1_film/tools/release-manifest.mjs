@@ -16,7 +16,11 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
-      if(recipe.exporter_revision>=26) {
+      if(recipe.exporter_revision>=28) {
+        assert.equal(requirements.pistol_accuracy,'halospawns.h1PistolAccuracy.v1');
+        assert.ok(recipe.analytics_revision>=4);
+      }
+      if(recipe.exporter_revision>=26 && (recipe.exporter_revision<28 || ['beta6','beta7'].includes(profile.port))) {
         assert.ok(['beta6','beta7'].includes(profile.port));
         assert.equal(requirements.network_host_bots,'halospawns.h1NetworkHostBots.v1');
       }
@@ -28,7 +32,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.ok(['beta5','beta6','beta7'].includes(profile.port)&&recipe.exporter_revision>=19);
         assert.equal(requirements.gameplay_metrics,'halospawns.h1GameplayMetrics.v1');
       }
-      if(recipe.exporter_revision>=21) {
+      if(recipe.exporter_revision>=21 && (recipe.exporter_revision<28 || recipe.analytics_revision===5)) {
         assert.ok(['beta5','beta6','beta7'].includes(profile.port) && recipe.analytics_revision===5);
         assert.equal(requirements.gameplay_estimates,'halospawns.h1GameplayEstimates.v1');
       }

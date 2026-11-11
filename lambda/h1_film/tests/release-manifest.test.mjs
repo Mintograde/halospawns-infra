@@ -9,7 +9,7 @@ const manifest=r=>createReleaseManifest(r,'20261101-r1','sha256:'+'a'.repeat(64)
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,24);
+  assert.equal(value.defaults[profile].exporter_revision,28);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -29,8 +29,8 @@ test('historical manifests do not acquire a client recipe field',()=>{
 
 test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:27,analytics_revision:5,viewer_revision:10,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:28,analytics_revision:5,viewer_revision:10,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -62,11 +62,26 @@ test('bot-aware host recipes retain exact binaries and require their reader',()=
 
 test('missing client match IDs use new recipes with exact binaries and unchanged viewer contracts',()=>{
   for(const [id,viewer] of [['h1-performance-beta6-p9839-wasm-v1',10],['h1-performance-beta7-p9844-wasm-v1',11]]) {
-    assert.deepEqual(manifest(registry).defaults[id],{exporter_revision:27,analytics_revision:5,viewer_revision:viewer,max_players:16});
+    assert.ok(manifest(registry).recipes[id].some(r=>JSON.stringify(r)===JSON.stringify(
+      {exporter_revision:27,analytics_revision:5,viewer_revision:viewer,max_players:16})));
     assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===27),
       {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===26),revision:27});
     assert.ok(manifest(registry).recipes[id].some(r=>r.exporter_revision===26));
   }
+});
+
+test('native pistol counters cover every engine without changing prior recipes or viewer formats',()=>{
+  const value=manifest(registry);
+  for(const p of registry.profiles) {
+    const current=value.defaults[p.id];
+    const previous=value.recipes[p.id].at(-2);
+    assert.deepEqual(current,{...previous,exporter_revision:28});
+    assert.ok(registry.exporters.some(e=>e.engine_profile===p.id&&e.revision===28));
+  }
+  const missing=structuredClone(registry);delete missing.processing.requirements.pistol_accuracy;
+  assert.throws(()=>manifest(missing));
+  const wrong=structuredClone(registry);wrong.processing.requirements.pistol_accuracy='unknown';
+  assert.throws(()=>manifest(wrong));
 });
 
 test('gameplay recipes require both shot evidence exporters and a compatible metric reader',()=>{

@@ -9,37 +9,37 @@
   "processing": {
     "defaults": {
       "h1-performance-beta3-p45-wasm-v1": {
-        "exporter_revision": 5,
+        "exporter_revision": 28,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1arena-197bb65c-p9111-wasm-v1": {
-        "exporter_revision": 5,
+        "exporter_revision": 28,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1-performance-beta4-p9803-wasm-v1": {
-        "exporter_revision": 10,
+        "exporter_revision": 28,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 24,
+        "exporter_revision": 28,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 27,
+        "exporter_revision": 28,
         "analytics_revision": 5,
         "viewer_revision": 10,
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 27,
+        "exporter_revision": 28,
         "analytics_revision": 5,
         "viewer_revision": 11,
         "max_players": 16
@@ -136,6 +136,12 @@
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
+        },
+        {
+          "exporter_revision": 28,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
         }
       ],
       "h1arena-197bb65c-p9111-wasm-v1": [
@@ -189,6 +195,12 @@
         },
         {
           "exporter_revision": 5,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 28,
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
@@ -260,6 +272,12 @@
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 28,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ],
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -301,6 +319,12 @@
         },
         {
           "exporter_revision": 24,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 28,
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
@@ -384,6 +408,12 @@
           "analytics_revision": 5,
           "viewer_revision": 10,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 28,
+          "analytics_revision": 5,
+          "viewer_revision": 10,
+          "max_players": 16
         }
       ],
       "h1-performance-beta7-p9844-wasm-v1": [
@@ -401,6 +431,12 @@
         },
         {
           "exporter_revision": 27,
+          "analytics_revision": 5,
+          "viewer_revision": 11,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 28,
           "analytics_revision": 5,
           "viewer_revision": 11,
           "max_players": 16
@@ -429,7 +465,8 @@
       "unsupported_client_build": "halospawns.h1MatchReplay.v5",
       "three_shot_headshot": "halospawns.h1GameplayMetrics.v1",
       "beta7": "halospawns.h1Beta7.v1",
-      "network_host_bots": "halospawns.h1NetworkHostBots.v1"
+      "network_host_bots": "halospawns.h1NetworkHostBots.v1",
+      "pistol_accuracy": "halospawns.h1PistolAccuracy.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -822,6 +859,48 @@
       "revision": 27,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "9f392777632fbb237642b6547246d0a370cbfe9592110f3c9fd8ad755a72a281",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "ea0eee1741c246fe66d252703adc7f6f1407bc0b2556582c03e23916df054ce4",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "8bf984ef6e983640d3059dd73d3a0b6ac050d2eabe408df1e3cd1c6e40d05702",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "ab6e26c190d87aea958f3108ccec090e5d3d255536b373306fbe296fbd3b4488",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "a263a72ee07231decac8854bbc0ce5b508c957bc61c36f5695221e43d73796b4",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "ae3a63506dae1db671fb226acdf1d701f809e66abf88184aadb257a8301f0523",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 28,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "29679d37d036e8236599eccfc6ba86ee56c4752a41803455d715fd6e1692e51e",
       "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
     }
   ]

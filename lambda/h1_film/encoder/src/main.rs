@@ -3,6 +3,7 @@ mod counters;
 mod artifact;
 mod fast_schema;
 mod native;
+mod pistol;
 mod combat;
 mod gameplay;
 mod recycle;
@@ -480,6 +481,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             )
         })
         .transpose()?;
+    let mut pistol = pistol::PistolCounters::default();
     let mut spare = Value::Null;
     let incremental = request.incremental_state
         && request.transport_contract == "HSFT0002"
@@ -504,6 +506,12 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         if let Some(native) = &mut native {
             native.observe(&tick, count)?;
         }
+        // Embedded client worlds only emit viewer data. Their predicted PGCR
+        // counters are not authoritative career measurements.
+        if native.is_some() {
+            pistol.observe(&tick)?;
+        }
+        tick.as_object_mut().unwrap().remove("pistol_counters");
         if let Some(combat) = &mut combat {
             combat.observe(&tick, count)?;
         }
@@ -605,6 +613,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         let product = native_product.as_mut().unwrap();
         product["schema"] = json!("halospawns.h1NativeAnalytics.v2");
         product["combat"] = combat.product()?;
+    }
+    if let Some(pistol) = pistol.product() {
+        native_product.as_mut().ok_or("pistol counters require native analytics")?["pistol_accuracy"] = pistol;
     }
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
         "verification":{"mode":if (4..=5).contains(&request.viewer_profile_revision) { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,

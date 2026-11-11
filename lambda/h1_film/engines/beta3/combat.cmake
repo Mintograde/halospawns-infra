@@ -1,3 +1,14 @@
+option(H1_PISTOL_COUNTERS "Export the game's native pistol shot/hit counters" OFF)
+if(H1_PISTOL_COUNTERS)
+    if(TARGET blampc)
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c" TARGET_DIRECTORY blampc
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_PISTOL_COUNTERS=1)
+    else()
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c"
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_PISTOL_COUNTERS=1)
+    endif()
+endif()
+
 function(hs_combat_patch source input output)
     set(content "${${input}}")
     get_filename_component(stem "${source}" NAME_WE)

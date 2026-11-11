@@ -805,6 +805,87 @@
       ],
       "title": "H1WeaponShots",
       "type": "object"
+    },
+    "PistolAccuracy": {
+      "additionalProperties": false,
+      "properties": {
+        "boundary_policy": {
+          "const": "pre_end_snapshot",
+          "title": "Boundary Policy",
+          "type": "string"
+        },
+        "method": {
+          "const": "pgcr_player_latch",
+          "title": "Method",
+          "type": "string"
+        },
+        "players": {
+          "items": {
+            "$ref": "#/$defs/PistolPlayer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Players",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1PistolAccuracy.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "method",
+        "boundary_policy",
+        "players"
+      ],
+      "title": "PistolAccuracy",
+      "type": "object"
+    },
+    "PistolPlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "shots_fired": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shots Fired"
+        },
+        "shots_hit": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shots Hit"
+        },
+        "slot_index": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "slot_index",
+        "shots_fired",
+        "shots_hit"
+      ],
+      "title": "PistolPlayer",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -817,6 +898,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/H1KillAttribution"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pistol_accuracy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PistolAccuracy"
         },
         {
           "type": "null"

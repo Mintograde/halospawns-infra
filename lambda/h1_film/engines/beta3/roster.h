@@ -7,7 +7,7 @@ static double damage_received[H1_EXPORT_MAX_PLAYERS];
 #if H1_EXPORT_MAX_PLAYERS > 4
 static unsigned int hs_roster_handles[H1_EXPORT_MAX_PLAYERS];
 static int hs_roster_count;
-static int hs_pgcr_baselines[H1_EXPORT_MAX_PLAYERS][5];
+static int hs_pgcr_baselines[H1_EXPORT_MAX_PLAYERS][7];
 
 void hs_register_players(void)
 {
@@ -29,6 +29,10 @@ void hs_register_players(void)
         hs_pgcr_baselines[participant][2] = blampc_pgcr_stats_damage_given_points(physical);
         hs_pgcr_baselines[participant][3] = blampc_pgcr_stats_camo_pickups(physical);
         hs_pgcr_baselines[participant][4] = blampc_pgcr_stats_overshield_pickups(physical);
+#ifdef H1_PISTOL_COUNTERS
+        hs_pgcr_baselines[participant][5] = blampc_pgcr_stats_pistol_shots_fired(physical);
+        hs_pgcr_baselines[participant][6] = blampc_pgcr_stats_pistol_shots_hit(physical);
+#endif
     }
 }
 
