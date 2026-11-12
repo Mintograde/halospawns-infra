@@ -6,6 +6,10 @@ typedef struct {
     int kind, clock, slot, physical, victim, unit, weapon, relationship, headshot;
     unsigned int shot, deal;
     float before[2], after[2];
+#ifdef H1_MELEE_EXPORT
+    unsigned int melee;
+    int ready_clock, category, backwhack;
+#endif
 } hs_gameplay_event;
 static hs_gameplay_event hs_gameplay_events[2048];
 static int hs_gameplay_count;
@@ -20,8 +24,15 @@ static hs_gameplay_event *hs_gameplay_add(int kind)
     e->kind = kind; e->clock = game_time_get();
     e->slot = e->physical = e->victim = e->unit = e->weapon = -1;
     e->headshot = -1;
+#ifdef H1_MELEE_EXPORT
+    e->category = -1;
+#endif
     return e;
 }
+
+#ifdef H1_MELEE_EXPORT
+#include "melee.h"
+#endif
 
 int blampc_universal_film_deal(const void *bytes, int size, int object, short node,
     short region, short material, const float *normal)
@@ -54,6 +65,11 @@ static void hs_gameplay_damage(int attacker, int victim, int object, const damag
     e->physical = damage->owner_player_index == -1 ? -1 : (unsigned short)damage->owner_player_index;
     e->shot = lineage.shot; e->deal = hs_gameplay_deal; e->relationship = relationship;
     e->before[0] = sb; e->before[1] = hb; e->after[0] = sa; e->after[1] = ha;
+#ifdef H1_MELEE_EXPORT
+    e->category = lineage.weapon < 0 ? -1 : hs_weapons[lineage.weapon].category;
+    e->melee = hs_gameplay_deal || lineage.owner != hs_current.owner ? 0 : hs_melee_current;
+    e->backwhack = hs_melee_backwhack_target == object;
+#endif
 }
 
 static void hs_gameplay_death(const hs_death *death)
@@ -61,6 +77,12 @@ static void hs_gameplay_death(const hs_death *death)
     hs_gameplay_event *e = hs_gameplay_add(2);
     e->slot = death->killer; e->victim = death->victim; e->weapon = death->weapon;
     e->relationship = death->kind; e->headshot = death->headshot;
+#ifdef H1_MELEE_EXPORT
+    e->unit = hs_melee_aftermath_object;
+    e->category = death->weapon < 0 ? -1 : hs_weapons[death->weapon].category;
+    e->melee = hs_gameplay_deal ? 0 : hs_melee_current;
+    e->backwhack = hs_melee_backwhack_target == e->unit && e->unit != -1;
+#endif
 }
 
 static void hs_gameplay_frame(void)
@@ -79,6 +101,10 @@ static void hs_gameplay_frame(void)
         hs_uint("weapon_tag", e->weapon < 0 ? 0xffffffffu : (unsigned int)hs_weapons[e->weapon].definition);
         hs_uint("shot", e->shot); hs_uint("deal", e->deal);
         hs_int("relationship", e->relationship); hs_int("headshot", e->headshot);
+#ifdef H1_MELEE_EXPORT
+        hs_uint("melee", e->melee); hs_int("ready_clock", e->ready_clock);
+        hs_int("category", e->category); hs_int("backwhack", e->backwhack);
+#endif
         hs_begin("before", 0); for (j = 0; j < 2; ++j) hs_float(NULL, e->before[j]); hs_end();
         hs_begin("after", 0); for (j = 0; j < 2; ++j) hs_float(NULL, e->after[j]); hs_end();
         hs_end();

@@ -16,6 +16,10 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
+      if(recipe.exporter_revision>=29) {
+        assert.equal(requirements.melee_metrics,'halospawns.h1GameplayMetrics.v1');
+        assert.equal(recipe.analytics_revision,5);
+      }
       if(recipe.exporter_revision>=28) {
         assert.equal(requirements.pistol_accuracy,'halospawns.h1PistolAccuracy.v1');
         assert.ok(recipe.analytics_revision>=4);

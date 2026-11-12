@@ -83,7 +83,8 @@ def validate_native_product(product: dict, *, encoding: dict, report: dict) -> N
         if encoding.get("analytics_revision") == 5:
             validate_gameplay(product["gameplay"], product["combat"], slots,
                               report["envelope"]["ticks"] if end is None else end + 1,
-                              definition_version=2 if report.get("exporter_revision", 0) >= 24 else 1)
+                              definition_version=2 if report.get("exporter_revision", 0) >= 24 else 1,
+                              melee_required=report.get("exporter_revision", 0) >= 29)
     elif product.get("schema") != "halospawns.h1NativeAnalytics.v1":
         raise ValueError("Retained analytics revisions require native schema v1")
 

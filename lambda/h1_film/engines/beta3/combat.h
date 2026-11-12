@@ -190,9 +190,17 @@ void effect_update(int handle, float elapsed)
 void unit_cause_player_melee_damage(int unit)
 {
     hs_lineage previous = hs_current;
+#ifdef H1_MELEE_EXPORT
+    unsigned int previous_melee = hs_melee_current;
+    hs_melee_action action = hs_melee_actions[(unsigned short)unit];
+    hs_melee_current = action.unit == unit ? action.id : 0;
+#endif
     hs_current = (hs_lineage){0, -1, player_index_from_unit_index(unit)};
     hs_original_unit_cause_player_melee_damage(unit);
     hs_current = previous;
+#ifdef H1_MELEE_EXPORT
+    hs_melee_current = previous_melee;
+#endif
 }
 
 void hs_combat_melee(int definition)
@@ -204,9 +212,16 @@ void object_cause_damage(damage_data *damage, int object, short node, short regi
     short material, const real_vector3d *normal)
 {
     int previous = hs_headshot_target;
+#ifdef H1_MELEE_EXPORT
+    int previous_backwhack = hs_melee_backwhack_target;
+    hs_melee_backwhack_target = -1;
+#endif
     hs_headshot_target = -1;
     hs_original_object_cause_damage(damage, object, node, region, material, normal);
     hs_headshot_target = previous;
+#ifdef H1_MELEE_EXPORT
+    hs_melee_backwhack_target = previous_backwhack;
+#endif
 }
 
 void hs_combat_headshot(int object)
@@ -274,6 +289,10 @@ void object_damage_aftermath(int object, damage_data *damage, unsigned int flags
     const damage_data *previous_damage = hs_aftermath_damage;
     hs_lineage previous_lineage = hs_aftermath_lineage;
     int previous_target = hs_aftermath_target, previous_headshot = hs_aftermath_headshot;
+#ifdef H1_MELEE_EXPORT
+    int previous_object = hs_melee_aftermath_object;
+    hs_melee_aftermath_object = object;
+#endif
     hs_aftermath_damage = damage;
     hs_aftermath_target = hs_slot(player_index_from_unit_index(object));
     hs_aftermath_lineage = hs_damage_lineage(damage);
@@ -283,6 +302,9 @@ void object_damage_aftermath(int object, damage_data *damage, unsigned int flags
     hs_aftermath_lineage = previous_lineage;
     hs_aftermath_target = previous_target;
     hs_aftermath_headshot = previous_headshot;
+#ifdef H1_MELEE_EXPORT
+    hs_melee_aftermath_object = previous_object;
+#endif
 }
 
 static int hs_position(int handle, float *position)

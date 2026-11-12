@@ -8,6 +8,7 @@ import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {TABLES,decodeDiagnosticRow,pairShotVerdicts,linkedPull} from './diagnostics-codec.mjs';
 import {classifyGameplayMetrics} from './gameplay-metrics.mjs';
 import {addGameplayEstimates} from './gameplay-estimates.mjs';
+import {deriveMeleeMetrics} from './melee-metrics.mjs';
 
 function rows(account,kind,name) {
   const t=account?.tables.find(t=>t.name===name);
@@ -149,8 +150,11 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
     assert.ok(events.length<=400000,'Gameplay event limit exceeded');
   }
   const source=recordedGameplaySources(await readFile(film),exporterRevision);
-  const args={events,slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,definitionVersion,
+  const args={events:events.filter(e=>e.kind<=3),slots:encoding.players,deaths:encoding.native_analytics.combat.deaths,definitionVersion,
     partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
-  const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(events,source)});
-  return includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
+  const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(args.events,source)});
+  const product=includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
+  if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,events}));
+  else assert.ok(events.every(e=>e.kind<=3),'Melee evidence requires its frozen exporter');
+  return product;
 }

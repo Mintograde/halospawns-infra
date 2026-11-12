@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 cd8b1c63f64de0827f3a66b1407ef2f5ef19330b13c2e184367673b20008c063",
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 3419764faa253bf07b2e1a09cdfb41d19f433c045b462a1c393b398e2ae8fa45",
   "$defs": {
     "GameplayCoverage": {
       "additionalProperties": false,
@@ -9,6 +9,7 @@
             {
               "enum": [
                 "missing_shot_evidence",
+                "missing_melee_evidence",
                 "partial_recording"
               ],
               "type": "string"
@@ -87,6 +88,17 @@
           "title": "Kill Event Index",
           "type": "integer"
         },
+        "melee_timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeleeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "start_source_tick": {
           "exclusiveMaximum": 432000,
           "minimum": 0,
@@ -121,7 +133,11 @@
           "type": "integer"
         },
         "id": {
-          "const": "pistol_three_shot_kills",
+          "enum": [
+            "pistol_three_shot_kills",
+            "backwhack_kills",
+            "double_melee_kills"
+          ],
           "title": "Id",
           "type": "string"
         },
@@ -150,7 +166,7 @@
           "items": {
             "$ref": "#/$defs/GameplayMetric"
           },
-          "maxItems": 1,
+          "maxItems": 3,
           "minItems": 1,
           "title": "Metrics",
           "type": "array"
@@ -1046,6 +1062,43 @@
         "shots_hit"
       ],
       "title": "H1WeaponShots",
+      "type": "object"
+    },
+    "MeleeTiming": {
+      "additionalProperties": false,
+      "properties": {
+        "cooldown_expiry_source_tick": {
+          "maximum": 433000,
+          "minimum": 0,
+          "title": "Cooldown Expiry Source Tick",
+          "type": "integer"
+        },
+        "first_damage_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "First Damage Source Tick",
+          "type": "integer"
+        },
+        "grenade_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Grenade Source Tick",
+          "type": "integer"
+        },
+        "second_action_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Second Action Source Tick",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "first_damage_source_tick",
+        "grenade_source_tick",
+        "second_action_source_tick",
+        "cooldown_expiry_source_tick"
+      ],
+      "title": "MeleeTiming",
       "type": "object"
     },
     "PistolAccuracy": {
