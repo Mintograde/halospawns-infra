@@ -109,7 +109,7 @@ try {
     $healthInput = Join-Path $evidence 'health-input.json'
     $healthOutput = Join-Path $evidence 'health.json'
     '{"schema":"halospawns.h1FilmHealth.v1","action":"health"}' | Set-Content -LiteralPath $healthInput -Encoding utf8NoBOM
-    $healthMeta = Invoke-Aws @('lambda', 'invoke', '--function-name', $worker, '--cli-read-timeout', '210',
+    $healthMeta = Invoke-Aws @('lambda', 'invoke', '--function-name', $worker, '--cli-read-timeout', '330',
         '--payload', "fileb://$healthInput", $healthOutput) | ConvertFrom-Json
     if ($healthMeta.PSObject.Properties.Name -contains 'FunctionError') { throw "Worker health failed: $healthOutput" }
     $health = Get-Content -Raw -LiteralPath $healthOutput | ConvertFrom-Json

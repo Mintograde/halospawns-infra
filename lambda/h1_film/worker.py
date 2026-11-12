@@ -29,7 +29,7 @@ def handler(event, context):
             capture_output=True,
             # Inventory reads every retained binary. A cold Lambda image can
             # spend longer than a minute fetching this growing immutable set.
-            timeout=180,
+            timeout=300,
         )
         health = json.loads(result.stdout)
         health.update(mode=mode, intake_enabled=mode == "intake")

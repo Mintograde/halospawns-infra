@@ -7,7 +7,9 @@ import { verifyEngine } from './profiles.mjs';
 
 export async function sha256(path) {
   const hash = createHash('sha256');
-  for await (const bytes of createReadStream(path)) hash.update(bytes);
+  // Lambda fetches immutable image blocks on demand. Larger sequential reads
+  // avoid thousands of small reads while hashing the full retained inventory.
+  for await (const bytes of createReadStream(path, { highWaterMark: 1024 * 1024 })) hash.update(bytes);
   return hash.digest('hex');
 }
 
