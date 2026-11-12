@@ -1,3 +1,14 @@
+option(H1_PLAYER_CAMO_AMOUNT "Export completed per-world active camouflage strength" OFF)
+if(H1_PLAYER_CAMO_AMOUNT)
+    if(TARGET blampc)
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c" TARGET_DIRECTORY blampc
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_PLAYER_CAMO_AMOUNT=1)
+    else()
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c"
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_PLAYER_CAMO_AMOUNT=1)
+    endif()
+endif()
+
 option(H1_PISTOL_COUNTERS "Export the game's native pistol shot/hit counters" OFF)
 if(H1_PISTOL_COUNTERS)
     if(TARGET blampc)

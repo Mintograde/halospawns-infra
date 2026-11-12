@@ -1982,6 +1982,30 @@ mod incremental_tests {
         }
     }
     #[test]
+    fn camo_strength_survives_all_h1_projections_without_inventing_missing_values() {
+        // Match formats 6–11 contain independently encoded revision-5 worlds.
+        for revision in [4, 5] {
+            let projection = Projection::load_revision(revision).unwrap();
+            for body in [
+                serde_json::json!({"camo_amount":0.0}),
+                serde_json::json!({"camo_amount":0.375}),
+                serde_json::json!({"camo_amount":1.0}),
+                serde_json::json!({"camo_amount":null}),
+                serde_json::json!({}),
+                Value::Null,
+            ] {
+                let input = serde_json::json!({"players":[{"player_index":0,"player_object_data":body}]});
+                let borrowed = projection.tick.project(&input).unwrap();
+                let owned = projection.tick.project_owned(input.clone()).unwrap();
+                let mut reused = Value::Null;
+                projection.tick.project_reusing(&input, &mut reused).unwrap();
+                for output in [borrowed, owned, reused] {
+                    assert_eq!(output["players"][0]["player_object_data"], body);
+                }
+            }
+        }
+    }
+    #[test]
     fn batch_and_incremental_bytes_match() {
         let ticks = vec![
             serde_json::json!({"p":[{"id":4294901761_u64,"v":[-0.0,2.0],"gone":true}]}),

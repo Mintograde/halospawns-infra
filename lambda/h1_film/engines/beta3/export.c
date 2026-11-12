@@ -187,6 +187,16 @@ static void player(int slot, const player_datum *p)
         hs_float("max_health", b->object.maximum_body_vitality);
         hs_float("shields", b->object.shield_vitality);
         hs_float("max_shields", b->object.maximum_shield_vitality);
+#ifdef H1_PLAYER_CAMO_AMOUNT
+        /* Read completed world state only. Enable exclusively in a new pinned
+         * exporter after validating simulation updates for that profile. */
+        if (isfinite(b->unit.active_camouflage)
+            && b->unit.active_camouflage >= 0.0f
+            && b->unit.active_camouflage <= 1.0f)
+            hs_float("camo_amount", b->unit.active_camouflage);
+        else
+            hs_null("camo_amount");
+#endif
         hs_float("move_forward", b->unit.throttle.n[0]);
         hs_float("move_left", b->unit.throttle.n[1]);
         hs_int("primary_nades", (unsigned char)b->unit.grenade_counts[0]);

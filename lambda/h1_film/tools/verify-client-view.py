@@ -73,7 +73,8 @@ def main():
         if path == views.API + "/prepare":
             views.validate_association(payload)
             prepares.append(copy.deepcopy(payload))
-            recipe = manifest["client_view_recipes"][views.PROFILE][0]
+            recipe = next(r for r in manifest["client_view_recipes"][views.PROFILE]
+                          if r["exporter_revision"] == payload["exporter_revision"])
             engine = select_exporter(load_registry()[views.PROFILE], recipe["exporter_revision"])
             import hashlib
             pin = {"release_id": manifest["release_id"], "image_digest": manifest["image_digest"],

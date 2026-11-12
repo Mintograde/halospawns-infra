@@ -9,37 +9,37 @@
   "processing": {
     "defaults": {
       "h1-performance-beta3-p45-wasm-v1": {
-        "exporter_revision": 28,
+        "exporter_revision": 30,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1arena-197bb65c-p9111-wasm-v1": {
-        "exporter_revision": 28,
+        "exporter_revision": 30,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1-performance-beta4-p9803-wasm-v1": {
-        "exporter_revision": 28,
+        "exporter_revision": 30,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 29,
+        "exporter_revision": 30,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 29,
+        "exporter_revision": 30,
         "analytics_revision": 5,
         "viewer_revision": 10,
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 29,
+        "exporter_revision": 30,
         "analytics_revision": 5,
         "viewer_revision": 11,
         "max_players": 16
@@ -142,6 +142,12 @@
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
+        },
+        {
+          "exporter_revision": 30,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
         }
       ],
       "h1arena-197bb65c-p9111-wasm-v1": [
@@ -201,6 +207,12 @@
         },
         {
           "exporter_revision": 28,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 30,
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
@@ -278,6 +290,12 @@
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 30,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ],
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -331,6 +349,12 @@
         },
         {
           "exporter_revision": 29,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 30,
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
@@ -426,6 +450,12 @@
           "analytics_revision": 5,
           "viewer_revision": 10,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 30,
+          "analytics_revision": 5,
+          "viewer_revision": 10,
+          "max_players": 16
         }
       ],
       "h1-performance-beta7-p9844-wasm-v1": [
@@ -458,6 +488,12 @@
           "analytics_revision": 5,
           "viewer_revision": 11,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 30,
+          "analytics_revision": 5,
+          "viewer_revision": 11,
+          "max_players": 16
         }
       ]
     },
@@ -485,12 +521,19 @@
       "beta7": "halospawns.h1Beta7.v1",
       "network_host_bots": "halospawns.h1NetworkHostBots.v1",
       "pistol_accuracy": "halospawns.h1PistolAccuracy.v1",
-      "melee_metrics": "halospawns.h1GameplayMetrics.v1"
+      "melee_metrics": "halospawns.h1GameplayMetrics.v1",
+      "player_camo_amount": "halospawns.h1PlayerCamoAmount.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
         {
           "exporter_revision": 13,
+          "analytics_revision": 2,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 31,
           "analytics_revision": 2,
           "viewer_revision": 5,
           "max_players": 16
@@ -941,6 +984,55 @@
       "revision": 29,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "5098fc7301ac2e51eeaae8423da95709803be1343b346d49fde0c5dadd4cd3ee",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "67dd938275178f77e3b9c255396e83ee811b5375b105aa9a132c1cbb46d0cf23",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "13cc4291dbfbad809460968b05d53c95235d8ea86ce7f0aca1de1ec0e6b7af13",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "8c5345986df575caffd7f356d25cf0b09cbf3deab78dabb4489dc471905f8f30",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "51483033a319ca8c6c228b41a799f7bbbd2265063ae8cb17b5aa0b7ae7669d03",
+      "glue_sha256": "dbd118fc8db944f6be355a6ad04aa8e5ec75075bb88757da2e453ff13478a45b"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 31,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "17560d23f1584a76e94ff828c53c08ecbbe402aa269c93518f8a6d6ad357029f",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "5fa1af0818752577eee5353562de45717846110e7930a92d669af8dccf117fa8",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 30,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "641158f2092ff8b3bffe538d1e07707edbb647e297464e5d11202e6dae8ce2da",
       "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
     }
   ]

@@ -16,7 +16,9 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
-      if(recipe.exporter_revision>=29) {
+      if(recipe.exporter_revision>=30)
+        assert.equal(requirements.player_camo_amount,'halospawns.h1PlayerCamoAmount.v1');
+      if(recipe.exporter_revision>=29 && (recipe.exporter_revision<30 || ['beta5','beta6','beta7'].includes(profile.port))) {
         assert.equal(requirements.melee_metrics,'halospawns.h1GameplayMetrics.v1');
         assert.equal(recipe.analytics_revision,5);
       }
@@ -68,6 +70,8 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
     for (const [id, entries] of Object.entries(client_view_recipes)) {
       assert.ok(Array.isArray(entries) && entries.length > 0);
       for (const recipe of entries) {
+        if(recipe.exporter_revision>=30)
+          assert.equal(requirements.player_camo_amount,'halospawns.h1PlayerCamoAmount.v1');
         assert.ok(recipe.exporter_revision >= 13 && recipe.analytics_revision === 2 && recipe.viewer_revision === 5);
         assert.ok(Number.isInteger(recipe.max_players) && recipe.max_players >= 1 && recipe.max_players <= 16);
         assert.ok(registry.exporters.some(e => e.engine_profile === id && e.revision === recipe.exporter_revision));
