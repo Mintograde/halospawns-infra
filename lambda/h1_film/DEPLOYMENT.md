@@ -1,5 +1,87 @@
 # H1 film Lambda integration
 
+## Backwhacks and double-melee kills deployed (2026-11-12 UTC)
+
+Dev API **250** (`918d938cd9dd8230457a60897db8b3321eaf7b72`, CI
+**43134370060**) and worker/default **20261112-r1**, policy **28**, add
+definition-1 `backwhack_kills` and `double_melee_kills`. Worker source is
+`07836e1`; the immutable image digest is
+`sha256:1b4278a4d58129e635e27b33806945a9c3dc987d42dff929573bdf1605523e4c`.
+See [MELEE_METRICS.md](MELEE_METRICS.md) for exact source evidence, strict
+cooldown semantics and coverage. Double melee requires two damaging swings
+against the same enemy lifetime, a successful grenade cancellation, and a
+lethal second hit strictly before the original timer expires. Remote host
+animation cannot prove client timing; unresolved candidates stay unknown.
+
+Three exporter-29 entries bring the retained inventory to **six profiles /
+45 exporters**. Beta 5/6/7 defaults are **29/5/5**, **29/5/10**, **29/5/11**;
+earlier engines remain on 28. All old recipes and exact binaries remain.
+The API reader capability is `melee_metrics: halospawns.h1GameplayMetrics.v1`;
+career sums include only complete definition-1 participant counts. No migration
+or replay-format change. Retain the capability/readers and every pinned recipe
+on rollback. Frontend stays local/uncommitted; no prod release.
+
+Release checks pass: **182 Node**, **114 packaged worker**, **2,264 API CI**
+(325 skips), 14 isolated PostgreSQL cases, **847 site** tests and both builds.
+Final native/WASM full-export parity covers **170,807 ticks / 1,424 hashes**.
+All **18 packaged cases / 54 exact deployed-API callbacks**, retries and the
+separate Beta 5 client flow pass. Six retained exporter-28 recipes pass another
+18 exact API callbacks. Comparison with r3 preserves old native statistics,
+**410 match payload entries**, four legacy viewer files and both separate
+client artifacts across the 16 pre-existing cases.
+
+Publication used `scripts/publish-h1-film.ps1 -Tag 20261112-r1` with the full
+retained engine store and 18-case corpus. The API-only version output refresh
+249 -> 250 applied zero resource changes. `scripts/promote-h1-film.ps1 -Stack
+dev` verified the numeric API code hash, registered the release, applied only
+the worker image/digest, passed the first full live health check and activated
+policy 28. All six `scripts/plan.ps1 dev` postplans are no-op. Memory 3008 MB,
+900-second timeout, reserved/SQS concurrency 50, batch size 1 and sequential
+world processing remain unchanged.
+
+The user-authorized backfill freezes **227 games**: 27 Beta 5, 146 Beta 6 and
+54 Beta 7, grouped into 64 audited batches of at most eight replays / 230 MiB
+of source verification. All three engine canaries succeeded and were selected;
+their eight verified backwhacks preserve prior native metrics, score/graph/
+occupancy hashes, 161 match payload entries and one legacy viewer file.
+Worthy's live API/CDN range/CORS/full hash checks pass; all five views verify
+213,755 ticks / 1,783 hashes.
+
+All **227 attempts succeeded and selected their new generations**, with no
+failures or recovery batches. The 981 participant appearances contain **158
+verified backwhacks**: 810 complete / 171 partial totals, with 146 unresolved
+kills. Double melee has 579 complete / 402 partial totals, **zero verified
+positives** and 548 unresolved kills; unknown is not a measured zero. Existing
+native analytics (including pistol counters and three-shots), scoreboard,
+graph and occupancy hashes all match. All **27 legacy viewer files** and
+**19,910 payload entries across 200 match files** are unchanged. The 51 older
+engine games retain their complete original inventory and native analytics.
+
+Four new Beta 7 films arrived during the rollout and automatically selected
+exporter 29 without reparsing: **231 games** now have both metrics, containing
+**162 verified backwhacks** including the four new films' four observations.
+No eligible processed game is missing the product, and no attempt remains
+active. Default PB2 2v2 now has **222 games**, **111 complete-count backwhacks**
+(662 measured appearances / 190 games), and zero complete-count double melees
+(455 appearances / 172 games). A read-only run of the identical career query
+restricted to the original inventory reproduces every prior field for the
+original 218-game scope after removing only the two new metrics. The initial
+unrestricted comparison correctly flagged the four arrivals; its evidence is
+retained rather than replacing the baseline.
+
+Live API-backed Chrome passes all three canaries at 1600/390 px and the career
+totals, with correct coverage/example links and no errors or overflow. All
+307 original conversion identities/jobs, 995 receipts, 721 H1 attempts and
+360 map approvals remain. Audit totals are **311 conversions / 1,226 receipts /
+948 H1 attempts / 360 approvals**. The worker/API pins match and queue/DLQ are
+empty. Frontend remains local/uncommitted.
+
+Evidence: `.build/melee-deploy/`, publication
+`.build/h1-releases/20261112-r1-publication/`, packaged corpus
+`.build/h1-contracts/20261112-r1-a094adb80bba4dc4a6877d333040292a/`, promotion
+`.build/h1-promotions/20261112-013728-8d1ade1e6c26462bb59ce73390e8da15/`.
+Live browser evidence is in sibling Svelte `smoke-runs/melee-deploy-20261112/`.
+
 ## Native pistol counters deployed (2026-11-11 UTC)
 
 Dev API **247** (`01b747c6b2e046131d6eb5bf0ac5b0f7dbff66b7`, CI

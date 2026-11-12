@@ -1,9 +1,10 @@
 # Backwhacks and double-melee kills
 
-Implemented and validated locally on 2026-11-11. Nothing has been deployed or
-reparsed in dev/prod. Checked-in defaults remain exporter 28; all existing pins
-and recipes remain. The local candidate adds exporter 29 for Beta 5, 6 and 7:
-29/5/5, 29/5/10 and 29/5/11. The retained registry has six profiles/45 exporters.
+Deployed in dev on 2026-11-12 UTC as worker/default `20261112-r1`, policy 28,
+and API 250 (`918d938`, CI 43134370060). Exporter 29 is selected for Beta 5,
+6 and 7: 29/5/5, 29/5/10 and 29/5/11. Earlier engines stay on exporter 28.
+All old pins and recipes remain; the registry has six profiles/45 exporters.
+No migration or prod release. Frontend changes remain local/uncommitted.
 
 ## Definitions
 
@@ -76,13 +77,47 @@ when the product exists, displaying exact counts, `n+` verified lower bounds or
 `-` for unknown. Combat panels explain coverage and link verified examples to
 the existing replay player/time seek. Frontend work remains local/uncommitted.
 
-A future rollout must publish the compatible API, retain every old binary and
-recipe, package/register the new engines, run guarded deployment checks and
-explicitly select the new processing defaults. Existing games need full
-reparses to acquire the stats. Rollback must retain the capability/readers and
-all recipes used by stored generations.
+The compatible API was deployed before worker registration, guarded image
+promotion and default selection. Existing games acquire these measurements
+through audited full reparses that preserve their original generations.
+Rollback must retain the capability/readers and all recipes used by stored
+generations.
 
-## Local validation
+## Deployment and backfill validation
+
+Release image:
+`sha256:1b4278a4d58129e635e27b33806945a9c3dc987d42dff929573bdf1605523e4c`.
+API CI passes 2,264 tests (325 skips). All 18 packaged cases / 54 exact API
+callbacks, six retained exporter-28 recipes / 18 callbacks, receipt retries
+and the separate Beta 5 client flow pass. The first full live health check
+passes; all six dev postplans are no-op. Runtime limits are unchanged.
+
+The authorized backfill completed all 227 games (27 Beta 5, 146 Beta 6,
+54 Beta 7) through 64 audited batches, with no failed attempts. All selected
+viewer/statistics generations agree. Results across 981 participant appearances:
+
+| Metric | Verified observations | Complete / partial totals | Unresolved kills |
+| --- | ---: | ---: | ---: |
+| Backwhacks | 158 | 810 / 171 | 146 |
+| Double-melee kills | 0 | 579 / 402 | 548 |
+
+No positive double melee was proven by these recordings; this does not claim
+that the unresolved candidates are zero. Every old native statistic, pistol
+counter, three-shot result, scoreboard/graph/occupancy hash, 27 legacy viewer
+files and 19,910 entries across 200 match files is unchanged. The 51 older
+engine games and all original history are preserved.
+
+Four new Beta 7 uploads automatically used the new defaults, bringing the
+audit snapshot to 231 measured games and 162 verified backwhacks. Default PB2
+2v2 has 222 games / 111 complete-count backwhacks. Its original 218-game scope
+reproduces every previous career field in an independent read-only comparison.
+Live API/CDN hash/range/CORS and desktop/mobile Chrome checks pass. Queue/DLQ
+are empty. Final history totals: 311 conversions / 1,226 receipts / 948 H1
+attempts / 360 approvals. See [DEPLOYMENT.md](DEPLOYMENT.md) and
+`.build/melee-deploy/final-audit.json`; browser evidence is in sibling Svelte
+`smoke-runs/melee-deploy-20261112/`.
+
+## Prior local validation
 
 - 182 Node tests; 114 tests inside the packaged worker.
 - 2,249 API unit tests (six optional skips), final focused schema tests and
@@ -98,7 +133,7 @@ all recipes used by stored generations.
   three-shots, scoreboard/graph/occupancy data and replay payloads across three
   profiles. Beta 5 viewer bytes are identical; Beta 6/7 match manifests differ
   only in the intentional engine pins. All 42 old exporter entries and every
-  old recipe/default are unchanged.
+  old recipe are retained.
 - Real melee recordings yield eight verified backwhacks (six Beta 5/two Beta 6).
   No verified positive double melee was found in these samples. Controlled
   event tests establish positive sequences and the expiry boundary; they do

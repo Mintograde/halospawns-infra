@@ -1,8 +1,9 @@
 # Derived gameplay metrics
 
-Local exporter-29 support adds backwhacks and strict grenade-cancelled
-double-melee kills. See [MELEE_METRICS.md](MELEE_METRICS.md) for definitions,
-source limitations, compatibility and validation. Defaults remain exporter 28;
+Exporter 29 adds backwhacks and strict grenade-cancelled double-melee kills,
+deployed in dev for Beta 5/6/7 as worker/default `20261112-r1`, policy 28,
+API 250. See [MELEE_METRICS.md](MELEE_METRICS.md) for definitions, source
+limitations, compatibility and validation. Earlier engines retain exporter 28;
 the deployment history below concerns the existing three-shot metrics.
 
 Analytics 5 / native v3 adds `halospawns.h1GameplayMetrics.v1`. Metric IDs,
