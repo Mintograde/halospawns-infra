@@ -21,7 +21,12 @@ components:
   terraform:
     ecr:
       vars:
+        workshop_ci_enabled: true
         repositories:
+          halospawns-workshop-maps:
+            image_tag_mutability: IMMUTABLE
+            force_delete: false
+            untagged_image_expiry_days: 7
           halospawns-h1-film:
             image_tag_mutability: IMMUTABLE
             force_delete: false
@@ -53,6 +58,7 @@ components:
     app-api:
       vars:
         enabled: true
+        workshop_maps_enabled: true
         h1_film:
           enabled: true
           processing_enabled: true
@@ -117,6 +123,7 @@ components:
           alert_subscriptions: {}
         trusted_services:
           parameter_names:
+            workshop-maps: /halospawns/dev/app-api/trusted-clients/workshop-maps/hmac-secret
             h1-film: /halospawns/dev/app-api/trusted-clients/h1-film/hmac-secret
             heatmap-processing: /halospawns/dev/app-api/trusted-clients/heatmap-processing/hmac-secret
             live-relay: /halospawns/dev/app-api/trusted-clients/live-relay/hmac-secret

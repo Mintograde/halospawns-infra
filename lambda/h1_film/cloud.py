@@ -967,12 +967,24 @@ def execute(work_item, context):
         film = work / "input.h1film"
         source_metadata = {}
         source = download(source, film, metadata=source_metadata)
+        workshop_source = False
+        if job is None and os.environ.get("H1_WORKSHOP_ENABLED") == "true":
+            from .workshop import discover
+            workshop_source, pending = discover(film, source, work_item["upload_id"], api)
+            if pending:
+                # Durable discovery will redeliver once the imported map has an approval.
+                return
         intake = {}
         evidence = inspect_film(film, work, deadline, intake=intake)
         if intake:
-            observed = api("POST", "/v1/ingest/h1films/intake", {
-                "upload_id": work_item["upload_id"], "source": source, "film": evidence, **intake,
-            })["data"]
+            try:
+                observed = api("POST", "/v1/ingest/h1films/intake", {
+                    "upload_id": work_item["upload_id"], "source": source, "film": evidence, **intake,
+                })["data"]
+            except FilmError as error:
+                if workshop_source and error.reason == "missing_map":
+                    return
+                raise
             require(observed["recording_role"] == intake["recording_role"])
             if observed.get("pending"):
                 drain_intake_events({"upload_id": work_item["upload_id"]})
@@ -984,7 +996,12 @@ def execute(work_item, context):
         if job is None:
             prepare = {"upload_id": work_item["upload_id"], "source": source, "film": evidence,
                        "use_default_release": True}
-            result = api("POST", "/v1/ingest/h1films/prepare", prepare)
+            try:
+                result = api("POST", "/v1/ingest/h1films/prepare", prepare)
+            except FilmError as error:
+                if workshop_source and error.reason == "missing_map":
+                    return
+                raise
             job = result["data"]["job"]
             validate_job(job)
             require(

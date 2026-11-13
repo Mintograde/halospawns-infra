@@ -1,0 +1,46 @@
+name: Workshop maps worker
+on:
+  workflow_dispatch:
+    inputs:
+      publish_h1_intake:
+        description: Publish the one-time retained 20261113-r3 H1 intake integration
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test
+        run: python -m unittest discover -s lambda/workshop_maps/tests -v
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::283279960672:role/halospawns-dev-workshop-publish
+          aws-region: us-east-1
+          allowed-account-ids: '283279960672'
+      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: lambda/workshop_maps/Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: 283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-workshop-maps:git-${{ github.sha }}
+      - name: Publish retained H1 intake integration
+        if: inputs.publish_h1_intake
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: lambda/workshop_maps/H1.Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: 283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film:20261113-r3

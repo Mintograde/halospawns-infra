@@ -140,6 +140,7 @@ locals {
       REPLAY_PROCESSING_QUEUE_URL = local.replay_processing_queue_url
     },
     local.h1_film_api_environment,
+    local.workshop_api_environment,
   ) : {}
 
   jwt_authorizer = var.supabase.jwt.create_authorizer ? {
@@ -230,6 +231,7 @@ locals {
     local.app_api_public_routes,
     local.app_api_dev_public_routes,
     local.h1_film_api_routes,
+    local.workshop_api_routes,
     [
       {
         route_key          = "$default"

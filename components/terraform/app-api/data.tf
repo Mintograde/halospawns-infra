@@ -100,6 +100,15 @@ data "aws_iam_policy_document" "app_runtime" {
   count = var.enabled ? 1 : 0
 
   dynamic "statement" {
+    for_each = var.workshop_maps_enabled ? [1] : []
+    content {
+      sid       = "ReadImmutableWorkshopMaps"
+      actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+      resources = ["${local.uploads_bucket_arn}/workshop/maps/*"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = local.h1_film_api_enabled ? [1] : []
     content {
       sid     = "InspectH1FilmRawMapVersions"
