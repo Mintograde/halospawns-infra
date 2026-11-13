@@ -2,7 +2,9 @@
 
 Dev now has Workshop discovery, content history, exact-map deduplication,
 scheduled downloads and durable replay waiters. New map bytes use the ordinary
-map-processing pipeline; discovery never grants an engine approval.
+map-processing pipeline. Downloaded MCC maps receive automatic approvals for
+registered Beta 7+ engines after normal map processing and identity checks;
+older and other engines retain manual review.
 
 **Remaining prerequisite:** the user has no dedicated Steam account/session yet.
 A real anonymous SteamCMD probe connected but failed to download MCC item
@@ -12,7 +14,8 @@ Workshop map has been imported into dev during this effort.
 
 This implements the upcoming Beta 8 MAP1 contract; it does **not** register a
 Beta 8 simulation engine. That release still needs exact source/exporters,
-compatible readers and reviewed map bindings through the existing process.
+compatible readers and map bindings. Eligible Workshop maps are automatically
+approved once that engine is registered.
 
 ## Intake and identity
 
@@ -44,6 +47,21 @@ without rewriting game records. Local frontend changes show the waiting message
 and a Workshop link in game details.
 
 ## Updates and failures
+
+API maintenance approves at most four map/engine pairs before redispatching
+films. Policy `halospawns.workshopMccApproval.v1` covers numeric Beta 7 and later
+profiles in the trusted H1 registry, including future registrations. It requires
+downloaded revision proof, exact original SHA-256/size/scenario, a processed
+cache-v13 MCC multiplayer map, current GLB, active release and immutable source.
+Previously uploaded identical maps qualify after download proves their identity.
+Existing manual approvals and all retirements are preserved. Ambiguity and
+missing evidence stay blocked for review; failures retry after an hour without
+holding up other maps. Full replay simulation verification remains mandatory.
+
+Automatic bindings store policy and Workshop provenance with no human reviewer.
+The additive `20261113030000_workshop_map_autoapprovals.sql` migration also adds
+the fair approval-check queue. No worker image or replay recipe changes are needed.
+See the [flow diagram](WORKSHOP_MAPS_FLOW.md) and API runbook for the audit contract.
 
 The worker polls every 15 minutes at concurrency one, claiming one publication
 and maintaining up to four map imports and four films per maintenance pass.
@@ -101,7 +119,7 @@ Terraform manages only its name/ARN.
   prioritizes matching associated maps so history bounds cannot hide older maps.
 - HMAC `/v1/ingest/workshop/observe` admits `h1-film` and `workshop-maps`.
   `/claim`, `/complete`, `/maintain` admit only `workshop-maps`.
-- The four API-owned tables are RLS-enabled and inaccessible to ordinary database
+- The API-owned tables are RLS-enabled and inaccessible to ordinary database
   clients. See `../halospawns-api/docs/workshop-maps.md` for contracts.
 
 After provisioning credentials, track a public Halo CE item and invoke
@@ -172,8 +190,52 @@ app-api, ecr and map-processing (`.build/workshop/final-postplans.log`). No AWS
 profile/session blocker remains. Frontend remains local/uncommitted; no
 production or historical replay action was performed.
 
+## Automatic approval deployment (2026-11-13)
+
+Dev API **258**, source `ed254f54ecaa9019f972bba52f969ce6af22312c`,
+[CI 43529931773](https://github.com/Mintograde/halospawns-api/actions/runs/43529931773),
+implements the Beta 7+ automatic approval policy. Migration
+`20261113030000_workshop_map_autoapprovals.sql` was applied after a dry run showing
+only that migration. The CI artifact's SHA-256 matches the live Lambda:
+`e2be9c20f7df484c0d3a9f615fa4e9904f12dd522a46332457b527449f78b23a`.
+H1/default **20261113-r3**, policy **32**, Workshop worker image, all six engines,
+59 exporters and every replay recipe remain unchanged.
+
+Validation: 2313 local API unit tests (six optional native/fixture skips),
+2315 CI tests (354 opt-in integration/private-fixture skips), full Ruff, 17 new
+automatic-approval PostgreSQL cases, 22 existing manual approval/engine cases,
+and six existing Workshop PostgreSQL cases pass. The new cases cover future
+registered Beta 8/9 profiles, preuploaded-map reuse, provenance/catalog races,
+concurrent idempotence, retirement, retry and explicit human transfer to Beta 6.
+The local admin UI displays system policy/publication/revision instead of an
+empty reviewer; 36 existing review UI/API tests and the site build pass.
+
+Live `/health`, authenticated maintenance (`imports:0, approvals:0, films:0`)
+and the deployed Workshop poll (`state:idle`) pass. Read-only before/after audits
+preserve 378 conversions, 1837 receipts, all 360 approval records and 419 total
+games; the complete preexisting approval-history fingerprint is unchanged.
+Workshop tables remain empty and both film queue/DLQ have zero visible, delayed
+or in-flight messages. Authenticated Steam downloads and real imported-map
+canaries remain pending account provisioning; these checks do not claim those
+paths were exercised live.
+
+`.build/workshop/autoapproval-refresh-api.ps1` verifies the CI artifact identity,
+live code hash and saved refresh-only plan before applying the API output
+257 -> 258, with zero resource actions. Evidence is in
+`.build/workshop/autoapproval-*.log`, `autoapproval-*.json` and
+`api258-refresh-*.log`. Frontend changes remain local/uncommitted; no production
+deployment or historical replay processing occurred.
+
+The final `scripts/plan.ps1 dev` run is no-op for all six components:
+tfstate-backend, frontend-site, uploads-ingest, app-api, ecr and map-processing
+(`.build/workshop/autoapproval-final-postplans.log`).
+
 ## Rollback
 
 Disable the schedule/API feature or return H1 default/image to retained r2 using
 guarded promotion. Keep additive tables, sources, snapshots, associations, reader
 contracts and every retained recipe. Do not purge queues or rewrite history.
+Retain the automatic-approval migration and API provenance reader, including
+nullable system reviewers. `WORKSHOP_MAPS_ENABLED=false` stops new automatic
+approvals; existing decisions remain immutable and can be retired through the
+normal admin workflow.
