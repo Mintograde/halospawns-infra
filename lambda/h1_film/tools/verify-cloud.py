@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--release-manifest", type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3, 4, 5), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
-    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), default=4)
+    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), default=4)
     state_mode = parser.add_mutually_exclusive_group()
     state_mode.add_argument("--generic-state", action="store_true")
     state_mode.add_argument("--verify-incremental-state", action="store_true")
@@ -171,7 +171,13 @@ def main():
                 command = [*command, "--generic-poses"]
             if args.verify_incremental_state:
                 command = [*command, "--verify-incremental-state"]
-        return real_run_bounded(command, *values, **options)
+        try:
+            return real_run_bounded(command, *values, **options)
+        except Exception:
+            log = values[0] / options.get("output_name", "command.log")
+            if log.is_file():
+                shutil.copyfile(log, args.output / ("failure-" + log.name))
+            raise
 
     def api(method, path, payload):
         assert method == "POST"

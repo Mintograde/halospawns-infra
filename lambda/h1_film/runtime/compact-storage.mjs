@@ -40,7 +40,8 @@ export function validateCompactStorage(m,header) {
       }
     }
   }
-  check(integer(m.logical_size_bytes,1)&&logical===m.logical_size_bytes&&physical+header.body_offset===header.size_bytes,'container coverage differs');
+  const logicalLimit=header.version===7&&m.schema==='halospawns.h1MatchReplay.v7'?2147483648:LIMIT;
+  check(integer(m.logical_size_bytes,1,logicalLimit)&&logical===m.logical_size_bytes&&physical+header.body_offset===header.size_bytes,'container coverage differs');
 }
 
 export function compactRangeReader(readRange,header,m,codecs,sha) {

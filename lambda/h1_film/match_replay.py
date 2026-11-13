@@ -37,7 +37,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
         item = {key: track[key] for key in (
             "id", "role", "source_film_sha256", "frame_count", "first_update",
         )}
-        if revision in (7, 8, 9, 10, 11):
+        if revision in (7, 8, 9, 10, 11, 12):
             item["status"] = track["status"]
         if track.get("status") == "unavailable":
             item["failure"] = track["failure"]
@@ -65,7 +65,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
         chunk_count=len(entries), manifest=manifest,
         metrics={**host.metrics, "match_pack_duration_ms": round((time.perf_counter()-started)*1000),
                  **({"unavailable_client_count": sum(t.get("status") == "unavailable" for t in tracks)}
-                    if revision in (7, 8, 9, 10, 11) else {}),
+                    if revision in (7, 8, 9, 10, 11, 12) else {}),
                  "match_view_count": len(tracks), "artifact_bytes": result["size_bytes"],
                  "artifact_uncompressed_bytes": result["size_bytes"], "compression_ratio": 1},
     )

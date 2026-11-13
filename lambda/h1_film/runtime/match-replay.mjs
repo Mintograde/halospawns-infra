@@ -1,6 +1,8 @@
 // Browser-safe range reader for the single-file H1 match replay container.
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 import {validateCompactStorage,compactRangeReader} from './compact-storage.mjs';
+export const LARGE_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v7';
+export const LARGE_MATCH_PROJECTION='c2947bab9d94971364227a4cb7ea752cee0ad6f0ef9ee81a625b6d4f04b9260f';
 export const BETA7_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v6';
 export const BETA7_MATCH_PROJECTION='e04e97f3b3c129672bf41800eece0a69bd3c7372e1da26e87b16f7caddeddfbb';
 export const UNSUPPORTED_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v5';
@@ -15,6 +17,7 @@ export const PARTIAL_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v2';
 export const PARTIAL_MATCH_PROJECTION='e19c41417dd3c4e6843037a94fb8d993e4861bfd6d345a9965f82b4ed8effdbb';
 export const MATCH_REPLAY_HEADER_BYTES=64;
 export const MATCH_REPLAY_MAX_BYTES=512*1024*1024;
+export const MATCH_REPLAY_MAX_LOGICAL_BYTES=2*1024*1024*1024;
 export const MATCH_REPLAY_MAX_MANIFEST=8*1024*1024;
 const hash=/^[a-f0-9]{64}$/;
 const integer=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -29,7 +32,7 @@ export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const version=v.getUint32(8,true);
-  check([1,2,3,4,5,6].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
+  check([1,2,3,4,5,6,7].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
@@ -37,14 +40,14 @@ export function readMatchReplayHeader(bytes) {
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  const beta7=m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
+  const large=m?.schema===LARGE_MATCH_REPLAY_SCHEMA,beta7=large||m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
   const compact=roster||m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
-  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(large?7:beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
     &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
   check(m.engine_profile===(beta7?'h1-performance-beta7-p9844-wasm-v1':'h1-performance-beta6-p9839-wasm-v1')&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&m.tick_rate===120&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===(beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
+    &&m.sourceContract.profile_revision===(large?12:beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(large?LARGE_MATCH_PROJECTION:beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -55,7 +58,7 @@ export function validateMatchReplay(m,header) {
     check(['world','client-account','host-ledger','raw-pad','network-observations','diagnostic-table','recorded-section'].includes(e.kind)
       &&e.compression==='identity','invalid entry kind');
     if(e.kind==='world') check(hash.test(e.index_sha256)&&integer(e.index_size_bytes,33,Math.min(e.size_bytes,16777216)),'invalid world index');
-    end+=e.size_bytes;check(end<=MATCH_REPLAY_MAX_BYTES,'entry overflow');entries.set(e.id,e);
+    end+=e.size_bytes;check(end<=(large?MATCH_REPLAY_MAX_LOGICAL_BYTES:MATCH_REPLAY_MAX_BYTES),'entry overflow');entries.set(e.id,e);
   }
   if(!compact)check(m.logical_size_bytes===undefined&&end+header.body_offset===header.size_bytes,'container coverage differs');
   check(Array.isArray(m.tracks)&&m.tracks.length>=1&&m.tracks.length<=17,'invalid track count');

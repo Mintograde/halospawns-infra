@@ -56,6 +56,16 @@ class CloudTests(unittest.TestCase):
         self.addCleanup(self.s3.stop)
         self.job = fixture("initial-job")
 
+    def test_viewer_storage_names_preserve_old_generations_and_match_large_format(self):
+        for revision, version in ((2, 1), (4, 2), (5, 2), (6, 1), (7, 1),
+                                  (8, 1), (9, 4), (10, 5), (11, 6), (12, 7)):
+            with self.subTest(revision=revision):
+                key = self.shared._viewer_artifact_key(
+                    "upload", "generation", "a" * 64, profile_revision=revision)
+                self.assertTrue(key.endswith(
+                    f"frontend-default-r{revision}.{'a' * 64}.viewer-delta.v{version}.hsrv"))
+                self.assertIn("upload/generations/generation/", key)
+
     def test_api_job_fixtures_and_target_fences(self):
         for name in ("initial-job", "viewer-rebuild-job", "full-reparse-job"):
             with self.subTest(name=name):

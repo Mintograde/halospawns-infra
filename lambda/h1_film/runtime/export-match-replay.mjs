@@ -23,13 +23,15 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8,9,10,11].includes(sourceContract.profile_revision);
-  const accountOptions={allowUnassignedPlayer:sourceContract.profile_revision===11};
+  const partial=[7,8,9,10,11,12].includes(sourceContract.profile_revision);
+  const accountOptions={allowUnassignedPlayer:[11,12].includes(sourceContract.profile_revision)};
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
   assert.equal(report.exporter_revision>=18,sourceContract.profile_revision>=9,'Match roster policy differs from recipe');
   assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
-  assert.equal(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1',sourceContract.profile_revision===11,'Match source differs from recipe');
+  assert.equal(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1',[11,12].includes(sourceContract.profile_revision),'Match source differs from recipe');
+  if(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1')
+    assert.equal(report.exporter_revision>=33,sourceContract.profile_revision===12,'Match logical size policy differs from recipe');
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   // Compact packing immediately consumes these entries. Keep a bounded amount

@@ -39,9 +39,9 @@
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 32,
+        "exporter_revision": 33,
         "analytics_revision": 5,
-        "viewer_revision": 11,
+        "viewer_revision": 12,
         "max_players": 16
       }
     },
@@ -530,6 +530,12 @@
           "analytics_revision": 5,
           "viewer_revision": 11,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 33,
+          "analytics_revision": 5,
+          "viewer_revision": 12,
+          "max_players": 16
         }
       ]
     },
@@ -559,7 +565,8 @@
       "pistol_accuracy": "halospawns.h1PistolAccuracy.v1",
       "melee_metrics": "halospawns.h1GameplayMetrics.v1",
       "player_camo_amount": "halospawns.h1PlayerCamoAmount.v1",
-      "spawn_metrics": "halospawns.h1SpawnMetrics.v1"
+      "spawn_metrics": "halospawns.h1SpawnMetrics.v1",
+      "large_match_replay": "halospawns.h1MatchReplay.v7"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -1110,6 +1117,13 @@
     {
       "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
       "revision": 32,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "0e41f5931d24e281defd09e13b56c8557446dcc18377bb45ec34ec8971a8544e",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 33,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "0e41f5931d24e281defd09e13b56c8557446dcc18377bb45ec34ec8971a8544e",
       "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"

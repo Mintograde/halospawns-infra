@@ -1,5 +1,63 @@
 # H1 film Lambda integration
 
+## Large compact match recovery deployed (2026-11-13)
+
+The twenty failed November 13 eight-player Beta 7 uploads are recovered in dev
+with worker/default `20261113-r2`, policy 31, API 254 (`e2f5f2b`, CI
+43374833145), and additive migration `20261113010000_h1film_large_match_replay.sql`.
+The old packer incorrectly capped aggregate logical entries at the physical
+file's 512 MiB limit. Viewer 12 / match v7 permits 2 GiB logical data while
+retaining the 512 MiB physical/per-entry caps and all verification. Beta 7
+uses 33/5/12 with exact exporter-32 binaries; all six profiles / 59 exporters
+and every old recipe remain. Other defaults and separate client 31 are unchanged.
+All twenty fresh audited recoveries are processed and selected: 153 playable
+worlds / 8324325 ticks / 69441 hashes with zero mismatches; 14
+original desynchronized client views remain explicitly unavailable. All 47 original
+upload rows, 309 previous games, old artifacts, statistics and history remain.
+Totals are 378 conversions / 1837 receipts / 1512 H1 attempts /
+360 approvals / 329 games. Queue and DLQ are empty.
+196 Node / 118 worker tests, API CI, 1849 viewer tests and both builds pass.
+Nine final packaged cases / 27 exact callbacks, six retained cases / 18 callbacks,
+and separate client flow pass. All 19 earlier corpus cases preserve statistics
+and 576 match payload entries; the two canaries preserve all 337 logical entries
+offline and every live payload except the expected new host upload identity.
+First live health, all six postplans, all 20 API/CDN checks and real Chrome
+desktop/mobile playback, paused seeks and perspective switching pass.
+Candidate r1 was registered but never installed/activated: the exact API guard
+rejected its viewer-12 filename suffix. Do not promote r1. Final r2 fixes only
+that suffix and retains every old name. Frontend readers stay local/uncommitted;
+no frontend or prod deployment. Keep migration, v7 readers/capability and every
+recipe on rollback. See `lambda/h1_film/LARGE_MATCH_REPLAY.md`, `DEPLOYMENT.md`
+and completed handoff `20261113-infra-api-svelte-large-match-recovery`.
+
+Image: `sha256:b206c002a3350828d5ad36a8445677b2f7d6afecd57025228f323a25f7b7f74a`.
+Source inventory/recovery evidence: `.build/recent-failures-20261113/`.
+Guarded promotion: `.build/h1-promotions/20261113-063003-3f5dee8de4a746aa8a033a7be9875f18/`.
+
+The owning infrastructure component is `map-processing`; `app-api` only
+refreshes its CI-managed version output. Runtime, reader contracts, recipe
+registry, release checks, tests, `scripts/test-h1-film-release.ps1`, and
+`stacks/dev.yaml` change. Memory remains 3008 MiB, timeout 900 seconds,
+reserved/SQS maximum concurrency 50, batch size 1, and worlds run sequentially.
+The API owns the additive migration and API reader changes. Frontend changes
+are the v7 contracts, range reader, session routing and regression tests.
+
+Exact commands from the infra root:
+
+- `scripts/plan.ps1 dev app-api`: zero resource actions; API output 253 -> 254.
+- `.build/recent-failures-20261113/refresh-api-state.ps1` ran
+  `terraform -chdir=components/terraform/app-api plan -refresh-only -no-color -var-file=dev-app-api.terraform.tfvars.json -out=L:/bens_stuff/projects/halospawns-infra/.build/recent-failures-20261113/api254-refresh.planfile`,
+  verified the saved plan and live API code pin, then applied that saved plan.
+- `scripts/promote-h1-film.ps1 -Stack dev` ran the focused worker plan and
+  `terraform -chdir=components/terraform/map-processing plan -no-color -var-file=dev-map-processing.terraform.tfvars.json -out=L:/bens_stuff/projects/halospawns-infra/.build/h1-promotions/20261113-063003-3f5dee8de4a746aa8a033a7be9875f18/worker.planfile`.
+  Guarded apply of that saved plan changed only the H1 image URI/digest:
+  0 add, 1 change, 0 destroy. First health passed and policy 31 activated.
+- `scripts/plan.ps1 dev`: all six components are no-op.
+
+Only the dev account/profile was used; no AWS/profile/session blocker remains.
+
+
+
 ## Improbable spawn metrics deployed (2026-11-12)
 
 Dev API **253** (`7cc59dc`, CI **43356594104**) and worker/default

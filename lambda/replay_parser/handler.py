@@ -3023,9 +3023,11 @@ def _viewer_artifact_key(
     profile_revision: int = VIEWER_PROFILE_REVISION,
 ) -> str:
     prefix = _settings()["viewer_artifact_prefix"]
+    # Keep published viewer-7/8 names immutable while matching new containers.
+    suffix_version = {4: 2, 5: 2, 9: 4, 10: 5, 11: 6, 12: 7}.get(profile_revision, 1)
     filename = (
         f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{profile_revision}."
-        f"{artifact_sha256}.viewer-delta.v{6 if profile_revision == 11 else 5 if profile_revision == 10 else 4 if profile_revision == 9 else 2 if profile_revision in (4, 5) else 1}.hsrv"
+        f"{artifact_sha256}.viewer-delta.v{suffix_version}.hsrv"
     )
     return f"{prefix}{upload_id}/generations/{generation_token}/{filename}"
 

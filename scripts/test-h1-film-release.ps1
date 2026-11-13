@@ -27,9 +27,11 @@ foreach ($case in $cases) {
     $film = (Resolve-Path -LiteralPath $case.film).Path
     $map = (Resolve-Path -LiteralPath $case.map).Path
     $recipe = $manifest.defaults.($case.engine_profile)
+    # Lambda /tmp is disk-backed, outside its memory allowance. An anonymous
+    # volume matches that behavior and --rm removes it with this test container.
     docker run --rm --network none --read-only --user 10001:10001 --cpus 2 --memory 3008m `
         --env PYTHONPATH=/var/task --env "H1_WORKER_IMAGE_DIGEST=$($manifest.image_digest)" `
-        --tmpfs /tmp:rw,nosuid,size=6g,mode=1777 `
+        --mount type=volume,destination=/tmp `
         --mount "type=bind,source=$film,target=/input/film.h1film,readonly" `
         --mount "type=bind,source=$map,target=/input/$([IO.Path]::GetFileName($map)),readonly" `
         --mount "type=bind,source=$manifestPath,target=/input/release.json,readonly" `
@@ -53,7 +55,7 @@ foreach ($case in $cases) {
         $client = (Resolve-Path -LiteralPath $case.client_film).Path
         docker run --rm --network none --read-only --user 10001:10001 --cpus 2 --memory 3008m `
             --env PYTHONPATH=/var/task --env "H1_WORKER_IMAGE_DIGEST=$($manifest.image_digest)" `
-            --tmpfs /tmp:rw,nosuid,size=6g,mode=1777 `
+            --mount type=volume,destination=/tmp `
             --mount "type=bind,source=$film,target=/input/host.h1film,readonly" `
             --mount "type=bind,source=$client,target=/input/client.h1film,readonly" `
             --mount "type=bind,source=$map,target=/input/map.map,readonly" `

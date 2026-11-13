@@ -12,7 +12,7 @@ test('camo recipes retain prior analytics and viewer formats across all families
   for(const p of registry.profiles) {
     const recipes=value.recipes[p.id],current=recipes.find(r=>r.exporter_revision===30);
     assert.deepEqual(current,{...recipes[recipes.indexOf(current)-1],exporter_revision:30});
-    assert.deepEqual(value.defaults[p.id],{...current,exporter_revision:32});
+    assert.deepEqual(recipes.find(r=>r.exporter_revision===32),{...current,exporter_revision:32});
   }
   const clients=value.client_view_recipes[profile];
   assert.deepEqual(clients.at(-1),{...clients[0],exporter_revision:31});
@@ -31,7 +31,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
   const next=r.exporters.filter(e=>e.revision===29);
   assert.equal(next.length,3);
   for(const exporter of next) {
-    assert.equal(r.processing.defaults[exporter.engine_profile].exporter_revision,32);
+    assert.ok(r.processing.recipes[exporter.engine_profile].some(recipe=>recipe.exporter_revision===32));
     assert.ok(r.processing.recipes[exporter.engine_profile].some(recipe=>recipe.exporter_revision===28));
     assert.equal(r.processing.recipes[exporter.engine_profile].find(recipe=>recipe.exporter_revision===29).analytics_revision,5);
   }
@@ -136,7 +136,22 @@ test('spawn event recipes require a compatible reader and retain the prior host 
   }
   for(const p of registry.profiles) {
     const old=registry.processing.recipes[p.id].find(r=>r.exporter_revision===30);
-    assert.deepEqual(registry.processing.defaults[p.id],{...old,exporter_revision:32});
+    assert.deepEqual(registry.processing.recipes[p.id].find(r=>r.exporter_revision===32),{...old,exporter_revision:32});
   }
   assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
+});
+
+test('large matches use a new Beta 7 recipe with unchanged binaries and a required reader',()=>{
+  const id='h1-performance-beta7-p9844-wasm-v1',value=manifest(registry);
+  assert.deepEqual(value.defaults[id],{exporter_revision:33,analytics_revision:5,viewer_revision:12,max_players:16});
+  assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===33),
+    {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===32),revision:33});
+  assert.ok(value.recipes[id].some(r=>r.exporter_revision===32&&r.viewer_revision===11));
+  for(const p of registry.profiles.filter(p=>p.id!==id))assert.equal(value.defaults[p.id].exporter_revision,32);
+  for(const mutate of [
+    r=>delete r.processing.requirements.large_match_replay,
+    r=>r.processing.requirements.large_match_replay='unknown',
+    r=>r.processing.recipes[id].at(-1).viewer_revision=11,
+    r=>r.processing.recipes[id].find(r=>r.exporter_revision===32).viewer_revision=12,
+  ]) {const bad=structuredClone(registry);mutate(bad);assert.throws(()=>manifest(bad));}
 });

@@ -4,16 +4,19 @@ import {open,stat,mkdtemp,rm} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {createReadStream} from 'node:fs';
 import {sha256} from './engine-store.mjs';
-import {BETA7_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_SCHEMA,PARTIAL_MATCH_REPLAY_SCHEMA,COMPACT_MATCH_REPLAY_SCHEMA,ROSTER_MATCH_REPLAY_SCHEMA,UNSUPPORTED_MATCH_REPLAY_SCHEMA,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
+import {LARGE_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_MAX_BYTES,MATCH_REPLAY_MAX_LOGICAL_BYTES,BETA7_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_SCHEMA,PARTIAL_MATCH_REPLAY_SCHEMA,COMPACT_MATCH_REPLAY_SCHEMA,ROSTER_MATCH_REPLAY_SCHEMA,UNSUPPORTED_MATCH_REPLAY_SCHEMA,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
 import {packCompactStorage} from './pack-compact-storage.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function writeMatchReplay(path,identity,tracks,entries) {
+  const version=identity.sourceContract.profile_revision===12?7:identity.sourceContract.profile_revision===11?6:identity.sourceContract.profile_revision===10?5:identity.sourceContract.profile_revision===9?4:identity.sourceContract.profile_revision===8?3:identity.sourceContract.profile_revision===7?2:1;
+  const logicalLimit=version===7?MATCH_REPLAY_MAX_LOGICAL_BYTES:MATCH_REPLAY_MAX_BYTES;
   let offset=0;
   const index=[];
   for(const {bytes,path,...entry} of entries) {
     assert.ok(Buffer.isBuffer(bytes)||typeof path==='string');
     const size=bytes?.length??(await stat(path)).size;
+    assert.ok(size>0&&size<=MATCH_REPLAY_MAX_BYTES,'Match entry exceeds size limit');
     if(entry.kind==='world') {
       const file=path?await open(path,'r'):null;
       try {
@@ -28,19 +31,19 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
       } finally {await file?.close();}
     }
     index.push({...entry,offset,size_bytes:size,sha256:bytes?sha(bytes):await sha256(path)});
-    offset+=size;assert.ok(offset<=512*1024*1024,'Match replay exceeds size limit');
+    offset+=size;assert.ok(offset<=logicalLimit,'Match replay exceeds logical size limit');
   }
-  const version=identity.sourceContract.profile_revision===11?6:identity.sourceContract.profile_revision===10?5:identity.sourceContract.profile_revision===9?4:identity.sourceContract.profile_revision===8?3:identity.sourceContract.profile_revision===7?2:1;
-  const schema=version===6?BETA7_MATCH_REPLAY_SCHEMA:version===5?UNSUPPORTED_MATCH_REPLAY_SCHEMA:version===4?ROSTER_MATCH_REPLAY_SCHEMA:version===3?COMPACT_MATCH_REPLAY_SCHEMA:version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
+  const schema=version===7?LARGE_MATCH_REPLAY_SCHEMA:version===6?BETA7_MATCH_REPLAY_SCHEMA:version===5?UNSUPPORTED_MATCH_REPLAY_SCHEMA:version===4?ROSTER_MATCH_REPLAY_SCHEMA:version===3?COMPACT_MATCH_REPLAY_SCHEMA:version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
   const manifest={...identity,schema,tick_rate:120,authoritative_track:'host',tracks,entries:index};
   let payload=entries.map(e=>({...e,...index.find(p=>p.id===e.id)})),scratch;
   try {
   if(version>=3) {
     scratch=await mkdtemp(join(dirname(path),'.compact-'));
-    const packed=await packCompactStorage(index,tracks,entries,scratch,identity.match_id,{allowUnassignedPlayer:version===6});
+    const packed=await packCompactStorage(index,tracks,entries,scratch,identity.match_id,{allowUnassignedPlayer:version>=6});
     manifest.logical_size_bytes=offset;payload=packed.physical;offset=packed.size;
   }
   const raw=Buffer.from(JSON.stringify(manifest)),header=Buffer.alloc(64),size=64+raw.length+offset;
+  assert.ok(size<=MATCH_REPLAY_MAX_BYTES,'Match replay exceeds physical file size limit');
   header.write(`H1MV000${version}`);header.writeUInt32LE(version,8);header.writeUInt32LE(64,12);
   header.writeUInt32LE(raw.length,16);header.writeUInt32LE(size,20);Buffer.from(sha(raw),'hex').copy(header,32);
   validateMatchReplay(manifest,readMatchReplayHeader(header));
