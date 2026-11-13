@@ -57,7 +57,9 @@ run "h1_contracts_without_activation" {
       local.app_lambda_environment.H1FILM_UPLOADS_ENABLED == "false" &&
       local.app_lambda_environment.H1FILM_PROCESSING_ENABLED == "false" &&
       !contains(keys(local.app_lambda_environment), "H1FILM_MAX_SIZE_BYTES") &&
-      length(local.h1_film_api_routes) == 2 &&
+      alltrue([for required in ["POST /v1/ingest/h1films/prepare", "POST /v1/ingest/h1films/resolve-map"] :
+        contains([for route in local.h1_film_api_routes : route.route_key], required)
+      ]) &&
       alltrue([for route in local.h1_film_api_routes : route.authorization_type == "NONE"])
     )
     error_message = "Contracts must expose HMAC routes without enabling producers or claiming measured limits."

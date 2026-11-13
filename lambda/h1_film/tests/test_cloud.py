@@ -18,6 +18,7 @@ FIXTURES = Path(__file__).with_name("fixtures")
 ENV = {
     "ENVIRONMENT": "dev",
     "H1_WORKER_MODE": "intake",
+    "H1_WORKSHOP_ENABLED": "false",
     "H1_UPLOADS_BUCKET": "contract-fixture-bucket",
     "H1_QUEUE_ARN": "arn:aws:sqs:us-east-1:283279960672:films-processing-queue",
     "H1_TOPIC_ARN": "arn:aws:sns:us-east-1:283279960672:films-uploaded",
@@ -55,6 +56,39 @@ class CloudTests(unittest.TestCase):
         self.s3.start()
         self.addCleanup(self.s3.stop)
         self.job = fixture("initial-job")
+
+    def test_workshop_pending_is_durable_before_any_conversion(self):
+        from h1_film import workshop
+        source = self.job["conversion"]["source"]
+        context = MagicMock()
+        context.get_remaining_time_in_millis.return_value = 600000
+        with (
+            patch.dict(os.environ, {"H1_WORKSHOP_ENABLED": "true"}),
+            patch.object(cloud, "download", return_value=source),
+            patch.object(workshop, "discover", return_value=(True, True)) as discover,
+            patch.object(cloud, "inspect_film") as inspect,
+            patch.object(cloud, "api") as api,
+        ):
+            cloud.execute({"upload_id": self.job["upload_id"], "source": source}, context)
+            discover.assert_called_once()
+            inspect.assert_not_called()
+            api.assert_not_called()
+
+    def test_workshop_missing_map_approval_does_not_fail_the_upload(self):
+        from h1_film import workshop
+        source = self.job["conversion"]["source"]
+        context = MagicMock()
+        context.get_remaining_time_in_millis.return_value = 600000
+        with (
+            patch.dict(os.environ, {"H1_WORKSHOP_ENABLED": "true"}),
+            patch.object(cloud, "download", return_value=source),
+            patch.object(workshop, "discover", return_value=(True, False)),
+            patch.object(cloud, "inspect_film", return_value=self.job["conversion"]["film"]),
+            patch.object(cloud, "api", side_effect=cloud.FilmError("missing_map")),
+            patch.object(cloud, "convert") as convert,
+        ):
+            cloud.execute({"upload_id": self.job["upload_id"], "source": source}, context)
+            convert.assert_not_called()
 
     def test_viewer_storage_names_preserve_old_generations_and_match_large_format(self):
         for revision, version in ((2, 1), (4, 2), (5, 2), (6, 1), (7, 1),

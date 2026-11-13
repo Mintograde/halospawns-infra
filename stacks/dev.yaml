@@ -164,10 +164,14 @@ components:
             - http://127.0.0.1:5180
     map-processing:
       vars:
+        workshop_maps:
+          enabled: true
+          image_tag: git-1875fe3373041b6e7b1b5117e7875a942a99f3a4
+          schedule_enabled: true
         h1_film:
           enabled: true
-          image_tag: 20261113-r2
-          default_release: 20261113-r2
+          image_tag: 20261113-r3
+          default_release: 20261113-r3
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true
