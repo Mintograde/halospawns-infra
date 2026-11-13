@@ -15,6 +15,7 @@ from . import recorded
 from .combat import participant_counters, validate_combat_product
 from .gameplay import validate_gameplay
 from .pistol import validate_pistol
+from .spawns import validate_spawns
 
 ANALYTICS_SCHEMA = "halospawns.h1AnalyticsSource.v1"
 KNOWN_GAPS = {
@@ -40,6 +41,10 @@ NATIVE_METRICS = {
 def validate_native_product(product: dict, *, encoding: dict, report: dict) -> None:
     """Check semantic invariants that are not expressible in the DTO JSON schema."""
     validate_pistol(product.get("pistol_accuracy"), encoding=encoding, report=report)
+    end = report["analytics"].get("match_end_source_tick")
+    validate_spawns(product.get("spawn_metrics"), exporter_revision=report.get("exporter_revision"),
+                    slots=encoding["players"], stop=end if end is not None else report["envelope"]["ticks"],
+                    full_match=encoding.get("source_first_clock") == 0 and end is not None)
     slots = [player["slot_index"] for player in product["players"]]
     if len(slots) != len(set(slots)) or set(slots) != set(encoding["players"]):
         raise ValueError("Native slots differ from observed roster")

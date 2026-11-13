@@ -322,6 +322,10 @@ static void network(void)
 #include "combat.h"
 #endif
 
+#ifdef H1_SPAWN_EVENTS
+#include "spawn-events.h"
+#endif
+
 void hs_export_tick(FILE *out, int frame)
 {
     static int previous = -1, ended = 0;
@@ -377,6 +381,9 @@ void hs_export_tick(FILE *out, int frame)
     }
     hs_end();
     metadata(); spawns(); network();
+#ifdef H1_SPAWN_EVENTS
+    hs_spawn_frame();
+#endif
 #ifdef H1_PISTOL_COUNTERS
     /* Native PGCR bookkeeping, independent of projectile attribution. Removed
      * by the encoder before viewer/30 Hz serialization. */

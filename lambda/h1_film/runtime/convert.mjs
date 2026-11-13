@@ -17,6 +17,7 @@ import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './clie
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
+import {buildSpawnMetrics} from './spawn-metrics.mjs';
 import {compatibleClientBuild} from './client-build.mjs';
 
 export async function convertFilm(options) {
@@ -306,6 +307,13 @@ export async function convertFilm(options) {
       encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
       await save(encodingPath,encoding);
       report.timing.gameplay_seconds = (performance.now() - gameplayStarted) / 1000;
+    }
+    if (values.analytics && profile.exporter_revision >= 32) {
+      const encodingPath = join(stage,'candidate','encoding.json');
+      const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
+      encoding.native_analytics.spawn_metrics = await buildSpawnMetrics({
+        evidence:join(stage,'candidate','spawns.ndjson'),encoding});
+      await save(encodingPath,encoding);
     }
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');

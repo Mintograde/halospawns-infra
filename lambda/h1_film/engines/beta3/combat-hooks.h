@@ -14,3 +14,7 @@ void hs_combat_death(int kind, int killer, int victim);
 void hs_combat_kill(int killer, int victim, int spree);
 void hs_combat_multikill(int player, int tier);
 #endif
+/* These declarations are inert for retained builds; only the gated patch calls them. */
+void hs_spawn_begin(int player, int count);
+void hs_spawn_rating(int player, int index, float rating);
+void hs_spawn_success(int player, int unit, int index, int selected);

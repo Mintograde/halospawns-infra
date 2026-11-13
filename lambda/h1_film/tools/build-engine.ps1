@@ -13,10 +13,12 @@ param(
     [switch]$PistolCounters,
     [switch]$Melee,
     [switch]$PlayerCamoAmount,
+    [switch]$SpawnEvents,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
+if ($SpawnEvents -and -not $Combat) { throw 'Spawn events require observational export.' }
 if ($PlayerCamoAmount -and -not $Combat) { throw 'Player camo amount requires the observational export build.' }
 if ($Melee -and (-not $Gameplay -or $Port -notin @('beta5', 'beta6', 'beta7'))) { throw 'Melee evidence requires Beta 5/6/7 gameplay export.' }
 if ($DamageAttributionV2 -and ($Port -notin @('beta5', 'beta6', 'beta7') -or -not $DamageAttribution)) { throw 'Damage graph v2 requires beta5 or beta6 damage attribution.' }
@@ -46,6 +48,7 @@ if ($Gameplay) { $variant += '-gameplay-v1' }
 if ($PistolCounters) { $variant += '-pistol-counters-v1' }
 if ($Melee) { $variant += '-melee-v1' }
 if ($PlayerCamoAmount) { $variant += '-player-camo-amount-v1' }
+if ($SpawnEvents) { $variant += '-spawn-events-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -73,6 +76,7 @@ if ($DamageAttributionV2) { $damageArguments += '-DH1_DAMAGE_ATTRIBUTION_V2=ON' 
 if ($PistolCounters) { $gameplayArguments += '-DH1_PISTOL_COUNTERS=ON' }
 if ($Melee) { $gameplayArguments += '-DH1_MELEE_EXPORT=ON' }
 if ($PlayerCamoAmount) { $gameplayArguments += '-DH1_PLAYER_CAMO_AMOUNT=ON' }
+if ($SpawnEvents) { $gameplayArguments += '-DH1_SPAWN_EVENTS=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -100,6 +104,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     pistol_counters = [bool]$PistolCounters
     melee = [bool]$Melee
     player_camo_amount = [bool]$PlayerCamoAmount
+    spawn_events = [bool]$SpawnEvents
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

@@ -12,7 +12,7 @@ test('camo recipes retain prior analytics and viewer formats across all families
   for(const p of registry.profiles) {
     const recipes=value.recipes[p.id],current=recipes.find(r=>r.exporter_revision===30);
     assert.deepEqual(current,{...recipes[recipes.indexOf(current)-1],exporter_revision:30});
-    assert.deepEqual(value.defaults[p.id],current);
+    assert.deepEqual(value.defaults[p.id],{...current,exporter_revision:32});
   }
   const clients=value.client_view_recipes[profile];
   assert.deepEqual(clients.at(-1),{...clients[0],exporter_revision:31});
@@ -31,7 +31,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
   const next=r.exporters.filter(e=>e.revision===29);
   assert.equal(next.length,3);
   for(const exporter of next) {
-    assert.equal(r.processing.defaults[exporter.engine_profile].exporter_revision,30);
+    assert.equal(r.processing.defaults[exporter.engine_profile].exporter_revision,32);
     assert.ok(r.processing.recipes[exporter.engine_profile].some(recipe=>recipe.exporter_revision===28));
     assert.equal(r.processing.recipes[exporter.engine_profile].find(recipe=>recipe.exporter_revision===29).analytics_revision,5);
   }
@@ -42,7 +42,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,30);
+  assert.equal(value.defaults[profile].exporter_revision,32);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -62,8 +62,8 @@ test('historical manifests do not acquire a client recipe field',()=>{
 
 test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:30,analytics_revision:5,viewer_revision:10,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:32,analytics_revision:5,viewer_revision:10,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -126,4 +126,17 @@ test('gameplay recipes require both shot evidence exporters and a compatible met
     r=>r.processing.defaults[profile].exporter_revision=12,
     r=>r.processing.recipes['h1-performance-beta4-p9803-wasm-v1'].at(-1).analytics_revision=5,
   ]) {const r=structuredClone(registry);mutate(r);assert.throws(()=>manifest(r));}
+});
+
+test('spawn event recipes require a compatible reader and retain the prior host and client contracts',()=>{
+  assert.equal(registry.exporters.filter(e=>e.revision===32).length,6);
+  for(const wrong of [undefined,'unknown']) {
+    const r=structuredClone(registry);r.processing.requirements.spawn_metrics=wrong;
+    assert.throws(()=>manifest(r));
+  }
+  for(const p of registry.profiles) {
+    const old=registry.processing.recipes[p.id].find(r=>r.exporter_revision===30);
+    assert.deepEqual(registry.processing.defaults[p.id],{...old,exporter_revision:32});
+  }
+  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
 });

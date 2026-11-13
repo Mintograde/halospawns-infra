@@ -1,5 +1,88 @@
 # H1 film Lambda integration
 
+## Improbable spawn metrics deployed (2026-11-12)
+
+Dev API **253** (`7cc59dc`, CI **43356594104**) and worker/default
+**20261112-r4**, policy **30**, are active. Image:
+`sha256:2c1c1afb4865d686d43eec10428df6f68e116cd641614085352dfb05903008f6`. Six host exporter-32 entries retain all six profiles,
+58 exporters and prior recipes. Separate Beta 5 client exporter 31 is unchanged.
+Memory remains 3008 MB; worker/SQS maximum concurrency 50 and batch size 1 remain.
+No migration, frontend deployment or prod change. Frontend stays local/uncommitted.
+
+Definition 1 flags the chosen spawn when its modeled chance is at most half the
+highest chance and at least 10 percentage points lower. The separate non-highest
+count excludes tied maxima. Successful initial spawns and respawns count; forced
+or unobserved selections stay unknown. Host-only, pre-end evidence retains every
+event's probabilities, ratio/gap, point, player and source tick for future threshold
+analysis. The model is continuous independent-uniform squared ratings, not exact
+finite correlated PRNG odds. Private observations do not enter viewer payloads.
+
+All **282** eligible games succeeded and are selected across **83** audited batches:
+**27053 observed / 27053 measured / 0 unknown spawns**, **3021 improbable**,
+**5692 non-highest**; **256 complete / 26 partial** games. Every previous
+native statistic and scoreboard value remains. Graph/occupancy hashes, all
+78 legacy viewer files and 20333 entries across 204 match containers are unchanged.
+1 scoreboard hash differs solely because adding the product normalizes JSON
+number spelling (for example 375.0 to 375). Restoring only those spellings reproduces
+every original hash exactly; old manifests/generations remain immutable.
+
+All six previously current completed client sources were reattached through fresh
+audited uploads. Viewer bytes, source pins, verification and timeline clocks match.
+All old rows remain. Final totals: 311 conversions, 1790 receipts,
+1512 H1 attempts, 360 map approvals; 20 client uploads / 21 client attempts.
+Fresh inventory has no applicable old selected host recipe or active reparse.
+
+One API batch response timed out after all eight jobs were confirmed; its saved ID
+was reconciled without redispatch. API timeouts also left 26 completed artifacts
+awaiting callback. Their source-bound manifests were verified and exact frozen jobs
+were redelivered in groups of four after the original invocation bound. All cached
+receipts are selected; no new attempts or simulation were needed. Unsubmitted
+batches were reduced to four games and at most 20 outstanding attempts. Preserve
+the 28 original in-flight deliveries: their completed receipts will acknowledge on
+automatic redelivery. No visible/delayed work or DLQ messages remain. No purge,
+visibility change, original replacement or queue configuration change occurred.
+The two previously completed camo attempts also retain their completed status and
+immutable original history; their original deliveries were already awaiting acknowledgement.
+
+193 Node, 117 packaged worker, 102 Rust, 2,284 API unit, 849 site and 1,844 viewer
+tests pass, as do API CI and both frontend builds. All 19 packaged cases / 57
+exact API callbacks, six retained hosts / 18 callbacks, and separate client flow
+pass. Five native/WASM exports are byte-identical; Beta 3's 25 new rating values
+differ by one ULP with identical prior fields, choices and classifications
+(maximum probability/ratio/gap delta 1.435e-7). All six prior field streams match.
+Cold 300-second inventory health timed out; warm inventory and guarded activation
+passed. All six dev postplans are no-op. Live API/CDN range, CORS and full hash
+verification passes. Real Chrome at desktop/phone widths checks complete and
+partial counts, the broader event filter and paused player/time seeks for legacy
+and Beta 7 match replay formats, without errors or overflow.
+
+Infra changes are the host source hooks, private encoder observations, probability
+derivation and validation, schemas, retained registry entries, release guards,
+tests, feature documentation, and `stacks/dev.yaml`. The owning component is
+`map-processing`; `app-api` only refreshes its CI-managed version output.
+From the infra root, `scripts/plan.ps1 dev app-api` showed output 252 -> 253
+with zero resource actions. `.build/spawns/refresh-api-state.ps1` ran
+`terraform -chdir=components/terraform/app-api plan -refresh-only -no-color
+-var-file=dev-app-api.terraform.tfvars.json
+-out=L:/bens_stuff/projects/halospawns-infra/.build/spawns/api253-refresh.planfile`,
+checked the saved JSON plan and exact live code pin, then applied that saved plan.
+`scripts/promote-h1-film.ps1 -Stack dev` ran the focused worker plan and saved
+`terraform -chdir=components/terraform/map-processing plan -no-color
+-var-file=dev-map-processing.terraform.tfvars.json
+-out=L:/bens_stuff/projects/halospawns-infra/.build/h1-promotions/20261113-033555-bf5f4ed78c0d422495b36a74799152bc/worker.planfile`.
+It verified and applied only the H1 Lambda image/digest change (0 add, 1 change,
+0 destroy). After the cold health timeout, `.build/spawns/resume-promotion.ps1`
+rechecked full warm health, exact API callbacks and image pins before activating.
+`scripts/plan.ps1 dev` then confirmed all six components are no-op. No AWS
+profile/session blocker remains. All commands used dev account/profile only.
+
+Evidence: `.build/spawns/final-audit.json`, `.build/spawns/`, and
+`.build/h1-promotions/20261113-033555-bf5f4ed78c0d422495b36a74799152bc/`.
+Contract and model details: `lambda/h1_film/IMPROBABLE_SPAWNS.md`.
+Rollback must retain compatible spawn readers/capabilities, all engines and recipes,
+published generations and original audit history.
+
+
 ## Per-world player camouflage deployed (2026-11-12)
 
 Dev worker/default **20261112-r3**, policy **29**, and API **252**

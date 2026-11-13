@@ -4,6 +4,7 @@ mod artifact;
 mod fast_schema;
 mod native;
 mod pistol;
+mod spawns;
 mod combat;
 mod gameplay;
 mod recycle;
@@ -482,6 +483,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let mut pistol = pistol::PistolCounters::default();
+    let mut spawns = native.as_ref().map(|_| spawns::Evidence::new(&directory.join("spawns.ndjson"))).transpose()?;
     let mut spare = Value::Null;
     let incremental = request.incremental_state
         && request.transport_contract == "HSFT0002"
@@ -512,6 +514,8 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             pistol.observe(&tick)?;
         }
         tick.as_object_mut().unwrap().remove("pistol_counters");
+        if let Some(spawns) = &mut spawns { spawns.observe(&tick, count)?; }
+        tick.as_object_mut().unwrap().remove("spawn_events");
         if let Some(combat) = &mut combat {
             combat.observe(&tick, count)?;
         }
@@ -609,6 +613,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         .transpose()?;
     let mut native_product = native.map(|native| native.product());
     if let Some(gameplay) = gameplay { gameplay.finish()?; }
+    if let Some(spawns) = spawns { spawns.finish()?; }
     if let Some(combat) = combat {
         let product = native_product.as_mut().unwrap();
         product["schema"] = json!("halospawns.h1NativeAnalytics.v2");
