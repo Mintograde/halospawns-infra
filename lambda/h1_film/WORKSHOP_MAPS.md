@@ -7,11 +7,12 @@ approvals for registered Beta 7+ engines, including existing catalog maps and
 future standalone uploads. Workshop association is optional; older and other
 engines retain manual review.
 
-**Remaining prerequisite:** the user has no dedicated Steam account/session yet.
-A real anonymous SteamCMD probe connected but failed to download MCC item
-`2890016882`. Authenticated downloading has not been verified. Failed anonymous
-downloads report `auth_required`; pending work remains durable. No actual
-Workshop map has been imported into dev during this effort.
+**Live downloads verified (2026-11-14):** the dedicated account now has an MCC
+license and a saved SSM session. The native 64-bit Workshop worker downloaded
+Epicenter and Chillout Pro in Lambda; both were imported, associated with their
+Workshop IDs and automatically approved for Beta 7. See
+[Steam authentication and deployment evidence](WORKSHOP_STEAM_AUTH.md).
+Live changed-version, pre-uploaded-map dedup and Beta 8 film canaries remain.
 
 This implements the upcoming Beta 8 MAP1 contract; it does **not** register a
 Beta 8 simulation engine. That release still needs exact source/exporters,
@@ -98,12 +99,13 @@ uploads remain recoverable through the existing audited workflow.
 
 ## Worker and credentials
 
-The image pins the official SteamCMD archive checksum. Workshop content is never
-executed. Only validated numeric IDs reach SteamCMD, with a fixed app ID. Valve's
+The image pins the native x86-64 DepotDownloader 3.4.0 archive checksum; SteamCMD
+is retained for local diagnostics. Workshop content is never executed. Only
+validated numeric item IDs reach the downloader, with a fixed app ID. Valve's
 fixed HTTPS metadata endpoint disallows redirects and has 30-second/1-MiB bounds:
 https://partner.steamgames.com/doc/webapi/isteamremotestorage .
 
-Lambda has 2 GiB memory, 8 GiB scratch and a 900-second timeout. SteamCMD has a
+Lambda has 2 GiB memory, 8 GiB scratch and a 900-second timeout. The downloader has a
 720-second budget with process-group termination, 4 GiB disk/package and 10,000
 file limits. Symlinks/special files are rejected. Only multiplayer Halo CE MCC
 cache-v13 candidates are imported (128 maps maximum, 256 MiB each). Scenarios come
@@ -115,21 +117,22 @@ Provision a dedicated account through the existing external SSM secret
 tooling. Standard SecureString name:
 `/halospawns/dev/workshop-maps/steam-credentials`, using the managed SSM key.
 The value is JSON with `username` and `password` string fields. Never place values
-in Terraform, Git, logs, command arguments or chat. Configure only its name in
+in Terraform, Git, logs or chat; passwords/tokens also stay out of command arguments.
+Configure only its name in
 `map-processing.vars.workshop_maps.steam_credentials_parameter`, then review/apply
 the exact IAM/Lambda environment changes.
 
-Cached SteamCMD authentication uses a separate standard SecureString at
+Cached Steam authentication uses a separate standard SecureString at
 `/halospawns/dev/workshop-maps/steam-session`, configured by
 `map-processing.vars.workshop_maps.steam_session_parameter`. The local bootstrap
-tool completes Steam Guard and saves bounded, compressed `config/config.vdf`.
-The worker restores it in fresh scratch, uses username-only login, and persists
+tool completes Steam Guard and saves bounded, compressed authentication state.
+The worker restores it in fresh scratch, logs in using the saved token, and persists
 updated authentication state. It cannot write account credentials or the HMAC.
 Empty, invalid, expired or wrong-account sessions fail closed without a password
 login fallback. See [WORKSHOP_STEAM_AUTH.md](WORKSHOP_STEAM_AUTH.md) for setup,
 the download-only probe, recovery and live verification status.
 
-Credentials are written only to a private temporary script or child PTY;
+Passwords/tokens are written only to private temporary state or the child PTY;
 subprocess output stays private and is deleted with scratch. Cloud output
 contains error codes only. The API HMAC SecureString
 `/halospawns/dev/app-api/trusted-clients/workshop-maps/hmac-secret` is provisioned;
@@ -148,10 +151,12 @@ Terraform manages only its name/ARN.
 - The API-owned tables are RLS-enabled and inaccessible to ordinary database
   clients. See `../halospawns-api/docs/workshop-maps.md` for contracts.
 
-After provisioning credentials, track a public Halo CE item and invoke
+Track a public Halo CE item and invoke
 `halospawns-workshop-maps-dev` with `{"action":"poll"}`. Verify snapshot bytes,
 ordinary map finalization, dedup against a pre-uploaded copy, a changed version,
-and a real Beta 8 film after its engine release. These live canaries remain pending.
+and a real Beta 8 film after its engine release. The first two real imports and
+their automatic approvals passed on November 14; changed-version,
+pre-uploaded-map dedup and Beta 8 film canaries remain pending.
 
 ## Deployment evidence (2026-11-13)
 

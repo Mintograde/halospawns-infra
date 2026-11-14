@@ -94,9 +94,10 @@ pinned map and engine versions; updates do not automatically reprocess them.
 
 ## Current prerequisites
 
-As of November 14, 2026, the dedicated account credentials have been supplied;
-Steam Guard bootstrap and authenticated download verification remain the next
-checks. See [Steam authentication](WORKSHOP_STEAM_AUTH.md) for the live status.
+As of November 14, 2026, the licensed dedicated account and saved SSM session
+are working. The native 64-bit worker downloaded Epicenter and Chillout Pro in
+Lambda, imported both through normal processing and automatically approved them
+for Beta 7. See [Steam authentication](WORKSHOP_STEAM_AUTH.md) for evidence.
 Standalone MCC approval does not require Steam
 credentials or a Workshop association. Beta 8 engine activation remains a
 separate requirement. Once a Beta 7+ engine is registered, scheduled maintenance
@@ -118,7 +119,7 @@ sequenceDiagram
     actor Owner
     participant Bootstrap as Local bootstrap container
     participant SSM as SSM SecureStrings
-    participant Worker as Workshop worker
+    participant Worker as Workshop worker (native 64-bit downloader)
     participant Steam
     Owner->>SSM: Store account username and password privately
     Bootstrap->>SSM: Read account credentials
