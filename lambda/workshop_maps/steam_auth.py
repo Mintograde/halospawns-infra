@@ -94,7 +94,7 @@ def load_credentials(ssm, credential_parameter, session_parameter=""):
 
 
 def failure_reason(output):
-    if re.search(r"Exec format error|cannot execute binary|bad ELF interpreter|error while loading shared libraries", output, re.I):
+    if re.search(r"Exec format error|cannot execute binary|bad ELF interpreter|error while loading shared libraries|Bad system call|Illegal instruction|Segmentation fault", output, re.I):
         return "steam_runtime_unavailable"
     if re.search(r"No space left on device", output, re.I):
         return "scratch_full"

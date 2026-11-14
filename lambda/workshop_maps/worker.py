@@ -31,11 +31,12 @@ MAX_FILES = 10000
 
 
 class WorkshopError(Exception):
-    def __init__(self, code, state="failed", reason=None, authenticated=None):
+    def __init__(self, code, state="failed", reason=None, authenticated=None, exit_code=None):
         super().__init__(code)
         self.code, self.state = code, state
         self.reason = reason or code
         self.authenticated = authenticated
+        self.exit_code = exit_code
 
 
 def item_id(value):
@@ -163,7 +164,7 @@ def steam_download(identifier, work, deadline, credentials=None):
     if process.returncode != 0 or not success:
         if not credentials:
             raise WorkshopError("authentication_required", "auth_required")
-        raise WorkshopError("download_failed", reason=reason, authenticated=authenticated)
+        raise WorkshopError("download_failed", reason=reason, authenticated=authenticated, exit_code=process.returncode)
     package = steam / "steamapps" / "workshop" / "content" / str(APP) / identifier
     if not package.is_dir():
         raise WorkshopError("invalid_package")
@@ -290,6 +291,8 @@ def probe(event, context, ssm):
         result = {"state": error.state, "reason": error.reason, "stage": stage}
         if error.authenticated is not None:
             result["authenticated"] = error.authenticated
+        if error.exit_code is not None:
+            result["exit_code"] = error.exit_code
         return result
     except Exception as error:
         kind = type(error).__name__
