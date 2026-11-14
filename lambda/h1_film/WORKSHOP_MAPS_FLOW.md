@@ -30,7 +30,7 @@ flowchart TD
     AB --> L["Redispatch waiting replay"]
     AC -. "After approval" .-> L
     AB -- "Ambiguous, retired or ineligible" --> P
-    L --> J{"Unique approved map binding<br/>for the recorded engine?"}
+    L --> J{"Unique approval at preferred priority<br/>within engine, size and Workshop scope?"}
 
     J -- Yes --> M["Freeze exact map and engine versions"]
     M --> N["Simulate and verify replay"]
@@ -48,6 +48,28 @@ flowchart TD
     class D,P,R waiting;
     class H,O success;
 ```
+
+## Map selection precedence
+
+```mermaid
+flowchart TD
+    A["Match active approvals<br/>Engine + scenario + recorded size when present"] --> B{"Film identifies a Workshop item?"}
+    B -- Yes --> C["Keep only exact map hashes and sizes<br/>associated with that item"]
+    B -- No --> D{"Any non-MCC approvals remain?"}
+    C --> D
+    D -- Yes --> E["Consider only non-MCC approvals"]
+    D -- No --> F["Consider MCC fallback approvals"]
+    E --> G{"Exactly one eligible approval?"}
+    F --> G
+    G -- Yes --> H["Freeze source and GLB<br/>Simulate and verify"]
+    G -- No --> I["Missing, ambiguous or ineligible map<br/>requires review"]
+```
+
+Priority uses the processor's cache classification. Multiple matches within the
+preferred tier still require review. An ineligible preferred approval also fails
+closed. A Workshop film cannot select an unrelated map outside its publication,
+and failed simulation never tries a second map. Existing games and retry jobs
+keep their frozen map; reparse checks use that map's priority tier.
 
 ## Workshop updates
 

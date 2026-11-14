@@ -36,8 +36,18 @@ remain required. Exact matches reuse existing map IDs, even if uploaded earlier.
 Snapshots live at `workshop/maps/<sha256>.map` in the versioned uploads bucket,
 outside temporary-prefix expiry. The API checks bucket/prefix/version/hash/size,
 then copies the exact version into `maps/unprocessed/`. The normal engine resolver
-requires a unique eligible reviewed binding intersecting the downloaded
-publication's maps. Same-size ambiguity remains explicit; it is not guessed.
+filters approvals by engine, scenario, recorded size when present and exact
+downloaded publication content when present. Within that scope, non-MCC maps
+take priority over MCC fallback maps. Processor cache version `13` or name
+`h1a_mcc` identifies the fallback tier, regardless of approval provenance.
+The selected tier must contain exactly one eligible binding; same-tier ambiguity
+and an ineligible preferred approval still fail closed. Workshop films cannot
+fall back to unrelated PC maps, and failed simulation never tries another map.
+
+Approval previews and transfers allow PC/MCC approvals to coexist for the same
+scenario and size. Existing jobs retain their exact map pins; reparse preflight
+checks the pinned map's tier and Workshop scope. Adding a higher-priority map
+later does not repin a game. See [the flow diagram](WORKSHOP_MAPS_FLOW.md).
 
 Waiting films acknowledge their original SQS delivery after durable observation.
 Maintenance re-enters ordinary intake after map ingestion and approval; it never
@@ -274,6 +284,63 @@ labels remain local/uncommitted. No production deployment or replay reparse.
 The final `scripts/plan.ps1 dev` run is no-op for all six components
 (`.build/workshop/mcc-final-postplans.log`).
 
+## Map precedence and replay recovery (2026-11-13)
+
+Dev API **260**, source `69a03dd5699c5c21648b6eb88bfd3541c3486b64`,
+[CI 43536763475](https://github.com/Mintograde/halospawns-api/actions/runs/43536763475),
+implements the non-MCC-first selection policy above. The exact CI artifact and
+live Lambda share SHA-256
+`ad83f6b43f5fb1c2af466d6543c69a6b575bd6d4646ac4ca59bebbd364a319ac`.
+No migration, worker, engine, recipe or frontend deployment was needed;
+H1/default r3 and policy 32 remain active.
+
+The two user-reported Beta 7 films recorded zero map size with validated
+missing-size evidence. Each matched a PC approval and a newly autoapproved MCC
+copy. New intake now selects the PC binding. All 329 preexisting H1 games also
+pass a read-only resolver audit with one eligible pinned binding each.
+
+Both original film objects were read at exact S3 versions and SHA-256 checked
+against the supplied local files. Fresh ordinary upload tickets preserve the
+same owner, bytes and source metadata; the original failed rows remain intact.
+
+| Original failed upload | Fresh processed upload | Recovered game |
+| --- | --- | --- |
+| `39b4e1b0-c03d-475f-95f4-0d6a8f846570` | `66d8e76a-c52d-486c-9b14-035a9da690da` | Prisoner `f7139de8-e0ef-43b4-994c-012b540a7ba9` |
+| `a3770a73-4aa7-4704-be57-0b5e94841080` | `1f2a112d-d9ca-41f2-b818-266565b624a8` | Hang 'Em High `e22522a7-a3a4-46cf-a5ff-31b53f323358` |
+
+Both games have all five host/client worlds available: 748,501 verified ticks,
+6,244 hash checks and zero seed/hash mismatches. API game statistics, participant
+counts, selected assets, source/map/engine manifest pins, CDN ranges/CORS and both
+complete CDN SHA-256 hashes pass. Published v7 artifacts are 118,846,782 and
+147,421,859 bytes. The live reparse inventory endpoint also passes.
+Real Chrome checks pass for both games at 1440px and 390px: game detail,
+paused URL seek/player selection, all five available perspectives, switching
+between client worlds and no panel overflow or page errors. Checks compare
+aligned authoritative time rather than assuming client clocks equal the host
+clock; Prisoner's client recording legitimately differs by five ticks. The
+temporary fresh dev server was stopped; frontend source remains unchanged by
+this follow-up and existing local frontend work remains uncommitted.
+
+Tests: 2,313 local API unit cases and full Ruff; 164 distinct isolated PostgreSQL
+cases across precedence, missing sizes, manual/automatic approvals, engine
+transfers, reparse and Workshop ingestion (two optional fixture skips). Fifteen
+new cases cover ordering before the result limit, both MCC classification
+markers, exact-size filtering, same-tier ambiguity, ineligible/retired bindings,
+Workshop scope, immutable replay pins and transfer validation. CI passes 2,315
+tests with 378 opt-in/private-fixture skips, native checks and Lambda packaging.
+
+Before/after row fingerprints prove every original conversion, completion,
+approval, game and reprocess attempt remains unchanged. Totals are 380
+conversions, 1,839 receipts, 380 approvals, 421 total games (331 H1) and 1,835
+reprocess attempts (1,512 H1). No historical reparse was dispatched.
+
+Evidence is under `.build/mcc-precedence/`: source/selection plans, separate
+creation and dispatch receipts, original-row fingerprints, test/CI logs,
+published manifests and live checks. `refresh-api.ps1` verifies the exact
+CI artifact/live hash and applies only the API output refresh 259 -> 260,
+with zero resource actions. All six dev postplans are no-op; both film queue
+and DLQ have zero visible, delayed or in-flight messages.
+
 ## Rollback
 
 Disable the schedule/API feature or return H1 default/image to retained r2 using
@@ -283,3 +350,5 @@ Retain the automatic-approval migration and API provenance reader, including
 both policy versions and nullable system reviewers. `WORKSHOP_MAPS_ENABLED=false` stops new automatic
 approvals; existing decisions remain immutable and can be retired through the
 normal admin workflow.
+Keep map precedence when retaining the catalog MCC approvals; reverting to the
+old resolver would reintroduce PC/MCC ambiguity for films without recorded sizes.
