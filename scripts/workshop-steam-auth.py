@@ -22,16 +22,20 @@ FUNCTION = "halospawns-workshop-maps-dev"
 ACCOUNT = "283279960672"
 
 
+class OperationError(Exception):
+    """Only fixed, non-secret operator guidance may be used as this message."""
+
+
 def docker(*args, input=None):
     result = subprocess.run(["docker", *args], input=input, capture_output=True, check=False)
     if result.returncode:
-        raise RuntimeError("Docker operation failed; check Docker Desktop and AWS/ECR access")
+        raise OperationError("Docker operation failed; check Docker Desktop and AWS/ECR access")
     return result.stdout
 
 
 def input_tar(credentials, interactive):
     payload = json.dumps({"username": auth.login_value(credentials["username"]),
-                         "password": auth.login_value(credentials["password"]),
+                         "password": auth.password_value(credentials["password"]),
                          "interactive": interactive}).encode()
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w") as archive:
@@ -43,11 +47,11 @@ def input_tar(credentials, interactive):
 
 def session_from_tar(raw, username):
     if len(raw) > 32 * 1024:
-        raise RuntimeError("Unexpected session export size")
+        raise OperationError("Unexpected session export size")
     with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
         members = archive.getmembers()
         if len(members) != 1 or not members[0].isfile() or members[0].size > auth.MAX_SECRET:
-            raise RuntimeError("Invalid session export")
+            raise OperationError("Invalid session export")
         value = archive.extractfile(members[0]).read(auth.MAX_SECRET + 1).decode()
     auth.decode_session(username, value)
     return value
@@ -55,15 +59,23 @@ def session_from_tar(raw, username):
 
 def bootstrap(session, client, interactive):
     ssm = session.client("ssm")
-    credentials = json.loads(ssm.get_parameter(Name=PREFIX + "steam-credentials",
-        WithDecryption=True)["Parameter"]["Value"])
-    payload = input_tar(credentials, interactive)
+    print("Reading the dedicated account from SSM.", flush=True)
+    raw = ssm.get_parameter(Name=PREFIX + "steam-credentials", WithDecryption=True)["Parameter"]["Value"]
+    try:
+        credentials = json.loads(raw)
+        payload = input_tar(credentials, interactive)
+    except (ValueError, KeyError, TypeError):
+        raise OperationError("The credential parameter must contain a JSON object with username and password string fields.") from None
+    except auth.AuthRequired:
+        raise OperationError("Login values must be nonempty and contain no control characters; the account name cannot contain quotes or backslashes.") from None
+    print("Credentials validated. Resolving the deployed Workshop image.", flush=True)
     image = client.get_function(FunctionName=FUNCTION)["Code"]["ResolvedImageUri"]
     if not re.fullmatch(ACCOUNT + r"\.dkr\.ecr\.us-east-1\.amazonaws\.com/halospawns-workshop-maps@sha256:[a-f0-9]{64}", image):
-        raise RuntimeError("Expected the deployed immutable dev Workshop image")
+        raise OperationError("Expected the deployed immutable dev Workshop image")
     authorization = session.client("ecr").get_authorization_token(registryIds=[ACCOUNT])["authorizationData"][0]
     username, password = base64.b64decode(authorization["authorizationToken"]).decode().split(":", 1)
     docker("login", "--username", username, "--password-stdin", authorization["proxyEndpoint"], input=password.encode())
+    print("Pulling the pinned Workshop image.", flush=True)
     docker("pull", image)
     name = "halospawns-steam-bootstrap-" + uuid.uuid4().hex
     try:
@@ -73,12 +85,12 @@ def bootstrap(session, client, interactive):
         docker("cp", "-", name + ":/tmp", input=payload)
         result = subprocess.run(["docker", "start", "--attach", "--interactive", name], check=False)
         if result.returncode:
-            raise RuntimeError("Bootstrap did not finish; run it in your own terminal to complete Steam Guard")
+            raise OperationError("Bootstrap did not finish; run it in your own terminal to complete Steam Guard")
         value = session_from_tar(docker("cp", name + ":/tmp/workshop-session.json", "-"), credentials["username"])
         current = json.loads(ssm.get_parameter(Name=PREFIX + "steam-credentials",
             WithDecryption=True)["Parameter"]["Value"])
         if current != credentials:
-            raise RuntimeError("Credentials changed during bootstrap; session was not saved")
+            raise OperationError("Credentials changed during bootstrap; session was not saved")
         response = ssm.put_parameter(Name=PREFIX + "steam-session", Value=value,
             Type="SecureString", KeyId="alias/aws/ssm", Tier="Standard", Overwrite=True)
         print(f"Session saved in SSM, version {response['Version']}. Run the probe next.")
@@ -95,7 +107,7 @@ def main():
     args = parser.parse_args()
     session = boto3.Session(profile_name=args.profile, region_name="us-east-1")
     if session.client("sts").get_caller_identity()["Account"] != ACCOUNT:
-        raise RuntimeError("Expected the Halospawns dev AWS account")
+        raise OperationError("Expected the Halospawns dev AWS account")
     client = session.client("lambda", config=Config(read_timeout=930, retries={"total_max_attempts": 1}))
     if args.action == "bootstrap":
         bootstrap(session, client, interactive=not args.non_interactive)
@@ -106,7 +118,7 @@ def main():
             Payload=json.dumps({"action": "probe", "item_id": args.item_id}).encode())
         result = json.loads(response["Payload"].read())
         if response.get("FunctionError"):
-            raise RuntimeError("Probe invocation failed")
+            raise OperationError("Probe invocation failed")
         print(json.dumps({k: result[k] for k in ("state", "reason", "item_id", "maps") if k in result}))
         if result.get("state") != "download_verified":
             raise SystemExit(2)
@@ -115,6 +127,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except OperationError as error:
+        raise SystemExit(str(error)) from None
     except Exception:
         # SDK/Docker exceptions may carry secret input; print no raw exception data.
         raise SystemExit("Steam operation failed. Check credentials, Steam Guard, Docker and dev AWS access; secret values were not printed.") from None

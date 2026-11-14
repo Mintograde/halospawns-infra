@@ -94,8 +94,10 @@ pinned map and engine versions; updates do not automatically reprocess them.
 
 ## Current prerequisites
 
-As of November 13, 2026, authenticated downloads still await dedicated Steam
-account setup and verification. Standalone MCC approval does not require Steam
+As of November 14, 2026, the dedicated account credentials have been supplied;
+Steam Guard bootstrap and authenticated download verification remain the next
+checks. See [Steam authentication](WORKSHOP_STEAM_AUTH.md) for the live status.
+Standalone MCC approval does not require Steam
 credentials or a Workshop association. Beta 8 engine activation remains a
 separate requirement. Once a Beta 7+ engine is registered, scheduled maintenance
 also approves eligible existing MCC maps for it. Future direct uploads follow
@@ -108,3 +110,32 @@ record the matching downloaded revision. The policy preserves manual approvals
 and retirements; ambiguity or missing evidence requires review. Campaign/UI maps
 are outside this multiplayer replay path. Replay simulation and verification
 remain mandatory.
+
+## Steam authentication
+
+```mermaid
+sequenceDiagram
+    actor Owner
+    participant Bootstrap as Local bootstrap container
+    participant SSM as SSM SecureStrings
+    participant Worker as Workshop worker
+    participant Steam
+    Owner->>SSM: Store account username and password privately
+    Bootstrap->>SSM: Read account credentials
+    Bootstrap->>Steam: Initial login
+    Steam-->>Bootstrap: Steam Guard challenge if required
+    Owner->>Bootstrap: Enter hidden code or approve on mobile
+    Bootstrap->>SSM: Save compressed login state
+    Note over Bootstrap: Disposable container removed
+    Worker->>SSM: Read account identity and saved login state
+    Worker->>Steam: Restore state; log in without password
+    alt Authentication and item access succeed
+        Steam-->>Worker: Download Workshop package
+        Worker->>SSM: Save refreshed login state if changed
+        Note over Worker: Continue normal map processing
+    else Session expired or missing
+        Worker-->>Owner: auth_required; bootstrap again
+    else Item access denied
+        Note over Worker: Report access failure; do not import
+    end
+```

@@ -19,6 +19,13 @@ def login_value(value):
     return value
 
 
+def password_value(value):
+    # Passwords are sent to SteamCMD's hidden prompt, not its command parser.
+    if not isinstance(value, str) or not value or re.search(r"[\x00-\x1f\x7f]", value):
+        raise AuthRequired("invalid_credentials")
+    return value
+
+
 def encode_session(username, config):
     login_value(username)
     if not isinstance(config, bytes) or not config or len(config) > MAX_CONFIG:

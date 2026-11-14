@@ -135,14 +135,27 @@ class SessionTests(unittest.TestCase):
 class BootstrapTests(unittest.TestCase):
     def test_guard_code_is_prompted_privately_and_never_stored(self):
         child = Mock()
-        child.expect.side_effect = [0, 2, 1, 0, 0]
+        child.expect.side_effect = [0, 4, 2, 1, 0, 0]
         with patch.object(bootstrap.getpass, "getpass", return_value="AB123"):
             bootstrap.authenticate(child, "fixture", "password", True)
         self.assertEqual([call.args[0] for call in child.sendline.call_args_list],
-                         ['login "fixture" "password"', "AB123", "quit"])
+                         ['login "fixture"', "password", "AB123", "quit"])
+
+    def test_password_quotes_and_backslashes_bypass_command_parser(self):
+        password = 'fictional"quoted\\password'
+        self.assertEqual(auth.password_value(password), password)
+        child = Mock()
+        child.expect.side_effect = [0, 4, 1, 0, 0]
+        bootstrap.authenticate(child, "fixture", password, False)
+        self.assertEqual([call.args[0] for call in child.sendline.call_args_list],
+                         ['login "fixture"', password, "quit"])
+        child.setecho.assert_called_once_with(False)
+        for invalid in ("", "a\nquit", "a\r", "a\x00"):
+            with self.assertRaises(auth.AuthRequired):
+                auth.password_value(invalid)
 
     def test_noninteractive_guard_and_failed_login_do_not_create_a_session(self):
-        for match in (2, 0, 5):
+        for match in (2, 0, 6):
             child = Mock()
             child.expect.side_effect = [0, match]
             with self.assertRaises(auth.AuthRequired):

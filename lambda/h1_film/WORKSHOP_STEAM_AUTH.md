@@ -43,8 +43,11 @@ existing values:
   `{"username":"<account login name>","password":"<password>"}`.
 - `/halospawns/dev/workshop-maps/steam-session`: leave `{}` until bootstrap.
 
-The current Steam command quoting rejects control characters, double quotes and
-backslashes in login values. Use a long password without those characters.
+Passwords containing double quotes and backslashes are supported: escape them
+as `\"` and `\\` respectively in the SSM JSON. The bootstrap decodes JSON and
+sends the original password to SteamCMD's password prompt with PTY echo disabled;
+it never places the password in a Steam console command. Control characters are
+rejected. Account names cannot contain quotes or backslashes.
 The worker reads credentials and session; only the session is writable by its
 role. API, H1 replay workers, frontend and CI do not receive Steam credentials.
 

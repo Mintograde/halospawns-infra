@@ -20,15 +20,18 @@ OUTPUT = Path("/tmp/workshop-session.json")
 
 def authenticate(child, username, password, interactive):
     child.expect(r"Steam>", timeout=180)
-    child.sendline(f'login "{username}" "{password}"')
+    child.sendline(f'login "{username}"')
     deadline = time.monotonic() + 600
     authenticated = False
     prompted = 0
+    password_sent = False
     patterns = [
         r"Steam>",
         r"(?i)(?:Logged in OK|Waiting for user info[^\r\n]*OK|Logging in[^\r\n]*\.\.\.OK)",
-        r"(?i)(?:enter|provide)[^\r\n]*(?:code|authenticator)[^\r\n]*:",
+        r"(?i)(?:(?:enter|provide)[^\r\n]*(?:code|authenticator)[^\r\n]*:|"
+        r"(?:two.factor|steam guard|authenticator|email|authentication)[^\r\n]*code\s*:)",
         r"(?i)(?:confirm|approve)[^\r\n]*(?:mobile|device|app)",
+        r"(?i)password\s*:",
         pexpect.TIMEOUT, pexpect.EOF,
     ]
     while time.monotonic() < deadline:
@@ -48,10 +51,17 @@ def authenticate(child, username, password, interactive):
             code = getpass.getpass("Steam Guard code (input hidden; never saved): ").strip()
             if not re.fullmatch(r"[A-Za-z0-9]{5,8}", code):
                 raise steam_auth.AuthRequired("invalid_guard_code")
+            child.setecho(False)
             child.sendline(code)
         elif matched == 3:
             print("Approve this login in your Steam mobile app.", flush=True)
-        elif matched == 5:
+        elif matched == 4:
+            if password_sent:
+                raise steam_auth.AuthRequired("login_failed")
+            password_sent = True
+            child.setecho(False)
+            child.sendline(password)
+        elif matched == 6:
             raise steam_auth.AuthRequired("login_failed")
     raise steam_auth.AuthRequired("login_timed_out")
 
@@ -60,7 +70,7 @@ def main():
     credentials = json.loads(INPUT.read_text())
     INPUT.unlink()
     username = steam_auth.login_value(credentials.get("username"))
-    password = steam_auth.login_value(credentials.get("password"))
+    password = steam_auth.password_value(credentials.get("password"))
     with tempfile.TemporaryDirectory(prefix="workshop-bootstrap-") as temp:
         work = Path(temp)
         steam = work / "steam"
