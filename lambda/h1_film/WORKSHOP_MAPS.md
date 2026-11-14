@@ -111,19 +111,27 @@ from map headers, not archive filenames. Other MCC games/campaigns are ignored.
 Package support resources are not imported automatically; existing catalog and
 support-resource workflows remain required.
 
-Provision a dedicated entitled account through the existing external SSM secret
-tooling. Suggested standard SecureString name:
+Provision a dedicated account through the existing external SSM secret
+tooling. Standard SecureString name:
 `/halospawns/dev/workshop-maps/steam-credentials`, using the managed SSM key.
 The value is JSON with `username` and `password` string fields. Never place values
 in Terraform, Git, logs, command arguments or chat. Configure only its name in
 `map-processing.vars.workshop_maps.steam_credentials_parameter`, then review/apply
 the exact IAM/Lambda environment changes.
 
-The account must support unattended SteamCMD login. Interactive Steam Guard codes
-and cached authenticated sessions are not implemented; test actual account/Guard
-behavior before declaring downloads operational. Credentials are written only
-to a private temporary script; subprocess output stays private and is deleted
-with scratch. Cloud output contains error codes only. The API HMAC SecureString
+Cached SteamCMD authentication uses a separate standard SecureString at
+`/halospawns/dev/workshop-maps/steam-session`, configured by
+`map-processing.vars.workshop_maps.steam_session_parameter`. The local bootstrap
+tool completes Steam Guard and saves bounded, compressed `config/config.vdf`.
+The worker restores it in fresh scratch, uses username-only login, and persists
+updated authentication state. It cannot write account credentials or the HMAC.
+Empty, invalid, expired or wrong-account sessions fail closed without a password
+login fallback. See [WORKSHOP_STEAM_AUTH.md](WORKSHOP_STEAM_AUTH.md) for setup,
+the download-only probe, recovery and live verification status.
+
+Credentials are written only to a private temporary script or child PTY;
+subprocess output stays private and is deleted with scratch. Cloud output
+contains error codes only. The API HMAC SecureString
 `/halospawns/dev/app-api/trusted-clients/workshop-maps/hmac-secret` is provisioned;
 Terraform manages only its name/ARN.
 

@@ -1,7 +1,7 @@
 FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl libc6-i386 lib32gcc-s1 g++ make cmake unzip libcurl4-openssl-dev \
-    && pip install --no-cache-dir awslambdaric==3.1.1 boto3==1.40.75 \
+    && pip install --no-cache-dir awslambdaric==3.1.1 boto3==1.40.75 pexpect==4.9.0 \
     && mkdir -p /opt/steamcmd \
     && curl --fail --location --proto '=https' --tlsv1.2 \
       https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -o /tmp/steamcmd.tar.gz \
@@ -12,5 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /var/task
 COPY lambda/workshop_maps/worker.py /var/task/worker.py
+COPY lambda/workshop_maps/steam_auth.py lambda/workshop_maps/bootstrap.py /var/task/
 ENTRYPOINT ["/usr/local/bin/python", "-m", "awslambdaric"]
 CMD ["worker.handler"]

@@ -18,7 +18,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test
-        run: python -m unittest discover -s lambda/workshop_maps/tests -v
+        run: |
+          pip install boto3==1.40.75 pexpect==4.9.0
+          python -m unittest discover -s lambda/workshop_maps/tests -v
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::283279960672:role/halospawns-dev-workshop-publish

@@ -27,7 +27,10 @@ variables {
 
 override_data {
   target = data.terraform_remote_state.ecr
-  values = { outputs = { repository_urls = { halospawns-h1-film = "283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film" } } }
+  values = { outputs = { repository_urls = {
+    halospawns-h1-film       = "283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-h1-film"
+    halospawns-workshop-maps = "283279960672.dkr.ecr.us-east-1.amazonaws.com/halospawns-workshop-maps"
+  } } }
 }
 override_data {
   target = data.terraform_remote_state.app_api
@@ -44,6 +47,7 @@ override_data {
       h1-film        = "/fixture/h1"
       map-processing = "/fixture/maps"
       map-rendering  = "/fixture/renderer"
+      workshop-maps  = "/fixture/workshop-hmac"
     }
     trusted_service_hmac_parameter_arns = {
       h1-film        = "arn:aws:ssm:us-east-1:283279960672:parameter/fixture/h1"
@@ -237,4 +241,50 @@ run "prod_is_not_authorized" {
   command = plan
   variables { environment = "prod" }
   expect_failures = [aws_lambda_function.h1_film]
+}
+
+run "workshop_session_permissions_are_scoped" {
+  command = plan
+  override_resource {
+    target          = aws_cloudwatch_log_group.workshop[0]
+    override_during = plan
+    values          = { arn = "arn:aws:logs:us-east-1:283279960672:log-group:/aws/lambda/fixture-workshop" }
+  }
+  variables {
+    workshop_maps = {
+      enabled                     = true
+      image_tag                   = "git-1111111111111111111111111111111111111111"
+      steam_credentials_parameter = "/fixture/steam-credentials"
+      steam_session_parameter     = "/fixture/steam-session"
+    }
+  }
+  assert {
+    condition     = aws_lambda_function.workshop[0].environment[0].variables.WORKSHOP_STEAM_SESSION_PARAMETER == "/fixture/steam-session"
+    error_message = "The worker must receive only the session parameter name."
+  }
+  assert {
+    condition     = [for statement in jsondecode(aws_iam_role_policy.workshop[0].policy).Statement : statement.Resource if contains(statement.Action, "ssm:PutParameter")] == ["arn:aws:ssm:us-east-1:283279960672:parameter/fixture/steam-session"]
+    error_message = "The worker may update only its session, never the account credentials or HMAC."
+  }
+  assert {
+    condition     = aws_lambda_function.workshop[0].reserved_concurrent_executions == 1
+    error_message = "One Steam session must have one scheduled consumer."
+  }
+}
+
+run "workshop_session_cannot_overwrite_credentials" {
+  command = plan
+  variables {
+    workshop_maps = {
+      steam_credentials_parameter = "/fixture/same"
+      steam_session_parameter     = "/fixture/same"
+    }
+  }
+  expect_failures = [var.workshop_maps]
+}
+
+run "workshop_session_requires_account_identity" {
+  command = plan
+  variables { workshop_maps = { steam_session_parameter = "/fixture/session" } }
+  expect_failures = [var.workshop_maps]
 }

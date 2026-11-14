@@ -4,6 +4,7 @@ variable "workshop_maps" {
     image_tag                   = optional(string, "")
     schedule_enabled            = optional(bool, false)
     steam_credentials_parameter = optional(string, "")
+    steam_session_parameter     = optional(string, "")
   })
   default = {}
   validation {
@@ -11,6 +12,13 @@ variable "workshop_maps" {
       can(regex("^git-[0-9a-f]{40}$", var.workshop_maps.image_tag))
     )
     error_message = "Workshop worker requires an immutable CI commit image tag."
+  }
+  validation {
+    condition = var.workshop_maps.steam_session_parameter == "" || (
+      var.workshop_maps.steam_credentials_parameter != "" &&
+      var.workshop_maps.steam_session_parameter != var.workshop_maps.steam_credentials_parameter
+    )
+    error_message = "Steam sessions require a distinct credential parameter."
   }
 }
 locals {
@@ -37,16 +45,19 @@ resource "aws_iam_role" "workshop" {
 resource "aws_iam_role_policy" "workshop" {
   count = var.workshop_maps.enabled ? 1 : 0
   role  = aws_iam_role.workshop[0].id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"],
     Resource = "${aws_cloudwatch_log_group.workshop[0].arn}:*" },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"],
     Resource = "${local.h1_film_bucket_arn}/workshop/maps/*" },
     { Effect = "Allow", Action = ["ssm:GetParameter"], Resource = [
-      for name in compact([local.workshop_hmac, var.workshop_maps.steam_credentials_parameter]) :
+      for name in compact([local.workshop_hmac, var.workshop_maps.steam_credentials_parameter, var.workshop_maps.steam_session_parameter]) :
       "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${name}"
     ] }
-  ] })
+    ], var.workshop_maps.steam_session_parameter == "" ? [] : [
+    { Effect = "Allow", Action = ["ssm:PutParameter"],
+    Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.workshop_maps.steam_session_parameter}" }
+  ]) })
 }
 resource "aws_lambda_function" "workshop" {
   count                          = var.workshop_maps.enabled ? 1 : 0
@@ -65,6 +76,7 @@ resource "aws_lambda_function" "workshop" {
       WORKSHOP_HMAC_PARAMETER              = local.workshop_hmac
       WORKSHOP_BUCKET                      = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       WORKSHOP_STEAM_CREDENTIALS_PARAMETER = var.workshop_maps.steam_credentials_parameter
+      WORKSHOP_STEAM_SESSION_PARAMETER     = var.workshop_maps.steam_session_parameter
     }
   }
   lifecycle {

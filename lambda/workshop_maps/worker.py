@@ -19,6 +19,11 @@ import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+try:
+    from . import steam_auth
+except ImportError:  # Lambda imports worker as a top-level module.
+    import steam_auth
+
 APP = 976730
 MAX_PACKAGE = 4 * 1024**3
 MAX_MAP = 256 * 1024**2
@@ -26,9 +31,10 @@ MAX_FILES = 10000
 
 
 class WorkshopError(Exception):
-    def __init__(self, code, state="failed"):
+    def __init__(self, code, state="failed", reason=None):
         super().__init__(code)
         self.code, self.state = code, state
+        self.reason = reason or code
 
 
 def item_id(value):
@@ -108,10 +114,18 @@ def steam_download(identifier, work, deadline, credentials=None):
     login = "login anonymous"
     if credentials:
         # Credentials live only in a private temporary script, never argv or logs.
-        values = [credentials.get("username"), credentials.get("password")]
-        if any(not isinstance(v,str) or not v or re.search(r'[\r\n\x00"\\]',v) for v in values):
-            raise WorkshopError("authentication_required", "auth_required")
-        login = 'login "' + values[0] + '" "' + values[1] + '"'
+        try:
+            username = steam_auth.login_value(credentials.get("username"))
+            login = f'login "{username}"'
+            if "config_vdf" in credentials:
+                config = steam / "config" / "config.vdf"
+                config.parent.mkdir(parents=True, exist_ok=True)
+                config.write_bytes(credentials["config_vdf"])
+                config.chmod(0o600)
+            else:
+                login += ' "' + steam_auth.login_value(credentials.get("password")) + '"'
+        except steam_auth.AuthRequired:
+            raise WorkshopError("authentication_required", "auth_required") from None
     script = work / "download.txt"
     script.write_text("@ShutdownOnFailedCommand 1\n@NoPromptForPassword 1\n" + login +
                       f"\nworkshop_download_item {APP} {identifier} validate\nquit\n")
@@ -135,10 +149,13 @@ def steam_download(identifier, work, deadline, credentials=None):
     if log.stat().st_size > 4*1024**2:
         raise WorkshopError("download_failed")
     result = log.read_text(errors="replace")
-    if re.search(r"Access Denied|No subscription|Invalid Password|Steam Guard|Account Logon Denied|Invalid Login",
-                 result, re.I):
-        raise WorkshopError("authentication_required", "auth_required")
-    if process.returncode != 0 or f"Success. Downloaded item {identifier}" not in result:
+    success = f"Success. Downloaded item {identifier}" in result
+    if credentials and credentials.get("save_config") and (success or steam_auth.logged_in(result)):
+        credentials["save_config"](steam_auth.read_config(steam / "config" / "config.vdf"))
+    reason = steam_auth.failure_reason(result)
+    if not success and reason != "download_failed":
+        raise WorkshopError("authentication_required", "auth_required", reason)
+    if process.returncode != 0 or not success:
         if not credentials:
             raise WorkshopError("authentication_required", "auth_required")
         raise WorkshopError("download_failed")
@@ -243,24 +260,53 @@ def api(path, payload, secret):
         "X-Halospawns-Timestamp": stamp,"X-Halospawns-Signature": signature}))["data"]
 
 
+def probe(event, context, ssm):
+    """IAM-only canary: download in fresh scratch without importing or claiming work."""
+    identifier = item_id(event["item_id"])
+    try:
+        credentials = steam_auth.load_credentials(ssm,
+            os.environ.get("WORKSHOP_STEAM_CREDENTIALS_PARAMETER", ""),
+            os.environ.get("WORKSHOP_STEAM_SESSION_PARAMETER", ""))
+        if not credentials:
+            raise steam_auth.AuthRequired("authentication_required")
+        metadata(identifier)
+        with tempfile.TemporaryDirectory(prefix="workshop-probe-") as temp:
+            root = steam_download(identifier, Path(temp),
+                time.monotonic()+min(720,context.get_remaining_time_in_millis()/1000-60), credentials)
+            maps = package_maps(root)
+            return {"state": "download_verified", "item_id": identifier, "maps": len(maps)}
+    except steam_auth.AuthRequired:
+        return {"state": "auth_required", "reason": "authentication_required"}
+    except WorkshopError as error:
+        return {"state": error.state, "reason": error.reason}
+    except Exception:
+        return {"state": "failed", "reason": "download_failed"}
+
+
 def handler(event, context):
-    if event != {"action": "poll"}:
-        raise ValueError("Expected scheduled poll")
+    is_probe = (isinstance(event, dict) and set(event) == {"action", "item_id"}
+                and event["action"] == "probe")
+    if event != {"action": "poll"} and not is_probe:
+        raise ValueError("Expected scheduled poll or authenticated download probe")
     import boto3
     ssm, s3 = boto3.client("ssm"), boto3.client("s3")
+    if is_probe:
+        return probe(event, context, ssm)
     secret = ssm.get_parameter(Name=os.environ["WORKSHOP_HMAC_PARAMETER"],
                                WithDecryption=True)["Parameter"]["Value"]
     api("/v1/ingest/workshop/maintain",{},secret)
     job = api("/v1/ingest/workshop/claim",{},secret)["job"]
     if not job:
         return {"state": "idle"}
-    credentials = None
-    parameter = os.environ.get("WORKSHOP_STEAM_CREDENTIALS_PARAMETER")
-    if parameter:
-        credentials = json.loads(ssm.get_parameter(Name=parameter,WithDecryption=True)["Parameter"]["Value"])
     try:
+        credentials = steam_auth.load_credentials(ssm,
+            os.environ.get("WORKSHOP_STEAM_CREDENTIALS_PARAMETER", ""),
+            os.environ.get("WORKSHOP_STEAM_SESSION_PARAMETER", ""))
         receipt = process(job,s3=s3,bucket=os.environ["WORKSHOP_BUCKET"],credentials=credentials,
                           deadline=time.monotonic()+min(720,context.get_remaining_time_in_millis()/1000-60))
+    except steam_auth.AuthRequired:
+        receipt = {**{k: job[k] for k in ("app_id","item_id","lease_id")},
+                   "state": "auth_required", "error": "authentication_required"}
     except Exception:
         # Raw Steam/API errors may contain authentication material; never log them.
         receipt = {**{k: job[k] for k in ("app_id","item_id","lease_id")},
