@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {validateMatchReplay,readMatchReplayHeader,LARGE_MATCH_PROJECTION,BETA7_MATCH_PROJECTION} from '../runtime/match-replay.mjs';
+import {validateMatchReplay,readMatchReplayHeader,LARGE_MATCH_PROJECTION,BETA8_MATCH_PROJECTION,BETA7_MATCH_PROJECTION} from '../runtime/match-replay.mjs';
 
 const FILE=512*1024*1024,LOGICAL=2*1024*1024*1024,BLOCK=262144,hash='a'.repeat(64);
 // Validate address-space boundaries without allocating gigabytes. Stored records
@@ -54,4 +54,13 @@ test('v7 retains aggregate, individual-entry, physical and compressed-block boun
   const raw=Buffer.alloc(64);raw.write('H1MV0007');raw.writeUInt32LE(7,8);raw.writeUInt32LE(64,12);
   raw.writeUInt32LE(1,16);raw.writeUInt32LE(FILE+1,20);
   assert.throws(()=>readMatchReplayHeader(raw),/bounds/);
+});
+
+test('Beta 8 retains the 2 GiB logical limit with strict source binding',()=>{
+ const {manifest,header}=fixture([FILE,FILE,FILE,FILE-40]);
+ manifest.schema='halospawns.h1MatchReplay.v8';manifest.engine_profile='h1-performance-beta8-p9848-wasm-v1';
+ manifest.sourceContract.profile_revision=13;manifest.sourceContract.projection_sha256=BETA8_MATCH_PROJECTION;header.version=8;
+ assert.equal(validateMatchReplay(manifest,header),manifest);
+ manifest.engine_profile='h1-performance-beta7-p9844-wasm-v1';
+ assert.throws(()=>validateMatchReplay(manifest,header),/engine/);
 });

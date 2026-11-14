@@ -12,7 +12,7 @@ export class ClientDesync extends Error {
 // embedded clients may run again without producing a world to obtain a full
 // playback verdict. Hosts, old strict recipes and other encoder errors fail.
 export function canVerifyRejectedClient(profile, values, report, encoderLog) {
-  return ['beta6','beta7'].includes(profile.port) && profile.exporter_revision >= 16
+  return ['beta6','beta7','beta8'].includes(profile.port) && profile.exporter_revision >= 16
     && values['embedded-match'] === true && values['client-view'] === true
     && report.encoder_exit?.code === 1
     && (encoderLog.trim() === 'h1-film-encoder: film roster does not match engine export'

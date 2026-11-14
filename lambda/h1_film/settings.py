@@ -19,6 +19,8 @@ SCHEMA = "halospawns.h1FilmSettings.v1"
 MAX_DOCUMENT_BYTES = 256 * 1024
 MAX_TEXT_BYTES = 1024 * 1024
 LAYOUTS = {
+    "beta8": (504, 78, 13360, {"shot_delay_aim_ms": 13032, "input_pipeline_ticks": 13036,
+                            "aim_rate_hz": 13060, "shot_aim_ahead_ticks": 13040}),
     "beta7": (504, 78, 13356, {"shot_delay_aim_ms": 13028, "input_pipeline_ticks": 13032,
                             "aim_rate_hz": 13056, "shot_aim_ahead_ticks": 13036}),
     "beta6": (504, 77, 13324, {"shot_delay_aim_ms": 12996, "input_pipeline_ticks": 13000,
@@ -284,8 +286,8 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         words = struct.unpack_from("<32I", header)
         if words[:4] != (0x314D4C46, profile["format"], profile["protocol_revision"], profile["tick_rate"]):
             raise ValueError("Settings header differs from engine profile")
-        if words[16] not in ((504, 536) if profile["port"] in ("beta6", "beta7") else (header_size,)) or words[4] not in (
-            options_size, options_size + 4 if profile["port"] in ("beta4", "beta5", "beta6", "beta7") else options_size
+        if words[16] not in ((504, 536) if profile["port"] in ("beta6", "beta7", "beta8") else (header_size,)) or words[4] not in (
+            options_size, options_size + 4 if profile["port"] in ("beta4", "beta5", "beta6", "beta7", "beta8") else options_size
         ):
             raise ValueError("Unsupported recorded settings layout")
         if not header_size <= words[17] <= size:
@@ -316,7 +318,7 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         raise ValueError("Unsupported recorded variant layout")
     fields = {key: unavailable("not_recorded") for key, definition in CATALOGUE["definitions"].items()
               if definition["scope"] != "recorder_profile"
-              and (key != "variant.weapon_set" or profile["port"] == "beta7")}
+              and (key != "variant.weapon_set" or profile["port"] in ("beta7", "beta8"))}
     if variant:
         name = variant[:128].split(b"\0", 1)[0].decode("utf-8", errors="replace")
         fields["variant.name"] = entry("variant.name", name, "recorded_variant")
@@ -325,12 +327,12 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         ][:field_count]
         if profile["port"] == "beta5":
             variant_fields = BETA5_VARIANT_FIELDS
-        elif profile["port"] in ("beta6", "beta7"):
-            variant_fields = BETA6_VARIANT_FIELDS + (["weapon_set"] if profile["port"] == "beta7" else [])
+        elif profile["port"] in ("beta6", "beta7", "beta8"):
+            variant_fields = BETA6_VARIANT_FIELDS + (["weapon_set"] if profile["port"] in ("beta7", "beta8") else [])
         for key in VARIANT_FIELDS:
             fields[f"variant.{key}"] = unavailable("not_supported")
         for index, key in enumerate(variant_fields):
-            if profile["port"] in ("beta6", "beta7"):
+            if profile["port"] in ("beta6", "beta7", "beta8"):
                 key = BETA6_VARIANT_ALIASES.get(key, key)
             elif key not in VARIANT_FIELDS or (profile["port"] == "beta5" and key in ("footstep_sounds", "kill_restores")):
                 continue  # Beta5 changed these from booleans to sliders/enums.
@@ -372,7 +374,7 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
         raise ValueError("Settings tick count differs from verified envelope")
     if words[7] & 2:
         header_fields.update(initial_human_player_count=words[31] & 255, recorder_player_slot=(words[31] >> 8) & 255)
-        if profile["port"] in ("beta6", "beta7"):
+        if profile["port"] in ("beta6", "beta7", "beta8"):
             own = (struct.unpack_from("<I", header, 476)[0] >> 16) & 255
             if own < 16:
                 header_fields["recorder_player_slot"] = own
@@ -380,7 +382,7 @@ def extract(path: Path, *, report: dict, encoding: dict) -> dict:
                 header_fields.pop("recorder_player_slot", None)
     else:
         header_fields["initial_human_player_count"] = words[25]
-    if profile["port"] in ("beta4", "beta5", "beta6", "beta7"):
+    if profile["port"] in ("beta4", "beta5", "beta6", "beta7", "beta8"):
         created = struct.unpack_from("<Q", header, 464)[0]
         if created:
             header_fields["created_utc"] = created

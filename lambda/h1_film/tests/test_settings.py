@@ -70,8 +70,8 @@ score_to_win = 999
             ][:count]
             if port == "beta5":
                 fields = settings.BETA5_VARIANT_FIELDS
-            if port in ("beta6", "beta7"):
-                fields = settings.BETA6_VARIANT_FIELDS + (["weapon_set"] if port == "beta7" else [])
+            if port in ("beta6", "beta7", "beta8"):
+                fields = settings.BETA6_VARIANT_FIELDS + (["weapon_set"] if port in ("beta7", "beta8") else [])
             values = {"game_rules": 0, "score_to_win": 50, "teams": 1, "shields": 0,
                       "weapon_secondary": -1, "footstep_sounds": 1, "teammate_outlines": 1,
                       "os_brightness": 70, "fov_limit": 2, "powerup_waypoints": 3, "weapon_set": 7}
@@ -113,16 +113,16 @@ score_to_win = 999
                 self.assertEqual(fields["variant.name"]["value"], "selected")
                 self.assertEqual(fields["variant.score_to_win"]["value"], 50)
                 self.assertEqual(fields["variant.os_brightness"]["value"], 70)
-                if port in ("beta5", "beta6", "beta7"):
+                if port in ("beta5", "beta6", "beta7", "beta8"):
                     self.assertEqual(fields["variant.footstep_sounds"]["status"], "unavailable")
                     self.assertEqual(fields["variant.kill_restores"]["status"], "unavailable")
                 else:
                     self.assertIs(fields["variant.footstep_sounds"]["value"], True)
                 self.assertIs(fields["variant.teammate_outlines"]["value"], True)
                 self.assertEqual(fields["variant.weapon_secondary"]["value"], -1)
-                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port in ("beta4", "beta5", "beta6", "beta7") else None)
+                self.assertEqual(fields["variant.powerup_waypoints"].get("value"), 3 if port in ("beta4", "beta5", "beta6", "beta7", "beta8") else None)
                 self.assertEqual(fields["variant.fov_limit"].get("value"), None if port == "beta3" else 2)
-                if port == "beta7":
+                if port in ("beta7", "beta8"):
                     self.assertEqual(fields["variant.weapon_set"]["value"], 7)
                 else:
                     self.assertNotIn("variant.weapon_set", fields)

@@ -9,7 +9,7 @@ const manifest=r=>createReleaseManifest(r,'20261101-r1','sha256:'+'a'.repeat(64)
 
 test('camo recipes retain prior analytics and viewer formats across all families and clients',()=>{
   const value=manifest(registry);
-  for(const p of registry.profiles) {
+  for(const p of registry.profiles.filter(p=>p.port!=='beta8')) {
     const recipes=value.recipes[p.id],current=recipes.find(r=>r.exporter_revision===30);
     assert.deepEqual(current,{...recipes[recipes.indexOf(current)-1],exporter_revision:30});
     assert.deepEqual(recipes.find(r=>r.exporter_revision===32),{...current,exporter_revision:32});
@@ -105,7 +105,7 @@ test('missing client match IDs use new recipes with exact binaries and unchanged
 
 test('native pistol counters cover every engine without changing prior recipes or viewer formats',()=>{
   const value=manifest(registry);
-  for(const p of registry.profiles) {
+  for(const p of registry.profiles.filter(p=>p.port!=='beta8')) {
     const recipes=value.recipes[p.id];
     const current=recipes.find(recipe=>recipe.exporter_revision===28);
     const previous=recipes[recipes.indexOf(current)-1];
@@ -134,7 +134,7 @@ test('spawn event recipes require a compatible reader and retain the prior host 
     const r=structuredClone(registry);r.processing.requirements.spawn_metrics=wrong;
     assert.throws(()=>manifest(r));
   }
-  for(const p of registry.profiles) {
+  for(const p of registry.profiles.filter(p=>p.port!=='beta8')) {
     const old=registry.processing.recipes[p.id].find(r=>r.exporter_revision===30);
     assert.deepEqual(registry.processing.recipes[p.id].find(r=>r.exporter_revision===32),{...old,exporter_revision:32});
   }
@@ -147,7 +147,7 @@ test('large matches use a new Beta 7 recipe with unchanged binaries and a requir
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===33),
     {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===32),revision:33});
   assert.ok(value.recipes[id].some(r=>r.exporter_revision===32&&r.viewer_revision===11));
-  for(const p of registry.profiles.filter(p=>p.id!==id))assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===32));
+  for(const p of registry.profiles.filter(p=>p.id!==id&&p.port!=='beta8'))assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===32));
   for(const mutate of [
     r=>delete r.processing.requirements.large_match_replay,
     r=>r.processing.requirements.large_match_replay='unknown',
@@ -158,7 +158,7 @@ test('large matches use a new Beta 7 recipe with unchanged binaries and a requir
 
 test('neutral baseline definition adds recipes without changing retained engine binaries',()=>{
   const value=manifest(registry);
-  for(const p of registry.profiles) {
+  for(const p of registry.profiles.filter(p=>p.port!=='beta8')) {
     const prior=p.port==='beta7'?33:32;
     assert.equal(value.defaults[p.id].exporter_revision,34);
     assert.deepEqual(registry.exporters.find(e=>e.engine_profile===p.id&&e.revision===34),
@@ -171,4 +171,19 @@ test('neutral baseline definition adds recipes without changing retained engine 
     assert.throws(()=>manifest(r));
   }
   assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
+});
+
+test('Beta 8 binds the exact new source, protocol, recipe and reader without altering old defaults',()=>{
+  const id='h1-performance-beta8-p9848-wasm-v1',value=manifest(registry);
+  const p=registry.profiles.find(p=>p.id===id);
+  assert.equal(p.source.git_commit,'3194e680896cead7326c2a3fcb9e35e85de1d7cc');
+  assert.equal(p.protocol_revision,9848);
+  assert.deepEqual(value.defaults[id],{exporter_revision:35,analytics_revision:5,viewer_revision:13,max_players:16});
+  assert.deepEqual(value.recipes[id],[value.defaults[id]]);
+  for(const mutate of [
+    r=>delete r.processing.requirements.beta8,
+    r=>r.processing.requirements.beta8='unknown',
+    r=>r.processing.recipes[id][0].viewer_revision=12,
+    r=>r.processing.recipes[id][0].exporter_revision=34,
+  ]) {const bad=structuredClone(registry);mutate(bad);assert.throws(()=>manifest(bad));}
 });

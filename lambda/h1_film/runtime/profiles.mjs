@@ -17,7 +17,7 @@ export function validateRegistry(document) {
     const profile = { ...entry };
     assert.match(profile.id, ID, 'Invalid engine profile ID');
     assert.match(profile.port, ID, 'Invalid engine port');
-    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1', 'beta4-v2-120-v1', 'beta5-v2-120-v1', 'beta6-v3-120-v1', 'beta7-v3-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
+    assert.ok(['film-v2-120-v1', 'h1arena-v2-120-v1', 'beta4-v2-120-v1', 'beta5-v2-120-v1', 'beta6-v3-120-v1', 'beta7-v3-120-v1', 'beta8-v3-120-v1'].includes(profile.adapter), 'Unsupported film adapter');
     if (profile.source !== undefined || profile.adapter !== 'film-v2-120-v1') {
       assert.equal(profile.source?.project, 'h1arena', 'Missing source provenance');
       assert.match(profile.source.git_commit, /^[0-9a-f]{40}$/, 'Invalid source commit');
@@ -27,7 +27,7 @@ export function validateRegistry(document) {
       assert.match(profile.source.git_date, /^\d{4}-\d{2}-\d{2}$/);
       Object.freeze(profile.source);
     }
-    assert.equal(profile.format, ['beta6-v3-120-v1', 'beta7-v3-120-v1'].includes(profile.adapter) ? 3 : 2, 'Adapter format differs');
+    assert.equal(profile.format, ['beta6-v3-120-v1', 'beta7-v3-120-v1', 'beta8-v3-120-v1'].includes(profile.adapter) ? 3 : 2, 'Adapter format differs');
     assert.equal(profile.tick_rate, 120, 'Adapter requires 120 Hz');
     assert.ok(Number.isSafeInteger(profile.protocol_revision) && profile.protocol_revision > 0);
     assert.ok(typeof profile.build === 'string' && profile.build.length > 0
@@ -124,7 +124,7 @@ export function resolveMap(profile, envelope, catalog, buildMatching = BUILD_MAT
   assert.match(envelope.map, /^[a-zA-Z0-9_-]+$/, 'Invalid scenario name');
   const matches = catalog.maps.filter(map => map.engine_profile === profile.id
     && map.scenario === envelope.map && (map.size_bytes === envelope.map_bytes
-      || (['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1', 'h1-performance-beta7-p9844-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0)));
+      || (['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1', 'h1-performance-beta7-p9844-wasm-v1', 'h1-performance-beta8-p9848-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0)));
   assert.equal(matches.length, 1, matches.length ? 'Ambiguous map binding' : 'Matching raw map unavailable');
   const map = matches[0];
   assert.match(map.sha256, /^[0-9a-f]{64}$/, 'Invalid raw map hash');

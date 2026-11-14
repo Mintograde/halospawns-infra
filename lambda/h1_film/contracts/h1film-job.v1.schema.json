@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 ddd242cc26646a926b40bc9951cf16927f72e40e2052746493551b7ea6bd818f",
+  "$comment": "Generated from API schemas/h1films.py SHA256 e2a52f43cc5a90cfab8e886aaa90837598818ba8e5b8e067c0c7e3097ce18901",
   "$defs": {
     "H1FilmEngine": {
       "additionalProperties": false,
@@ -79,7 +79,8 @@
                 "enum": [
                   "h1-performance-beta5-p9818-wasm-v1",
                   "h1-performance-beta6-p9839-wasm-v1",
-                  "h1-performance-beta7-p9844-wasm-v1"
+                  "h1-performance-beta7-p9844-wasm-v1",
+                  "h1-performance-beta8-p9848-wasm-v1"
                 ]
               },
               "map_size_evidence": {
@@ -309,7 +310,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 12,
+          "maximum": 13,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"

@@ -1,6 +1,8 @@
 // Browser-safe range reader for the single-file H1 match replay container.
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 import {validateCompactStorage,compactRangeReader} from './compact-storage.mjs';
+export const BETA8_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v8';
+export const BETA8_MATCH_PROJECTION='bd69a27d859c42a54d03e6c42c766dc3000e43b32029f3637d6cb759771ce0d6';
 export const LARGE_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v7';
 export const LARGE_MATCH_PROJECTION='c2947bab9d94971364227a4cb7ea752cee0ad6f0ef9ee81a625b6d4f04b9260f';
 export const BETA7_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v6';
@@ -32,7 +34,7 @@ export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const version=v.getUint32(8,true);
-  check([1,2,3,4,5,6,7].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
+  check([1,2,3,4,5,6,7,8].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
@@ -40,14 +42,14 @@ export function readMatchReplayHeader(bytes) {
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  const large=m?.schema===LARGE_MATCH_REPLAY_SCHEMA,beta7=large||m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
+  const beta8=m?.schema===BETA8_MATCH_REPLAY_SCHEMA,large=beta8||m?.schema===LARGE_MATCH_REPLAY_SCHEMA,beta7=large||m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
   const compact=roster||m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
-  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(large?7:beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(beta8?8:large?7:beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
     &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
-  check(m.engine_profile===(beta7?'h1-performance-beta7-p9844-wasm-v1':'h1-performance-beta6-p9839-wasm-v1')&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
+  check(m.engine_profile===(beta8?'h1-performance-beta8-p9848-wasm-v1':beta7?'h1-performance-beta7-p9844-wasm-v1':'h1-performance-beta6-p9839-wasm-v1')&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&m.tick_rate===120&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===(large?12:beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(large?LARGE_MATCH_PROJECTION:beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
+    &&m.sourceContract.profile_revision===(beta8?13:large?12:beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(beta8?BETA8_MATCH_PROJECTION:large?LARGE_MATCH_PROJECTION:beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -74,7 +76,7 @@ export function validateMatchReplay(m,header) {
       const f=t.failure;
       if(unsupported&&f?.reason==='unsupported_build') {
         check(typeof f.recorded_build==='string'&&/^[\x20-\x7e]{1,63}$/.test(f.recorded_build)
-          &&f.format===3&&f.protocol_revision===(m.engine_profile==='h1-performance-beta7-p9844-wasm-v1'?9844:9839)&&f.tick_rate===120
+          &&f.format===3&&f.protocol_revision===(beta8?9848:beta7?9844:9839)&&f.tick_rate===120
           &&Object.keys(f).sort().join(',')==='format,protocol_revision,reason,recorded_build,tick_rate',
           'invalid unsupported build evidence');
       } else if(roster&&f?.reason==='roster_mismatch') {

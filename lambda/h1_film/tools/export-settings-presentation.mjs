@@ -135,7 +135,9 @@ choices('tuning.shotgun_spread_constant', { true: 'Constant', false: 'Random' })
 put('tuning.plasma_climb_gain', { format: 'percent', active_when: [{ key: 'tuning.plasma_climb', values: [true] }] });
 choices('network.net_model', ['Lockstep', 'Rollback', 'Prediction', 'Universal']);
 choices('network.shot_prediction', ['Off', 'On']);
-choices('bots.bot_skill', ['Easy', 'Normal', 'Heroic', 'Legendary']);
+const botHeader = await host('blampc_bots.h');
+choices('bots.bot_skill', ['Easy', 'Normal', 'Heroic', 'Legendary',
+  ...(/BLAMPC_BOTS_SKILL_MYTHIC\s+4/.test(botHeader) ? ['Mythic'] : [])]);
 choices('bots.bot_teams', { auto: 'Automatic' });
 for (const key of ['bots.bot_skill', 'bots.bot_teams']) put(key, { active_when: [{ key: 'bots.bots', greater_than: 0 }] });
 choices('recording.end_reason', ['Unknown / no trailer', 'Session ended', 'Tick limit reached']);

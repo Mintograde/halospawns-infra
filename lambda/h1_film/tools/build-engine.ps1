@@ -20,13 +20,13 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($SpawnEvents -and -not $Combat) { throw 'Spawn events require observational export.' }
 if ($PlayerCamoAmount -and -not $Combat) { throw 'Player camo amount requires the observational export build.' }
-if ($Melee -and (-not $Gameplay -or $Port -notin @('beta5', 'beta6', 'beta7'))) { throw 'Melee evidence requires Beta 5/6/7 gameplay export.' }
-if ($DamageAttributionV2 -and ($Port -notin @('beta5', 'beta6', 'beta7') -or -not $DamageAttribution)) { throw 'Damage graph v2 requires beta5 or beta6 damage attribution.' }
-if ($ClientView -and ($Port -notin @('beta5', 'beta6', 'beta7') -or -not $NetworkReplayFixes)) { throw 'Client view requires beta5 network replay fixes.' }
+if ($Melee -and (-not $Gameplay -or $Port -notin @('beta5', 'beta6', 'beta7', 'beta8'))) { throw 'Melee evidence requires Beta 5/6/7 gameplay export.' }
+if ($DamageAttributionV2 -and ($Port -notin @('beta5', 'beta6', 'beta7', 'beta8') -or -not $DamageAttribution)) { throw 'Damage graph v2 requires beta5 or beta6 damage attribution.' }
+if ($ClientView -and ($Port -notin @('beta5', 'beta6', 'beta7', 'beta8') -or -not $NetworkReplayFixes)) { throw 'Client view requires beta5 network replay fixes.' }
 if ($RosterRecovery -and ($Port -ne 'beta5' -or -not $NetworkReplayFixes)) { throw 'Roster recovery requires beta5 network replay fixes.' }
-if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5', 'beta6', 'beta7')) { throw 'Finite world object filtering requires beta4 or beta5.' }
-if ($NetworkReplayFixes -and $Port -notin @('beta4', 'beta5', 'beta6', 'beta7')) { throw 'Network replay corrections require beta4 or beta5.' }
-if ($DamageAttribution -and ($Port -notin @('beta4', 'beta5', 'beta6', 'beta7') -or -not $Combat)) { throw 'Damage attribution requires beta4 or beta5 combat export.' }
+if ($FiniteWorldObjects -and $Port -notin @('beta4', 'beta5', 'beta6', 'beta7', 'beta8')) { throw 'Finite world object filtering requires beta4 or beta5.' }
+if ($NetworkReplayFixes -and $Port -notin @('beta4', 'beta5', 'beta6', 'beta7', 'beta8')) { throw 'Network replay corrections require beta4 or beta5.' }
+if ($DamageAttribution -and ($Port -notin @('beta4', 'beta5', 'beta6', 'beta7', 'beta8') -or -not $Combat)) { throw 'Damage attribution requires beta4 or beta5 combat export.' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
 $worker = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $buildPath = [IO.Path]::GetFullPath($BuildDirectory)

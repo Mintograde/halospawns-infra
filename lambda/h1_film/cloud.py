@@ -158,7 +158,7 @@ def validate_job(job):
     exporter = engine.get("exporter_revision")
     if job.get("analytics_revision") == 5:
         require(film["engine_profile"] in (
-            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1",
+            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1",
         ) and (exporter or 1) >= 19, "unsupported_build")
     client_recipes = json.loads((PACKAGE / "profiles/registry.json").read_text())["processing"].get("client_view_recipes", {})
     require(not any(r["exporter_revision"] == exporter for r in client_recipes.get(film["engine_profile"], [])), "unsupported_build")
@@ -190,7 +190,7 @@ def validate_job(job):
         and binding["scenario"] == film["scenario"]
     )
     missing_size = film.get("map_size_evidence") == "halospawns.h1MissingMapSize.v1"
-    require(not missing_size or (film["engine_profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1") and film["map_size_bytes"] == 0))
+    require(not missing_size or (film["engine_profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1") and film["map_size_bytes"] == 0))
     require(missing_size or binding["raw_source"]["size_bytes"] == film["map_size_bytes"])
     validate_source(conversion["source"])
     validate_source(binding["raw_source"], raw_map=True)
@@ -237,9 +237,9 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), "unsupported_build")
-    require((request.profile_revision in (6, 7, 8, 9, 10, 11, 12)) ==
-            (job["conversion"]["film"]["engine_profile"] in ("h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1")),
+    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), "unsupported_build")
+    require((request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13)) ==
+            (job["conversion"]["film"]["engine_profile"] in ("h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1")),
             "unsupported_build")
     return request
 
@@ -555,7 +555,7 @@ def inspect_film(path, work, deadline, *, intake=None):
         env["ticks"] <= limits()["SOURCE_TICKS"]
         and env["players"] <= limits()["PLAYERS"]
     )
-    missing_size = env["map_bytes"] == 0 and result["profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1")
+    missing_size = env["map_bytes"] == 0 and result["profile"] in ("h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1")
     require(missing_size or 0 < env["map_bytes"] <= 256 * 1024**2)
     return {
         "engine_profile": result["profile"],
@@ -619,7 +619,7 @@ def convert(job, film, work, deadline):
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
             "--viewer-revision",
-            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12)
+            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12, 13)
                 else job["viewer_artifact_target"]["profile_revision"]),
             *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
               if job["conversion"]["engine"].get("exporter_revision") is not None else []),
@@ -636,7 +636,7 @@ def convert(job, film, work, deadline):
     ticks = job["conversion"]["film"]["source_tick_count"]
     encoding = analytics._json(directory / "candidate/encoding.json")
     require(encoding.get("verification") == {
-        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7, 8, 9, 10, 11, 12) else "inline-lossless",
+        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13) else "inline-lossless",
         "120hz": ticks, "30hz": None,
     }, "conversion_failed")
     return directory
@@ -700,7 +700,7 @@ def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
     if proof.get("analytics_revision") == 5:
         require(proof["engine_profile"] in (
-            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1",
+            "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1",
         ) and (proof.get("exporter_revision") or 1) >= 19, "unsupported_build")
     recovery = proof.get("roster_recovery")
     require(recovery == pin["film"].get("roster_recovery"))
@@ -793,7 +793,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     parts = shared.load_native_viewer_parts(
         directory / "candidate/parts-120",
         native_binary_path=extractor,
-        revision=5 if request.profile_revision in (6, 7, 8, 9, 10, 11, 12) else request.profile_revision,
+        revision=5 if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13) else request.profile_revision,
     )
     container = shared.assemble_viewer_container(
         parts,
@@ -803,7 +803,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         if proof.get("created_utc") is not None else UNKNOWN_RECORDED_AT,
     )
     require(container.tick_count == proof["source_tick_count"])
-    if request.profile_revision in (6, 7, 8, 9, 10, 11, 12):
+    if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13):
         from dataclasses import replace
 
         from .match_replay import assemble_match_replay

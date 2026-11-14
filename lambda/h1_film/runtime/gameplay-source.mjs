@@ -31,7 +31,7 @@ function account11(bytes) {
 
 export function recordedGameplaySources(raw,exporterRevision) {
   const beta6=raw.readUInt32LE(4)===3;
-  const accountOptions={allowUnassignedPlayer:beta6&&raw.readUInt32LE(8)===9844};
+  const accountOptions={allowUnassignedPlayer:beta6&&[9844,9848].includes(raw.readUInt32LE(8))};
   const match=beta6?inspectMatchFilm(raw,matchFilmPolicy(exporterRevision)):null;
   const host=match?raw.subarray(match.host_offset,match.host_offset+match.host_size):raw;
   const section=(b,at)=>{

@@ -23,7 +23,7 @@ const wasm=engine.endsWith('.js'),capture=flags.includes('--capture');
 const log=await open(output+'/engine.log','wx');
 const ticks=wasm ? await open(capture?output+'/ticks.hsft':'NUL',capture?'wx':'w'):null;
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^(BLAMPC_|H1_EXPORT_|H1_ROSTER_|AWS_)/i.test(key)));
-Object.assign(env,{BLAMPC_FILM_RING:'0',BLAMPC_FILM_KEYFRAME_TICKS:'432001',BLAMPC_FILM_VIEW_DELIVERED:'1',BLAMPC_WINDOW_BACKGROUND:'1'});
+Object.assign(env,{BLAMPC_FILM_RING:'0',BLAMPC_FILM_KEYFRAME_TICKS:'432001',BLAMPC_FILM_START_HOST:'1',BLAMPC_FILM_VIEW_DELIVERED:'1',BLAMPC_WINDOW_BACKGROUND:'1'});
 if(wasm) env.H1_EXPORT_HANDLE='3';
 const args=['--film','input.h1film','--deterministic','--ticks',String(source.frame_count+10),'--dump',capture&&!wasm?'ticks.hsft':'NUL'];
 const started=performance.now();

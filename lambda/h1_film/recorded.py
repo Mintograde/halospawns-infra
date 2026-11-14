@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 RECORDED_PROFILES = ("h1-performance-beta4-p9803-wasm-v1", "h1-performance-beta5-p9818-wasm-v1",
-                     "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1")
+                     "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1")
 
 
 def validate_roster_recovery(value: dict, *, engine_profile: str, ticks: int,
@@ -142,6 +142,8 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
     if identity == (0x314D4C46, 3, 9839, 120) and words[16] in (504, 536):
         return words[16], 77
     if identity == (0x314D4C46, 3, 9844, 120) and words[16] in (504, 536):
+        return words[16], 78
+    if identity == (0x314D4C46, 3, 9848, 120) and words[16] in (504, 536):
         return words[16], 78
     raise ValueError("Unsupported recorded evidence adapter")
 

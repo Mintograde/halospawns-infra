@@ -27,7 +27,7 @@ await mkdir(values.output);
 const environment = Object.fromEntries(Object.entries(process.env)
   .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|VIEWER_ARTIFACT_)/i.test(key)));
 Object.assign(environment, { BLAMPC_FILM_RING: '0', BLAMPC_FILM_KEYFRAME_TICKS: '432001',
-  BLAMPC_FILM_VIEW_DELIVERED: '1' });
+  BLAMPC_FILM_START_HOST: '1', BLAMPC_FILM_VIEW_DELIVERED: '1' });
 
 async function replay(kind, cwd, envelope) {
   const stream = join(cwd, `${kind}.hsft`), logPath = join(cwd, `${kind}.log`);
@@ -51,7 +51,7 @@ async function replay(kind, cwd, envelope) {
     closeSync(log);
     if (output !== undefined) closeSync(output);
   }
-  const verify = [9839,9844].includes(envelope.protocol_revision) ? verifyBeta6 : envelope.protocol_revision === 9818 ? verifyBeta5
+  const verify = [9839,9844,9848].includes(envelope.protocol_revision) ? verifyBeta6 : envelope.protocol_revision === 9818 ? verifyBeta5
     : envelope.protocol_revision === 9803 ? verifyBeta4
     : envelope.protocol_revision === 9111 ? verifyArena : verifyBeta3;
   verify(await readFile(logPath, 'utf8'), envelope);

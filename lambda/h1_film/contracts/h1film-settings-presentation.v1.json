@@ -3386,6 +3386,1712 @@
           }
         }
       ]
+    },
+    "h1-performance-beta8-p9848-wasm-v1": {
+      "schema": "halospawns.h1SettingsPresentation.v1",
+      "engine_profile": "h1-performance-beta8-p9848-wasm-v1",
+      "source_commit": "3194e680896cead7326c2a3fcb9e35e85de1d7cc",
+      "source_sha256": "ea459ac467d60bcb6e19dc908161601cdf4d9347e44a49c08f969f12bd561f60",
+      "source_files": {
+        "host/blampc_config.h": "da0a8388322d0b45cefa69db8787dbd1bdc89a9bc2b523f67ee67703e612c51b",
+        "host/blampc_menu.c": "53b7b2cbdbdfd17da593faa6a75661057ac2e49fc5a88d46af869d6db714b67b",
+        "host/blampc_menu_defaults.h": "5ef58a50cb072bf51387091da5c3ef0080bc1992650906cb8935be93de406036",
+        "host/blampc_config.c": "99489ff5fe65c7647240935f093ec1b8da76a27f55b7119d929d9ed910c43795",
+        "host/blampc_gametype.c": "834b29bfa8c98c30f87eafa277a0171c766494a2b3af71fe919d9a67c9bfb9df",
+        "host/blampc_movement.c": "b0731bfda709e8ee2d55db45e20be8ca2c1cdc190c807c32381be0072d07cb5c",
+        "host/blampc_wall_jump.c": "8867e62d9c7bd9678933809607b5f2906bfc5076edc78547c8dda273888b7d03",
+        "host/blampc_crouch_slide.c": "6ccf3e70352b12fda7c69dd0f8d05ec4bb99c20d0427d1ddcbe592f9a74b900a",
+        "host/blampc_bots.h": "6fe52e67138898c4470d4a94b33caa34e0f35ee511f7e2cfda9ff519f392e84e",
+        "host/blampc_input_pipeline.c": "868632fd9bb61f21b1ab0c73c8ebef16f31fcd0357961e4edfa584515d59d0c1"
+      },
+      "label": "Beta 8",
+      "settings": {
+        "variant.game_rules": {
+          "label": "Game rules",
+          "format": "number",
+          "choices": {
+            "0": "Slayer",
+            "1": "Capture the flag",
+            "3": "Oddball",
+            "4": "King of the hill"
+          }
+        },
+        "variant.score_to_win": {
+          "label": "Score limit",
+          "format": "number",
+          "special_values": {
+            "0": "Unlimited"
+          }
+        },
+        "variant.flag_pickup": {
+          "label": "Flag pickup",
+          "format": "number",
+          "choices": {
+            "0": "Manual",
+            "1": "Automatic"
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.ball_pickup": {
+          "label": "Ball pickup",
+          "format": "number",
+          "choices": {
+            "0": "Manual",
+            "1": "Automatic"
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ]
+        },
+        "variant.hill_order": {
+          "label": "Hill order",
+          "format": "number",
+          "choices": {
+            "0": "Ordered",
+            "1": "Random after first"
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                4
+              ]
+            },
+            {
+              "key": "variant.king_moving_hill",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.hill_move_s": {
+          "label": "Hill move time",
+          "format": "seconds",
+          "special_values": {
+            "0": "Default (60 s)"
+          },
+          "equivalent_values": {
+            "0": 60
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                4
+              ]
+            },
+            {
+              "key": "variant.king_moving_hill",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.ctf_assault": {
+          "label": "Assault",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.ctf_single_flag_s": {
+          "label": "Single flag",
+          "format": "seconds",
+          "special_values": {
+            "0": "Off"
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.ctf_flag_must_reset": {
+          "label": "Flag must reset",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.ctf_flag_at_home": {
+          "label": "Flag at home to score",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.ctf_flag_reset_s": {
+          "label": "Flag reset time",
+          "format": "seconds",
+          "special_values": {
+            "0": "Default (17 s)"
+          },
+          "equivalent_values": {
+            "0": 17
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.king_moving_hill": {
+          "label": "Moving hill",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                4
+              ]
+            }
+          ]
+        },
+        "variant.ball_type": {
+          "label": "Ball type",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ],
+          "choices": {
+            "0": "Normal",
+            "1": "Reverse tag",
+            "2": "Juggernaut"
+          }
+        },
+        "variant.ball_count": {
+          "label": "Ball count",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ]
+        },
+        "variant.ball_random_start": {
+          "label": "Random start",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ]
+        },
+        "variant.ball_speed": {
+          "label": "Speed with ball",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ],
+          "choices": {
+            "0": "Slow",
+            "1": "Normal",
+            "2": "Fast"
+          }
+        },
+        "variant.ball_trait_with": {
+          "label": "Trait with ball",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ],
+          "choices": {
+            "0": "None",
+            "1": "Invisible",
+            "2": "Extra damage",
+            "3": "Damage resistant"
+          }
+        },
+        "variant.ball_trait_without": {
+          "label": "Trait without ball",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ],
+          "choices": {
+            "0": "None",
+            "1": "Invisible",
+            "2": "Extra damage",
+            "3": "Damage resistant"
+          }
+        },
+        "variant.ball_reset_s": {
+          "label": "Ball reset time",
+          "format": "seconds",
+          "special_values": {
+            "0": "Default (40 s)"
+          },
+          "equivalent_values": {
+            "0": 40
+          },
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                3
+              ]
+            }
+          ]
+        },
+        "variant.teams": {
+          "label": "Team play",
+          "format": "boolean"
+        },
+        "variant.respawn_s": {
+          "label": "Respawn time",
+          "format": "seconds"
+        },
+        "variant.suicide_s": {
+          "label": "Suicide penalty",
+          "format": "seconds"
+        },
+        "variant.health_pct": {
+          "label": "Maximum health",
+          "format": "percent",
+          "special_values": {
+            "0": "Infinite"
+          }
+        },
+        "variant.shields": {
+          "label": "Shields",
+          "format": "boolean"
+        },
+        "variant.infinite_ammo": {
+          "label": "Infinite ammo",
+          "format": "number",
+          "choices": {
+            "0": "Off",
+            "1": "Bottomless clip",
+            "2": "Unlimited magazines"
+          }
+        },
+        "variant.fireteams": {
+          "label": "Fireteams",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.infinite_grenades": {
+          "label": "Infinite grenades",
+          "format": "boolean"
+        },
+        "variant.frags": {
+          "label": "Frags",
+          "format": "number"
+        },
+        "variant.plasmas": {
+          "label": "Plasmas",
+          "format": "number"
+        },
+        "variant.weapon_primary": {
+          "label": "Starting weapon",
+          "format": "number",
+          "choices": {
+            "0": "Pistol",
+            "1": "Sniper rifle",
+            "2": "Rocket launcher",
+            "3": "Plasma pistol",
+            "4": "Assault rifle",
+            "5": "Needler",
+            "6": "Plasma rifle",
+            "7": "Shotgun",
+            "-1": "Default (Assault rifle)"
+          },
+          "equivalent_values": {
+            "-1": 4
+          }
+        },
+        "variant.weapon_secondary": {
+          "label": "Secondary weapon",
+          "format": "number",
+          "choices": {
+            "0": "Pistol",
+            "1": "Sniper rifle",
+            "2": "Rocket launcher",
+            "3": "Plasma pistol",
+            "4": "Assault rifle",
+            "5": "Needler",
+            "6": "Plasma rifle",
+            "7": "Shotgun",
+            "-1": "Default (Pistol)",
+            "-2": "None"
+          },
+          "equivalent_values": {
+            "-1": 0
+          }
+        },
+        "variant.skip_first_draw": {
+          "label": "Skip first weapon draw",
+          "format": "boolean"
+        },
+        "variant.motion_tracker": {
+          "label": "Motion tracker",
+          "format": "boolean"
+        },
+        "variant.objectives_indicator": {
+          "label": "Objectives indicator",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.game_rules",
+              "values": [
+                1,
+                3,
+                4
+              ]
+            }
+          ],
+          "choices": {
+            "0": "Motion tracker",
+            "1": "Nav points",
+            "2": "Off"
+          }
+        },
+        "variant.friend_indicators": {
+          "label": "Friend indicators on screen",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.camo_variant": {
+          "label": "Camo variant",
+          "format": "number",
+          "choices": {
+            "0": "Xbox",
+            "1": "MCC Hardcore",
+            "2": "Custom"
+          }
+        },
+        "variant.camo_refraction": {
+          "label": "Camo refraction",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.camo_variant",
+              "values": [
+                2
+              ]
+            }
+          ]
+        },
+        "variant.camo_falloff": {
+          "label": "Camo falloff",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.camo_variant",
+              "values": [
+                2
+              ]
+            }
+          ]
+        },
+        "variant.camo_tint_r": {
+          "label": "Camo tint r",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.camo_variant",
+              "values": [
+                2
+              ]
+            }
+          ]
+        },
+        "variant.camo_tint_g": {
+          "label": "Camo tint g",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.camo_variant",
+              "values": [
+                2
+              ]
+            }
+          ]
+        },
+        "variant.camo_tint_b": {
+          "label": "Camo tint b",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.camo_variant",
+              "values": [
+                2
+              ]
+            }
+          ]
+        },
+        "variant.spawns_visible": {
+          "label": "Spawns visible",
+          "format": "number",
+          "choices": {
+            "0": "Off",
+            "1": "Markers",
+            "2": "Markers + zones"
+          }
+        },
+        "variant.powerup_waypoints": {
+          "label": "Powerup waypoints",
+          "format": "number",
+          "choices": {
+            "0": "Off",
+            "1": "On"
+          }
+        },
+        "variant.random_pct_visible": {
+          "label": "Random % visible",
+          "format": "number",
+          "choices": {
+            "0": "Off",
+            "1": "On"
+          },
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.footstep_sounds_level": {
+          "label": "Movement sounds",
+          "format": "percent"
+        },
+        "variant.pickup_sounds": {
+          "label": "Pickup sounds",
+          "format": "percent"
+        },
+        "variant.teleporter_sounds": {
+          "label": "Teleporter sounds",
+          "format": "percent"
+        },
+        "variant.shield_sounds": {
+          "label": "Shield sounds",
+          "format": "percent"
+        },
+        "variant.weapon_drop_sounds": {
+          "label": "Weapon drop sounds",
+          "format": "percent"
+        },
+        "variant.map_scenery_audio": {
+          "label": "Map scenery audio",
+          "format": "percent"
+        },
+        "variant.weapon_sounds_all": {
+          "label": "Weapon sounds",
+          "format": "number",
+          "choices": {
+            "0": "Pro",
+            "1": "All"
+          }
+        },
+        "variant.ambience_volume": {
+          "label": "Ambience volume",
+          "format": "percent"
+        },
+        "variant.kill_restores_mode": {
+          "label": "Kill restores resources",
+          "format": "number",
+          "choices": {
+            "0": "No",
+            "1": "Shields and health",
+            "2": "Ammo",
+            "3": "Everything"
+          }
+        },
+        "variant.overshield_visible": {
+          "label": "Overshield visible",
+          "format": "boolean"
+        },
+        "variant.os_tint_perp_r": {
+          "label": "Facing red",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_tint_perp_g": {
+          "label": "Facing green",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_tint_perp_b": {
+          "label": "Facing blue",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_tint_par_r": {
+          "label": "Edge red",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_tint_par_g": {
+          "label": "Edge green",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_tint_par_b": {
+          "label": "Edge blue",
+          "format": "number",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_brightness": {
+          "label": "Brightness",
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.os_type": {
+          "label": "Type",
+          "format": "number",
+          "choices": {
+            "0": "Constant",
+            "1": "Fading"
+          },
+          "active_when": [
+            {
+              "key": "variant.overshield_visible",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.omit_first_spawn": {
+          "label": "Omit first item spawn",
+          "format": "number",
+          "choices": {
+            "0": "No",
+            "1": "Yes",
+            "2": "Power items only"
+          }
+        },
+        "variant.item_spawn_s": {
+          "label": "Item spawn override",
+          "format": "seconds",
+          "special_values": {
+            "0": "Off"
+          }
+        },
+        "variant.camo_drop": {
+          "label": "Camo drop",
+          "format": "number",
+          "choices": {
+            "0": "Off",
+            "1": "Pause timer",
+            "2": "Continue timer"
+          }
+        },
+        "variant.os_assassination": {
+          "label": "Os assassination",
+          "format": "number",
+          "choices": {
+            "0": "Drop nothing",
+            "1": "Drop full",
+            "2": "Drop remaining"
+          }
+        },
+        "variant.teammate_outlines": {
+          "label": "Teammate outlines",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.teammate_view": {
+          "label": "Shared view",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.teammate_respawn_timers": {
+          "label": "Teammate respawn timers",
+          "format": "boolean",
+          "active_when": [
+            {
+              "key": "variant.teams",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "variant.fov_limit": {
+          "label": "FOV limit",
+          "format": "number",
+          "choices": {
+            "0": "On",
+            "1": "Split screen only",
+            "2": "Off"
+          }
+        },
+        "variant.time_limit_min": {
+          "label": "Time limit",
+          "format": "minutes",
+          "special_values": {
+            "0": "None"
+          }
+        },
+        "variant.overtime": {
+          "label": "Overtime",
+          "format": "number",
+          "choices": {
+            "0": "No",
+            "1": "Yes"
+          },
+          "active_when": [
+            {
+              "key": "variant.time_limit_min",
+              "greater_than": 0
+            }
+          ]
+        },
+        "variant.overtime_timed": {
+          "label": "Sudden death",
+          "format": "number",
+          "choices": {
+            "0": "Yes",
+            "1": "No"
+          },
+          "active_when": [
+            {
+              "key": "variant.time_limit_min",
+              "greater_than": 0
+            },
+            {
+              "key": "variant.overtime",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.overtime_length_min": {
+          "label": "Overtime length",
+          "format": "minutes",
+          "special_values": {
+            "0": "Default (2 min)"
+          },
+          "equivalent_values": {
+            "0": 2
+          },
+          "active_when": [
+            {
+              "key": "variant.time_limit_min",
+              "greater_than": 0
+            },
+            {
+              "key": "variant.overtime",
+              "values": [
+                1
+              ]
+            },
+            {
+              "key": "variant.overtime_timed",
+              "values": [
+                1
+              ]
+            }
+          ]
+        },
+        "variant.smoke_rendering": {
+          "label": "Smoke rendering",
+          "format": "number",
+          "choices": {
+            "0": "Force original",
+            "1": "Force performance",
+            "2": "Not forced"
+          }
+        },
+        "variant.map_scripts_off": {
+          "label": "Map scripts",
+          "format": "number",
+          "choices": {
+            "0": "Yes",
+            "1": "No"
+          }
+        },
+        "variant.alternating_powerups": {
+          "label": "Alternating powerups",
+          "format": "number",
+          "choices": {
+            "0": "Random",
+            "1": "Overshield first",
+            "2": "Camo first"
+          }
+        },
+        "variant.weapon_set": {
+          "label": "Weapon set",
+          "format": "number",
+          "choices": {
+            "0": "Normal",
+            "1": "Pistols",
+            "2": "Rifles",
+            "3": "Plasma weapons",
+            "4": "Sniper",
+            "5": "No sniping",
+            "6": "Rocket launchers",
+            "7": "Shotguns",
+            "8": "Short range",
+            "9": "Human"
+          }
+        },
+        "tuning.move_run_forward": {
+          "label": "Run forward",
+          "format": "thousandths"
+        },
+        "tuning.move_run_backward": {
+          "label": "Run backward",
+          "format": "thousandths"
+        },
+        "tuning.move_run_sideways": {
+          "label": "Run sideways",
+          "format": "thousandths"
+        },
+        "tuning.move_run_acceleration": {
+          "label": "Run acceleration",
+          "format": "thousandths"
+        },
+        "tuning.move_sneak_forward": {
+          "label": "Sneak forward",
+          "format": "thousandths"
+        },
+        "tuning.move_sneak_backward": {
+          "label": "Sneak backward",
+          "format": "thousandths"
+        },
+        "tuning.move_sneak_sideways": {
+          "label": "Sneak sideways",
+          "format": "thousandths"
+        },
+        "tuning.move_sneak_acceleration": {
+          "label": "Sneak acceleration",
+          "format": "thousandths"
+        },
+        "tuning.move_air_acceleration": {
+          "label": "Airborne acceleration",
+          "format": "thousandths"
+        },
+        "tuning.move_stun_movement": {
+          "label": "Stun movement penalty",
+          "format": "thousandths"
+        },
+        "tuning.move_stun_turning": {
+          "label": "Stun turning penalty",
+          "format": "thousandths"
+        },
+        "tuning.move_stun_min_time": {
+          "label": "Minimum stun time",
+          "format": "thousandths"
+        },
+        "tuning.move_stun_max_time": {
+          "label": "Maximum stun time",
+          "format": "thousandths"
+        },
+        "tuning.wall_jump": {
+          "label": "Wall jump",
+          "format": "boolean"
+        },
+        "tuning.wall_jump_window_ms": {
+          "label": "Timing window",
+          "format": "milliseconds",
+          "active_when": [
+            {
+              "key": "tuning.wall_jump",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "tuning.wall_jump_height": {
+          "label": "Jump height",
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "tuning.wall_jump",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "tuning.wall_jump_kick": {
+          "label": "Wall kick",
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "tuning.wall_jump",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "tuning.wall_jump_steer": {
+          "label": "Stick steer",
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "tuning.wall_jump",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "tuning.wall_jump_momentum": {
+          "label": "Momentum kept",
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "tuning.wall_jump",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "tuning.crouch_slide": {
+          "label": "Crouch slide",
+          "format": "boolean"
+        },
+        "tuning.plasma_grenade_stickiness": {
+          "choices": {
+            "0": "Players only",
+            "1": "Players + environment",
+            "2": "Players + environment + held weapons"
+          }
+        },
+        "tuning.pistol_spread": {
+          "choices": {
+            "0": "NHE",
+            "1": "Stock",
+            "2": "MCC Hardcore"
+          }
+        },
+        "tuning.shotgun_spread_constant": {
+          "choices": {
+            "true": "Constant",
+            "false": "Random"
+          }
+        },
+        "tuning.plasma_climb_gain": {
+          "format": "percent",
+          "active_when": [
+            {
+              "key": "tuning.plasma_climb",
+              "values": [
+                true
+              ]
+            }
+          ]
+        },
+        "network.net_model": {
+          "choices": {
+            "0": "Lockstep",
+            "1": "Rollback",
+            "2": "Prediction",
+            "3": "Universal"
+          }
+        },
+        "network.shot_prediction": {
+          "choices": {
+            "0": "Off",
+            "1": "On"
+          }
+        },
+        "bots.bot_skill": {
+          "choices": {
+            "0": "Easy",
+            "1": "Normal",
+            "2": "Heroic",
+            "3": "Legendary",
+            "4": "Mythic"
+          },
+          "active_when": [
+            {
+              "key": "bots.bots",
+              "greater_than": 0
+            }
+          ]
+        },
+        "bots.bot_teams": {
+          "choices": {
+            "auto": "Automatic"
+          },
+          "active_when": [
+            {
+              "key": "bots.bots",
+              "greater_than": 0
+            }
+          ]
+        },
+        "recording.end_reason": {
+          "choices": {
+            "0": "Unknown / no trailer",
+            "1": "Session ended",
+            "2": "Tick limit reached"
+          }
+        },
+        "recording.format": {
+          "format": "number"
+        },
+        "recording.protocol_revision": {
+          "format": "number"
+        }
+      },
+      "defaults": {
+        "tuning.move_run_forward": 2250,
+        "tuning.move_run_backward": 2000,
+        "tuning.move_run_sideways": 2000,
+        "tuning.move_run_acceleration": 320,
+        "tuning.move_sneak_forward": 900,
+        "tuning.move_sneak_backward": 650,
+        "tuning.move_sneak_sideways": 600,
+        "tuning.move_sneak_acceleration": 160,
+        "tuning.move_air_acceleration": 35,
+        "tuning.move_stun_movement": 800,
+        "tuning.move_stun_turning": 800,
+        "tuning.move_stun_min_time": 0,
+        "tuning.move_stun_max_time": 1250,
+        "tuning.wall_jump": false,
+        "tuning.wall_jump_window_ms": 250,
+        "tuning.wall_jump_height": 100,
+        "tuning.wall_jump_kick": 50,
+        "tuning.wall_jump_steer": 100,
+        "tuning.wall_jump_momentum": 100,
+        "tuning.crouch_slide": false,
+        "timing.input_pipeline_ms": 33,
+        "timing.shot_delay_aim_ms": 0,
+        "timing.aim_rate_hz": 120,
+        "timing.shot_aim_ahead_ticks": 0,
+        "bots.bots": 0,
+        "bots.bot_teams": "auto",
+        "tuning.plasma_overheat_damage": true,
+        "tuning.plasma_grenade_stickiness": 2,
+        "tuning.pistol_spread": 0,
+        "tuning.shotgun_spread_constant": true,
+        "tuning.plasma_climb": false,
+        "tuning.plasma_climb_gain": 130,
+        "bots.bot_skill": 1
+      },
+      "pipeline_ms": 33,
+      "presets": [
+        {
+          "label": "Team slayer 50",
+          "values": {
+            "variant.game_rules": 0,
+            "variant.score_to_win": 50,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": false,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": true,
+            "variant.respawn_s": 5,
+            "variant.suicide_s": 5,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": false,
+            "variant.infinite_grenades": false,
+            "variant.frags": 4,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": true,
+            "variant.teammate_respawn_timers": true,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "FFA 50",
+          "values": {
+            "variant.game_rules": 0,
+            "variant.score_to_win": 50,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": false,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": false,
+            "variant.respawn_s": 5,
+            "variant.suicide_s": 5,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": false,
+            "variant.infinite_grenades": false,
+            "variant.frags": 2,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": true,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": false,
+            "variant.teammate_respawn_timers": false,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "CTF 3",
+          "values": {
+            "variant.game_rules": 1,
+            "variant.score_to_win": 3,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": true,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": true,
+            "variant.respawn_s": 10,
+            "variant.suicide_s": 10,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": true,
+            "variant.infinite_grenades": false,
+            "variant.frags": 2,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": true,
+            "variant.teammate_respawn_timers": true,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "CTF 5",
+          "values": {
+            "variant.game_rules": 1,
+            "variant.score_to_win": 5,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": true,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": true,
+            "variant.respawn_s": 10,
+            "variant.suicide_s": 10,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": true,
+            "variant.infinite_grenades": false,
+            "variant.frags": 2,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": true,
+            "variant.teammate_respawn_timers": true,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "Team ball",
+          "values": {
+            "variant.game_rules": 3,
+            "variant.score_to_win": 300,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": false,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": true,
+            "variant.respawn_s": 10,
+            "variant.suicide_s": 10,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": true,
+            "variant.infinite_grenades": false,
+            "variant.frags": 2,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": true,
+            "variant.teammate_respawn_timers": true,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "Team king",
+          "values": {
+            "variant.game_rules": 4,
+            "variant.score_to_win": 300,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": false,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": true,
+            "variant.respawn_s": 10,
+            "variant.suicide_s": 10,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": true,
+            "variant.infinite_grenades": false,
+            "variant.frags": 2,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": -1,
+            "variant.weapon_secondary": -1,
+            "variant.skip_first_draw": false,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 0,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": true,
+            "variant.teammate_respawn_timers": true,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        },
+        {
+          "label": "Octagon 100",
+          "values": {
+            "variant.game_rules": 0,
+            "variant.score_to_win": 100,
+            "variant.flag_pickup": 0,
+            "variant.ball_pickup": 0,
+            "variant.hill_order": 0,
+            "variant.hill_move_s": 60,
+            "variant.ctf_assault": false,
+            "variant.ctf_single_flag_s": 0,
+            "variant.ctf_flag_must_reset": false,
+            "variant.ctf_flag_at_home": false,
+            "variant.ctf_flag_reset_s": 0,
+            "variant.king_moving_hill": true,
+            "variant.ball_type": 0,
+            "variant.ball_count": 1,
+            "variant.ball_random_start": false,
+            "variant.ball_speed": 0,
+            "variant.ball_trait_with": 0,
+            "variant.ball_trait_without": 0,
+            "variant.ball_reset_s": 0,
+            "variant.teams": false,
+            "variant.respawn_s": 1,
+            "variant.suicide_s": 0,
+            "variant.health_pct": 100,
+            "variant.shields": true,
+            "variant.infinite_ammo": 0,
+            "variant.fireteams": false,
+            "variant.infinite_grenades": false,
+            "variant.frags": 4,
+            "variant.plasmas": 0,
+            "variant.weapon_primary": 0,
+            "variant.weapon_secondary": 1,
+            "variant.skip_first_draw": true,
+            "variant.motion_tracker": false,
+            "variant.objectives_indicator": 1,
+            "variant.friend_indicators": true,
+            "variant.camo_variant": 1,
+            "variant.camo_refraction": 9,
+            "variant.camo_falloff": 9,
+            "variant.camo_tint_r": 255,
+            "variant.camo_tint_g": 255,
+            "variant.camo_tint_b": 255,
+            "variant.spawns_visible": 0,
+            "variant.powerup_waypoints": 0,
+            "variant.random_pct_visible": 0,
+            "variant.footstep_sounds_level": 0,
+            "variant.pickup_sounds": 100,
+            "variant.teleporter_sounds": 0,
+            "variant.shield_sounds": 0,
+            "variant.weapon_drop_sounds": 100,
+            "variant.map_scenery_audio": 0,
+            "variant.weapon_sounds_all": 0,
+            "variant.ambience_volume": 100,
+            "variant.kill_restores_mode": 1,
+            "variant.overshield_visible": false,
+            "variant.os_tint_perp_r": 71,
+            "variant.os_tint_perp_g": 255,
+            "variant.os_tint_perp_b": 107,
+            "variant.os_tint_par_r": 10,
+            "variant.os_tint_par_g": 122,
+            "variant.os_tint_par_b": 41,
+            "variant.os_brightness": 55,
+            "variant.os_type": 0,
+            "variant.omit_first_spawn": 0,
+            "variant.item_spawn_s": 0,
+            "variant.camo_drop": 0,
+            "variant.os_assassination": 0,
+            "variant.teammate_outlines": false,
+            "variant.teammate_view": false,
+            "variant.teammate_respawn_timers": false,
+            "variant.fov_limit": 0,
+            "variant.time_limit_min": 0,
+            "variant.overtime": 0,
+            "variant.overtime_timed": 0,
+            "variant.overtime_length_min": 2,
+            "variant.smoke_rendering": 0,
+            "variant.map_scripts_off": 1,
+            "variant.alternating_powerups": 0,
+            "variant.weapon_set": 0
+          }
+        }
+      ]
     }
   }
 }

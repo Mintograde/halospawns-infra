@@ -14,6 +14,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
   for (const profile of registry.profiles) {
     assert.ok(recipes[profile.id]?.some(recipe =>
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
+    if(profile.port==='beta8') assert.equal(requirements.beta8,'halospawns.h1Beta8.v1');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
       if(recipe.exporter_revision>=34)
@@ -22,7 +23,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.equal(requirements.spawn_metrics,'halospawns.h1SpawnMetrics.v1');
       if(recipe.exporter_revision>=30)
         assert.equal(requirements.player_camo_amount,'halospawns.h1PlayerCamoAmount.v1');
-      if(recipe.exporter_revision>=29 && (recipe.exporter_revision<30 || ['beta5','beta6','beta7'].includes(profile.port))) {
+      if(recipe.exporter_revision>=29 && (recipe.exporter_revision<30 || ['beta5','beta6','beta7','beta8'].includes(profile.port))) {
         assert.equal(requirements.melee_metrics,'halospawns.h1GameplayMetrics.v1');
         assert.equal(recipe.analytics_revision,5);
       }
@@ -30,10 +31,12 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.equal(requirements.pistol_accuracy,'halospawns.h1PistolAccuracy.v1');
         assert.ok(recipe.analytics_revision>=4);
       }
-      if(recipe.exporter_revision>=26 && (recipe.exporter_revision<28 || ['beta6','beta7'].includes(profile.port))) {
-        assert.ok(['beta6','beta7'].includes(profile.port));
+      if(recipe.exporter_revision>=26 && (recipe.exporter_revision<28 || ['beta6','beta7','beta8'].includes(profile.port))) {
+        assert.ok(['beta6','beta7','beta8'].includes(profile.port));
         assert.equal(requirements.network_host_bots,'halospawns.h1NetworkHostBots.v1');
       }
+      assert.equal(profile.port==='beta8',recipe.viewer_revision===13);
+      if(profile.port==='beta8') assert.equal(recipe.exporter_revision,35);
       assert.equal(profile.port==='beta7',[11,12].includes(recipe.viewer_revision));
       if(profile.port==='beta7')assert.equal(recipe.exporter_revision>=33,recipe.viewer_revision===12);
       if(recipe.viewer_revision===12)assert.equal(requirements.large_match_replay,'halospawns.h1MatchReplay.v7');
@@ -41,24 +44,24 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         exporter.engine_profile === profile.id && exporter.revision === recipe.exporter_revision));
       assert.ok([1, 2, 3, 4, 5].includes(recipe.analytics_revision));
       if(recipe.analytics_revision===5) {
-        assert.ok(['beta5','beta6','beta7'].includes(profile.port)&&recipe.exporter_revision>=19);
+        assert.ok(['beta5','beta6','beta7','beta8'].includes(profile.port)&&recipe.exporter_revision>=19);
         assert.equal(requirements.gameplay_metrics,'halospawns.h1GameplayMetrics.v1');
       }
       if(recipe.exporter_revision>=21 && (recipe.exporter_revision<28 || recipe.analytics_revision===5)) {
-        assert.ok(['beta5','beta6','beta7'].includes(profile.port) && recipe.analytics_revision===5);
+        assert.ok(['beta5','beta6','beta7','beta8'].includes(profile.port) && recipe.analytics_revision===5);
         assert.equal(requirements.gameplay_estimates,'halospawns.h1GameplayEstimates.v1');
       }
       if(recipe.exporter_revision>=24)
         assert.equal(requirements.three_shot_headshot,'halospawns.h1GameplayMetrics.v1');
-      assert.ok([2, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(recipe.viewer_revision));
-      if(['beta6','beta7'].includes(profile.port)) {
+      assert.ok([2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(recipe.viewer_revision));
+      if(['beta6','beta7','beta8'].includes(profile.port)) {
         assert.equal(recipe.exporter_revision>=16,recipe.viewer_revision>=7);
         assert.equal(recipe.exporter_revision>=17,recipe.viewer_revision>=8);
         assert.equal(recipe.exporter_revision>=18,recipe.viewer_revision>=9);
         assert.equal(recipe.exporter_revision>=22,recipe.viewer_revision>=10);
       }
       if(recipe.viewer_revision>=7) {
-        assert.ok(['beta6','beta7'].includes(profile.port));assert.ok(recipe.exporter_revision>=16);
+        assert.ok(['beta6','beta7','beta8'].includes(profile.port));assert.ok(recipe.exporter_revision>=16);
         assert.equal(requirements.partial_match_replay,'halospawns.h1MatchReplay.v2');
       }
       if(recipe.viewer_revision>=8) {
