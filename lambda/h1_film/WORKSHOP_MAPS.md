@@ -2,9 +2,10 @@
 
 Dev now has Workshop discovery, content history, exact-map deduplication,
 scheduled downloads and durable replay waiters. New map bytes use the ordinary
-map-processing pipeline. Downloaded MCC maps receive automatic approvals for
-registered Beta 7+ engines after normal map processing and identity checks;
-older and other engines retain manual review.
+map-processing pipeline. All processed MCC multiplayer maps receive automatic
+approvals for registered Beta 7+ engines, including existing catalog maps and
+future standalone uploads. Workshop association is optional; older and other
+engines retain manual review.
 
 **Remaining prerequisite:** the user has no dedicated Steam account/session yet.
 A real anonymous SteamCMD probe connected but failed to download MCC item
@@ -49,18 +50,25 @@ and a Workshop link in game details.
 ## Updates and failures
 
 API maintenance approves at most four map/engine pairs before redispatching
-films. Policy `halospawns.workshopMccApproval.v1` covers numeric Beta 7 and later
-profiles in the trusted H1 registry, including future registrations. It requires
-downloaded revision proof, exact original SHA-256/size/scenario, a processed
+films. Policy `halospawns.mccMapApproval.v1` covers every processed MCC multiplayer
+map for numeric Beta 7 and later profiles in the trusted H1 registry, including
+future uploads and engine registrations. It records catalog original/GLB file
+IDs, processor classification and immutable source. When Workshop evidence exists,
+`halospawns.workshopMccApproval.v1` retains the publication audit and verifies
+downloaded revision SHA-256/size/scenario. Both paths require a processed
 cache-v13 MCC multiplayer map, current GLB, active release and immutable source.
-Previously uploaded identical maps qualify after download proves their identity.
 Existing manual approvals and all retirements are preserved. Ambiguity and
 missing evidence stay blocked for review; failures retry after an hour without
 holding up other maps. Full replay simulation verification remains mandatory.
 
-Automatic bindings store policy and Workshop provenance with no human reviewer.
+Automatic bindings store policy and catalog or Workshop provenance with no human reviewer.
 The additive `20261113030000_workshop_map_autoapprovals.sql` migration also adds
 the fair approval-check queue. No worker image or replay recipe changes are needed.
+Migration `20261113040000_mcc_catalog_autoapprovals.sql` extends the audit constraint
+to standalone maps. The existing 15-minute worker schedule scans the whole MCC
+multiplayer catalog even with no tracked Workshop items, before Steam login.
+Standalone approval does not require Steam credentials. Campaign/UI maps are
+outside the multiplayer replay contract.
 See the [flow diagram](WORKSHOP_MAPS_FLOW.md) and API runbook for the audit contract.
 
 The worker polls every 15 minutes at concurrency one, claiming one publication
@@ -230,12 +238,48 @@ The final `scripts/plan.ps1 dev` run is no-op for all six components:
 tfstate-backend, frontend-site, uploads-ingest, app-api, ecr and map-processing
 (`.build/workshop/autoapproval-final-postplans.log`).
 
+## Catalog-wide MCC approvals (2026-11-13)
+
+Dev API **259**, source `bcca31ddadaff117b534d7137d0010ef74033b8a`,
+[CI 43532429480](https://github.com/Mintograde/halospawns-api/actions/runs/43532429480),
+extends approval to existing MCC maps and future standalone uploads. Migration
+`20261113040000_mcc_catalog_autoapprovals.sql` was applied after a dry run showing
+only that migration. The live Lambda hash matches the exact CI artifact.
+H1 r3/policy 32, both workers, all six engines and all 59 exporters remain unchanged.
+
+The dev inventory contains 20 MCC multiplayer maps and ten campaign maps. All
+20 multiplayer maps passed read-only catalog/S3 previews and now have eligible
+Beta 7 bindings under `halospawns.mccMapApproval.v1`. Four approvals were already
+present when the bounded maintenance run began; four additional four-map passes
+completed the remaining 16. An extra maintenance pass and the deployed worker
+poll both return idle. Future direct uploads and future registered Beta 8/9+
+profiles are handled by the same scheduled catalog scan, before Steam login.
+Campaign/UI maps remain outside the multiplayer replay contract.
+
+All 20 immutable raw versions, source hashes and GLB pins match their previews.
+All 360 previous approval records retain their complete audit fingerprint.
+Totals are 380 approvals, 378 conversions, 1837 completion receipts and 419 total
+games. No game/replay history changed; Workshop items remain zero and both film
+queue/DLQ are empty. Tests pass: 2313 local API units, 2315 CI cases (363 optional
+integration/private-fixture skips), 26 isolated PostgreSQL approval cases,
+36 local review UI/API cases, Ruff and site build. The new database cases cover
+standalone uploads, future engines, catalog/classification races, immutable
+audits, retirement and manual transfers from either automatic policy.
+
+Evidence: `.build/workshop/mcc-inventory-before.json`, `mcc-previews.json`,
+`mcc-backfill-result.json`, `mcc-backfill.log`, `mcc-*.log` and `mcc-queue-audit.json`.
+`mcc-refresh-api.ps1` verifies the source/CI artifact and live hash, then applies
+only the API output refresh 258 -> 259 with zero resource actions. Frontend
+labels remain local/uncommitted. No production deployment or replay reparse.
+The final `scripts/plan.ps1 dev` run is no-op for all six components
+(`.build/workshop/mcc-final-postplans.log`).
+
 ## Rollback
 
 Disable the schedule/API feature or return H1 default/image to retained r2 using
 guarded promotion. Keep additive tables, sources, snapshots, associations, reader
 contracts and every retained recipe. Do not purge queues or rewrite history.
 Retain the automatic-approval migration and API provenance reader, including
-nullable system reviewers. `WORKSHOP_MAPS_ENABLED=false` stops new automatic
+both policy versions and nullable system reviewers. `WORKSHOP_MAPS_ENABLED=false` stops new automatic
 approvals; existing decisions remain immutable and can be retired through the
 normal admin workflow.

@@ -10,6 +10,8 @@ deployment, credential setup and rollback details.
 flowchart TD
     A["Replay uploaded<br/>Workshop ID in film metadata"] --> B["Record Workshop ID<br/>and original film source"]
     B --> C{"Matching map already<br/>linked to this Workshop ID?"}
+    SA["Existing MCC catalog maps<br/>or future standalone uploads"] --> SB["Normal map processing<br/>Retain original and GLB"]
+    SB --> AA
 
     C -- Yes --> J
     C -- No --> D["Save replay as waiting"]
@@ -23,7 +25,7 @@ flowchart TD
     H --> K["Associate Workshop revision<br/>with map IDs"]
     I --> K
     K --> AA{"Registered H1 film engine<br/>Beta 7 or later?"}
-    AA -- Yes --> AB["Automatically approve eligible MCC map<br/>Pin source, GLB and Workshop provenance"]
+    AA -- Yes --> AB["Automatically approve eligible MCC map<br/>Pin source, GLB and approval evidence"]
     AA -- No --> AC["Manual map approval required"]
     AB --> L["Redispatch waiting replay"]
     AC -. "After approval" .-> L
@@ -71,13 +73,16 @@ pinned map and engine versions; updates do not automatically reprocess them.
 ## Current prerequisites
 
 As of November 13, 2026, authenticated downloads still await dedicated Steam
-account setup and verification. Beta 8 engine activation remains a separate
-requirement. Once a Beta 7+ engine is registered, scheduled maintenance also
-approves eligible previously downloaded MCC maps for it. Older and other
-engines require manual approval.
+account setup and verification. Standalone MCC approval does not require Steam
+credentials or a Workshop association. Beta 8 engine activation remains a
+separate requirement. Once a Beta 7+ engine is registered, scheduled maintenance
+also approves eligible existing MCC maps for it. Future direct uploads follow
+the same policy. Older and other engines require manual approval.
 
-Automatic approval requires a downloaded Workshop revision with the exact
-original SHA-256 and size, a processed MCC multiplayer map, an active release,
-an immutable retained source and a current GLB. It preserves manual approvals
-and retirements; ambiguity or missing evidence requires review. Replay
-simulation and verification remain mandatory.
+Automatic approval requires a processed MCC multiplayer map, an active release,
+an immutable retained source and a current GLB. Standalone approvals record the
+catalog file IDs and processor classification; Workshop approvals additionally
+record the matching downloaded revision. The policy preserves manual approvals
+and retirements; ambiguity or missing evidence requires review. Campaign/UI maps
+are outside this multiplayer replay path. Replay simulation and verification
+remain mandatory.
