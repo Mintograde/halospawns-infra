@@ -140,6 +140,15 @@ class SessionTests(unittest.TestCase):
                                  "stage": "metadata", "error_type": "PermissionError"})
         self.assertNotIn("secret-value", json.dumps(result))
 
+    def test_probe_distinguishes_authenticated_download_rejection(self):
+        with patch.object(w.steam_auth, "load_credentials", return_value={"username": "fixture"}), \
+             patch.object(w, "metadata"), \
+             patch.object(w, "steam_download", side_effect=w.WorkshopError("download_failed", authenticated=True)):
+            context = Mock(get_remaining_time_in_millis=Mock(return_value=900000))
+            result = w.probe({"item_id": "123"}, context, Mock())
+        self.assertEqual(result, {"state": "failed", "reason": "download_failed",
+                                 "stage": "download", "authenticated": True})
+
 
 class BootstrapTests(unittest.TestCase):
     def test_guard_code_is_prompted_privately_and_never_stored(self):

@@ -171,7 +171,7 @@ def main():
         result = json.loads(response["Payload"].read())
         if response.get("FunctionError"):
             raise OperationError("Probe invocation failed")
-        print(json.dumps({k: result[k] for k in ("state", "reason", "item_id", "maps", "stage", "error_type") if k in result}))
+        print(json.dumps({k: result[k] for k in ("state", "reason", "item_id", "maps", "stage", "error_type", "authenticated") if k in result}))
         if result.get("state") != "download_verified":
             raise SystemExit(2)
 

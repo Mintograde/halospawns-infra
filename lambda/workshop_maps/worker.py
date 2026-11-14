@@ -31,10 +31,11 @@ MAX_FILES = 10000
 
 
 class WorkshopError(Exception):
-    def __init__(self, code, state="failed", reason=None):
+    def __init__(self, code, state="failed", reason=None, authenticated=None):
         super().__init__(code)
         self.code, self.state = code, state
         self.reason = reason or code
+        self.authenticated = authenticated
 
 
 def item_id(value):
@@ -150,18 +151,19 @@ def steam_download(identifier, work, deadline, credentials=None):
         raise WorkshopError("download_failed")
     result = log.read_text(errors="replace")
     success = f"Success. Downloaded item {identifier}" in result
-    if credentials and credentials.get("save_config") and (success or steam_auth.logged_in(result)):
+    authenticated = bool(credentials) and (success or steam_auth.logged_in(result))
+    if credentials and credentials.get("save_config") and authenticated:
         try:
             credentials["save_config"](steam_auth.read_config(steam / "config" / "config.vdf"))
         except Exception:
-            raise WorkshopError("download_failed", reason="session_storage_failed") from None
+            raise WorkshopError("download_failed", reason="session_storage_failed", authenticated=True) from None
     reason = steam_auth.failure_reason(result)
     if not success and reason in ("no_subscription", "access_denied", "authentication_required"):
-        raise WorkshopError("authentication_required", "auth_required", reason)
+        raise WorkshopError("authentication_required", "auth_required", reason, authenticated)
     if process.returncode != 0 or not success:
         if not credentials:
             raise WorkshopError("authentication_required", "auth_required")
-        raise WorkshopError("download_failed", reason=reason)
+        raise WorkshopError("download_failed", reason=reason, authenticated=authenticated)
     package = steam / "steamapps" / "workshop" / "content" / str(APP) / identifier
     if not package.is_dir():
         raise WorkshopError("invalid_package")
@@ -285,7 +287,10 @@ def probe(event, context, ssm):
     except steam_auth.AuthRequired:
         return {"state": "auth_required", "reason": "authentication_required"}
     except WorkshopError as error:
-        return {"state": error.state, "reason": error.reason, "stage": stage}
+        result = {"state": error.state, "reason": error.reason, "stage": stage}
+        if error.authenticated is not None:
+            result["authenticated"] = error.authenticated
+        return result
     except Exception as error:
         kind = type(error).__name__
         if kind not in {"PermissionError", "FileNotFoundError", "OSError", "HTTPError", "URLError", "TimeoutError", "ClientError"}:
