@@ -20,9 +20,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 try:
-    from . import steam_auth
+    from . import depot, steam_auth
 except ImportError:  # Lambda imports worker as a top-level module.
-    import steam_auth
+    import depot, steam_auth
 
 APP = 976730
 MAX_PACKAGE = 4 * 1024**3
@@ -111,6 +111,9 @@ def tree_size(root):
 
 def steam_download(identifier, work, deadline, credentials=None):
     identifier = item_id(identifier)
+    if os.environ.get("WORKSHOP_DOWNLOADER") == "depotdownloader":
+        return depot.download(identifier, work, deadline, credentials,
+                              error_type=WorkshopError, check_tree=tree_size)
     steam = work / "steam"
     shutil.copytree(os.environ.get("STEAMCMD_ROOT", "/opt/steamcmd"),steam)
     login = "login anonymous"
@@ -135,10 +138,7 @@ def steam_download(identifier, work, deadline, credentials=None):
     log = work / "steam.log"
     with log.open("wb") as output:
         process = subprocess.Popen([str(steam / "steamcmd.sh"), "+runscript", str(script)],
-            # Lambda rejects native i386 syscalls (SIGSYS). The official launcher
-            # supports a debugger prefix and preserves it across update restarts.
-            cwd=steam, env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
-                           "DEBUGGER": "/usr/bin/qemu-i386-static"},
+            cwd=steam, env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
             stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             while process.poll() is None:
