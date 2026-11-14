@@ -1,4 +1,6 @@
 import copy
+import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -20,6 +22,40 @@ def product():
 
 
 class SpawnTests(unittest.TestCase):
+    def test_node_products_match_worker_validation_and_api_schema(self):
+        from jsonschema import Draft202012Validator
+
+        root = Path(__file__).resolve().parents[1]
+        runtime = root / "runtime/spawn-metrics.mjs"
+        if not runtime.exists():
+            runtime = root.parent / "runtime/spawn-metrics.mjs"
+        script = """
+import {deriveSpawnMetrics} from RUNTIME_MODULE;
+const encoding = {players:[0],source_ticks:20,source_first_clock:0,analytics:{match_end_source_tick:19}};
+const cases = [[1,2],[0.5,1,2],[0.5,2],[0.1,1,1.01],[1,Math.sqrt(1.5)],
+  [1,Math.sqrt(1.5)+1e-6],[1,...Array(100).fill(1.01)],[1,1],null];
+console.log(JSON.stringify([1,2].flatMap(version => cases.map(ratings => deriveSpawnMetrics([
+  {source_tick:1,events:[{slot_index:0,unit_handle:1234,spawn_index:0,ratings}]}
+],encoding,version)))));
+"""
+        script = script.replace("RUNTIME_MODULE", json.dumps(runtime.as_uri()))
+        generated = subprocess.run(["node", "--input-type=module", "-e", script],
+                                   cwd=root, capture_output=True, text=True, check=True)
+        products = json.loads(generated.stdout)
+        for version in (1, 2, 3):
+            schema = json.loads((root / f"contracts/h1film-native-analytics.v{version}.schema.json").read_text())
+            validator = Draft202012Validator({"$defs": schema["$defs"], **schema["properties"]["spawn_metrics"]})
+            for p in products:
+                with self.subTest(native_version=version, definition=p["definition_version"], event=p["events"][0]):
+                    validator.validate(p)
+                    self.validate(p, revision=34 if p["definition_version"] == 2 else 32)
+                    if p["events"][0]["improbable"] is not None:
+                        forged = copy.deepcopy(p)
+                        forged["events"][0]["improbable"] = not p["events"][0]["improbable"]
+                        forged["improbable_count"] = int(forged["events"][0]["improbable"])
+                        with self.assertRaises(ValueError):
+                            self.validate(forged, revision=34 if p["definition_version"] == 2 else 32)
+
     def validate(self, value, revision=32, full=True):
         validate_spawns(value, exporter_revision=revision, slots={0}, stop=20, full_match=full)
 

@@ -36,8 +36,35 @@ export function spawnProbabilities(ratings) {
 }
 
 export const INITIAL_THRESHOLD = Object.freeze({maximum_ratio: 0.5, minimum_gap: 0.10});
+export const NEUTRAL_THRESHOLD = Object.freeze({positive_to_neutral_ratio_exclusive: 2});
+
+// Ratings are the engine's final net influence: 1 is neutral, >1 positive,
+// and 0<rating<1 negative. Use an actual neutral candidate, never insert one.
+export function classifyNeutralSpawn(ratings, chosenIndex) {
+  const probabilities = spawnProbabilities(ratings);
+  const result = classifyProbabilities(ratings, chosenIndex, INITIAL_THRESHOLD, probabilities);
+  if (result === null) return null;
+  const neutralIndex = ratings.indexOf(1);
+  const neutral = neutralIndex < 0 ? null : probabilities[neutralIndex];
+  const positive = ratings.some(r => r > 1) ? result.highest_probability : null;
+  const rating = ratings[chosenIndex];
+  const threshold = neutral === null ? null : 2 * neutral;
+  return {
+    ...result,
+    chosen_rating: rating,
+    neutral_probability: neutral,
+    highest_positive_probability: positive,
+    improbable: neutral !== null && positive !== null &&
+      (rating === 1 || (rating < 1 && result.chosen_probability < neutral)) &&
+      positive > threshold && positive - threshold > 1e-12 * Math.max(positive, threshold),
+  };
+}
 
 export function classifySpawn(ratings, chosenIndex, threshold = INITIAL_THRESHOLD) {
+  return classifyProbabilities(ratings, chosenIndex, threshold, spawnProbabilities(ratings));
+}
+
+function classifyProbabilities(ratings, chosenIndex, threshold, probabilities) {
   if (!Number.isInteger(chosenIndex) || chosenIndex < 0 || chosenIndex >= ratings.length) {
     throw new RangeError('Chosen spawn index is outside the rating array');
   }
@@ -46,7 +73,6 @@ export function classifySpawn(ratings, chosenIndex, threshold = INITIAL_THRESHOL
       !Number.isFinite(gap) || gap < 0 || gap > 1) {
     throw new RangeError('Invalid improbable-spawn threshold');
   }
-  const probabilities = spawnProbabilities(ratings);
   if (!probabilities || ratings[chosenIndex] <= 0) return null;
   const chosen = probabilities[chosenIndex];
   const highest = probabilities.reduce((m, p) => Math.max(m, p), 0);

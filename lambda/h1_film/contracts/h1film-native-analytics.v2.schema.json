@@ -806,6 +806,186 @@
       "title": "H1WeaponShots",
       "type": "object"
     },
+    "NeutralSpawnEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "chosen_probability": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Chosen Probability"
+        },
+        "chosen_rating": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Chosen Rating"
+        },
+        "highest_positive_probability": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Highest Positive Probability"
+        },
+        "highest_probability": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Highest Probability"
+        },
+        "improbable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Improbable"
+        },
+        "neutral_probability": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Neutral Probability"
+        },
+        "non_highest": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Non Highest"
+        },
+        "probability_gap": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Probability Gap"
+        },
+        "probability_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Probability Ratio"
+        },
+        "slot_index": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Slot Index",
+          "type": "integer"
+        },
+        "source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Source Tick",
+          "type": "integer"
+        },
+        "spawn_index": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 32768,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spawn Index"
+        },
+        "unit_handle": {
+          "exclusiveMaximum": 4294967296,
+          "minimum": 0,
+          "title": "Unit Handle",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_tick",
+        "slot_index",
+        "unit_handle",
+        "spawn_index",
+        "chosen_probability",
+        "highest_probability",
+        "probability_ratio",
+        "probability_gap",
+        "non_highest",
+        "improbable",
+        "chosen_rating",
+        "neutral_probability",
+        "highest_positive_probability"
+      ],
+      "title": "NeutralSpawnEvent",
+      "type": "object"
+    },
+    "NeutralSpawnThreshold": {
+      "additionalProperties": false,
+      "properties": {
+        "positive_to_neutral_ratio_exclusive": {
+          "const": 2.0,
+          "title": "Positive To Neutral Ratio Exclusive",
+          "type": "number"
+        }
+      },
+      "required": [
+        "positive_to_neutral_ratio_exclusive"
+      ],
+      "title": "NeutralSpawnThreshold",
+      "type": "object"
+    },
     "PistolAccuracy": {
       "additionalProperties": false,
       "properties": {
@@ -1101,6 +1281,96 @@
       "title": "SpawnMetrics",
       "type": "object"
     },
+    "SpawnMetricsV2": {
+      "additionalProperties": false,
+      "properties": {
+        "boundary_policy": {
+          "const": "pre_end_snapshot",
+          "title": "Boundary Policy",
+          "type": "string"
+        },
+        "coverage": {
+          "enum": [
+            "complete",
+            "partial"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "definition_version": {
+          "const": 2,
+          "title": "Definition Version",
+          "type": "integer"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/NeutralSpawnEvent"
+          },
+          "maxItems": 8192,
+          "title": "Events",
+          "type": "array"
+        },
+        "improbable_count": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Improbable Count",
+          "type": "integer"
+        },
+        "measured_spawns": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Measured Spawns",
+          "type": "integer"
+        },
+        "non_highest_count": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Non Highest Count",
+          "type": "integer"
+        },
+        "observed_spawns": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Observed Spawns",
+          "type": "integer"
+        },
+        "probability_model": {
+          "const": "independent_uniform_squared_ratings_v1",
+          "title": "Probability Model",
+          "type": "string"
+        },
+        "schema": {
+          "const": "halospawns.h1SpawnMetrics.v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "threshold": {
+          "$ref": "#/$defs/NeutralSpawnThreshold"
+        },
+        "unknown_spawns": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Unknown Spawns",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema",
+        "definition_version",
+        "probability_model",
+        "boundary_policy",
+        "threshold",
+        "observed_spawns",
+        "measured_spawns",
+        "unknown_spawns",
+        "non_highest_count",
+        "improbable_count",
+        "coverage",
+        "events"
+      ],
+      "title": "SpawnMetricsV2",
+      "type": "object"
+    },
     "SpawnThreshold": {
       "additionalProperties": false,
       "properties": {
@@ -1179,13 +1449,28 @@
     "spawn_metrics": {
       "anyOf": [
         {
-          "$ref": "#/$defs/SpawnMetrics"
+          "discriminator": {
+            "mapping": {
+              "1": "#/$defs/SpawnMetrics",
+              "2": "#/$defs/SpawnMetricsV2"
+            },
+            "propertyName": "definition_version"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SpawnMetrics"
+            },
+            {
+              "$ref": "#/$defs/SpawnMetricsV2"
+            }
+          ]
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Spawn Metrics"
     }
   },
   "required": [

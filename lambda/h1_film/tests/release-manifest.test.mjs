@@ -42,7 +42,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,32);
+  assert.equal(value.defaults[profile].exporter_revision,34);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -62,8 +62,8 @@ test('historical manifests do not acquire a client recipe field',()=>{
 
 test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:32,analytics_revision:5,viewer_revision:10,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:34,analytics_revision:5,viewer_revision:10,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10],[34,10]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -143,15 +143,32 @@ test('spawn event recipes require a compatible reader and retain the prior host 
 
 test('large matches use a new Beta 7 recipe with unchanged binaries and a required reader',()=>{
   const id='h1-performance-beta7-p9844-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:33,analytics_revision:5,viewer_revision:12,max_players:16});
+  assert.ok(value.recipes[id].some(r=>r.exporter_revision===33&&r.analytics_revision===5&&r.viewer_revision===12&&r.max_players===16));
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===33),
     {...registry.exporters.find(e=>e.engine_profile===id&&e.revision===32),revision:33});
   assert.ok(value.recipes[id].some(r=>r.exporter_revision===32&&r.viewer_revision===11));
-  for(const p of registry.profiles.filter(p=>p.id!==id))assert.equal(value.defaults[p.id].exporter_revision,32);
+  for(const p of registry.profiles.filter(p=>p.id!==id))assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===32));
   for(const mutate of [
     r=>delete r.processing.requirements.large_match_replay,
     r=>r.processing.requirements.large_match_replay='unknown',
     r=>r.processing.recipes[id].at(-1).viewer_revision=11,
     r=>r.processing.recipes[id].find(r=>r.exporter_revision===32).viewer_revision=12,
   ]) {const bad=structuredClone(registry);mutate(bad);assert.throws(()=>manifest(bad));}
+});
+
+test('neutral baseline definition adds recipes without changing retained engine binaries',()=>{
+  const value=manifest(registry);
+  for(const p of registry.profiles) {
+    const prior=p.port==='beta7'?33:32;
+    assert.equal(value.defaults[p.id].exporter_revision,34);
+    assert.deepEqual(registry.exporters.find(e=>e.engine_profile===p.id&&e.revision===34),
+      {...registry.exporters.find(e=>e.engine_profile===p.id&&e.revision===prior),revision:34});
+    const recipe=value.recipes[p.id].find(r=>r.exporter_revision===prior);
+    assert.deepEqual(value.defaults[p.id],{...recipe,exporter_revision:34});
+  }
+  for(const wrong of [undefined,'unknown']) {
+    const r=structuredClone(registry);r.processing.requirements.spawn_neutral_baseline=wrong;
+    assert.throws(()=>manifest(r));
+  }
+  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
 });

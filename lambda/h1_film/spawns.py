@@ -8,12 +8,17 @@ def validate_spawns(product, *, exporter_revision, slots, stop, full_match):
         raise ValueError("Spawn metrics differ from exporter recipe")
     if product is None:
         return
+    definition = 2 if exporter_revision >= 34 else 1
+    threshold = (
+        {"positive_to_neutral_ratio_exclusive": 2.0}
+        if definition == 2 else {"maximum_ratio": 0.5, "minimum_gap": 0.1}
+    )
     if (
         product.get("schema") != "halospawns.h1SpawnMetrics.v1"
-        or product.get("definition_version") != 1
+        or product.get("definition_version") != definition
         or product.get("probability_model") != "independent_uniform_squared_ratings_v1"
         or product.get("boundary_policy") != "pre_end_snapshot"
-        or product.get("threshold") != {"maximum_ratio": 0.5, "minimum_gap": 0.1}
+        or product.get("threshold") != threshold
     ):
         raise ValueError("Unsupported spawn definition")
     events = product["events"]
@@ -50,6 +55,10 @@ def validate_spawns(product, *, exporter_revision, slots, stop, full_match):
         if all(v is None for v in values):
             if event["non_highest"] is not None or event["improbable"] is not None:
                 raise ValueError("Unknown spawn cannot be classified")
+            if definition == 2 and any(event[n] is not None for n in (
+                "chosen_rating", "neutral_probability", "highest_positive_probability",
+            )):
+                raise ValueError("Unknown spawn cannot have influence evidence")
             continue
         if any(
             type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in values
@@ -67,6 +76,8 @@ def validate_spawns(product, *, exporter_revision, slots, stop, full_match):
             raise ValueError("Inconsistent spawn probabilities")
         non_highest = chosen < highest - 1e-12
         rare = non_highest and chosen <= highest * 0.5 + 1e-12 and gap >= 0.1 - 1e-12
+        if definition == 2:
+            rare = _neutral_baseline_classification(event, chosen, highest)
         if event["non_highest"] is not non_highest or event["improbable"] is not rare:
             raise ValueError("Spawn classification differs from definition")
         measured += 1
@@ -84,3 +95,40 @@ def validate_spawns(product, *, exporter_revision, slots, stop, full_match):
     complete = full_match and stop > 0 and measured == len(events)
     if product["coverage"] != ("complete" if complete else "partial"):
         raise ValueError("Spawn coverage differs from recording/evidence")
+
+
+def _neutral_baseline_classification(event, chosen, highest):
+    rating = event["chosen_rating"]
+    neutral = event["neutral_probability"]
+    positive = event["highest_positive_probability"]
+    if type(rating) not in (int, float) or not math.isfinite(rating) or rating <= 0:
+        raise ValueError("Invalid chosen spawn rating")
+    for probability in (neutral, positive):
+        if probability is not None and (
+            type(probability) not in (int, float)
+            or not math.isfinite(probability)
+            or not 0 <= probability <= highest
+        ):
+            raise ValueError("Invalid spawn influence probability")
+    # Positive ratings (> 1) outrank every neutral/negative rating in this model.
+    if positive is not None and abs(positive - highest) > 1e-10:
+        raise ValueError("Positive spawn must have the highest probability")
+    if rating > 1 and positive is None:
+        raise ValueError("Positive selection requires positive spawn evidence")
+    if rating == 1 and (neutral is None or abs(chosen - neutral) > 1e-10):
+        raise ValueError("Neutral selection requires matching neutral probability")
+    if neutral is not None:
+        if (rating < 1 and chosen > neutral) or (rating > 1 and chosen < neutral):
+            raise ValueError("Chosen probability differs from spawn influence")
+        if positive is None and abs(neutral - highest) > 1e-10:
+            raise ValueError("Without positive influence neutral spawns are highest")
+    # Strictly more than twice the actual neutral chance; equality does not count.
+    # Relative tolerance absorbs integration rounding without imposing an absolute
+    # percentage-point floor on small probabilities.
+    return (
+        neutral is not None
+        and positive is not None
+        and (rating == 1 or (rating < 1 and chosen < neutral))
+        and positive > 2 * neutral
+        and not math.isclose(positive, 2 * neutral, rel_tol=1e-12, abs_tol=0)
+    )

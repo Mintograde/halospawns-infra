@@ -16,6 +16,8 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
       JSON.stringify(recipe) === JSON.stringify(defaults[profile.id])), 'Missing default recipe');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
+      if(recipe.exporter_revision>=34)
+        assert.equal(requirements.spawn_neutral_baseline,'halospawns.h1SpawnMetrics.v1');
       if(recipe.exporter_revision>=32)
         assert.equal(requirements.spawn_metrics,'halospawns.h1SpawnMetrics.v1');
       if(recipe.exporter_revision>=30)

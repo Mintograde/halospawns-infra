@@ -9,14 +9,33 @@ test('successful observed spawns reconcile with model counts and retain per-even
   assert.equal(p.observed_spawns,2); assert.equal(p.coverage,'complete');
   assert.equal(p.events[0].chosen_probability,0.125);
   assert.equal(p.events[0].highest_probability,0.875);
+  assert.equal(p.definition_version,2);
+  assert.deepEqual(p.threshold,{positive_to_neutral_ratio_exclusive:2});
+  assert.equal(p.events[0].neutral_probability,0.125);
 });
 test('missing ratings and partial recordings remain partial, zero stays measured', () => {
   const p=deriveSpawnMetrics([{source_tick:1,events:[event(1,null)]}],encoding);
   assert.equal(p.unknown_spawns,1); assert.equal(p.coverage,'partial');
   assert.equal(p.events[0].improbable,null);
+  assert.equal(p.events[0].chosen_rating,null);
+  assert.equal(p.events[0].neutral_probability,null);
   assert.equal(deriveSpawnMetrics([],encoding).improbable_count,0);
   assert.equal(deriveSpawnMetrics([],{...encoding,source_first_clock:12}).coverage,'partial');
   assert.equal(deriveSpawnMetrics([],{...encoding,analytics:{match_end_source_tick:0}}).coverage,'partial');
+});
+
+test('retained definition 1 keeps its classifications and exact event shape', () => {
+  const frames = [{source_tick:0,events:[event(1,[0.5,2])]}];
+  const old = deriveSpawnMetrics(frames,encoding,1);
+  assert.equal(old.definition_version,1);
+  assert.equal(old.improbable_count,1);
+  assert.deepEqual(old.threshold,{maximum_ratio:0.5,minimum_gap:0.1});
+  assert.equal('chosen_rating' in old.events[0],false);
+  const current = deriveSpawnMetrics(frames,encoding);
+  assert.equal(current.improbable_count,0);
+  assert.equal(current.measured_spawns,1);
+  assert.equal(current.coverage,'complete');
+  assert.equal(current.events[0].neutral_probability,null);
 });
 test('duplicate units, unknown identities, invalid rating vectors and boundary events reject', () => {
   for (const frames of [

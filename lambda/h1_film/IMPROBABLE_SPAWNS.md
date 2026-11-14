@@ -1,5 +1,43 @@
 # Improbable spawns (random randoms)
 
+## Prepared locally: neutral-baseline definition 2
+
+Exporter 34 reuses the existing exporter-32 binaries (including Beta 7's
+exporter-33/viewer-12 recipe). All six host defaults in the candidate registry
+use 34, all previous recipes remain, and separate-client exporter 31 is unchanged.
+The new capability is `spawn_neutral_baseline: halospawns.h1SpawnMetrics.v1`.
+The deployed worker/default has not been changed.
+
+Count a neutral selection, or a negative selection with lower probability than
+neutral, only when a positive point exceeds twice an **actual** neutral point's
+probability. Equality is excluded, with 1e-12 relative rounding tolerance; there
+is no absolute gap floor. Net engine rating defines influence: 1 neutral, >1
+positive, 0<rating<1 negative. Do not synthesize a neutral point when none exists.
+Offsetting influences with final rating 1 are net neutral.
+
+The producer preserves `chosen_rating`, `neutral_probability` and
+`highest_positive_probability` for every event, including unflagged events.
+Missing neutral/positive candidates are null; unknown selection remains unknown.
+The unchanged engine observation hooks supply this evidence. Old recipes still
+produce definition 1 byte-for-byte. API and worker independently validate both.
+
+The API now derives current `spawn_metrics.analysis` at read time from the
+retained inputs. Its definition version, count, selected event indexes and help
+text can change in an API release without a worker release, reparse or frontend
+change. The original ingestion definition remains frozen for receipt/retry audit.
+This compact per-event evidence supports ratio/gap/net-influence rules; complete
+candidate distributions and spatial context are not retained. See the API's
+`docs/h1film-spawn-metrics.md` for the supported scope and future-change workflow.
+
+Old completion manifests and replay artifacts do not contain the temporary full
+rating vectors. Old games therefore need separately authorized full reparses once
+to obtain the new inputs. Publish compatible API readers before the candidate
+worker, then perform the normal exact packaged callback and promotion checks.
+No deployment or reparse has been performed. Keep both definitions, capability
+readers and every old recipe on rollback.
+
+## Historical definition-1 deployment
+
 Dev deployment complete: API 253, worker/default 20261112-r4, policy 30.
 All 282 eligible games and six current separate client views have selected
 generations. See DEPLOYMENT.md for totals, preservation evidence and recovery.

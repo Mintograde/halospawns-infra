@@ -312,7 +312,8 @@ export async function convertFilm(options) {
       const encodingPath = join(stage,'candidate','encoding.json');
       const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
       encoding.native_analytics.spawn_metrics = await buildSpawnMetrics({
-        evidence:join(stage,'candidate','spawns.ndjson'),encoding});
+        evidence:join(stage,'candidate','spawns.ndjson'),encoding,
+        definitionVersion:profile.exporter_revision >= 34 ? 2 : 1});
       await save(encodingPath,encoding);
     }
     if (values.analytics) {

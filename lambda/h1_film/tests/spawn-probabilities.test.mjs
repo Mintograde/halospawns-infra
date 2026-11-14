@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawnProbabilities, classifySpawn} from '../runtime/spawn-probabilities.mjs';
+import {spawnProbabilities, classifySpawn, classifyNeutralSpawn} from '../runtime/spawn-probabilities.mjs';
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-11, `${a} != ${b}`);
 test('three unequal weights integrate each interval and cutoff equality qualifies', () => {
@@ -44,4 +44,32 @@ test('invalid observations cannot become measured zero counts', () => {
   }
   assert.throws(() => classifySpawn([1], 2), RangeError);
   assert.throws(() => classifySpawn([1], 0, {maximum_ratio: 1, minimum_gap: 0}), RangeError);
+});
+
+test('definition 2 requires an actual neutral point and a positive point above twice its odds', () => {
+  const neutral = classifyNeutralSpawn([1, 2], 0);
+  assert.equal(neutral.improbable, true);
+  assert.equal(neutral.chosen_rating, 1);
+  close(neutral.neutral_probability, 1/8);
+  close(neutral.highest_positive_probability, 7/8);
+  assert.equal(classifyNeutralSpawn([0.5, 1, 2], 0).improbable, true);
+  assert.equal(classifyNeutralSpawn([0.5, 2], 0).improbable, false);
+  assert.equal(classifyNeutralSpawn([0.5, 2], 0).neutral_probability, null);
+  assert.equal(classifyNeutralSpawn([0.5, 1], 0).improbable, false);
+  assert.equal(classifyNeutralSpawn([1, 1], 0).highest_positive_probability, null);
+  assert.equal(classifyNeutralSpawn([1, 1.1, 3], 1).improbable, false);
+  // The chosen negative point may be very unlikely; the positive still has to
+  // beat twice the neutral probability, not twice the chosen probability.
+  assert.equal(classifyNeutralSpawn([0.1, 1, 1.01], 0).improbable, false);
+});
+
+test('definition 2 excludes exactly twice and has no absolute probability-gap floor', () => {
+  assert.equal(classifyNeutralSpawn([1, Math.sqrt(1.5)], 0).improbable, false);
+  assert.equal(classifyNeutralSpawn([1, Math.sqrt(1.5) - 1e-6], 0).improbable, false);
+  assert.equal(classifyNeutralSpawn([1, Math.sqrt(1.5) + 1e-6], 0).improbable, true);
+  const many = [1, ...Array(100).fill(1.01)];
+  assert.ok(classifyNeutralSpawn(many, 0).highest_probability < 0.1);
+  assert.equal(classifyNeutralSpawn(many, 0).improbable, true);
+  assert.equal(classifySpawn(many, 0).improbable, false);
+  assert.equal(classifyNeutralSpawn([0, 1, 2], 0), null);
 });
