@@ -1,5 +1,35 @@
 # H1 film Lambda integration
 
+## Receipt archive reader and database recovery (2026-11-14 UTC)
+
+API 263 (`065ee44`, CI 43555606157) reads superseded completion bodies from
+private, exact-version S3 objects. Infra `0932436` adds only the archive bucket
+environment and `s3:GetObjectVersion` on `database-archive/h1film-completions/*`.
+No worker/default/policy change was made. Release expiration excludes this
+prefix. Preserve the reader, IAM, environment and all archive versions on rollback.
+
+The API-owned migration drops four unused settings indexes and adds protected
+receipt storage pointers. All 1,549 eligible bodies passed exact-version read-back;
+a live historical callback returned the identical response through API 263.
+The final all-database size is 409,369,397 bytes (81.9% of 500 MB) after a
+5.75-second receipt-table compaction. All settings and historical identities
+remain. See `../halospawns-api/docs/h1film-receipt-archives.md` for full evidence.
+
+Commands: `scripts/plan.ps1 dev app-api`; save/review the same component plan
+with `terraform -chdir=components/terraform/app-api plan -var-file=dev-app-api.terraform.tfvars.json -out=<plan>`;
+`terraform -chdir=components/terraform/app-api apply <plan>`. The 1-add/3-change/
+1-destroy count includes replacement of the configuration-promotion invocation,
+not deletion of a bucket, function or history. Full `scripts/plan.ps1 dev` then
+had zero resource actions and only the API 262-to-263 output refresh. Its reviewed
+refresh-only apply changed no resources; the final component plan is no-op.
+All 17 component tests pass. Plans/apply logs are `.build/receipt-archives-*.log`.
+
+The paused neutral-baseline backfill was not resumed. Its inventory scripts now
+return SQL receipt hashes and retain a verified bridge from every original
+Python hash. Do not rerun older full-receipt audit downloads. The before script
+refuses to overwrite its original baseline. See both repos' completed handoff
+`20261114-api-infra-receipt-archives`.
+
 ## Large compact match recovery deployed (2026-11-13)
 
 The twenty failed November 13 eight-player Beta 7 uploads are recovered in dev
