@@ -92,7 +92,7 @@ class CloudTests(unittest.TestCase):
 
     def test_viewer_storage_names_preserve_old_generations_and_match_large_format(self):
         for revision, version in ((2, 1), (4, 2), (5, 2), (6, 1), (7, 1),
-                                  (8, 1), (9, 4), (10, 5), (11, 6), (12, 7)):
+                                  (8, 1), (9, 4), (10, 5), (11, 6), (12, 7), (13, 8)):
             with self.subTest(revision=revision):
                 key = self.shared._viewer_artifact_key(
                     "upload", "generation", "a" * 64, profile_revision=revision)

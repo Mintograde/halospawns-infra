@@ -3024,7 +3024,7 @@ def _viewer_artifact_key(
 ) -> str:
     prefix = _settings()["viewer_artifact_prefix"]
     # Keep published viewer-7/8 names immutable while matching new containers.
-    suffix_version = {4: 2, 5: 2, 9: 4, 10: 5, 11: 6, 12: 7}.get(profile_revision, 1)
+    suffix_version = {4: 2, 5: 2, 9: 4, 10: 5, 11: 6, 12: 7, 13: 8}.get(profile_revision, 1)
     filename = (
         f"{VIEWER_SCHEMA}.{VIEWER_PROFILE}-r{profile_revision}."
         f"{artifact_sha256}.viewer-delta.v{suffix_version}.hsrv"
