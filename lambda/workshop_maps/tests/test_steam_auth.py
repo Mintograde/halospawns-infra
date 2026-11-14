@@ -106,6 +106,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(auth.failure_reason("Invalid Password"), "authentication_required")
         self.assertEqual(auth.failure_reason("Steam Guard code required"), "authentication_required")
         self.assertEqual(auth.failure_reason("network failed"), "download_failed")
+        self.assertEqual(auth.failure_reason("cannot execute binary file: Exec format error"), "steam_runtime_unavailable")
 
     def test_missing_secret_finishes_claim_and_preserves_maintenance(self):
         ssm, s3 = Mock(), Mock()
@@ -130,6 +131,14 @@ class SessionTests(unittest.TestCase):
                              {"state": "auth_required", "reason": "authentication_required"})
         api.assert_not_called()
         download.assert_not_called()
+
+    def test_probe_exposes_only_fixed_stage_and_error_type(self):
+        with patch.object(w.steam_auth, "load_credentials", return_value={"username": "fixture"}), \
+             patch.object(w, "metadata", side_effect=PermissionError("secret-value")):
+            result = w.probe({"item_id": "123"}, Mock(), Mock())
+        self.assertEqual(result, {"state": "failed", "reason": "download_failed",
+                                 "stage": "metadata", "error_type": "PermissionError"})
+        self.assertNotIn("secret-value", json.dumps(result))
 
 
 class BootstrapTests(unittest.TestCase):

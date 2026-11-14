@@ -77,10 +77,11 @@ used to disable or work around Steam Guard.
 ## Verify access without importing a map
 
 ```powershell
-uv run --with boto3==1.40.75 --no-project python scripts/workshop-steam-auth.py probe --item-id 2890016882
+uv run --with boto3==1.40.75 --no-project python scripts/workshop-steam-auth.py probe --item-id 2903623613
 ```
 
-This invokes the private worker with `{"action":"probe","item_id":"2890016882"}`.
+This invokes the private worker with `{"action":"probe","item_id":"2903623613"}`
+(Halo CE - Epicenter, confirmed public and unbanned through Steam metadata).
 It checks metadata for app `976730`, restores the SSM session in fresh scratch,
 and attempts the real bounded download. It does not claim a job, import maps,
 write map snapshots, create replays, or change map approvals. Successful login

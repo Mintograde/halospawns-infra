@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Bootstrap Steam Guard locally or test MCC downloads; never print secret values."""
 import argparse
-import base64
+import contextlib
+import csv
 import importlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -26,11 +29,41 @@ class OperationError(Exception):
     """Only fixed, non-secret operator guidance may be used as this message."""
 
 
-def docker(*args, input=None):
-    result = subprocess.run(["docker", *args], input=input, capture_output=True, check=False)
+def docker(*args, input=None, config=None, env=None):
+    prefix = ["--config", config] if config else []
+    result = subprocess.run(["docker", *prefix, *args], input=input, env=env, capture_output=True, check=False)
     if result.returncode:
-        raise OperationError("Docker operation failed; check Docker Desktop and AWS/ECR access")
+        output = (result.stdout + result.stderr).lower()
+        hints = [label for text, label in (
+            (b"credentials", "credential_store"), (b"logon session", "windows_logon_session"),
+            (b"access is denied", "access_denied"), (b"unauthorized", "registry_auth"),
+            (b"cannot connect", "daemon_connection"), (b"certificate", "tls_certificate"),
+            (b"password-stdin", "stdin_login"), (b"forbidden", "forbidden"),
+            (b"not found", "not_found"), (b"timeout", "timeout"),
+        ) if text in output]
+        raise OperationError("Docker operation failed (" + ",".join(hints or ["unclassified"]) + "); check Docker Desktop and AWS/ECR access")
     return result.stdout
+
+
+@contextlib.contextmanager
+def private_docker_config():
+    # ECR's temporary registry token must not depend on a desktop keychain session.
+    # The Steam password/session never touches this host directory.
+    with tempfile.TemporaryDirectory(prefix="halospawns-ecr-") as temp:
+        if not Path(temp).resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):
+            raise OperationError("Unexpected temporary configuration location")
+        if os.name == "nt":
+            identity = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+                capture_output=True, check=True, text=True)
+            sid = next(csv.reader(io.StringIO(identity.stdout)))[1]
+            if not re.fullmatch(r"S-1-[0-9-]+", sid):
+                raise OperationError("Cannot establish a private temporary directory")
+            permissions = subprocess.run(["icacls", temp, "/inheritance:r", "/grant:r",
+                f"*{sid}:(OI)(CI)F"], capture_output=True, check=False)
+            if permissions.returncode:
+                raise OperationError("Cannot protect temporary registry authentication")
+        (Path(temp) / "config.json").write_text("{}")
+        yield temp
 
 
 def input_tar(credentials, interactive):
@@ -72,21 +105,39 @@ def bootstrap(session, client, interactive):
     image = client.get_function(FunctionName=FUNCTION)["Code"]["ResolvedImageUri"]
     if not re.fullmatch(ACCOUNT + r"\.dkr\.ecr\.us-east-1\.amazonaws\.com/halospawns-workshop-maps@sha256:[a-f0-9]{64}", image):
         raise OperationError("Expected the deployed immutable dev Workshop image")
-    authorization = session.client("ecr").get_authorization_token(registryIds=[ACCOUNT])["authorizationData"][0]
-    username, password = base64.b64decode(authorization["authorizationToken"]).decode().split(":", 1)
-    docker("login", "--username", username, "--password-stdin", authorization["proxyEndpoint"], input=password.encode())
-    print("Pulling the pinned Workshop image.", flush=True)
-    docker("pull", image)
+    endpoint = docker("context", "inspect", "--format", "{{.Endpoints.docker.Host}}").decode().strip()
+    if not endpoint.startswith(("npipe://", "unix://")):
+        raise OperationError("Bootstrap requires a local Docker engine")
+    environment = {**os.environ, "DOCKER_HOST": endpoint}
+    environment.pop("DOCKER_CONTEXT", None)
+    with private_docker_config() as config:
+        authorization = session.client("ecr").get_authorization_token(registryIds=[ACCOUNT])["authorizationData"][0]
+        registry = image.split("/", 1)[0]
+        if authorization["proxyEndpoint"] != "https://" + registry:
+            raise OperationError("Unexpected registry authorization endpoint")
+        # A populated private auth file avoids Docker's automatic native-keychain
+        # discovery, including Windows logon sessions without a usable keychain.
+        auth_path = Path(config) / "config.json"
+        auth_path.write_text(json.dumps({"auths": {registry: {"auth": authorization["authorizationToken"]}}}))
+        auth_path.chmod(0o600)
+        print("Pulling the pinned Workshop image.", flush=True)
+        docker("pull", image, config=config, env=environment)
+        bootstrap_container(ssm, image, payload, credentials, interactive, config, environment)
+
+
+def bootstrap_container(ssm, image, payload, credentials, interactive, config, environment):
     name = "halospawns-steam-bootstrap-" + uuid.uuid4().hex
     try:
         docker("create", "--name", name, "--interactive", *(["--tty"] if interactive else []),
             "--log-driver", "none", "--memory", "2g", "--pids-limit", "256",
-            "--entrypoint", "/usr/local/bin/python", image, "/var/task/bootstrap.py")
-        docker("cp", "-", name + ":/tmp", input=payload)
-        result = subprocess.run(["docker", "start", "--attach", "--interactive", name], check=False)
+            "--entrypoint", "/usr/local/bin/python", image, "/var/task/bootstrap.py", config=config, env=environment)
+        docker("cp", "-", name + ":/tmp", input=payload, config=config, env=environment)
+        result = subprocess.run(["docker", "--config", config, "start", "--attach", "--interactive", name],
+                                env=environment, check=False)
         if result.returncode:
             raise OperationError("Bootstrap did not finish; run it in your own terminal to complete Steam Guard")
-        value = session_from_tar(docker("cp", name + ":/tmp/workshop-session.json", "-"), credentials["username"])
+        value = session_from_tar(docker("cp", name + ":/tmp/workshop-session.json", "-",
+            config=config, env=environment), credentials["username"])
         current = json.loads(ssm.get_parameter(Name=PREFIX + "steam-credentials",
             WithDecryption=True)["Parameter"]["Value"])
         if current != credentials:
@@ -95,7 +146,8 @@ def bootstrap(session, client, interactive):
             Type="SecureString", KeyId="alias/aws/ssm", Tier="Standard", Overwrite=True)
         print(f"Session saved in SSM, version {response['Version']}. Run the probe next.")
     finally:
-        subprocess.run(["docker", "rm", "--force", name], capture_output=True, check=False)
+        subprocess.run(["docker", "--config", config, "rm", "--force", name],
+                       env=environment, capture_output=True, check=False)
 
 
 def main():
@@ -103,7 +155,7 @@ def main():
     parser.add_argument("action", choices=("bootstrap", "probe"))
     parser.add_argument("--profile", default="halospawns-dev")
     parser.add_argument("--non-interactive", action="store_true")
-    parser.add_argument("--item-id", default="2890016882")
+    parser.add_argument("--item-id", default="2903623613")
     args = parser.parse_args()
     session = boto3.Session(profile_name=args.profile, region_name="us-east-1")
     if session.client("sts").get_caller_identity()["Account"] != ACCOUNT:
@@ -119,7 +171,7 @@ def main():
         result = json.loads(response["Payload"].read())
         if response.get("FunctionError"):
             raise OperationError("Probe invocation failed")
-        print(json.dumps({k: result[k] for k in ("state", "reason", "item_id", "maps") if k in result}))
+        print(json.dumps({k: result[k] for k in ("state", "reason", "item_id", "maps", "stage", "error_type") if k in result}))
         if result.get("state") != "download_verified":
             raise SystemExit(2)
 

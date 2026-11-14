@@ -151,14 +151,17 @@ def steam_download(identifier, work, deadline, credentials=None):
     result = log.read_text(errors="replace")
     success = f"Success. Downloaded item {identifier}" in result
     if credentials and credentials.get("save_config") and (success or steam_auth.logged_in(result)):
-        credentials["save_config"](steam_auth.read_config(steam / "config" / "config.vdf"))
+        try:
+            credentials["save_config"](steam_auth.read_config(steam / "config" / "config.vdf"))
+        except Exception:
+            raise WorkshopError("download_failed", reason="session_storage_failed") from None
     reason = steam_auth.failure_reason(result)
-    if not success and reason != "download_failed":
+    if not success and reason in ("no_subscription", "access_denied", "authentication_required"):
         raise WorkshopError("authentication_required", "auth_required", reason)
     if process.returncode != 0 or not success:
         if not credentials:
             raise WorkshopError("authentication_required", "auth_required")
-        raise WorkshopError("download_failed")
+        raise WorkshopError("download_failed", reason=reason)
     package = steam / "steamapps" / "workshop" / "content" / str(APP) / identifier
     if not package.is_dir():
         raise WorkshopError("invalid_package")
@@ -263,24 +266,31 @@ def api(path, payload, secret):
 def probe(event, context, ssm):
     """IAM-only canary: download in fresh scratch without importing or claiming work."""
     identifier = item_id(event["item_id"])
+    stage = "credentials"
     try:
         credentials = steam_auth.load_credentials(ssm,
             os.environ.get("WORKSHOP_STEAM_CREDENTIALS_PARAMETER", ""),
             os.environ.get("WORKSHOP_STEAM_SESSION_PARAMETER", ""))
         if not credentials:
             raise steam_auth.AuthRequired("authentication_required")
+        stage = "metadata"
         metadata(identifier)
         with tempfile.TemporaryDirectory(prefix="workshop-probe-") as temp:
+            stage = "download"
             root = steam_download(identifier, Path(temp),
                 time.monotonic()+min(720,context.get_remaining_time_in_millis()/1000-60), credentials)
+            stage = "package"
             maps = package_maps(root)
             return {"state": "download_verified", "item_id": identifier, "maps": len(maps)}
     except steam_auth.AuthRequired:
         return {"state": "auth_required", "reason": "authentication_required"}
     except WorkshopError as error:
-        return {"state": error.state, "reason": error.reason}
-    except Exception:
-        return {"state": "failed", "reason": "download_failed"}
+        return {"state": error.state, "reason": error.reason, "stage": stage}
+    except Exception as error:
+        kind = type(error).__name__
+        if kind not in {"PermissionError", "FileNotFoundError", "OSError", "HTTPError", "URLError", "TimeoutError", "ClientError"}:
+            kind = "InternalError"
+        return {"state": "failed", "reason": "download_failed", "stage": stage, "error_type": kind}
 
 
 def handler(event, context):
