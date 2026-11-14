@@ -104,6 +104,7 @@ locals {
       SUPABASE_PROJECT_REF                      = var.supabase.project_ref == null ? "" : var.supabase.project_ref
       SUPABASE_URL                              = var.supabase.url == null ? "" : var.supabase.url
       UPLOADS_BUCKET                            = coalesce(local.uploads_bucket_name, "")
+      H1FILM_RECEIPT_ARCHIVE_BUCKET             = aws_s3_bucket.artifacts[0].bucket
       ASSET_DELIVERY_MODE                       = var.asset_delivery_mode
       MAP_UPLOAD_PREFIX                         = local.map_upload_prefix
       REPLAY_UPLOAD_PREFIX                      = local.replay_upload_prefix

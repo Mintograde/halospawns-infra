@@ -186,6 +186,12 @@ data "aws_iam_policy_document" "app_runtime" {
     }
   }
 
+  statement {
+    sid       = "ReadH1FilmReceiptArchives"
+    actions   = ["s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.artifacts[0].arn}/database-archive/h1film-completions/*"]
+  }
+
   dynamic "statement" {
     for_each = length(local.replay_asset_get_object_resource_arns) == 0 ? [] : [1]
 
