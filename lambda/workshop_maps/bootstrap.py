@@ -77,7 +77,8 @@ def main():
         shutil.copytree("/opt/steamcmd", steam)
         print("Connecting to Steam. Raw login output is private.", flush=True)
         child = pexpect.spawn(str(steam / "steamcmd.sh"), cwd=steam,
-            env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+            env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
+                 "DEBUGGER": "/usr/bin/qemu-i386-static"},
             encoding="utf-8", codec_errors="replace", echo=False, maxread=4096)
         try:
             authenticate(child, username, password, bool(credentials.get("interactive")))

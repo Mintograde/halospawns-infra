@@ -83,6 +83,7 @@ class SessionTests(unittest.TestCase):
             credentials = {"username": "fixture", "config_vdf": b"old-config", "save_config": save}
 
             def popen(args, **kwargs):
+                self.assertEqual(kwargs["env"]["DEBUGGER"], "/usr/bin/qemu-i386-static")
                 self.assertNotIn("fixture", " ".join(args))
                 self.assertNotIn("old-config", " ".join(args))
                 self.assertIn('login "fixture"\n', (work / "download.txt").read_text())

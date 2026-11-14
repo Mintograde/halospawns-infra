@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libc6-i386 lib32gcc-s1 g++ make cmake unzip libcurl4-openssl-dev \
+    ca-certificates curl libc6-i386 lib32gcc-s1 qemu-user-static g++ make cmake unzip libcurl4-openssl-dev \
     && pip install --no-cache-dir awslambdaric==3.1.1 boto3==1.40.75 pexpect==4.9.0 \
     && mkdir -p /opt/steamcmd \
     && curl --fail --location --proto '=https' --tlsv1.2 \

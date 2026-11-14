@@ -166,7 +166,7 @@ components:
       vars:
         workshop_maps:
           enabled: true
-          image_tag: git-78b99bb61ff6eed573318e9e1ebe19e30c64044c
+          image_tag: git-af95e2e116f7282afd21311f8e8c0607a4f60b2c
           schedule_enabled: true
           steam_credentials_parameter: /halospawns/dev/workshop-maps/steam-credentials
           steam_session_parameter: /halospawns/dev/workshop-maps/steam-session

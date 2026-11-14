@@ -135,7 +135,10 @@ def steam_download(identifier, work, deadline, credentials=None):
     log = work / "steam.log"
     with log.open("wb") as output:
         process = subprocess.Popen([str(steam / "steamcmd.sh"), "+runscript", str(script)],
-            cwd=steam, env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+            # Lambda rejects native i386 syscalls (SIGSYS). The official launcher
+            # supports a debugger prefix and preserves it across update restarts.
+            cwd=steam, env={"HOME": str(work), "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
+                           "DEBUGGER": "/usr/bin/qemu-i386-static"},
             stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             while process.poll() is None:
