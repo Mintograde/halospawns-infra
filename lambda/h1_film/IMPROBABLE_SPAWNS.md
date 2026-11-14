@@ -1,12 +1,20 @@
 # Improbable spawns (random randoms)
 
-## Prepared locally: neutral-baseline definition 2
+## Dev deployed and backfilled (2026-11-14)
+
+All 339 original games and six separate client views have selected new results.
+API 265 / worker-default 20261114-r1 / policy 33 remain active. Original evidence,
+statistics and replay payloads are preserved; concurrent manual uploads are
+tracked separately. Frontend changes remain local/uncommitted. Full release and
+backfill evidence is below and in the completed handoff.
+
+### Neutral-baseline definition 2
 
 Exporter 34 reuses the existing exporter-32 binaries (including Beta 7's
-exporter-33/viewer-12 recipe). All six host defaults in the candidate registry
+exporter-33/viewer-12 recipe). All six host defaults in the active registry
 use 34, all previous recipes remain, and separate-client exporter 31 is unchanged.
 The new capability is `spawn_neutral_baseline: halospawns.h1SpawnMetrics.v1`.
-The deployed worker/default has not been changed.
+The new worker/default is active in dev; all prior releases and pins remain.
 
 Count a neutral selection, or a negative selection with lower probability than
 neutral, only when a positive point exceeds twice an **actual** neutral point's
@@ -30,11 +38,58 @@ candidate distributions and spatial context are not retained. See the API's
 `docs/h1film-spawn-metrics.md` for the supported scope and future-change workflow.
 
 Old completion manifests and replay artifacts do not contain the temporary full
-rating vectors. Old games therefore need separately authorized full reparses once
-to obtain the new inputs. Publish compatible API readers before the candidate
-worker, then perform the normal exact packaged callback and promotion checks.
-No deployment or reparse has been performed. Keep both definitions, capability
-readers and every old recipe on rollback.
+rating vectors. Old games need one full reparse to obtain the new inputs. The authorized
+backfill is complete. Compatible API readers,
+exact packaged callbacks and guarded promotion are verified. Keep both
+definitions, capability readers and every old recipe on rollback.
+
+## November 14 deployment and completed backfill
+
+The user-authorized neutral-baseline backfill is complete in dev: all 339
+original games have successful selected exporter-34 generations. API 265
+(`42bd83d`, CI 43562257607), worker/default 20261114-r1 and policy 33 remain.
+The original 48 submissions were reconciled before the remaining 291 resumed;
+all 112 immutable batch intents have confirmed responses. The user's concurrent
+uploads are separate: 36 new games were observed at the final audit. Frontend
+changes remain local/uncommitted, including the separate Overview panel removal.
+No frontend or prod deployment occurred.
+
+The original games retain 33,371 observed spawns (33,371 measured), 689 random
+randoms and 7,367 non-highest selections. Coverage is 311 complete / 28 partial
+games, with 0 unknown observed spawns. Definition 2 requires an actual neutral
+point; positive odds must be strictly more than twice its chance. Every event
+retains the evidence for API-only rule changes. Alternate thresholds were
+checked without modifying stored products or frozen classifications.
+
+All prior statistics, observations, graph/occupancy hashes and source pins are
+preserved. All 78 legacy viewer files and 27,918 logical entries in 261 match
+artifacts remain. Six separate client views are reattached through audited
+uploads, with identical viewer bytes, original clocks and exporter 31 (428,941
+frames / 3,578 hashes). All original history remains; the resume baseline of
+1,895 receipts, 388 conversions, 380 approvals and 1,759 settings snapshots has
+identical logical hashes. The earlier receipt-hash bridge and original
+attempt/client records also pass preservation checks.
+
+Database allocation is 410,852,149 / 500,000,000 bytes at the final audit,
+including concurrent uploads. All 291 resumed host completions use the compact
+response contract; their maximum acknowledgement is 487 bytes. The original 48
+receipts remain intact. All 15 native canary reads pass on API 265. Feature
+validation passed 2,348 API tests, 204 Node / 121 worker Python tests, 856 site
+tests and both frontend builds. All 21 packaged host cases / 63 exact API
+callbacks, six retained cases / 18 exact callbacks and the separate client flow
+passed. Live canaries passed CDN range/CORS/full-hash checks. All six resumed
+dev infrastructure plans are no-op. Batches stayed within four games / 230 MiB
+and 20 outstanding host attempts. The film queue and DLQ are empty at the final
+operational check. Keep every old recipe, both spawn definitions, compatible
+analysis/storage readers and forward migrations on rollback.
+
+Evidence: infra `.build/spawn-neutral-baseline/COMPLETED.json`,
+`compare-all-summary.json`, `inventory-after-summary.json`,
+`history-resume-summary.json`, `client-verification-summary.json`,
+`storage-final.json`, `operational-final-confirmed.json` and
+`postplans-resume.log`. The original pause is retained as
+`PAUSED-20261114T035241Z.json`; authorization and live pins are in
+`RESUME-APPROVED.json` and `api-pin-resume.json`.
 
 ## Historical definition-1 deployment
 

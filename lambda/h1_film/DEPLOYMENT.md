@@ -1,5 +1,53 @@
 # H1 film Lambda integration
 
+## Neutral-baseline spawn backfill completed (2026-11-14 UTC)
+
+The user-authorized neutral-baseline backfill is complete in dev: all 339
+original games have successful selected exporter-34 generations. API 265
+(`42bd83d`, CI 43562257607), worker/default 20261114-r1 and policy 33 remain.
+The original 48 submissions were reconciled before the remaining 291 resumed;
+all 112 immutable batch intents have confirmed responses. The user's concurrent
+uploads are separate: 36 new games were observed at the final audit. Frontend
+changes remain local/uncommitted, including the separate Overview panel removal.
+No frontend or prod deployment occurred.
+
+The original games retain 33,371 observed spawns (33,371 measured), 689 random
+randoms and 7,367 non-highest selections. Coverage is 311 complete / 28 partial
+games, with 0 unknown observed spawns. Definition 2 requires an actual neutral
+point; positive odds must be strictly more than twice its chance. Every event
+retains the evidence for API-only rule changes. Alternate thresholds were
+checked without modifying stored products or frozen classifications.
+
+All prior statistics, observations, graph/occupancy hashes and source pins are
+preserved. All 78 legacy viewer files and 27,918 logical entries in 261 match
+artifacts remain. Six separate client views are reattached through audited
+uploads, with identical viewer bytes, original clocks and exporter 31 (428,941
+frames / 3,578 hashes). All original history remains; the resume baseline of
+1,895 receipts, 388 conversions, 380 approvals and 1,759 settings snapshots has
+identical logical hashes. The earlier receipt-hash bridge and original
+attempt/client records also pass preservation checks.
+
+Database allocation is 410,852,149 / 500,000,000 bytes at the final audit,
+including concurrent uploads. All 291 resumed host completions use the compact
+response contract; their maximum acknowledgement is 487 bytes. The original 48
+receipts remain intact. All 15 native canary reads pass on API 265. Feature
+validation passed 2,348 API tests, 204 Node / 121 worker Python tests, 856 site
+tests and both frontend builds. All 21 packaged host cases / 63 exact API
+callbacks, six retained cases / 18 exact callbacks and the separate client flow
+passed. Live canaries passed CDN range/CORS/full-hash checks. All six resumed
+dev infrastructure plans are no-op. Batches stayed within four games / 230 MiB
+and 20 outstanding host attempts. The film queue and DLQ are empty at the final
+operational check. Keep every old recipe, both spawn definitions, compatible
+analysis/storage readers and forward migrations on rollback.
+
+Evidence: infra `.build/spawn-neutral-baseline/COMPLETED.json`,
+`compare-all-summary.json`, `inventory-after-summary.json`,
+`history-resume-summary.json`, `client-verification-summary.json`,
+`storage-final.json`, `operational-final-confirmed.json` and
+`postplans-resume.log`. The original pause is retained as
+`PAUSED-20261114T035241Z.json`; authorization and live pins are in
+`RESUME-APPROVED.json` and `api-pin-resume.json`.
+
 ## Receipt archive reader and database recovery (2026-11-14 UTC)
 
 API 263 (`065ee44`, CI 43555606157) reads superseded completion bodies from
