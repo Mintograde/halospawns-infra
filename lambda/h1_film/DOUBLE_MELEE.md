@@ -108,11 +108,85 @@ API 272 is commit `4ef34810f708fd29252138e95134ea299d842c32`, CI 43732127471.
 No migration or frontend publication is needed. Preserve compatible readers,
 archive readers, approvals, all recipes and all stored generations on rollback.
 
-Validation and rollout artifacts live under `.build/double-melee/`. Before
-activation, the native/WASM full streams match for all four engines:
+Validation and rollout artifacts live under `.build/double-melee/`. The
+native/WASM full streams match for all four engines:
 231,283 ticks / 1,928 hashes, including the complete user Fallout film. All
 60,476 Fallout frames preserve every prior exported field. Node tests (241),
 worker tests (122), site tests (867), viewer tests (1,860), isolated PostgreSQL
-career tests (14) and both frontend builds pass. The pre-rollout inventory has
-342 applicable games and six completed separate client views. Final packaged,
-activation, backfill and preservation outcomes are appended after verification.
+career tests (14) and both frontend builds pass. All 15 packaged cases / 45
+exact deployed API callbacks, four retained recipes / 12 callbacks and the
+separate-client flow pass. Thirteen prior packaged cases preserve every other
+statistic and all replay payloads. New match containers differ only in their
+top-level engine binary pins; legacy standalone viewer files stay identical.
+API CI passes 2,439 tests (396 opt-in skips), Rust, lint and packaging checks;
+all 15 map-processing Terraform tests pass.
+
+Worker/default `20261115-r1`, policy 35, is active in dev from infra commit
+`37ec458f819e3f7b94bf01c05dd9c5ed73a57e96`. The image digest is
+`sha256:765e97b82337bd1cec8db34f29fec94c805cc793e968336479ef60d78abca6e5`.
+The first live health passes. All six dev postplans are no-op. Exact commands:
+
+```powershell
+.\scripts\promote-h1-film.ps1 -Stack dev
+.\.build\double-melee\refresh-api-state.ps1
+.\scripts\plan.ps1 dev
+```
+
+The promotion owns only the map-processing worker image/environment update.
+The API refresh is state-only, with zero resource actions and its saved version
+output advancing from 270 to the CI-deployed 272. It records the already-live
+player-distribution cache lifecycle/inline-policy values without changing them.
+There were no AWS/session blockers. Publication initially ran out of local
+Docker space; audited disposable engine-copy build caches were cleared and the
+same immutable image was successfully revalidated before activation.
+
+Real Chrome desktop/mobile checks pass for the game count, all four Fallout
+review events, paused seeks, playback through the kill, and dstny/host world
+switching. A local CSS correction prevents the mobile event filter row from
+shrinking underneath the event list. The live career endpoint returns exactly
+one double melee for Seizen in this Fallout game. Frontend changes remain local.
+
+## Completed dev backfill
+
+All 342 user-authorized host reparses succeeded and are selected: Beta 5 (27),
+Beta 6 (146), Beta 7 (155) and Beta 8 (14). All 114 audited policy-35 batches
+have confirmed dispatches, with at most four games and 230 MiB of combined
+sources/maps per batch, and at most 20 outstanding host attempts. There were
+no failed or retried attempts.
+
+The selected results contain **119 verified double-melee kills across 86
+games**, all supported by the new original-host-report proof. There are 1,186
+complete and 335 partial player totals. Unknown kill classifications decrease
+from 878 to 357; uncertainty remains explicit and verified observations in
+partial totals remain available. Fallout contains four verified examples,
+including Seizen's kill at tick 7206. The independently supplied Exhibit film
+also reports dstny's kill at 52903, with a 40-tick report gap below the 56-tick
+bound. The final review list is `.build/double-melee/detections-all.csv`, with
+all 119 evidence summaries and paused player/time links.
+
+Every other native statistic, scoreboard/graph/occupancy hash, original source
+pin and world availability record is unchanged. All 27 standalone viewer files
+are byte-identical; all 32,574 logical payload entries across 315 match files
+retain their kinds, sizes and hashes. Match containers carry the new engine
+binary pins in their top-level manifest as described above.
+All 51 earlier-engine games retain their original selected artifacts and native
+statistics. The final inventory contains 393 games, no concurrent arrivals,
+and no active attempts.
+
+All six separate client views have fresh audited attachments to the new hosts.
+Exporter 31, the viewer bytes and original clocks are identical: 428,941 frames
+/ 3,578 verified hashes. All original uploads and attempts remain.
+
+The server-hashed history audit preserves all 442 original conversions, 2,240
+receipts, 474 approvals and 2,104 settings snapshots. Final totals are 442
+conversions, 2,582 receipts, 474 approvals and 2,446 settings snapshots. Final
+API health is 200 and queue/DLQ visible, delayed and in-flight counts are all
+zero. No migration, frontend publication or production deployment occurred.
+All 1,851 original H1 attempts remain unchanged (2,193 total). Separate-client
+history grows from 26 uploads / 27 attempts to 32 / 33, preserving every original
+row. Database allocation at the final audit is 432,974,995 bytes.
+
+Final evidence: `compare-all-summary.json`, `client-verification-summary.json`,
+`history-hashed-after.json` (compared with `history-hashed-before.json`),
+`inventory-after-summary.json`, `operational-verification.json`,
+`browser-verification.json` and the rollout logs under `.build/double-melee/`.

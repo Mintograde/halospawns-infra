@@ -1,5 +1,34 @@
 # H1 film Lambda integration
 
+## Host-only double melees deployed (2026-11-15)
+
+Host-only double-melee definition 2 is active in dev as worker/default
+`20261115-r1`, policy 35, API 272 (`4ef3481`, CI 43732127471). Beta 5-8 use
+exporter 36; all seven profiles, 70 exporters, old recipes and definition 1
+remain. The original host's accepted reliable hit-report clocks, a conservative
+map-wide melee timer bound and an observed grenade cancellation prove the
+remote sequence without the attacker's client film. Missing evidence stays
+unknown. Seizen's Fallout kill at tick 7206 now counts.
+
+All 342 audited host reparses succeeded and are selected: 119 verified doubles
+across 86 games, with unknown kill classifications reduced from 878 to 357.
+Every other statistic, all 27 standalone viewer files and 32,574 payload entries
+in 315 match files remain. All 51 earlier-engine games are unchanged. Six
+separate client views are reattached with identical bytes and original clocks
+(428,941 frames / 3,578 hashes). All original history remains; totals are 442
+conversions / 2,582 receipts / 2,193 H1 attempts / 474 approvals / 2,446 settings
+snapshots. No failures, retries, concurrent arrivals or active attempts remain.
+
+Native/WASM parity, packaged/exact callbacks, retained recipes, API CI,
+desktop/mobile Chrome and both frontend builds pass. First live health and all
+six no-op postplans pass; queue/DLQ are empty. Frontend changes remain local and
+uncommitted, including the mobile event-filter height correction. No migration,
+frontend or production deployment. Keep compatible readers and every recipe
+and stored generation on rollback.
+
+See [DOUBLE_MELEE.md](DOUBLE_MELEE.md) for proof, exact deployment commands and
+validation evidence. Handoff `20261115-infra-api-svelte-double-melee` is complete in all three repositories.
+
 ## Neutral-baseline spawn backfill completed (2026-11-14 UTC)
 
 The user-authorized neutral-baseline backfill is complete in dev: all 339
