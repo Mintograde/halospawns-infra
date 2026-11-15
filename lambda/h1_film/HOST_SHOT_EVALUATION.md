@@ -1,5 +1,9 @@
 # Host instrumentation and missing shot evidence
 
+The November 15 follow-up checks original reliable client hit clocks across
+these 90 cases plus six Beta 8 films. It preserves the distinction between
+verified counts and estimates; see [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md).
+
 ## Decision — November 8, 2026
 
 Keep the isolated instrumentation/evaluation tools and the regression protecting

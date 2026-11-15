@@ -1,5 +1,8 @@
 # Derived gameplay metrics
 
+The November 15 original-report review preserves verified three-shot counts
+and improves melee coverage; see [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md).
+
 Exporter 29 adds backwhacks and strict grenade-cancelled double-melee kills,
 deployed in dev for Beta 5/6/7 as worker/default `20261112-r1`, policy 28,
 API 250. See [MELEE_METRICS.md](MELEE_METRICS.md) for definitions, source

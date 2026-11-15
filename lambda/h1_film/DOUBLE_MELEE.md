@@ -1,5 +1,9 @@
 # Host-only double-melee detection
 
+The subsequent exporter-38 coverage correction for both melee metrics and the
+three-shot review are documented in [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md).
+The proof and exporter-36 rollout below remain unchanged.
+
 ## Scope and definition
 
 The November 15, 2026 follow-up adds double-melee definition 2 for source-pinned

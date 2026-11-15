@@ -1,5 +1,41 @@
 # H1 film Lambda integration
 
+## Backwhack and double-melee coverage deployed (2026-11-15)
+
+Backwhack and double-melee coverage corrections are deployed in dev as
+worker/default `20261115-r3`, policy 36, API 274 (`e8bf153`, CI 43743933684).
+Beta 5-8 use exporter 38 with exact exporter-36 binaries; all seven profiles,
+78 exporters and every prior recipe remain. Original lethal damage and actual
+assassination-branch observations resolve negative classifications despite
+incomplete kill-credit attribution. All 251 verified backwhacks and 119 verified
+double melees remain, including Seizen's Fallout example. Three-shot verified
+counts and estimates remain unchanged: original hit clocks cannot prove that
+there was no unreported miss.
+
+All 174 affected games succeeded in 67 audited batches. Backwhack unknown kill
+classifications fell from 268 to 1; double-melee unknowns fell from
+357 to 201. Backwhacks counted in complete player totals increased
+from 203 to 241, and double melees from 80 to 92.
+All other statistics, 19 standalone viewer files and
+16,728 payload entries across 155 match files remain.
+All 219 unaffected games are unchanged. Three separate client views are
+reattached with identical bytes and original clocks; the other three remain
+attached to their unchanged hosts. All original history remains: 442 conversions,
+2,756 receipts, 2,367 H1 attempts, 474 approvals and 2,620 settings snapshots;
+client history is 35 uploads / 36 attempts.
+
+All 262 Node / 122 packaged worker / 2,441 API CI tests, 15 packaged cases /
+45 exact API callbacks, five retained cases / 15 callbacks and separate client
+flow pass. Live API/CDN and desktop/mobile Chrome checks pass. First live health
+and all six no-op postplans pass; queue/DLQ are empty. Candidate r2 was published
+but never activated; do not promote it. No migration, frontend or prod release.
+Frontend changes remain local/uncommitted. Retain compatible readers, all recipes
+and generations on rollback. See `lambda/h1_film/REPORT_METRICS_REVIEW.md` and
+completed handoff `20261115-infra-api-svelte-metric-coverage`.
+
+See [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md) for source evidence,
+compatibility, exact release pins and the complete backfill audit.
+
 ## Host-only double melees deployed (2026-11-15)
 
 Host-only double-melee definition 2 is active in dev as worker/default

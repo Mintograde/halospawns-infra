@@ -1,6 +1,8 @@
 # Backwhacks and double-melee kills
 
 For the additive host-only definition-2 follow-up, see [DOUBLE_MELEE.md](DOUBLE_MELEE.md).
+For the later backwhack and double-melee coverage corrections and the
+three-shot investigation, see [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md).
 The definition-1 rollout and its retained historical behavior are documented below.
 
 Deployed in dev on 2026-11-12 UTC as worker/default `20261112-r1`, policy 28,
