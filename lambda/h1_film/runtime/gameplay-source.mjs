@@ -183,7 +183,8 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
   const product=includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
   if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,
     events:exporterRevision>=36?bindMeleeReports(events,source):events,
-    doubleMeleeDefinition:exporterRevision>=36?2:1}));
+    doubleMeleeDefinition:exporterRevision>=36?2:1,
+    resolveNonMeleeFinishers:exporterRevision>=37}));
   else assert.ok(events.every(e=>e.kind<=3),'Melee evidence requires its frozen exporter');
   return product;
 }

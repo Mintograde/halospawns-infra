@@ -89,3 +89,31 @@ test('missing hooks, reordered events and mismatched combat deaths fail closed',
     const f = fixture(); change(f); assert.throws(() => counts(f));
   }
 });
+
+function creditedGrenade() {
+  const f=fixture();
+  f.doubleMeleeDefinition=2; f.resolveNonMeleeFinishers=true;
+  f.events[4]={...f.events[4],slot:1,category:1,relationship:2,melee:0};
+  f.events[5]={...f.events[5],category:-1,melee:0};
+  return f;
+}
+
+test('confirmed non-melee finisher resolves double coverage despite earlier attacker kill credit',()=>{
+  const f=creditedGrenade(),[back,double]=counts(f);
+  assert.equal(double.value,0);assert.equal(double.unknown_kills,0);
+  assert.equal(back.value,null); // This release preserves backwhack results.
+  assert.equal(counts({...f,resolveNonMeleeFinishers:false})[1].value,null);
+  assert.equal(counts({...f,partialRecording:true})[1].coverage.reason,'partial_recording');
+});
+
+for(const [name,change] of [
+  ['unknown lethal category',f=>f.events[4].category=-1],
+  ['unowned melee after attacker death',f=>Object.assign(f.events[4],{category:2,slot:-1,relationship:3})],
+  ['different victim body',f=>f.events[4].unit++],
+  ['earlier non-melee damage',f=>f.events[4].source_tick--],
+  ['nonlethal callback',f=>f.events[4].after=[0,0.1]],
+  ['damage to an already dead body',f=>Object.assign(f.events[4],{before:[0.1,0],after:[0,0]})],
+  ['contradictory credited melee type',f=>f.events[5].category=2],
+])test(`finisher coverage keeps uncertainty for ${name}`,()=>{
+  const f=creditedGrenade();change(f);assert.equal(counts(f)[1].value,null);
+});

@@ -100,3 +100,33 @@ test('wrong weapon tag and mismatched report identity fail closed',()=>{
   const g=fixture();g.source.accounts[0].tables.find(t=>t.name==='shots').bytes.writeInt32LE(101,4);
   assert.equal(result(g).value,null);
 });
+
+test('original reliable report clocks still cannot reveal an intervening unreported miss',()=>{
+  const clean=fixture(),missed=fixture({miss:true});
+  for(const f of [clean,missed]) {
+    for(const t of f.source.accounts[0].tables) for(let i=0;i<t.count;i++) {
+      const b=t.bytes.subarray(i*t.stride,(i+1)*t.stride);
+      const tick=100+(b.readInt32LE(0)-100)*4;
+      b.writeInt32LE(tick,0);
+      if(t.name==='shots') {
+        b.writeInt32LE(tick,4);b[11]=9;
+        b.writeUInt16LE(i,78);b.writeUInt16LE(42,80);
+      }
+    }
+    const ledger=f.source.ledger.tables[0];
+    for(let i=0;i<ledger.count;i++) {
+      const b=ledger.bytes.subarray(i*88,(i+1)*88);
+      b[7]=1;b.writeUInt16LE(i,28);b.writeUInt16LE(42,30);
+      b.writeInt32LE(100+80*i,16);
+    }
+  }
+  // Both histories have identical original hit clocks and reliable identities.
+  // The extra discharge at client tick 140 never creates a hit report.
+  assert.deepEqual(clean.source.ledger,missed.source.ledger);
+  assert.equal(result(clean).value,1);assert.equal(result(missed).value,0);
+  for(const f of [clean,missed]) {
+    f.source.accounts=[];
+    assert.equal(result(f).observed_count,0);
+    assert.equal(result(f).unknown_kills,1);
+  }
+});
