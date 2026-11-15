@@ -17,6 +17,10 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
     if(profile.port==='beta8') assert.equal(requirements.beta8,'halospawns.h1Beta8.v1');
     if(profile.port==='beta7') assert.equal(requirements.beta7,'halospawns.h1Beta7.v1');
     for (const recipe of recipes[profile.id]) {
+      if(recipe.exporter_revision>=36) {
+        assert.equal(requirements.remote_melee_timing,'halospawns.h1GameplayMetrics.v1');
+        assert.equal(recipe.analytics_revision,5);
+      }
       if(recipe.exporter_revision>=34)
         assert.equal(requirements.spawn_neutral_baseline,'halospawns.h1SpawnMetrics.v1');
       if(recipe.exporter_revision>=32)
@@ -36,7 +40,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.equal(requirements.network_host_bots,'halospawns.h1NetworkHostBots.v1');
       }
       assert.equal(profile.port==='beta8',recipe.viewer_revision===13);
-      if(profile.port==='beta8') assert.equal(recipe.exporter_revision,35);
+      if(profile.port==='beta8') assert.ok([35,36].includes(recipe.exporter_revision));
       assert.equal(profile.port==='beta7',[11,12].includes(recipe.viewer_revision));
       if(profile.port==='beta7')assert.equal(recipe.exporter_revision>=33,recipe.viewer_revision===12);
       if(recipe.viewer_revision===12)assert.equal(requirements.large_match_replay,'halospawns.h1MatchReplay.v7');

@@ -5,15 +5,19 @@ const pair = v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite)
 const damaged = e => pair(e.before) && pair(e.after)
   && e.before.some((v, i) => Math.max(0, v) > Math.max(0, e.after[i]));
 
-// Only source-bound action identities qualify. In particular, accepted remote
-// damage is not matched to nearby host animation starts. Unknown is not zero.
-export function deriveMeleeMetrics({events, slots, deaths, partialRecording = false}) {
-  const metrics = MELEE_METRICS.map(id => ({id, definition_version: 1,
+// Definition 1 uses original local actions. Definition 2 additionally requires
+// accepted original-client report clocks, a map-wide conservative timer bound,
+// and a host-observed cancellation chain. Host timing alone is never proof.
+export function deriveMeleeMetrics({events, slots, deaths, partialRecording = false, doubleMeleeDefinition = 1}) {
+  assert.ok([1,2].includes(doubleMeleeDefinition),'Unsupported double melee definition');
+  const metrics = MELEE_METRICS.map(id => ({id, definition_version: id==='double_melee_kills'?doubleMeleeDefinition:1,
     players: slots.map(slot_index => ({slot_index, value: 0, observed_count: 0,
       evaluated_kills: 0, unknown_kills: 0, coverage: {status: 'complete', reason: null}, examples: []}))}));
   assert.equal(new Set(slots).size, slots.length, 'Duplicate melee roster slots');
   const players = metrics.map(m => new Map(m.players.map(p => [p.slot_index, p])));
   const actions = new Map(), latest = new Map(), damage = new Map();
+  const remoteHits = new Map();
+  const priorMeleeDamage = new Set();
   let lastTick = -1, deathIndex = 0;
   for (const [order, e] of events.entries()) {
     assert.ok(Number.isSafeInteger(e.source_tick) && e.source_tick >= lastTick, 'Unordered melee evidence');
@@ -39,6 +43,19 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
       assert.ok(players[0].has(e.victim) && pair(e.before) && pair(e.after), 'Invalid melee damage');
       if (!damaged(e)) continue;
       const hit = {...e, order};
+      const victimLife=`${e.victim}/${e.unit}`;
+      hit.priorPotentialMelee=priorMeleeDamage.has(victimLife);
+      // Unknown weapon attribution might have been a melee. Keep it in the
+      // history so a missing first blow can never manufacture a complete zero.
+      if(e.category===2 || e.category<0) priorMeleeDamage.add(victimLife);
+      hit.hostAction=latest.get(e.slot);
+      if(doubleMeleeDefinition===2 && e.category===2 && e.relationship===0 && e.deal) {
+        const key=`${e.slot}/${e.attacker_unit}`;
+        hit.previousRemote=remoteHits.get(key);
+        // Multiple callbacks for one accepted report are one impact.
+        if(hit.previousRemote?.deal===e.deal) hit.previousRemote=hit.previousRemote.previousRemote;
+        remoteHits.set(key,hit);
+      }
       damage.set(e.victim, hit);
       const action = actions.get(e.melee);
       if (action && e.category === 2 && e.relationship === 0 && action.slot === e.slot) {
@@ -66,7 +83,34 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
       else if (e.backwhack !== 0 || hit.backwhack !== 0) unknown(0);
 
       const second = actions.get(e.melee);
-      if (!second || hit.melee !== second.melee || second.slot !== e.slot) { unknown(1); continue; }
+      if (!second || hit.melee !== second.melee || second.slot !== e.slot) {
+        const first=hit.previousRemote, a=first?.melee_report, b=hit.melee_report;
+        const hostFirst=first?.hostAction, hostSecond=hit.hostAction;
+        const bound=first?.melee_recovery_ticks, delta=b&&a?b.client_tick-a.client_tick:0;
+        if(doubleMeleeDefinition===2 && a && b && a.id!==b.id && a.machine_slot===b.machine_slot
+          && a.epoch===b.epoch && a.sequence!==b.sequence && a.verdict_index<b.verdict_index
+          && Number.isInteger(hit.attacker_unit) && hit.attacker_unit!==-1
+          && first.attacker_unit===hit.attacker_unit && first.victim===hit.victim && first.unit===hit.unit
+          && first.after[1]>0 && first.order<hit.order && first.source_tick<=hit.source_tick
+          && hostFirst && hostSecond?.previous===hostFirst && hostFirst.cancel
+          && hostFirst.unit===hit.attacker_unit && hostSecond.unit===hit.attacker_unit
+          && hostFirst.order<first.order && first.order<hostFirst.cancel.order
+          && hostFirst.cancel.order<hostSecond.order && hostSecond.order<hit.order
+          && Number.isSafeInteger(bound) && bound>0 && bound<=508 && bound%4===0
+          && hit.melee_recovery_ticks===bound && delta>0 && delta<bound) {
+          count(1,{...example(first.source_tick),remote_melee_timing:{
+            method:'host_accepted_reports_v1',first_damage_source_tick:first.source_tick,
+            first_report_client_tick:a.client_tick,second_report_client_tick:b.client_tick,
+            minimum_recovery_ticks:bound,machine_slot:a.machine_slot,epoch:a.epoch,
+            first_sequence:a.sequence,second_sequence:b.sequence,
+            first_verdict_index:a.verdict_index,second_verdict_index:b.verdict_index,
+            host_first_action_source_tick:hostFirst.source_tick,
+            host_grenade_source_tick:hostFirst.cancel.source_tick,
+            host_second_action_source_tick:hostSecond.source_tick,
+          }});
+        } else if(doubleMeleeDefinition!==2 || partialRecording || hit.priorPotentialMelee) unknown(1);
+        continue;
+      }
       const first = second.previous;
       // A recording that begins in mid-action cannot establish a negative.
       if (!first) { if (partialRecording) unknown(1); continue; }

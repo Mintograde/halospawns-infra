@@ -57,3 +57,33 @@ class MeleeTests(unittest.TestCase):
         self.native["gameplay"]["metrics"][2]["id"] = "backwhack_kills"
         with self.assertRaises(ValueError):
             self.validate(melee_required=True)
+
+    def test_remote_timing_requires_new_definition_and_strict_original_clocks(self):
+        metric = self.native["gameplay"]["metrics"][2]
+        metric["definition_version"] = 2
+        example = metric["players"][0]["examples"][0]
+        example.pop("melee_timing")
+        example["start_source_tick"] = 1
+        remote = {
+            "method": "host_accepted_reports_v1", "first_damage_source_tick": 1,
+            "first_report_client_tick": 7145, "second_report_client_tick": 7177,
+            "minimum_recovery_ticks": 56, "machine_slot": 3, "epoch": 43123,
+            "first_sequence": 9, "second_sequence": 10,
+            "first_verdict_index": 48, "second_verdict_index": 50,
+            "host_first_action_source_tick": 0, "host_grenade_source_tick": 2,
+            "host_second_action_source_tick": 3,
+        }
+        example["remote_melee_timing"] = remote
+        self.validate(melee_required=True, double_melee_definition=2)
+        with self.assertRaises(ValueError):
+            self.validate(melee_required=True, double_melee_definition=1)
+        for field, value in (("second_report_client_tick", 7201),
+                             ("second_report_client_tick", 7145),
+                             ("first_sequence", 10), ("first_verdict_index", 50),
+                             ("host_grenade_source_tick", 0)):
+            with self.subTest(field=field, value=value):
+                old = remote[field]
+                remote[field] = value
+                with self.assertRaises(ValueError):
+                    self.validate(melee_required=True, double_melee_definition=2)
+                remote[field] = old

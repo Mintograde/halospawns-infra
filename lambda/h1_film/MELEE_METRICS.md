@@ -1,5 +1,8 @@
 # Backwhacks and double-melee kills
 
+For the additive host-only definition-2 follow-up, see [DOUBLE_MELEE.md](DOUBLE_MELEE.md).
+The definition-1 rollout and its retained historical behavior are documented below.
+
 Deployed in dev on 2026-11-12 UTC as worker/default `20261112-r1`, policy 28,
 and API 250 (`918d938`, CI 43134370060). Exporter 29 is selected for Beta 5,
 6 and 7: 29/5/5, 29/5/10 and 29/5/11. Earlier engines stay on exporter 28.

@@ -1,0 +1,269 @@
+{
+  "source_sha256": "64be95dc769107ec75009d91693ff8815b7b404076cf2a4dedf9d652e4f84bad",
+  "map_sha256": "5619f03a0ea67f75eb6bed2fa9ad29c260c5ffd356ec4eed98dcb6be410acefa",
+  "verification": {
+    "ticks": 60476,
+    "hashes": 504,
+    "mismatches": 0
+  },
+  "verdicts": [
+    48,
+    50
+  ],
+  "verdict_bytes": "BhwAAAADAwEHAPTi5hsAAOkbAAAAAAAAl23hvwkAc6j/////D1cVQSlqCsMo8w1Dk+o4v+wGID/xb5e+FloHQSXSCcOGkw1DAAAAAAAAAAAAAAAAAAAAACYcAAAAAwMBBwD04gYcAAAJHAAAAAAAAA9e9b8KAHOo/////9R/DUFdYArDW/QNQ4oLSb9syQg//hOgvr1MBEFK7wnDhpMNQwAAAAAAAAAAAAAAAAAAAAA=",
+  "events": [
+    {
+      "kind": 4,
+      "clock": 7157,
+      "slot": 3,
+      "physical": 3,
+      "victim": -1,
+      "unit": -495190003,
+      "weapon": "",
+      "weapon_tag": 4294967295,
+      "shot": 0,
+      "deal": 0,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 8,
+      "ready_clock": 7293,
+      "category": -1,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7157
+    },
+    {
+      "kind": 3,
+      "clock": 7174,
+      "slot": 3,
+      "physical": 3,
+      "victim": -1,
+      "unit": -487325689,
+      "weapon": "",
+      "weapon_tag": 4294967295,
+      "shot": 0,
+      "deal": 49,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 0,
+      "ready_clock": 0,
+      "category": -1,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7174
+    },
+    {
+      "kind": 1,
+      "clock": 7174,
+      "slot": 3,
+      "physical": 3,
+      "victim": 0,
+      "unit": -487325689,
+      "weapon": "weapons\\pistol\\melee",
+      "weapon_tag": 3819438644,
+      "shot": 0,
+      "deal": 49,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 0,
+      "ready_clock": 0,
+      "category": 2,
+      "backwhack": 0,
+      "attacker_unit": -495190003,
+      "melee_recovery_ticks": 56,
+      "before": [
+        1,
+        1
+      ],
+      "after": [
+        0.030206382274627686,
+        1
+      ],
+      "source_tick": 7174
+    },
+    {
+      "kind": 5,
+      "clock": 7186,
+      "slot": 3,
+      "physical": -1,
+      "victim": -1,
+      "unit": -495190003,
+      "weapon": "",
+      "weapon_tag": 4294967295,
+      "shot": 0,
+      "deal": 0,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 8,
+      "ready_clock": 0,
+      "category": -1,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7186
+    },
+    {
+      "kind": 4,
+      "clock": 7189,
+      "slot": 3,
+      "physical": 3,
+      "victim": -1,
+      "unit": -495190003,
+      "weapon": "",
+      "weapon_tag": 4294967295,
+      "shot": 0,
+      "deal": 0,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 9,
+      "ready_clock": 7325,
+      "category": -1,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7189
+    },
+    {
+      "kind": 3,
+      "clock": 7206,
+      "slot": 3,
+      "physical": 3,
+      "victim": -1,
+      "unit": -487325689,
+      "weapon": "",
+      "weapon_tag": 4294967295,
+      "shot": 0,
+      "deal": 51,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 0,
+      "ready_clock": 0,
+      "category": -1,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7206
+    },
+    {
+      "kind": 1,
+      "clock": 7206,
+      "slot": 3,
+      "physical": 3,
+      "victim": 0,
+      "unit": -487325689,
+      "weapon": "weapons\\pistol\\melee",
+      "weapon_tag": 3819438644,
+      "shot": 0,
+      "deal": 51,
+      "relationship": 0,
+      "headshot": -1,
+      "melee": 0,
+      "ready_clock": 0,
+      "category": 2,
+      "backwhack": 0,
+      "attacker_unit": -495190003,
+      "melee_recovery_ticks": 56,
+      "before": [
+        0.030206382274627686,
+        1
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7206
+    },
+    {
+      "kind": 2,
+      "clock": 7206,
+      "slot": 3,
+      "physical": -1,
+      "victim": 0,
+      "unit": -487325689,
+      "weapon": "weapons\\pistol\\melee",
+      "weapon_tag": 3819438644,
+      "shot": 0,
+      "deal": 0,
+      "relationship": 0,
+      "headshot": 0,
+      "melee": 0,
+      "ready_clock": 0,
+      "category": 2,
+      "backwhack": 0,
+      "attacker_unit": 0,
+      "melee_recovery_ticks": 0,
+      "before": [
+        0,
+        0
+      ],
+      "after": [
+        0,
+        0
+      ],
+      "source_tick": 7206
+    }
+  ],
+  "deaths": [
+    {
+      "killer_slot": 3,
+      "victim_slot": 0,
+      "kind": "kill",
+      "weapon_id": "w3",
+      "headshot": false,
+      "killer_position": [
+        8.854259490966797,
+        -138.3695831298828,
+        141.57626342773438
+      ],
+      "victim_position": [
+        8.374361038208008,
+        -137.71768188476562,
+        141.57626342773438
+      ],
+      "source_tick": 7206,
+      "event_index": 10
+    }
+  ]
+}

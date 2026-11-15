@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 3419764faa253bf07b2e1a09cdfb41d19f433c045b462a1c393b398e2ae8fa45",
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 c2b3083fceeeb27904b89fbfde12984b5f8669b5399b8ddef191138d32f4ab49",
   "$defs": {
     "GameplayCoverage": {
       "additionalProperties": false,
@@ -92,6 +92,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/MeleeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "remote_melee_timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RemoteMeleeTiming"
             },
             {
               "type": "null"
@@ -1360,6 +1371,113 @@
         "shots_hit"
       ],
       "title": "PistolPlayer",
+      "type": "object"
+    },
+    "RemoteMeleeTiming": {
+      "additionalProperties": false,
+      "properties": {
+        "epoch": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Epoch",
+          "type": "integer"
+        },
+        "first_damage_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "First Damage Source Tick",
+          "type": "integer"
+        },
+        "first_report_client_tick": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "First Report Client Tick",
+          "type": "integer"
+        },
+        "first_sequence": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "First Sequence",
+          "type": "integer"
+        },
+        "first_verdict_index": {
+          "exclusiveMaximum": 65536,
+          "minimum": 0,
+          "title": "First Verdict Index",
+          "type": "integer"
+        },
+        "host_first_action_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Host First Action Source Tick",
+          "type": "integer"
+        },
+        "host_grenade_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Host Grenade Source Tick",
+          "type": "integer"
+        },
+        "host_second_action_source_tick": {
+          "exclusiveMaximum": 432000,
+          "minimum": 0,
+          "title": "Host Second Action Source Tick",
+          "type": "integer"
+        },
+        "machine_slot": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Machine Slot",
+          "type": "integer"
+        },
+        "method": {
+          "const": "host_accepted_reports_v1",
+          "title": "Method",
+          "type": "string"
+        },
+        "minimum_recovery_ticks": {
+          "exclusiveMinimum": 0,
+          "maximum": 508,
+          "multipleOf": 4,
+          "title": "Minimum Recovery Ticks",
+          "type": "integer"
+        },
+        "second_report_client_tick": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Second Report Client Tick",
+          "type": "integer"
+        },
+        "second_sequence": {
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Second Sequence",
+          "type": "integer"
+        },
+        "second_verdict_index": {
+          "exclusiveMaximum": 65536,
+          "minimum": 0,
+          "title": "Second Verdict Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "method",
+        "first_damage_source_tick",
+        "first_report_client_tick",
+        "second_report_client_tick",
+        "minimum_recovery_ticks",
+        "machine_slot",
+        "epoch",
+        "first_sequence",
+        "second_sequence",
+        "first_verdict_index",
+        "second_verdict_index",
+        "host_first_action_source_tick",
+        "host_grenade_source_tick",
+        "host_second_action_source_tick"
+      ],
+      "title": "RemoteMeleeTiming",
       "type": "object"
     },
     "SpawnEvent": {

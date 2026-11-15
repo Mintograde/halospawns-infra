@@ -3,7 +3,8 @@
 from collections import Counter
 
 
-def validate_gameplay(product, combat, slots, stop, *, definition_version=1, melee_required=False):
+def validate_gameplay(product, combat, slots, stop, *, definition_version=1, melee_required=False,
+                      double_melee_definition=1):
     deaths = {event["event_index"]: event for event in combat["deaths"]}
     kills = Counter(event["killer_slot"] for event in deaths.values() if event["kind"] == "kill")
     weapons = {weapon["weapon_id"]: weapon["tag_path"] for weapon in combat["weapons"]}
@@ -17,7 +18,9 @@ def validate_gameplay(product, combat, slots, stop, *, definition_version=1, mel
     for metric in product["metrics"]:
         melee = metric["id"] != "pistol_three_shot_kills"
         missing = "missing_melee_evidence" if melee else "missing_shot_evidence"
-        if metric["definition_version"] != (1 if melee else definition_version):
+        expected_definition = (double_melee_definition if metric["id"] == "double_melee_kills"
+                               else 1 if melee else definition_version)
+        if metric["definition_version"] != expected_definition:
             raise ValueError("Gameplay definition differs from the frozen exporter")
         players = metric["players"]
         if {player["slot_index"] for player in players} != set(slots) or len(players) != len(slots):
@@ -60,12 +63,26 @@ def validate_gameplay(product, combat, slots, stop, *, definition_version=1, mel
                              weapons.get(death["weapon_id"], "").replace("\\", "/").lower() == "weapons/pistol/pistol")):
                     raise ValueError("Gameplay example differs from its verified pistol kill")
                 timing = example.get("melee_timing")
+                remote = example.get("remote_melee_timing")
                 if metric["id"] == "double_melee_kills":
+                    if remote is not None:
+                        if not (double_melee_definition == 2 and timing is None
+                                and remote["method"] == "host_accepted_reports_v1"
+                                and example["start_source_tick"] == remote["first_damage_source_tick"]
+                                and remote["host_first_action_source_tick"] <= example["start_source_tick"]
+                                <= remote["host_grenade_source_tick"] <= remote["host_second_action_source_tick"]
+                                <= example["end_source_tick"]
+                                and 0 < remote["second_report_client_tick"] - remote["first_report_client_tick"]
+                                < remote["minimum_recovery_ticks"]
+                                and remote["first_sequence"] != remote["second_sequence"]
+                                and remote["first_verdict_index"] < remote["second_verdict_index"]):
+                            raise ValueError("Remote double melee requires original timing and host ordering")
+                        continue
                     if not timing or not (
                         example["start_source_tick"] <= timing["first_damage_source_tick"]
                         <= timing["grenade_source_tick"] <= timing["second_action_source_tick"]
                         <= example["end_source_tick"] < timing["cooldown_expiry_source_tick"]
                     ):
                         raise ValueError("Double melee requires ordered timing evidence")
-                elif timing is not None:
+                elif timing is not None or remote is not None:
                     raise ValueError("Unexpected melee timing evidence")

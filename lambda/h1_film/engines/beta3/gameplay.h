@@ -10,6 +10,9 @@ typedef struct {
     unsigned int melee;
     int ready_clock, category, backwhack;
 #endif
+#ifdef H1_REMOTE_MELEE_EXPORT
+    int attacker_unit, melee_recovery_ticks;
+#endif
 } hs_gameplay_event;
 static hs_gameplay_event hs_gameplay_events[2048];
 static int hs_gameplay_count;
@@ -32,6 +35,9 @@ static hs_gameplay_event *hs_gameplay_add(int kind)
 
 #ifdef H1_MELEE_EXPORT
 #include "melee.h"
+#endif
+#ifdef H1_REMOTE_MELEE_EXPORT
+#include "remote-melee.h"
 #endif
 
 int blampc_universal_film_deal(const void *bytes, int size, int object, short node,
@@ -70,6 +76,10 @@ static void hs_gameplay_damage(int attacker, int victim, int object, const damag
     e->melee = hs_gameplay_deal || lineage.owner != hs_current.owner ? 0 : hs_melee_current;
     e->backwhack = hs_melee_backwhack_target == object;
 #endif
+#ifdef H1_REMOTE_MELEE_EXPORT
+    e->attacker_unit = damage->owner_object_index;
+    e->melee_recovery_ticks = e->category == 2 ? hs_remote_melee_recovery() : 0;
+#endif
 }
 
 static void hs_gameplay_death(const hs_death *death)
@@ -104,6 +114,10 @@ static void hs_gameplay_frame(void)
 #ifdef H1_MELEE_EXPORT
         hs_uint("melee", e->melee); hs_int("ready_clock", e->ready_clock);
         hs_int("category", e->category); hs_int("backwhack", e->backwhack);
+#endif
+#ifdef H1_REMOTE_MELEE_EXPORT
+        hs_int("attacker_unit", e->attacker_unit);
+        hs_int("melee_recovery_ticks", e->melee_recovery_ticks);
 #endif
         hs_begin("before", 0); for (j = 0; j < 2; ++j) hs_float(NULL, e->before[j]); hs_end();
         hs_begin("after", 0); for (j = 0; j < 2; ++j) hs_float(NULL, e->after[j]); hs_end();

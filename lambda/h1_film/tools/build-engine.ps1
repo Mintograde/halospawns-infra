@@ -12,12 +12,14 @@ param(
     [switch]$Gameplay,
     [switch]$PistolCounters,
     [switch]$Melee,
+    [switch]$RemoteMelee,
     [switch]$PlayerCamoAmount,
     [switch]$SpawnEvents,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
+if ($RemoteMelee -and -not $Melee) { throw 'Remote melee requires melee evidence.' }
 if ($SpawnEvents -and -not $Combat) { throw 'Spawn events require observational export.' }
 if ($PlayerCamoAmount -and -not $Combat) { throw 'Player camo amount requires the observational export build.' }
 if ($Melee -and (-not $Gameplay -or $Port -notin @('beta5', 'beta6', 'beta7', 'beta8'))) { throw 'Melee evidence requires Beta 5/6/7 gameplay export.' }
@@ -47,6 +49,7 @@ if ($ClientView) { $variant += '-client-view-v1' }
 if ($Gameplay) { $variant += '-gameplay-v1' }
 if ($PistolCounters) { $variant += '-pistol-counters-v1' }
 if ($Melee) { $variant += '-melee-v1' }
+if ($RemoteMelee) { $variant += '-remote-melee-v1' }
 if ($PlayerCamoAmount) { $variant += '-player-camo-amount-v1' }
 if ($SpawnEvents) { $variant += '-spawn-events-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
@@ -75,6 +78,7 @@ if ($DamageAttributionV2) { $damageArguments += '-DH1_DAMAGE_ATTRIBUTION_V2=ON' 
 [string[]]$gameplayArguments = if ($Gameplay) { @('-DH1_GAMEPLAY_EXPORT=ON') } else { @() }
 if ($PistolCounters) { $gameplayArguments += '-DH1_PISTOL_COUNTERS=ON' }
 if ($Melee) { $gameplayArguments += '-DH1_MELEE_EXPORT=ON' }
+if ($RemoteMelee) { $gameplayArguments += '-DH1_REMOTE_MELEE_EXPORT=ON' }
 if ($PlayerCamoAmount) { $gameplayArguments += '-DH1_PLAYER_CAMO_AMOUNT=ON' }
 if ($SpawnEvents) { $gameplayArguments += '-DH1_SPAWN_EVENTS=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
@@ -103,6 +107,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     gameplay = [bool]$Gameplay
     pistol_counters = [bool]$PistolCounters
     melee = [bool]$Melee
+    remote_melee = [bool]$RemoteMelee
     player_camo_amount = [bool]$PlayerCamoAmount
     spawn_events = [bool]$SpawnEvents
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()

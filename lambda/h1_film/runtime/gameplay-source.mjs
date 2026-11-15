@@ -71,7 +71,7 @@ export function gameplayVerdicts({ledger,accounts}) {
   return {verdicts:[...unique.values()].filter(Boolean).map((v,index)=>({...JSON.parse(v),index})),ordered:false};
 }
 
-export function bindGameplayShots(events,{ledger,accounts}) {
+export function bindGameplayDeals(events,{ledger,accounts}) {
   const {verdicts,ordered}=gameplayVerdicts({ledger,accounts}), links=new Map(), grouped=new Map();
   if(verdicts) {
     const byTick=new Map();
@@ -98,6 +98,33 @@ export function bindGameplayShots(events,{ledger,accounts}) {
       }
     }
   }
+  return {verdicts,ordered,links};
+}
+
+export function bindMeleeReports(events,source) {
+  const {verdicts,ordered,links}=bindGameplayDeals(events,source);
+  // Only the uncapped original host ledger establishes the complete ordered
+  // DEAL/verdict join. A client copy or a nearest-time match cannot do so.
+  if(!ordered) return events;
+  const keys=new Map();
+  for(const v of verdicts) if(v.verdict===0 && v.flags===1) {
+    const key=`${v.machine_slot}/${v.epoch}/${v.sequence}/${v.sent_client_tick}`;
+    keys.set(key,(keys.get(key)??0)+1);
+  }
+  return events.map(e=>{
+    if(e.kind!==1 || e.category!==2 || !e.deal) return e;
+    const v=verdicts[links.get(e.deal)];
+    if(!v || v.flags!==1 || v.owner!==e.physical || v.object!==e.unit || v.host_tick!==e.clock
+      || !Number.isSafeInteger(v.sent_client_tick) || v.sent_client_tick<0) return e;
+    const key=`${v.machine_slot}/${v.epoch}/${v.sequence}/${v.sent_client_tick}`;
+    if(keys.get(key)!==1) return e;
+    return {...e,melee_report:{id:key,machine_slot:v.machine_slot,epoch:v.epoch,
+      sequence:v.sequence,client_tick:v.sent_client_tick,verdict_index:v.index}};
+  });
+}
+
+export function bindGameplayShots(events,{ledger,accounts}) {
+  const {verdicts,links}=bindGameplayDeals(events,{ledger,accounts});
   const shotsByVerdict=new Map();
   for(const account of accounts) {
     const shots=rows(account,'client','shots'),pulls=rows(account,'client','pulls');
@@ -154,7 +181,9 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
     partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
   const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(args.events,source)});
   const product=includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
-  if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,events}));
+  if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,
+    events:exporterRevision>=36?bindMeleeReports(events,source):events,
+    doubleMeleeDefinition:exporterRevision>=36?2:1}));
   else assert.ok(events.every(e=>e.kind<=3),'Melee evidence requires its frozen exporter');
   return product;
 }
