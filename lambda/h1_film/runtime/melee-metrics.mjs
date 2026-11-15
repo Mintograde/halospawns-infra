@@ -9,7 +9,7 @@ const damaged = e => pair(e.before) && pair(e.after)
 // accepted original-client report clocks, a map-wide conservative timer bound,
 // and a host-observed cancellation chain. Host timing alone is never proof.
 export function deriveMeleeMetrics({events, slots, deaths, partialRecording = false, doubleMeleeDefinition = 1,
-  resolveNonMeleeFinishers = false}) {
+  resolveNonMeleeFinishers = false, resolveBackwhackFinishers = false}) {
   assert.ok([1,2].includes(doubleMeleeDefinition),'Unsupported double melee definition');
   const metrics = MELEE_METRICS.map(id => ({id, definition_version: id==='double_melee_kills'?doubleMeleeDefinition:1,
     players: slots.map(slot_index => ({slot_index, value: 0, observed_count: 0,
@@ -80,16 +80,21 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
       const lethal = hit && hit.slot === e.slot && hit.unit === e.unit && hit.category === 2
         && hit.relationship === 0 && hit.source_tick === e.source_tick && hit.after[1] <= 0;
       if (e.category !== 2 || !lethal) {
-        unknown(0);
         // Kill credit can name an earlier attacker after a grenade finishes the
         // victim. The death's credited weapon is then unknown, but a positive
         // health-to-zero callback on this exact body/tick can still prove the
         // finisher was not a melee. Unknown categories/owners alone cannot:
         // a dead player's host melee can appear as environmental damage.
-        const nonMelee = resolveNonMeleeFinishers && e.category < 0 && hit
+        const finisher = e.category < 0 && hit
           && hit.unit === e.unit && hit.source_tick === e.source_tick
-          && hit.before[1] > 0 && hit.after[1] <= 0 && hit.category >= 0 && hit.category !== 2;
-        if (!nonMelee) unknown(1);
+          && hit.before[1] > 0 && hit.after[1] <= 0;
+        const nonMelee = finisher && hit.category >= 0 && hit.category !== 2;
+        // The assassination branch is observed in the actual lethal host call,
+        // including remote damage. Two explicit false observations can exclude
+        // a backwhack even when its credited weapon/attacker is unresolved.
+        const notBackwhack = finisher && (nonMelee || (hit.backwhack === 0 && e.backwhack === 0));
+        if (!resolveBackwhackFinishers || !notBackwhack) unknown(0);
+        if (!resolveNonMeleeFinishers || !nonMelee) unknown(1);
         continue;
       }
       if (e.backwhack === 1 && hit.backwhack === 1) count(0, example(e.source_tick));

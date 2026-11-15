@@ -117,3 +117,29 @@ for(const [name,change] of [
 ])test(`finisher coverage keeps uncertainty for ${name}`,()=>{
   const f=creditedGrenade();change(f);assert.equal(counts(f)[1].value,null);
 });
+
+test('backwhack coverage uses actual lethal branch observations despite unknown credit attribution',()=>{
+  for(const category of [-1,1,2]) {
+    const f=creditedGrenade();f.resolveBackwhackFinishers=true;
+    Object.assign(f.events[4],{category,slot:-1,relationship:3});
+    const [back,double]=counts(f);
+    assert.equal(back.value,0);assert.equal(back.unknown_kills,0);
+    assert.equal(double.value,category===1?0:null);
+    assert.equal(counts({...f,resolveBackwhackFinishers:false})[0].value,null);
+  }
+});
+
+for(const [name,change] of [
+  ['missing hit branch observation',f=>delete f.events[4].backwhack],
+  ['missing death branch observation',f=>delete f.events[5].backwhack],
+  ['conflicting hit branch',f=>f.events[4].backwhack=1],
+  ['conflicting death branch',f=>f.events[5].backwhack=1],
+  ['unowned actual assassination',f=>{f.events[4].backwhack=f.events[5].backwhack=1;}],
+  ['different body',f=>f.events[4].unit++],
+  ['earlier damage',f=>f.events[4].source_tick--],
+  ['nonlethal damage',f=>f.events[4].after=[0,0.1]],
+])test(`backwhack coverage preserves uncertainty for ${name}`,()=>{
+  const f=creditedGrenade();f.resolveBackwhackFinishers=true;
+  Object.assign(f.events[4],{category:-1,slot:-1,relationship:3});
+  change(f);assert.equal(counts(f)[0].value,null);
+});

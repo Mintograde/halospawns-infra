@@ -3,7 +3,8 @@
 ## November 15, 2026 review
 
 The user asked whether the host-only double-melee approach could also improve
-three-shot kills. The review covers the six supplied Beta 8 recordings and the
+three-shot kills and clarified that backwhacks were the other intended metric.
+The review covers the six supplied Beta 8 recordings and the
 90 distinct Beta 5/6 cases from `HOST_SHOT_EVALUATION.md`. Original recordings
 are hash-checked and the instrumented reducer must reproduce the production
 result before its diagnostic classifications are inspected.
@@ -47,15 +48,45 @@ melee at tick 52904. That case remains unknown.
 Across the six supplied films, the correction preserves all five verified
 doubles and resolves five false unknowns: two Exhibit grenade finishers and
 one each in Dread, Hangemhigh and Fallout. Unknown classifications fall from
-nine to four. Backwhacks, three-shot results and all other statistics retain
+nine to four. Three-shot results and all other statistics retain
 their prior results. The Fallout dstny total becomes complete; Seizen's
 confirmed example remains intact.
 
-The new four exporter recipes reuse byte-identical exporter-36 engines. All
-seven profiles, 70 previous exporters and every old recipe remain. The worker
-gates the correction at exporter 37; retained recipes preserve their prior
-results. Double-melee definition 2, analytics 5, viewer revisions and proof
-shapes are unchanged. API support only admits the new Beta 8 recipe.
+## Backwhack investigation and correction
+
+Backwhacks already use authoritative host damage, including remote clients.
+The hook is inside the branch that actually depletes a live body's health after
+the engine's assassination check. It is independent of the attacker's client
+film and of ordinary instant kills, cheats and non-damaging predictions.
+Successful backwhacks need both the actual damage and death observations.
+Facing alone and original report timing cannot replace that branch evidence.
+
+The current 342-game set has 251 verified backwhacks and 268 unknown kill
+classifications across 151 games. Every such game is already among the 174
+games selected for the double-melee coverage review.
+
+Exporter 38 extends the finisher proof to backwhacks. A confirmed non-melee
+finisher excludes a backwhack. Alternatively, when both the actual lethal
+damage and its death explicitly report that the assassination branch did not
+execute, the unknown credited weapon cannot make the kill a backwhack. The
+same exact-body, same-tick and positive-health-to-zero requirements apply.
+Missing/conflicting branch observations and an unowned actual assassination
+remain unknown. This corrects negative classifications; it does not invent a
+positive kill from missing attribution.
+
+All nine backwhack unknowns in the supplied films are resolved by these rules,
+including the unowned ordinary melee in Exhibit. Its double-melee classification
+appropriately stays unknown. All existing backwhack and double-melee examples
+are retained exactly.
+
+The final exporter 38 and retained exporter 37 reuse byte-identical exporter-36
+engines. All seven profiles, 70 original exporters and every recipe remain
+(78 exporters with both additions). Exporter 37 only enables the double-melee
+correction; exporter 38 also enables backwhack coverage. Candidate worker r2
+was published before the user's clarification and was never activated; the
+combined release is r3. Retained recipes preserve their prior results.
+Backwhack definition 1, double-melee definition 2, analytics 5, viewer revisions
+and proof shapes are unchanged. API support only admits the new Beta 8 recipes.
 
 Local investigation and validation artifacts are under
 `.build/report-metrics/`: `coverage-study.mjs`, `coverage-study.json`,
