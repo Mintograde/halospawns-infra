@@ -1,5 +1,15 @@
 # Browser-ready heatmaps
 
+Dev is deployed as worker **16**, API **288** (`8f2d924`, CI `43972096748`), infra
+`470b5b5`. All 298 active scopes / 57,216 selections are populated, with unchanged
+scope and historical source fingerprints. Automatic builds read the exact frozen
+JSON source to keep publication byte-identical to derived-only backfills.
+The final worker ZIP and 40 packaged tests pass; repeat publication of an existing
+192-selection source preserves its S3 index version. API/site/Terraform tests,
+both builds, live CDN and browser checks, health and nine empty queues pass.
+All six postplans have no resource actions; final API/worker plans are no-op.
+Frontend remains local/uncommitted. No replay reparse or production action.
+
 The dev rollup worker also publishes immutable heatmap products under
 `heatmaps/precomputed/v1/<source-sha256>/views/<decoded-sha256>.json`.
 `HEATMAP_PRECOMPUTED_ENABLED` is enabled only in dev. The API repository owns the
