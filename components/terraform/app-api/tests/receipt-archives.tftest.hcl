@@ -55,13 +55,13 @@ run "private_versioned_receipt_reader" {
     condition = (
       local.app_lambda_environment.H1FILM_RECEIPT_ARCHIVE_BUCKET == "halospawns-api-artifacts-dev-283279960672" &&
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.actions
-      if s.sid == "ReadH1FilmReceiptArchives"])) == toset(["s3:GetObjectVersion"]) &&
+      if s.sid == "ReadH1FilmReceiptArchives"])) == toset(["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]) &&
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.resources
         if s.sid == "ReadH1FilmReceiptArchives"])) == toset([
         "arn:aws:s3:::halospawns-api-artifacts-dev-283279960672/database-archive/h1film-completions/*"
       ])
     )
-    error_message = "Only exact private receipt object versions may be read by the API."
+    error_message = "Receipt writes and version reads must be restricted to the archive prefix, with no delete permission."
   }
   assert {
     condition = alltrue([

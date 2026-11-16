@@ -188,7 +188,7 @@ data "aws_iam_policy_document" "app_runtime" {
 
   statement {
     sid       = "ReadH1FilmReceiptArchives"
-    actions   = ["s3:GetObjectVersion"]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
     resources = ["${aws_s3_bucket.artifacts[0].arn}/database-archive/h1film-completions/*"]
   }
 
