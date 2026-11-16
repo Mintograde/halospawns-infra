@@ -135,6 +135,12 @@ variable "supabase" {
   }
 }
 
+variable "heatmap_response_cache_enabled" {
+  description = "Enable private, generation-keyed response snapshots for heatmaps."
+  type        = bool
+  default     = false
+}
+
 variable "uploads" {
   description = "Uploads bucket prefixes and presigned URL behavior exposed to the app API."
   type = object({

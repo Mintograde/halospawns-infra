@@ -100,6 +100,15 @@ data "aws_iam_policy_document" "app_runtime" {
   count = var.enabled ? 1 : 0
 
   dynamic "statement" {
+    for_each = var.heatmap_response_cache_enabled ? [1] : []
+    content {
+      sid       = "CacheHeatmapResponses"
+      actions   = ["s3:GetObject", "s3:PutObject"]
+      resources = ["${aws_s3_bucket.artifacts[0].arn}/cache/heatmaps/*"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.workshop_maps_enabled ? [1] : []
     content {
       sid       = "ReadImmutableWorkshopMaps"

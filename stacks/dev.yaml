@@ -58,6 +58,7 @@ components:
     app-api:
       vars:
         enabled: true
+        heatmap_response_cache_enabled: true
         workshop_maps_enabled: true
         h1_film:
           enabled: true
