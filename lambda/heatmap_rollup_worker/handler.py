@@ -147,6 +147,8 @@ class MetricAccumulator:
     def __init__(self, value_unit: str) -> None:
         self.value_unit = value_unit
         self.groups: dict[tuple[int, int], dict[tuple[int, int], int]] = defaultdict(dict)
+        self.spatial_groups: dict[tuple[int, int], dict[tuple[int, int, int], int]] = defaultdict(dict)
+        self.missing_elevation: set[tuple[int, int]] = set()
         self.games_contributing: set[str] = set()
         self.participants_contributing: set[str] = set()
 
@@ -158,6 +160,7 @@ class MetricAccumulator:
         value: int,
         game_id: str,
         participant_id: str,
+        elevation: int | None = None,
     ) -> None:
         if value <= 0:
             raise RollupError(
@@ -180,6 +183,15 @@ class MetricAccumulator:
                 retryable=False,
             )
         cells[cell] = updated
+        if elevation is None:
+            self.missing_elevation.add(group)
+        else:
+            _plane_cell(elevation, 0)
+            spatial = self.spatial_groups[group]
+            voxel = (*cell, elevation)
+            if voxel not in spatial and len(spatial) >= MAX_CELLS_PER_GROUP:
+                raise RollupError("rollup_cell_limit_exceeded", "Too many spatial cells", retryable=False)
+            spatial[voxel] = spatial.get(voxel, 0) + value
         self.games_contributing.add(game_id)
         self.participants_contributing.add(participant_id)
 
@@ -201,6 +213,10 @@ class MetricAccumulator:
                     "cells": [
                         {"cell": [cell[0], cell[1]], "value": value}
                         for cell, value in sorted(self.groups[group_key].items())
+                    ],
+                    "cells_3d": None if group_key in self.missing_elevation else [
+                        {"cell": list(cell), "value": value}
+                        for cell, value in sorted(self.spatial_groups[group_key].items())
                     ],
                 }
             )
@@ -334,6 +350,7 @@ class RollupAccumulator:
                         group=selected[1],
                         cell=_plane_cell(math.floor(event["replay_x"] / SOURCE_CELL_SIZE),
                                          math.floor(-event["replay_y"] / SOURCE_CELL_SIZE)),
+                        elevation=_event_elevation(event),
                         value=1, game_id=game_id, participant_id=selected[0])
         if self.region_accumulator is not None:
             self.region_accumulator.begin_game(
@@ -403,7 +420,7 @@ class RollupAccumulator:
             len(cells)
             for metrics in (self.metrics, self.matched_metrics, *self.outcome_metrics.values())
             for metric in metrics.values()
-            for cells in metric.groups.values()
+            for cells in (*metric.groups.values(), *metric.spatial_groups.values())
         )
 
     def summary(self) -> dict[str, int]:
@@ -442,6 +459,7 @@ class RollupAccumulator:
                     math.floor(-replay_y / SOURCE_CELL_SIZE),
                 ),
                 value=1,
+                elevation=_event_elevation(event),
                 game_id=game_id,
                 participant_id=participant_id,
             )
@@ -491,12 +509,14 @@ class RollupAccumulator:
                 group=group,
                 cell=plane_cell,
                 value=observed_ticks,
+                elevation=math.floor((cell[2] + 0.5) * cell_ratio),
                 game_id=game_id,
                 participant_id=participant_id,
             )
             if matched:
                 self.matched_metrics["occupancy"].add(
                     group=group, cell=plane_cell, value=observed_ticks,
+                    elevation=math.floor((cell[2] + 0.5) * cell_ratio),
                     game_id=game_id, participant_id=participant_id)
 
     def _add_value(self, metric: str, outcome: str | None, **values: object) -> None:
@@ -1832,6 +1852,13 @@ def _current_timestamp() -> str:
 
 def _group_sort_key(group: tuple[int, int]) -> tuple[int, int]:
     return group
+
+
+def _event_elevation(event: Mapping[str, object]) -> int | None:
+    # Retained/older inputs may omit height. Never invent a ground-floor sample.
+    if event.get("replay_z") is None:
+        return None
+    return math.floor(_finite_number(event, "replay_z") / SOURCE_CELL_SIZE)
 
 
 def _plane_cell(cell_x: int, cell_y: int) -> tuple[int, int]:

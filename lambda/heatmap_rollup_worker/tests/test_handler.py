@@ -401,12 +401,14 @@ class RollupAggregationTests(unittest.TestCase):
                     "label": "Team 0",
                     "team_index": 0,
                     "cells": [{"cell": [-1, -3], "value": 3}],
+                    "cells_3d": [{"cell": [-1, -3, 9], "value": 3}],
                 },
                 {
                     "key": "team:none",
                     "label": "No team",
                     "team_index": None,
                     "cells": [{"cell": [4, 1], "value": 5}],
+                    "cells_3d": [{"cell": [4, 1, 1], "value": 5}],
                 },
             ],
         )
@@ -428,7 +430,7 @@ class RollupAggregationTests(unittest.TestCase):
             [{"cell": [2, 2], "value": 1}],
         )
         self.assertEqual(accumulator.input_bytes, 123)
-        self.assertEqual(accumulator.cell_count(), 4)
+        self.assertEqual(accumulator.cell_count(), 8)
 
     def test_player_scope_ignores_occupancy_for_unselected_slots(self) -> None:
         accumulator = handler.RollupAccumulator(
