@@ -1,5 +1,48 @@
 # H1 film Lambda integration
 
+## Mirrored-host double melees deployed (2026-11-16)
+
+Mirrored-host double-melee detection is deployed in dev as worker/default
+`20261116-r1`, policy 37, API 278 (`a147d8b`, CI 43887724133). Beta 5-8 use
+exporter 39 with exact exporter-38/36 binaries; all seven profiles, 82 exporters
+and every prior recipe remain. The original client reports and accepted host
+verdict copies retained in a mirrored host account can establish definition 2
+without an embedded client world. Missing, capped or conflicting evidence stays
+unknown. `.minto` now has two complete double-melee kills in replay
+`69e50a6e-85ba-49b3-972b-67133f77f75d`: CTRL at 11896 and JukkisP at 24553.
+
+All 121 affected games succeeded in 50 audited batches. Across the original
+410 games, verified double melees increased from 123 to 133
+(10 recovered across 8 games); unknown kill classifications fell
+from 213 to 203. Doubles included in complete player totals increased from
+95 to 103. All 262 backwhacks, 2598 verified three-shots and
+750 three-shot estimates remain unchanged. Their existing evidence paths already
+handle the corresponding host observations/client accounts; original hit clocks
+cannot establish an otherwise missing miss-free shot history.
+
+Every other statistic and all replay bytes remain: 17 standalone files and
+10,833 payload entries in 104 match files. All 289 unaffected original games
+are unchanged. Two separate client views are reattached with identical bytes
+and original clocks (167,368 frames / 1,396 hashes); the other four remain
+attached to unchanged hosts. All original history remains. Final totals are
+459 conversions / 2,894 logical receipts / 2,488 H1 attempts /
+474 approvals / 2,758 settings snapshots; client history is
+37 uploads / 38 attempts.
+
+All 295 Node / 123 packaged worker / 2,501 API CI tests, 17 packaged cases /
+51 exact deployed-API callbacks, seven retained cases / 21 callbacks and the
+separate client flow pass. Live API/CDN hashes and desktop/mobile Chrome counts,
+filtering, lead-in seeks, playback and perspective switching pass. The first
+cold inventory health exceeded 300 seconds; the full warm retry passed before
+the saved promotion's final policy/API/image-fenced activation. All six dev
+postplans have no resource actions; API output refresh and final no-op pass.
+Queue and DLQ are empty. No migration, frontend or production deployment.
+Retain compatible API readers, every recipe/generation, receipt archive access
+and all archived versions on rollback.
+
+See [CLIENT_MELEE.md](CLIENT_MELEE.md) and `.build/client-melee/`.
+
+
 ## Backwhack and double-melee coverage deployed (2026-11-15)
 
 Backwhack and double-melee coverage corrections are deployed in dev as
