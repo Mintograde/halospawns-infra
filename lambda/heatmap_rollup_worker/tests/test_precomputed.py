@@ -2,14 +2,59 @@ import gzip
 import hashlib
 import io
 import json
+import tempfile
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from test_handler import _claim, _settings, handler
 
 
 class PrecomputedTests(unittest.TestCase):
+    def test_normal_build_uses_frozen_source_and_publishes_before_activation(self):
+        document = handler.RollupAccumulator(_claim()).document()
+        payload = gzip.compress(json.dumps(document, sort_keys=True).encode())
+        for fail in (False, True):
+            with self.subTest(failure=fail):
+                with tempfile.NamedTemporaryFile(delete=False) as target:
+                    target.write(payload)
+                    path = Path(target.name)
+                generated = handler.GeneratedArtifact(
+                    path=path, bucket="uploads", key="rollup", size_bytes=len(payload),
+                    sha256=hashlib.sha256(payload).hexdigest(), cell_count=0, summary={},
+                )
+                stages = []
+
+                def publish(settings, digest, frozen):
+                    stages.append("published")
+                    self.assertEqual(digest, generated.sha256)
+                    self.assertEqual(list(frozen["metrics"]), sorted(document["metrics"]))
+                    self.assertEqual(frozen, document)
+                    if fail:
+                        raise OSError("upload failed")
+
+                def complete(*args):
+                    stages.append("activated")
+                    return {"activated": True}
+
+                try:
+                    with (
+                        patch.object(handler, "_list_inputs", return_value={"games": [], "next_cursor": None}),
+                        patch.object(handler, "_write_rollup_artifact", return_value=generated),
+                        patch.object(handler, "_publish_precomputed", side_effect=publish),
+                        patch.object(handler, "_complete_scope", side_effect=complete),
+                        patch.object(handler, "_mark_artifact_active"),
+                        patch.object(handler, "_delete_generated_artifact"),
+                        patch.object(handler, "_fail_scope") as failed,
+                    ):
+                        result = handler._process_claim(replace(_settings(), precomputed_enabled=True), _claim())
+                    self.assertEqual(result.status, "failed" if fail else "completed")
+                    self.assertEqual(stages, ["published"] if fail else ["published", "activated"])
+                    self.assertEqual(failed.call_count, int(fail))
+                finally:
+                    path.unlink(missing_ok=True)
+
     def test_backfill_verifies_source_without_claiming_or_changing_generations(self):
         document = handler.RollupAccumulator(_claim()).document()
         payload = gzip.compress(json.dumps(document).encode())

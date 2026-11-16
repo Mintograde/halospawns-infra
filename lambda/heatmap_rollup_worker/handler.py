@@ -667,7 +667,10 @@ def _process_claim(
             cell_count=accumulator.cell_count(),
         )
         if settings.precomputed_enabled:
-            _publish_precomputed(settings, generated.sha256, accumulator.document())
+            # Use the exact serialized source, including its canonical object order.
+            # Automatic builds and later backfills must publish byte-identical indexes.
+            with gzip.open(generated.path, "rt", encoding="utf-8") as frozen_source:
+                _publish_precomputed(settings, generated.sha256, json.load(frozen_source))
         if accumulator.region_accumulator is not None:
             generated_at = _region_generated_at(
                 settings,
