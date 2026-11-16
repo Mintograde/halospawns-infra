@@ -46,6 +46,12 @@ data "aws_iam_policy_document" "heatmap_rollup_worker_runtime" {
   count = var.heatmap_rollup_worker.enabled ? 1 : 0
 
   statement {
+    sid       = "PublishPrecomputedHeatmaps"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/heatmaps/precomputed/*"]
+  }
+
+  statement {
     sid       = "ListRegionStatRollupArtifacts"
     actions   = ["s3:ListBucket"]
     resources = [data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn]

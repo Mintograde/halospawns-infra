@@ -152,11 +152,12 @@ variable "replay_parser" {
 variable "heatmap_rollup_worker" {
   description = "Scheduled heatmap rollup Lambda, metric, retry, and alarm configuration."
   type = object({
-    enabled       = optional(bool, true)
-    function_name = optional(string)
-    runtime       = optional(string, "python3.14")
-    handler       = optional(string, "handler.lambda_handler")
-    alias_name    = optional(string, "live")
+    enabled             = optional(bool, true)
+    function_name       = optional(string)
+    runtime             = optional(string, "python3.14")
+    handler             = optional(string, "handler.lambda_handler")
+    alias_name          = optional(string, "live")
+    precomputed_enabled = optional(bool, false)
     lambda = optional(object({
       timeout_seconds                = optional(number, 840)
       memory_mb                      = optional(number, 3008)

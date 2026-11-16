@@ -100,6 +100,15 @@ data "aws_iam_policy_document" "app_runtime" {
   count = var.enabled ? 1 : 0
 
   dynamic "statement" {
+    for_each = local.uploads_bucket_arn == null ? [] : [1]
+    content {
+      sid       = "ReadPrecomputedHeatmapIndexes"
+      actions   = ["s3:GetObject"]
+      resources = ["${local.uploads_bucket_arn}/heatmaps/precomputed/*/index.json"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.heatmap_response_cache_enabled ? [1] : []
     content {
       sid       = "CacheHeatmapResponses"

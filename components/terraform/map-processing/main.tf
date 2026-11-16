@@ -286,6 +286,7 @@ module "heatmap_rollup_worker" {
       UPLOADS_BUCKET_NAME                           = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       SPATIAL_ARTIFACT_PREFIX                       = "${local.replay_spatial_artifact_prefix}/"
       HEATMAP_ROLLUP_ARTIFACT_PREFIX                = "${local.heatmap_rollup_artifact_prefix}/"
+      HEATMAP_PRECOMPUTED_ENABLED                   = tostring(var.heatmap_rollup_worker.precomputed_enabled)
       REGION_STAT_ROLLUP_ARTIFACT_PREFIX            = "${local.region_stat_rollup_artifact_prefix}/"
       REGION_STAT_ROLLUP_SCHEMA                     = "halospawns.regionStatsRollup.v1"
       REGION_STATS_CAPABILITY                       = "region_stats_v1"

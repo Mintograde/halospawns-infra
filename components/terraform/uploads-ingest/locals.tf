@@ -26,6 +26,7 @@ locals {
 
   asset_cors_expose_headers = ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range", "ETag"]
   asset_download_object_arns = concat(
+    ["${local.uploads_bucket_arn}/heatmaps/precomputed/v1/*/views/*.json"],
     try([for suffix in ["*.glb", "*.json", "*.png", "*.jpg", "*.jpeg", "*.webp"] :
       "${local.uploads_bucket_arn}/${local.pipelines.maps.processed_prefix}${suffix}"
     ], []),
@@ -41,6 +42,7 @@ locals {
   }
 
   immutable_replay_object_arns = concat(
+    ["${local.uploads_bucket_arn}/heatmaps/precomputed/*"],
     local.replay_processed_prefix == null ? [] : [
       "${local.uploads_bucket_arn}/${local.replay_processed_prefix}*/sources/*",
     ],

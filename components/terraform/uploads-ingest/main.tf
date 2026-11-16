@@ -438,6 +438,19 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 
   ordered_cache_behavior {
+    path_pattern               = "heatmaps/precomputed/*"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "S3-${module.uploads_bucket.s3_bucket_id}"
+    trusted_key_groups         = local.asset_trusted_key_groups
+    cache_policy_id            = aws_cloudfront_cache_policy.assets["immutable"].id
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.asset_cors[0].id
+    response_headers_policy_id = try(aws_cloudfront_response_headers_policy.asset_cors[0].id, null)
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = false
+  }
+
+  ordered_cache_behavior {
     path_pattern               = "${local.replay_viewer_artifact_prefix}*"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
     cached_methods             = ["GET", "HEAD"]

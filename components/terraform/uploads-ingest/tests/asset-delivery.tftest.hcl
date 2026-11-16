@@ -56,6 +56,7 @@ run "s3_default" {
   }
   assert {
     condition = toset(local.asset_download_object_arns) == toset([
+      "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/v1/*/views/*.json",
       "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*.glb",
       "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*.json",
       "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*.png",
@@ -72,6 +73,14 @@ run "s3_default" {
   assert {
     condition     = aws_cloudfront_cache_policy.assets["mutable"].max_ttl == 300 && aws_cloudfront_cache_policy.assets["immutable"].max_ttl == 31536000
     error_message = "Replaceable keys must have bounded TTLs; immutable generations may cache longer."
+  }
+  assert {
+    condition = (
+      contains(local.immutable_replay_object_arns, "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/*") &&
+      length([for b in aws_cloudfront_distribution.s3_distribution[0].ordered_cache_behavior : b
+        if b.path_pattern == "heatmaps/precomputed/*" && !b.compress]) == 1
+    )
+    error_message = "Prepared heatmaps must require conditional writes and preserve stored gzip bytes."
   }
 }
 
@@ -141,7 +150,7 @@ run "h1_preserves_canonical_versions" {
       local.pipeline_lifecycle_rules["replays-unprocessed"].noncurrent_version_expiration_days == 7 &&
       local.pipelines.films.unprocessed_prefix == "films/unprocessed/" &&
       aws_sqs_queue.file_processing["films"].visibility_timeout_seconds == 5400 &&
-      length(local.asset_download_object_arns) == 10
+      length(local.asset_download_object_arns) == 11
     )
     error_message = "Keep pinned film versions without broadening CDN access or changing Xbox retention."
   }
@@ -196,7 +205,7 @@ run "h1_preserves_retained_map_versions" {
   }
   assert {
     condition = (
-      length(local.asset_download_object_arns) == 10 &&
+      length(local.asset_download_object_arns) == 11 &&
       !contains(local.asset_download_object_arns, "${local.uploads_bucket_arn}/maps/processed/*.map")
     )
     error_message = "Retaining raw originals must not make them downloadable through CloudFront."
@@ -258,7 +267,9 @@ run "client_view_notification_and_retention" {
   assert {
     condition = contains(local.asset_download_object_arns,
       "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}client-views/*/generations/*/h1-client-view-timeline.v1.*.json") && alltrue([
-      for arn in local.asset_download_object_arns : !strcontains(arn, "films/client-views/unprocessed/") && !endswith(arn, "/*.json")
+      for arn in local.asset_download_object_arns : !strcontains(arn, "films/client-views/unprocessed/") && (
+        !endswith(arn, "/*.json") || arn == "${local.uploads_bucket_arn}/heatmaps/precomputed/v1/*/views/*.json"
+      )
     ])
     error_message = "Only the generation-bound client timeline JSON may be delivered publicly."
   }

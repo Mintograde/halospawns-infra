@@ -17,7 +17,10 @@ param (
     [string]$FunctionName,
 
     [Parameter()]
-    [string]$AliasName = "live"
+    [string]$AliasName = "live",
+
+    [Parameter()]
+    [string]$ApiSourceRoot
 )
 
 Set-StrictMode -Version Latest
@@ -53,9 +56,14 @@ if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptRoot
 $sourceRoot = Join-Path $repoRoot "lambda\heatmap_rollup_worker"
+if (-not $ApiSourceRoot) {
+    $ApiSourceRoot = Join-Path (Split-Path -Parent $repoRoot) "halospawns-api\src\halospawns_api"
+}
 $sourceFiles = @(
     (Join-Path $sourceRoot "handler.py"),
-    (Join-Path $sourceRoot "region_stats.py")
+    (Join-Path $sourceRoot "region_stats.py"),
+    (Join-Path $ApiSourceRoot "heatmap_product.py"),
+    (Join-Path $ApiSourceRoot "heatmap_encoding.py")
 )
 
 foreach ($sourceFile in $sourceFiles) {

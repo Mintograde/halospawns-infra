@@ -104,6 +104,7 @@ class Settings:
     max_scopes_per_invocation: int
     retry_after_seconds: int
     request_timeout_seconds: int
+    precomputed_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -526,8 +527,9 @@ class RollupAccumulator:
 
 
 def lambda_handler(event: object, context: object) -> dict[str, object]:
-    del event
     settings = _settings()
+    if isinstance(event, dict) and event.get("operation") == "precompute":
+        return _precompute_existing(settings, event)
     started = time.monotonic()
     runtime_metrics = RuntimeMetrics()
     totals = {
@@ -664,6 +666,8 @@ def _process_claim(
             summary=accumulator.summary(),
             cell_count=accumulator.cell_count(),
         )
+        if settings.precomputed_enabled:
+            _publish_precomputed(settings, generated.sha256, accumulator.document())
         if accumulator.region_accumulator is not None:
             generated_at = _region_generated_at(
                 settings,
@@ -1651,6 +1655,7 @@ def _settings() -> Settings:
         max_scopes_per_invocation=_bounded_int_env("HEATMAP_ROLLUP_MAX_SCOPES_PER_INVOCATION", 4, 1, 10),
         retry_after_seconds=_bounded_int_env("HEATMAP_ROLLUP_RETRY_AFTER_SECONDS", 300, 30, 86_400),
         request_timeout_seconds=_bounded_int_env("APP_API_REQUEST_TIMEOUT_SECONDS", 30, 1, 120),
+        precomputed_enabled=_bool_env("HEATMAP_PRECOMPUTED_ENABLED", False),
     )
     if (
         settings.region_schema != REGION_ROLLUP_SCHEMA
@@ -1662,6 +1667,44 @@ def _settings() -> Settings:
             retryable=False,
         )
     return settings
+
+
+def _publish_precomputed(settings, source_sha256, document):
+    from heatmap_encoding import publish_rollup
+    from heatmap_product import render_rollup
+
+    index = publish_rollup(
+        S3, bucket=settings.uploads_bucket, source_sha256=source_sha256,
+        document=document, renderer=render_rollup,
+    )
+    return {"source_sha256": source_sha256, "variants": len(index["variants"])}
+
+
+def _precompute_existing(settings, event):
+    """Derived-only backfill: no claims, SQL writes, replay processing, or source changes."""
+    import io
+    import re
+
+    key, digest = event.get("key", ""), event.get("sha256", "")
+    if (not settings.precomputed_enabled or not key.startswith(settings.output_prefix)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+        raise ValueError("Invalid heatmap precomputation request")
+    response = S3.get_object(Bucket=settings.uploads_bucket, Key=key)
+    stream = response["Body"]
+    try:
+        payload = stream.read(MAX_OUTPUT_ARTIFACT_BYTES + 1)
+    finally:
+        stream.close()
+    if len(payload) > MAX_OUTPUT_ARTIFACT_BYTES or hashlib.sha256(payload).hexdigest() != digest:
+        raise ValueError("Heatmap source hash mismatch")
+    with gzip.GzipFile(fileobj=io.BytesIO(payload)) as source:
+        decoded = source.read(MAX_DECOMPRESSED_OUTPUT_BYTES + 1)
+    if len(decoded) > MAX_DECOMPRESSED_OUTPUT_BYTES:
+        raise ValueError("Heatmap source exceeds size limit")
+    document = json.loads(decoded)
+    if document.get("schema") != ROLLUP_SCHEMA:
+        raise ValueError("Unsupported heatmap source schema")
+    return _publish_precomputed(settings, digest, document)
 
 
 def _rollup_key(prefix: str, scope_id: str, generation: int) -> str:

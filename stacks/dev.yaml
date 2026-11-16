@@ -165,6 +165,8 @@ components:
             - http://127.0.0.1:5180
     map-processing:
       vars:
+        heatmap_rollup_worker:
+          precomputed_enabled: true
         workshop_maps:
           enabled: true
           image_tag: git-6d414bfccf85ce3016b4839349b25707cf7cd7b1

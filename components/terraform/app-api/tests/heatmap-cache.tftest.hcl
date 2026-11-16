@@ -64,6 +64,17 @@ run "cache_is_private_and_prefix_scoped" {
   variables { heatmap_response_cache_enabled = true }
   assert {
     condition = (
+      toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.actions
+        if s.sid == "ReadPrecomputedHeatmapIndexes"])) == toset(["s3:GetObject"]) &&
+      toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.resources
+        if s.sid == "ReadPrecomputedHeatmapIndexes"])) == toset([
+          "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/*/index.json"
+        ])
+    )
+    error_message = "The API reads only small indexes; the producer owns permanent product writes."
+  }
+  assert {
+    condition = (
       local.app_lambda_environment.HEATMAP_RESPONSE_CACHE_BUCKET == "halospawns-api-artifacts-dev-283279960672" &&
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.actions
       if s.sid == "CacheHeatmapResponses"])) == toset(["s3:GetObject", "s3:PutObject"]) &&
