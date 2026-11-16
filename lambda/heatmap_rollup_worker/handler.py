@@ -242,6 +242,10 @@ class RollupAccumulator:
         }
         self.outcome_games: dict[str, set[str]] = {outcome: set() for outcome in self.outcome_metrics}
         self.outcome_participants = {outcome: 0 for outcome in self.outcome_metrics}
+        self.matched_metrics = {name: MetricAccumulator(metric.value_unit)
+                                for name, metric in self.metrics.items()}
+        self.matched_games = 0
+        self.matched_participants = 0
 
     def add_game(
         self,
@@ -309,6 +313,28 @@ class RollupAccumulator:
         document, downloaded_bytes = occupancy_loader(manifest)
         self.input_bytes += downloaded_bytes
         _validate_occupancy_document(document)
+        # Rates must never mix events from a game with another game's exposure.
+        # Zero kills/deaths are valid when availability explicitly confirms coverage.
+        availability = game.get("analytics_availability") or {}
+        available_metrics = availability.get("metrics", {})
+        observed_slots = {row.get("slot_index") for row in document.get("occupancy", [])
+                          if isinstance(row, Mapping) and row.get("observed_ticks", 0) > 0}
+        matched = (bool(participants_by_slot)
+                   and all(available_metrics.get(key) == "available"
+                           for key in ("kill_positions", "death_positions", "occupancy"))
+                   and document.get("coverage", {}).get("status") == "available"
+                   and set(participants_by_slot).issubset(observed_slots))
+        if matched:
+            self.matched_games += 1
+            self.matched_participants += len(participants_by_slot)
+            for participant in participants_raw:
+                selected = participants_by_slot[participant["slot_index"]]
+                for event in participant["events"]:
+                    self.matched_metrics[event["event_type"]].add(
+                        group=selected[1],
+                        cell=_plane_cell(math.floor(event["replay_x"] / SOURCE_CELL_SIZE),
+                                         math.floor(-event["replay_y"] / SOURCE_CELL_SIZE)),
+                        value=1, game_id=game_id, participant_id=selected[0])
         if self.region_accumulator is not None:
             self.region_accumulator.begin_game(
                 participants_by_slot=region_participants_by_slot,
@@ -318,6 +344,7 @@ class RollupAccumulator:
             game_id=game_id,
             participants_by_slot=participants_by_slot,
             document=document,
+            matched=matched,
         )
         if self.region_accumulator is not None:
             self.region_accumulator.finish_game()
@@ -343,8 +370,21 @@ class RollupAccumulator:
             "plane_coordinate_space": PLANE_COORDINATE_SPACE,
             "source_cell_size": SOURCE_CELL_SIZE,
             "metrics": metrics,
+            "matched": {
+                "schema": "halospawns.heatmapMatched.v1",
+                "metrics": {name: accumulator.document(
+                    games_selected=self.matched_games,
+                    participants_selected=self.matched_participants)
+                    for name, accumulator in self.matched_metrics.items()},
+            },
             "team_outcomes": {
                 "schema": TEAM_OUTCOMES_SCHEMA,
+                "games_selected": len(self.outcome_games["winning"] | self.outcome_games["losing"]),
+                "games_contributing": {
+                    name: len(self.outcome_metrics["winning"][name].games_contributing
+                              | self.outcome_metrics["losing"][name].games_contributing)
+                    for name in self.metrics
+                },
                 **{
                     outcome: {"metrics": {
                         name: accumulator.document(
@@ -361,7 +401,7 @@ class RollupAccumulator:
     def cell_count(self) -> int:
         return sum(
             len(cells)
-            for metrics in (self.metrics, *self.outcome_metrics.values())
+            for metrics in (self.metrics, self.matched_metrics, *self.outcome_metrics.values())
             for metric in metrics.values()
             for cells in metric.groups.values()
         )
@@ -412,6 +452,7 @@ class RollupAccumulator:
         game_id: str,
         participants_by_slot: Mapping[int, tuple[str, tuple[int, int], str | None]],
         document: Mapping[str, object],
+        matched: bool = False,
     ) -> None:
         occupancy = document.get("occupancy")
         assert isinstance(occupancy, list)
@@ -453,6 +494,10 @@ class RollupAccumulator:
                 game_id=game_id,
                 participant_id=participant_id,
             )
+            if matched:
+                self.matched_metrics["occupancy"].add(
+                    group=group, cell=plane_cell, value=observed_ticks,
+                    game_id=game_id, participant_id=participant_id)
 
     def _add_value(self, metric: str, outcome: str | None, **values: object) -> None:
         self.metrics[metric].add(**values)
