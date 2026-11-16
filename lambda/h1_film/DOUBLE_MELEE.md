@@ -1,5 +1,8 @@
 # Host-only double-melee detection
 
+Exporter 39 also proves qualifying sequences from a mirrored host recording's
+preserved original report/verdict account; see [CLIENT_MELEE.md](CLIENT_MELEE.md).
+
 The subsequent exporter-38 coverage correction for both melee metrics and the
 three-shot review are documented in [REPORT_METRICS_REVIEW.md](REPORT_METRICS_REVIEW.md).
 The proof and exporter-36 rollout below remain unchanged.

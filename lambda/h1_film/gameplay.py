@@ -4,7 +4,7 @@ from collections import Counter
 
 
 def validate_gameplay(product, combat, slots, stop, *, definition_version=1, melee_required=False,
-                      double_melee_definition=1):
+                      double_melee_definition=1, client_melee_allowed=False):
     deaths = {event["event_index"]: event for event in combat["deaths"]}
     kills = Counter(event["killer_slot"] for event in deaths.values() if event["kind"] == "kill")
     weapons = {weapon["weapon_id"]: weapon["tag_path"] for weapon in combat["weapons"]}
@@ -66,8 +66,12 @@ def validate_gameplay(product, combat, slots, stop, *, definition_version=1, mel
                 remote = example.get("remote_melee_timing")
                 if metric["id"] == "double_melee_kills":
                     if remote is not None:
+                        client_copy = remote["method"] == "client_accepted_reports_v1"
+                        if client_copy and not (client_melee_allowed
+                                and remote["first_shot_index"] < remote["second_shot_index"]):
+                            raise ValueError("Client melee timing differs from the frozen exporter or report order")
                         if not (double_melee_definition == 2 and timing is None
-                                and remote["method"] == "host_accepted_reports_v1"
+                                and remote["method"] in ("host_accepted_reports_v1", "client_accepted_reports_v1")
                                 and example["start_source_tick"] == remote["first_damage_source_tick"]
                                 and remote["host_first_action_source_tick"] <= example["start_source_tick"]
                                 <= remote["host_grenade_source_tick"] <= remote["host_second_action_source_tick"]

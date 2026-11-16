@@ -107,6 +107,8 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
         const bound=first?.melee_recovery_ticks, delta=b&&a?b.client_tick-a.client_tick:0;
         if(doubleMeleeDefinition===2 && a && b && a.id!==b.id && a.machine_slot===b.machine_slot
           && a.epoch===b.epoch && a.sequence!==b.sequence && a.verdict_index<b.verdict_index
+          && a.method===b.method && a.account_sha256===b.account_sha256
+          && (!a.method || (a.method==='client_accepted_reports_v1' && a.shot_index<b.shot_index))
           && Number.isInteger(hit.attacker_unit) && hit.attacker_unit!==-1
           && first.attacker_unit===hit.attacker_unit && first.victim===hit.victim && first.unit===hit.unit
           && first.after[1]>0 && first.order<hit.order && first.source_tick<=hit.source_tick
@@ -117,7 +119,7 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
           && Number.isSafeInteger(bound) && bound>0 && bound<=508 && bound%4===0
           && hit.melee_recovery_ticks===bound && delta>0 && delta<bound) {
           count(1,{...example(first.source_tick),remote_melee_timing:{
-            method:'host_accepted_reports_v1',first_damage_source_tick:first.source_tick,
+            method:a.method??'host_accepted_reports_v1',first_damage_source_tick:first.source_tick,
             first_report_client_tick:a.client_tick,second_report_client_tick:b.client_tick,
             minimum_recovery_ticks:bound,machine_slot:a.machine_slot,epoch:a.epoch,
             first_sequence:a.sequence,second_sequence:b.sequence,
@@ -125,6 +127,8 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
             host_first_action_source_tick:hostFirst.source_tick,
             host_grenade_source_tick:hostFirst.cancel.source_tick,
             host_second_action_source_tick:hostSecond.source_tick,
+            ...(a.method?{client_account_sha256:a.account_sha256,
+              first_shot_index:a.shot_index,second_shot_index:b.shot_index}:{}),
           }});
         } else if(doubleMeleeDefinition!==2 || partialRecording || hit.priorPotentialMelee) unknown(1);
         continue;

@@ -87,3 +87,31 @@ class MeleeTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.validate(melee_required=True, double_melee_definition=2)
                 remote[field] = old
+
+    def test_client_report_copies_require_provenance_and_new_recipe(self):
+        metric = self.native["gameplay"]["metrics"][2]
+        metric["definition_version"] = 2
+        example = metric["players"][0]["examples"][0]
+        example.pop("melee_timing")
+        example["start_source_tick"] = 1
+        remote = {
+            "method": "client_accepted_reports_v1", "first_damage_source_tick": 1,
+            "first_report_client_tick": 24517, "second_report_client_tick": 24553,
+            "minimum_recovery_ticks": 56, "machine_slot": 0, "epoch": 11539,
+            "first_sequence": 154, "second_sequence": 155,
+            "first_verdict_index": 154, "second_verdict_index": 155,
+            "host_first_action_source_tick": 0, "host_grenade_source_tick": 2,
+            "host_second_action_source_tick": 3,
+            "client_account_sha256": "a" * 64, "first_shot_index": 154, "second_shot_index": 155,
+        }
+        example["remote_melee_timing"] = remote
+        self.validate(melee_required=True, double_melee_definition=2, client_melee_allowed=True)
+        with self.assertRaises(ValueError):
+            self.validate(melee_required=True, double_melee_definition=2)
+        for field, value in (("client_account_sha256", "unknown"), ("first_shot_index", 155),
+                             ("second_shot_index", 65536), ("method", "host_accepted_reports_v1")):
+            old = remote[field]
+            remote[field] = value
+            with self.subTest(field=field), self.assertRaises((ValueError, cloud.FilmError)):
+                self.validate(melee_required=True, double_melee_definition=2, client_melee_allowed=True)
+            remote[field] = old

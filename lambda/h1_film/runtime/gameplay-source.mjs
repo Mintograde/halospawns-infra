@@ -101,11 +101,51 @@ export function bindGameplayDeals(events,{ledger,accounts}) {
   return {verdicts,ordered,links};
 }
 
-export function bindMeleeReports(events,source) {
+// A mirrored host film deliberately replaces the full host ledger with its
+// owner's account. Retain that account's raw indices and require an original
+// report, its byte-identical accepted verdict copy, and a unique host DEAL.
+// No ordering across different client accounts is inferred.
+function bindClientMeleeReports(events,source) {
+  if(source.ledger) return events; // A capped/conflicting original ledger is not a missing one.
+  const {verdicts,links}=bindGameplayDeals(events,source), candidates=new Map();
+  const key=v=>`${v.machine_slot}/${v.epoch}/${v.sequence}/${v.sent_client_tick}`;
+  const record=v=>JSON.stringify({...v,index:undefined});
+  const accepted=new Map(verdicts.filter(v=>v.verdict===0&&v.flags===1).map(v=>[key(v),v]));
+  for(const account of source.accounts) {
+    if(!/^[0-9a-f]{64}$/.test(account.hash??'')
+      || !Number.isInteger(account.own_player) || account.own_player<0 || account.own_player>=16
+      || !Number.isInteger(account.own_machine_slot) || account.own_machine_slot<0 || account.own_machine_slot>=16
+      || source.accounts.filter(a=>a.own_machine_slot===account.own_machine_slot&&a.own_player===account.own_player).length!==1) continue;
+    const shots=rows(account,'client','shots'), copies=rows(account,'client','host_verdicts');
+    if(!shots || !copies || shots.length>65536 || copies.length>65536) continue;
+    for(const pair of pairShotVerdicts(shots,copies,account.own_machine_slot)) {
+      if(pair.status!=='paired') continue;
+      const shot=shots[pair.shot_index], copy=copies[pair.verdict_index], verdict=accepted.get(key(copy));
+      if(!verdict || record(copy)!==record(verdict) || !(shot.flags&1)
+        || copy.machine_slot!==account.own_machine_slot || copy.owner!==account.own_player
+        || shot.owner!==copy.owner || shot.object!==copy.object
+        || shot.client_tick<0 || shot.client_tick>shot.sent_client_tick) continue;
+      const list=candidates.get(verdict.index)??[];
+      list.push({shot,copy,account});candidates.set(verdict.index,list);
+    }
+  }
+  return events.map(e=>{
+    if(e.kind!==1 || e.category!==2 || !e.deal) return e;
+    const verdict=verdicts[links.get(e.deal)], found=candidates.get(verdict?.index)??[];
+    if(found.length!==1 || verdict.host_tick!==e.clock || verdict.owner!==e.physical
+      || verdict.object!==e.unit || found[0].shot.damage_tag!==e.weapon_tag) return e;
+    const {shot,copy,account}=found[0];
+    return {...e,melee_report:{id:key(copy),machine_slot:copy.machine_slot,epoch:copy.epoch,
+      sequence:copy.sequence,client_tick:copy.sent_client_tick,verdict_index:copy.index,
+      method:'client_accepted_reports_v1',account_sha256:account.hash,shot_index:shot.index}};
+  });
+}
+
+export function bindMeleeReports(events,source,{allowClientCopies=false}={}) {
   const {verdicts,ordered,links}=bindGameplayDeals(events,source);
-  // Only the uncapped original host ledger establishes the complete ordered
-  // DEAL/verdict join. A client copy or a nearest-time match cannot do so.
-  if(!ordered) return events;
+  // The full ledger permits an ordered per-tick join. With no ledger, newer
+  // recipes separately require unique exact matches and original client reports.
+  if(!ordered) return allowClientCopies?bindClientMeleeReports(events,source):events;
   const keys=new Map();
   for(const v of verdicts) if(v.verdict===0 && v.flags===1) {
     const key=`${v.machine_slot}/${v.epoch}/${v.sequence}/${v.sent_client_tick}`;
@@ -182,7 +222,7 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
   const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(args.events,source)});
   const product=includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
   if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,
-    events:exporterRevision>=36?bindMeleeReports(events,source):events,
+    events:exporterRevision>=36?bindMeleeReports(events,source,{allowClientCopies:exporterRevision>=39}):events,
     doubleMeleeDefinition:exporterRevision>=36?2:1,
     resolveNonMeleeFinishers:exporterRevision>=37,
     resolveBackwhackFinishers:exporterRevision>=38}));
