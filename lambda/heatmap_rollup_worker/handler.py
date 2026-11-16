@@ -42,6 +42,7 @@ SSM = boto3.client("ssm")
 
 WORKER_VERSION = "heatmap-rollup-worker.v1"
 ROLLUP_SCHEMA = "halospawns.heatmapRollup.v1"
+TEAM_OUTCOMES_SCHEMA = "halospawns.heatmapTeamOutcomes.v1"
 REGION_ROLLUP_SCHEMA = "halospawns.regionStatsRollup.v1"
 REGION_STATS_CAPABILITY = "region_stats_v1"
 INPUT_SCHEMA = "halospawns.spatialFacts.v1"
@@ -232,6 +233,15 @@ class RollupAccumulator:
             "killer_position": MetricAccumulator("events"),
             "victim_position": MetricAccumulator("events"),
         }
+        self.outcome_metrics = {
+            outcome: {
+                name: MetricAccumulator(metric.value_unit)
+                for name, metric in self.metrics.items()
+            }
+            for outcome in ("winning", "losing")
+        }
+        self.outcome_games: dict[str, set[str]] = {outcome: set() for outcome in self.outcome_metrics}
+        self.outcome_participants = {outcome: 0 for outcome in self.outcome_metrics}
 
     def add_game(
         self,
@@ -240,11 +250,18 @@ class RollupAccumulator:
         occupancy_loader: Callable[[Mapping[str, object]], tuple[Mapping[str, object], int]],
     ) -> None:
         game_id = _required_string(game, "game_id")
+        if "winning_team_index" not in game:
+            raise _invalid_input("Heatmap team result evidence was missing")
+        winner = game["winning_team_index"]
+        if winner is not None and (
+            isinstance(winner, bool) or not isinstance(winner, int) or not 0 <= winner <= 63
+        ):
+            raise _invalid_input("Heatmap winning team was invalid")
         participants_raw = game.get("participants")
         if not isinstance(participants_raw, list):
             raise _invalid_input("Heatmap participants were missing")
 
-        participants_by_slot: dict[int, tuple[str, tuple[int, int]]] = {}
+        participants_by_slot: dict[int, tuple[str, tuple[int, int], str | None]] = {}
         region_participants_by_slot: dict[int, tuple[str, int | None]] = {}
         for participant_raw in participants_raw:
             if not isinstance(participant_raw, Mapping):
@@ -261,7 +278,12 @@ class RollupAccumulator:
             ):
                 raise _invalid_input("A heatmap participant team was invalid")
             group = (1, 0) if team_index is None else (0, team_index)
-            participants_by_slot[slot_index] = (participant_id, group)
+            outcome = None
+            if winner is not None and team_index is not None and team_index >= 0:
+                outcome = "winning" if team_index == winner else "losing"
+                self.outcome_games[outcome].add(game_id)
+                self.outcome_participants[outcome] += 1
+            participants_by_slot[slot_index] = (participant_id, group, outcome)
             region_participants_by_slot[slot_index] = (participant_id, team_index)
             self.participants_selected += 1
             self._add_events(
@@ -269,6 +291,7 @@ class RollupAccumulator:
                 participant_id=participant_id,
                 group=group,
                 participant=participant_raw,
+                outcome=outcome,
             )
 
         self.games_selected += 1
@@ -320,12 +343,26 @@ class RollupAccumulator:
             "plane_coordinate_space": PLANE_COORDINATE_SPACE,
             "source_cell_size": SOURCE_CELL_SIZE,
             "metrics": metrics,
+            "team_outcomes": {
+                "schema": TEAM_OUTCOMES_SCHEMA,
+                **{
+                    outcome: {"metrics": {
+                        name: accumulator.document(
+                            games_selected=len(self.outcome_games[outcome]),
+                            participants_selected=self.outcome_participants[outcome],
+                        )
+                        for name, accumulator in outcome_metrics.items()
+                    }}
+                    for outcome, outcome_metrics in self.outcome_metrics.items()
+                },
+            },
         }
 
     def cell_count(self) -> int:
         return sum(
             len(cells)
-            for metric in self.metrics.values()
+            for metrics in (self.metrics, *self.outcome_metrics.values())
+            for metric in metrics.values()
             for cells in metric.groups.values()
         )
 
@@ -344,6 +381,7 @@ class RollupAccumulator:
         participant_id: str,
         group: tuple[int, int],
         participant: Mapping[str, object],
+        outcome: str | None,
     ) -> None:
         events = participant.get("events")
         if not isinstance(events, list):
@@ -356,7 +394,8 @@ class RollupAccumulator:
                 raise _invalid_input("A heatmap event type was invalid")
             replay_x = _finite_number(event, "replay_x")
             replay_y = _finite_number(event, "replay_y")
-            self.metrics[str(metric)].add(
+            self._add_value(
+                str(metric), outcome,
                 group=group,
                 cell=_plane_cell(
                     math.floor(replay_x / SOURCE_CELL_SIZE),
@@ -371,7 +410,7 @@ class RollupAccumulator:
         self,
         *,
         game_id: str,
-        participants_by_slot: Mapping[int, tuple[str, tuple[int, int]]],
+        participants_by_slot: Mapping[int, tuple[str, tuple[int, int], str | None]],
         document: Mapping[str, object],
     ) -> None:
         occupancy = document.get("occupancy")
@@ -400,19 +439,25 @@ class RollupAccumulator:
             selected = participants_by_slot.get(slot_index)
             if selected is None:
                 continue
-            participant_id, group = selected
+            participant_id, group, outcome = selected
             # Project the center of the replay-space source voxel onto render x/-y.
             plane_cell = _plane_cell(
                 math.floor((cell[0] + 0.5) * cell_ratio),
                 math.floor(-(cell[1] + 0.5) * cell_ratio),
             )
-            self.metrics["occupancy"].add(
+            self._add_value(
+                "occupancy", outcome,
                 group=group,
                 cell=plane_cell,
                 value=observed_ticks,
                 game_id=game_id,
                 participant_id=participant_id,
             )
+
+    def _add_value(self, metric: str, outcome: str | None, **values: object) -> None:
+        self.metrics[metric].add(**values)
+        if outcome is not None:
+            self.outcome_metrics[outcome][metric].add(**values)
 
 
 def lambda_handler(event: object, context: object) -> dict[str, object]:

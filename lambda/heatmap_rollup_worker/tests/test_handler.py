@@ -142,6 +142,7 @@ def _region_configuration() -> dict[str, object]:
 def _region_game(*, document: dict[str, object] | None = None) -> dict[str, object]:
     return {
         "game_id": "33333333-3333-4333-8333-333333333333",
+            "winning_team_index": None,
         "participants": [
             {
                 "participant_id": "40000000-0000-4000-8000-000000000001",
@@ -347,6 +348,7 @@ class RollupAggregationTests(unittest.TestCase):
         accumulator = handler.RollupAccumulator(_claim())
         game = {
             "game_id": "33333333-3333-4333-8333-333333333333",
+            "winning_team_index": None,
             "participants": [
                 {
                     "participant_id": "44444444-4444-4444-8444-444444444444",
@@ -438,6 +440,7 @@ class RollupAggregationTests(unittest.TestCase):
         accumulator.add_game(
             {
                 "game_id": "33333333-3333-4333-8333-333333333333",
+            "winning_team_index": None,
                 "participants": [
                     {
                         "participant_id": "44444444-4444-4444-8444-444444444444",
@@ -1128,6 +1131,7 @@ class ScopeExecutionTests(unittest.TestCase):
         )
         game = {
             "game_id": "33333333-3333-4333-8333-333333333333",
+            "winning_team_index": None,
             "participants": [],
             "occupancy_artifact": None,
         }
@@ -1199,6 +1203,7 @@ class ScopeExecutionTests(unittest.TestCase):
     def test_reports_safe_nonretryable_input_failure(self) -> None:
         bad_game = {
             "game_id": "33333333-3333-4333-8333-333333333333",
+            "winning_team_index": None,
             "participants": [{"participant_id": "p", "slot_index": 0, "team_index": 0, "events": None}],
             "occupancy_artifact": None,
         }
