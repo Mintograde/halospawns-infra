@@ -1,8 +1,8 @@
 # Recorded tick rates
 
-Dev rollout authorized on 2026-11-17. The additive database migration is
-applied in dev; API, worker and frontend releases are in progress. No production
-action or historical reparse.
+Deployed in dev on 2026-11-17 as worker/default `20261117-r1`, policy 38,
+API 289 (`88652a2`) and frontend `10bef45`. The additive migration is applied.
+No production action or historical reparse.
 
 ## Supported recordings
 
@@ -68,7 +68,7 @@ Private local evidence is under `.build/tick-rates/`:
   Every other field, spawn selection and classification is identical. This is
   not byte-identical native/WASM output; raw observations are retained.
 - 300 Node, 124 Python worker and 103 Rust tests pass (one Rust test skipped).
-  API: 2,784 unit tests pass, four skipped; isolated PostgreSQL checks cover
+  API CI: 2,839 tests pass, 430 skipped; isolated PostgreSQL checks cover
   source-rate binding and old/new format constraints. Viewer: 2,018 tests pass,
   one skipped; site: 907 pass; both frontend builds pass.
 - Desktop/mobile Chrome loads the actual 30 Hz match, seeks while paused,
@@ -82,12 +82,41 @@ The offline release/catalog use a deliberately fake all-`a` image digest and
 must not be published. Private new WASM builds are under `.build/tick-rates/`;
 the retained engine store is `.build/beta7-deploy/engines`.
 
-## Rollout requirements
+## Dev release verification
 
-Deploy compatible API readers and additive migration
-`20261117010000_h1film_tick_rates.sql` before activating a real published worker
-manifest with the new capability. Run the normal release verification/health
-and guarded promotion procedure. The local frontend has the corresponding v9
-reader and recorded-rate presentation. Retain every old recipe, artifact,
-generation and migration on rollback. No historical reparse is required for
-existing 120 Hz data; the failed original upload has not been retried live.
+Dev worker/default `20261117-r1`, policy 38, API 289 (`88652a2`, CI
+44098326649) and frontend `10bef45` (CI 44098401230) support recorded 30/120 Hz
+for source-pinned Betas 4–8. Migration `20261117010000_h1film_tick_rates.sql`
+is applied. Host exporter 40, separate Beta 5 client 41 and match v9 retain all
+seven profiles, 88 exporters and every prior recipe. Fixed-rate engines remain
+unchanged; unsupported source rates remain rejected.
+
+The user's Chillout film is recovered through normal presign/S3 intake as upload
+`a904c396-6f8d-4319-98b9-ccd43ada8ae1`, game `bf2a6d11-8d4b-4b4a-a879-c4bcdab9bbe0`,
+replay `751356d0-12b8-416d-9df5-496b4bdfcc43`. All four worlds verify
+93,725 frames / 784 hashes with zero mismatches; duration is 13:01. The failed
+original upload and its exact S3 version remain untouched. API clocks, combat
+filters, settings, CDN hashes/ranges and desktop/mobile hosted Chrome playback,
+paused seeks and all perspective switches pass. Existing 120 Hz playback passes.
+
+All 23 packaged cases / 69 exact deployed-API callbacks and the separate client
+flow pass. API CI: 2,839 passed / 430 skipped; viewer: 2,018 passed / one skipped;
+site: 907 passed. The cold inventory exceeded 300 seconds; the complete warm
+check passed before policy/API/image-fenced activation. All six final dev plans
+are no-op, the API output refresh is applied, and health/queue/DLQ checks pass.
+Every original history fingerprint is retained; totals are 460 conversions,
+2,895 receipts, 474 approvals and 2,759 settings snapshots.
+No historical reparse or production action. The frontend study under
+`scripts/input-profile-study/` remains untouched. Keep compatible readers,
+the additive migration and every stored generation/recipe on rollback.
+
+Published image:
+`sha256:c5b88d7c6999a2741076102edbbcf1e219b7dffce7d48c13e770e0e5dc68ee77`.
+Saved promotion: `.build/h1-promotions/20261117-143158-70b8bd0c6cb147d7ab7fd37bf0db609e/`.
+The final release corpus used the normal Linux disk-backed temporary volume,
+3008 MB limit and two CPUs. Initial local credential-store/disk-space problems
+and a Windows bind-mount rename failure are retained in private evidence;
+the same immutable image passed all 23 final native-volume cases.
+
+Retain API 289+ compatible readers, match v9, the additive migration and every
+old recipe/artifact/generation on rollback. Existing 120 Hz games need no reparse.
