@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_combat.py SHA256 31a1adbc49f44495b64fdd37dbb7394a931238b210ad1a8ca0495a345657a15a",
+  "$comment": "Generated from API schemas/h1film_combat.py SHA256 06b26bd97f640846c2edef1ee40278bd7f6cf0bbf0744edffbff2540e0f239cf",
   "$defs": {
     "H1CombatAnalytics": {
       "additionalProperties": false,

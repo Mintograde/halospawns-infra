@@ -33,7 +33,7 @@ export function readDiagnosticsHeader(bytes) {
   return {manifest_bytes, size_bytes, body_offset: HEADER_BYTES + manifest_bytes};
 }
 export function validateDiagnosticsManifest(m, header, expected = {}) {
-  requireDiagnostic(m?.schema === DIAGNOSTICS_SCHEMA && m.source?.source_tick_rate === 120
+  requireDiagnostic(m?.schema === DIAGNOSTICS_SCHEMA && [30,120].includes(m.source?.source_tick_rate)
     && hash.test(m.source.film_sha256) && hash.test(m.source.raw_map_sha256)
     && typeof m.source.engine_profile === 'string'
     && integer(m.source.source_tick_count,1,432000) && /^[a-f0-9]{16}$/.test(m.match_id)

@@ -221,7 +221,7 @@ export async function buildGameplayMetrics({film,evidence,encoding,includeEstima
     partialRecording:encoding.source_first_clock!==0 || encoding.analytics.match_end_source_tick===null};
   const exact=classifyGameplayMetrics({...args,events:bindGameplayShots(args.events,source)});
   const product=includeEstimates ? addGameplayEstimates(exact,args) : exact.product;
-  if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,
+  if(exporterRevision>=29) product.metrics.push(...deriveMeleeMetrics({...args,sourceTickRate:encoding.source_hz??120,
     events:exporterRevision>=36?bindMeleeReports(events,source,{allowClientCopies:exporterRevision>=39}):events,
     doubleMeleeDefinition:exporterRevision>=36?2:1,
     resolveNonMeleeFinishers:exporterRevision>=37,

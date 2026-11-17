@@ -10,7 +10,7 @@ export function validateViewTracks(m) {
   if(hosted) check(hash.test(m.package_id)&&uuid.test(m.replay_id)&&uuid.test(m.host_artifact_id),'invalid package generation');
   check(/^[0-9a-f]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000','invalid match');
   check(m.engine_profile==='h1-performance-beta5-p9818-wasm-v1'&&hash.test(m.raw_map_sha256),'invalid engine/map');
-  check(m.tick_rate===120&&m.authoritative_track==='host','invalid authoritative track');
+  check([30,120].includes(m.tick_rate)&&m.authoritative_track==='host','invalid authoritative track');
   check(Array.isArray(m.tracks)&&m.tracks.length>=2&&m.tracks.length<=17,'invalid track count');
   const ids=new Set(),sources=new Set();
   for(const t of m.tracks) {
@@ -26,7 +26,7 @@ export function validateViewTracks(m) {
     const a=t.artifact;
     check(a?.viewer_revision===5&&hash.test(a.sha256)&&integer(a.size_bytes,1,2147483647),'invalid artifact');
     if(hosted) validateAsset(a,512*1024**2);
-    else check(typeof a.path==='string'&&/^(host|client-[0-9a-f]{64})\/replay\.120hz\.hsrdc$/.test(a.path)
+    else check(typeof a.path==='string'&&/^(host|client-[0-9a-f]{64})\/replay\.(?:120hz|source)\.hsrdc$/.test(a.path)
       &&a.path.startsWith(t.id+'/'),'invalid artifact path');
     if(t.role==='host') continue;
     check(integer(t.recorded_own_player,0,15),'invalid recording player');

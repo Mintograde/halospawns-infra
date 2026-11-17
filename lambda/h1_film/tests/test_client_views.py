@@ -48,6 +48,22 @@ class ClientViewTests(unittest.TestCase):
             cloud.execute(dispatch, None)
             execute.assert_called_once_with(dispatch, None)
 
+    def test_client_source_clocks_require_the_rate_capable_recipe(self):
+        evidence = ClientViewTests.job(self)["evidence"]
+        evidence["exporter_revision"] = 41
+        for key in ("client", "host", "clock_host"):
+            evidence[key]["film"]["tick_rate"] = 30
+        views.validate_association(evidence)
+        for mutate in (
+            lambda e: e.update(exporter_revision=31),
+            lambda e: e["host"]["film"].update(tick_rate=120),
+            lambda e: e["clock_host"]["film"].update(tick_rate=120),
+        ):
+            invalid = copy.deepcopy(evidence)
+            mutate(invalid)
+            with self.assertRaises(cloud.FilmError):
+                views.validate_association(invalid)
+
     def test_frozen_source_survives_newer_object_and_retry_never_heads_latest(self):
         job = ClientViewTests.job(self)
         source = job["identity"]["source"]

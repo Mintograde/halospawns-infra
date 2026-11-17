@@ -37,7 +37,7 @@ export async function inspectViewRecording(path, {allowUnmatchedHost = false} = 
     // Map identity is supplied and independently checked by the worker. It is not
     // encoded in the raw diagnostics section, so this placeholder never leaves here.
     const diagnostics=encodeDiagnostics(await readFile(path),{film_sha256:sourceHash,
-      raw_map_sha256:'0'.repeat(64),engine_profile:profile.id,source_tick_count:envelope.ticks,source_tick_rate:120});
+      raw_map_sha256:'0'.repeat(64),engine_profile:profile.id,source_tick_count:envelope.ticks,source_tick_rate:envelope.tick_rate});
     const section=diagnostics.manifest.sections.find(s=>s.kind==='client');
     if(section) {
       result.diagnostic_recorded_own_player=section.own_player;

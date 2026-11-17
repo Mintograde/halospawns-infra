@@ -1,3 +1,4 @@
+import {TICK_RATE_EXPORTER,sourceRateKey,sourceReplayName,analyticsStride} from './tick-rates.mjs';
 // Reusable local worker pipeline. Cloud intake/finalization remains separately gated.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -71,6 +72,10 @@ export async function convertFilm(options) {
   const profile = selectExporter(selectProfile(envelope, profiles, buildMatching, playback),
     playback.exporterRevision, exporters);
   const adapter = adapterFor(profile);
+  assert.ok(envelope.tick_rate === 120 || profile.exporter_revision >= TICK_RATE_EXPORTER,
+    'Recorded tick rate requires exporter 40 or later');
+  const sourceKey = sourceRateKey(envelope.tick_rate), sourceName = sourceReplayName(envelope.tick_rate);
+  const stride = analyticsStride(envelope.tick_rate);
   if(values['client-view']) assert.ok(['beta5','beta6','beta7','beta8'].includes(profile.port)&&profile.exporter_revision>=13,
     'Client view requires a new candidate exporter pin');
   const registry = JSON.parse(await readFile(values['candidate-registry'] || new URL('../profiles/registry.json', import.meta.url), 'utf8'));
@@ -325,7 +330,7 @@ export async function convertFilm(options) {
       assert.equal(encoding.analytics_revision, analyticsRevision);
       assert.equal(encoding.analytics.analytics_revision, analyticsRevision);
       assert.equal(encoding.analytics.statistics_source_ticks, statisticsTicks);
-      assert.equal(encoding.analytics.ticks, Math.ceil(statisticsTicks / 4));
+      assert.equal(encoding.analytics.ticks, Math.ceil(statisticsTicks / stride));
       assert.equal((await stat(path)).size, encoding.analytics.size_bytes);
       report.analytics = { ...encoding.analytics, sha256: await sha256(path) };
     }
@@ -333,11 +338,11 @@ export async function convertFilm(options) {
       const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
       report.encoding = Object.fromEntries(Object.entries(encoding).filter(([key]) => key !== 'source_events'));
       assert.equal(encoding.source_ticks, native.envelope.ticks);
-      const rates = [['120hz', native.envelope.ticks]];
-      if (!values['source-viewer-only']) rates.push(['30hz', Math.ceil(native.envelope.ticks / 4)]);
+      const rates = [[sourceKey, native.envelope.ticks]];
+      if (!values['source-viewer-only']) rates.push(['30hz', Math.ceil(native.envelope.ticks / stride)]);
       if (values['source-viewer-only']) {
         assert.equal(encoding['30hz'], null);
-        assert.deepEqual(encoding.verification, { mode: [4, 5].includes(request.viewer_profile_revision) ? 'inline-bounded-poses' : 'inline-lossless', '120hz': native.envelope.ticks, '30hz': null });
+        assert.deepEqual(encoding.verification, { mode: [4, 5].includes(request.viewer_profile_revision) ? 'inline-bounded-poses' : 'inline-lossless', [sourceKey]: native.envelope.ticks, '30hz': null });
       }
       for (const [rate, count] of rates) {
         const replay = join(stage, 'candidate', `replay.${rate}.hsrdc`);
@@ -352,8 +357,8 @@ export async function convertFilm(options) {
       const verificationStarted = performance.now();
       const validationLog = openSync(join(stage, 'validation.json'), 'wx');
       try {
-        const validator = spawn(values.encoder, ['verify', join(stage, 'candidate', 'replay.120hz.hsrdc'),
-          join(stage, 'candidate', 'replay.30hz.hsrdc')],
+        const validator = spawn(values.encoder, ['verify', join(stage, 'candidate', sourceName),
+          join(stage, 'candidate', 'replay.30hz.hsrdc'), String(envelope.tick_rate)],
         { windowsHide: true, env: environment, stdio: ['ignore', validationLog, encoderLog] });
         const validated = completion(validator);
         if (process.platform === 'win32') {
@@ -376,8 +381,8 @@ export async function convertFilm(options) {
         assert.equal(report.validator_exit.code, 0, 'Artifact verification failed');
         report.validation = JSON.parse(await readFile(join(stage, 'validation.json'), 'utf8'));
         assert.equal(report.validation.status, 'verified');
-        assert.equal(report.validation['120hz'].ticks, native.envelope.ticks);
-        assert.equal(report.validation['30hz'].ticks, Math.ceil(native.envelope.ticks / 4));
+        assert.equal(report.validation[sourceKey].ticks, native.envelope.ticks);
+        assert.equal(report.validation['30hz'].ticks, Math.ceil(native.envelope.ticks / stride));
         report.status = 'simulation_and_artifacts_verified';
       } finally { closeSync(validationLog); }
       report.timing.validation_seconds = (performance.now() - verificationStarted) / 1000;

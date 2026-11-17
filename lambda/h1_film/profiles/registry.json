@@ -22,33 +22,33 @@
         "max_players": 4
       },
       "h1-performance-beta4-p9803-wasm-v1": {
-        "exporter_revision": 34,
+        "exporter_revision": 40,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 39,
+        "exporter_revision": 40,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 39,
+        "exporter_revision": 40,
         "analytics_revision": 5,
-        "viewer_revision": 10,
+        "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 39,
+        "exporter_revision": 40,
         "analytics_revision": 5,
-        "viewer_revision": 12,
+        "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta8-p9848-wasm-v1": {
-        "exporter_revision": 39,
+        "exporter_revision": 40,
         "analytics_revision": 5,
-        "viewer_revision": 13,
+        "viewer_revision": 14,
         "max_players": 16
       }
     },
@@ -339,6 +339,12 @@
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 40,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
         }
       ],
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -434,6 +440,12 @@
         },
         {
           "exporter_revision": 39,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 40,
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
@@ -571,6 +583,12 @@
           "analytics_revision": 5,
           "viewer_revision": 10,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 40,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta7-p9844-wasm-v1": [
@@ -651,6 +669,12 @@
           "analytics_revision": 5,
           "viewer_revision": 12,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 40,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta8-p9848-wasm-v1": [
@@ -682,6 +706,12 @@
           "exporter_revision": 39,
           "analytics_revision": 5,
           "viewer_revision": 13,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 40,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
           "max_players": 16
         }
       ]
@@ -717,7 +747,8 @@
       "spawn_neutral_baseline": "halospawns.h1SpawnMetrics.v1",
       "beta8": "halospawns.h1Beta8.v1",
       "remote_melee_timing": "halospawns.h1GameplayMetrics.v1",
-      "client_melee_timing": "halospawns.h1GameplayMetrics.v1"
+      "client_melee_timing": "halospawns.h1GameplayMetrics.v1",
+      "tick_rates": "halospawns.h1TickRates.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -729,6 +760,12 @@
         },
         {
           "exporter_revision": 31,
+          "analytics_revision": 2,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 41,
           "analytics_revision": 2,
           "viewer_revision": 5,
           "max_players": 16
@@ -1461,6 +1498,48 @@
       "revision": 39,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "535dc523d96e644be5257df9b5b29c1be9e38be96812b3533a7af2b9dfec5edb",
+      "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 40,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "f927db9d21824bc3c5d16e8745fc2ff0f88661a3d7fff81b1a74ed77899d23c3",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 40,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "71775c6486b57c0cdf9a8f65b6cb1c8de5fa46fae03c308ce115a03a2923c93a",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 41,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "71775c6486b57c0cdf9a8f65b6cb1c8de5fa46fae03c308ce115a03a2923c93a",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 40,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "239498f5587b26e68db0e5e1e8181bb14bfeb61375a45112b6e958bc692ccc90",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 40,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "137450bafee603a2dade2ccd33e32812e4e28997f47b0e7a92dc32c2f6bdff5a",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta8-p9848-wasm-v1",
+      "revision": 40,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "11dc370e8d0df41548271745c1f220ddde00ee11578799711311dd9fedfdfb89",
       "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
     }
   ]

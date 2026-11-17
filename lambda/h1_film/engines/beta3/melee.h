@@ -12,7 +12,7 @@ void hs_melee_begin(int unit, int frames, int phase)
     int player = player_index_from_unit_index(unit), slot = hs_slot(player);
     hs_gameplay_event *e;
     if (!hs_active() || slot < 0) return;
-    if (phase != 4) hs_fail("unsupported melee timer phase");
+    if (phase != BLAMPC_TICKS_PER_ARTEFACT_TICK) hs_fail("unsupported melee timer phase");
     /* A weapon may have no first-person melee animation. Do not reject its
      * replay or reuse an older swing's identity when no timer can be proven. */
     if (frames <= 0 || frames > 127) {

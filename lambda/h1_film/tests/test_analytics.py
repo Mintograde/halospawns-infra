@@ -198,7 +198,7 @@ class H1AdaptationTests(unittest.TestCase):
         report = {
             "analytics": {"ticks": 2},
             "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
-            "envelope": {"created_utc": 1792540800, "first_update": 0},
+            "envelope": {"tick_rate": 120, "created_utc": 1792540800, "first_update": 0},
             "provenance": {"film_sha256": "a" * 64, "map_sha256": "b" * 64},
         }
         encoding = {"analytics_revision": 3, "source_first_clock": 0,
@@ -231,6 +231,7 @@ class H1AdaptationTests(unittest.TestCase):
             parsed,
             report={
                 "analytics": {"ticks": 1},
+                "envelope": {"tick_rate": 120},
                 "engine_profile": PROFILE["id"],
                 "provenance": {"film_sha256": "a" * 64, "map_sha256": "b" * 64},
             },
@@ -284,7 +285,7 @@ class H1AdaptationTests(unittest.TestCase):
         report = {
             "analytics": {"ticks": 2},
             "engine_profile": PROFILE["id"],
-            "envelope": {"map": "dread", "map_bytes": 1},
+            "envelope": {"tick_rate": 120, "map": "dread", "map_bytes": 1},
             "map_binding": binding,
             "provenance": {"film_sha256": "a" * 64, "map_sha256": "b" * 64},
         }

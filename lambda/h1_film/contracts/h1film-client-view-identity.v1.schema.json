@@ -15,7 +15,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 13,
+          "maximum": 14,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -119,6 +119,15 @@
   },
   "additionalProperties": false,
   "properties": {
+    "source_tick_rate": {
+      "default": 120,
+      "enum": [
+        30,
+        120
+      ],
+      "title": "Source Tick Rate",
+      "type": "integer"
+    },
     "contract": {
       "const": "halospawns.h1ClientView.v1",
       "title": "Contract",

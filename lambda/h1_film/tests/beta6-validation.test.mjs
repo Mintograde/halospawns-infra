@@ -83,3 +83,21 @@ test('Beta 6 counts closing client changes, excludes rules, and preserves the ho
   assert.throws(()=>verifyPlayback(log.replace('0 seed','1 seed'),client),/Seed mismatch/);
   assert.throws(()=>verifyPlayback(log.replace('0 of 1','1 of 1'),client),/Hash mismatch/);
 });
+
+
+test('recorded tick rate admits both upstream choices and rejects other rates', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'h1-rate-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const rate of [30, 120]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      assert.equal((await readEnvelope(path)).tick_rate, rate);
+    }
+    for (const rate of [0, 29, 60, 121, 0xffffffff]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      await assert.rejects(readEnvelope(path));
+    }
+  } finally { await rm(root, {recursive: true}); }
+});

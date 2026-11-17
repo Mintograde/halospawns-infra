@@ -15,7 +15,7 @@ export function encodeDiagnostics(film, source) {
   check(film.length >= 504 && film.readUInt32LE(0) === 0x314d4c46 && film.readUInt32LE(64) === 504,
     'unsupported film envelope');
   check(film.readUInt32LE(8) === 9818 && !(film.readUInt32LE(28)&64), 'expected Beta 5 host world');
-  check(film.readUInt32LE(4) === 2 && film.readUInt32LE(12) === 120
+  check(film.readUInt32LE(4) === 2 && [30,120].includes(film.readUInt32LE(12))
     && source.source_tick_count === film.readUInt32LE(44)
     && source.engine_profile === 'h1-performance-beta5-p9818-wasm-v1', 'source envelope mismatch');
   check(digest(film) === source.film_sha256, 'film hash mismatch');

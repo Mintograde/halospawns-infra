@@ -246,7 +246,7 @@ test('beta4 routes timestamp and join records without relaxing the retained aren
     assert.deepEqual(envelope.network, { records: 1, applications: 1, blocks: 1, participant_count: 3, max_player_slot: 2 });
     assert.equal(adapterFor({ adapter: 'beta4-v2-120-v1' }), beta4);
     await assert.rejects(readArena(path), /header extension/);
-    for (const [offset, value] of [[12, 30], [16, 12380], [472, 1], [124, 17], [12958, 16], [12966, 0xffffffff]]) {
+    for (const [offset, value] of [[12, 60], [16, 12380], [472, 1], [124, 17], [12958, 16], [12966, 0xffffffff]]) {
       const invalid = fixture();
       invalid.writeUInt32LE(value, offset);
       await writeFile(path, invalid);
@@ -273,4 +273,22 @@ test('beta4 reads both UTC words, treats zero as unknown and rejects out-of-rang
       await assert.rejects(readEnvelope(path), /UTC timestamp/);
     }
   } finally { await rm(root, { recursive: true }); }
+});
+
+
+test('recorded tick rate admits both upstream choices and rejects other rates', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'h1-rate-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const rate of [30, 120]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      assert.equal((await readEnvelope(path)).tick_rate, rate);
+    }
+    for (const rate of [0, 29, 60, 121, 0xffffffff]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      await assert.rejects(readEnvelope(path));
+    }
+  } finally { await rm(root, {recursive: true}); }
 });

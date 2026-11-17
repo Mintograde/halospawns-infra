@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from .tick_rates import TICK_RATE_EXPORTER
 from .build_identity import matches_profile, validate_build_matching
 
 REGISTRY_PATH = Path(__file__).with_name("profiles") / "registry.json"
@@ -131,7 +132,9 @@ def profile_for_report(report: dict) -> dict:
         != profile["export_contract"]
     ):
         raise ValueError("H1 engine export contract mismatch")
-    return profile
+    if envelope["tick_rate"] != 120 and (report.get("exporter_revision") or 1) < TICK_RATE_EXPORTER:
+        raise ValueError("Recorded rate requires exporter 40 or later")
+    return {**profile, "tick_rate": envelope["tick_rate"]}
 
 
 def matches_film(profile, film):

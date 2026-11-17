@@ -133,7 +133,7 @@ export async function readEnvelope(path) {
     assert.ok(size >= 480 && size <= 512 * 1024 * 1024, 'Invalid film size');
     const head = await readBlock(file, 0, 480);
     const words = Array.from({ length: 32 }, (_, index) => head.readUInt32LE(index * 4));
-    assert.ok(words[0] === 0x314d4c46 && words[1] === 2 && words[2] === 9803 && words[3] === 120 && words[5] === 32
+    assert.ok(words[0] === 0x314d4c46 && words[1] === 2 && words[2] === 9803 && [30,120].includes(words[3]) && words[5] === 32
       && words[6] === 4 && words[16] === 480, 'Unsupported beta4 film layout');
     assert.ok(words[11] > 0 && words[11] <= 432000 && words[25] > 0 && words[25] <= 4, 'Invalid tick or seat count');
     assert.ok([12376, 12380].includes(words[4]), 'Unsupported Beta 4 options layout');
@@ -200,7 +200,7 @@ export async function readEnvelope(path) {
     assert.match(map, /^[a-zA-Z0-9_-]+$/, 'Invalid map name');
     assert.equal(Boolean(netSize), universal, 'FNET section and film flags disagree');
     const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25]) : undefined;
-    return { format: 2, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
+    return { format: 2, protocol_revision: words[2], tick_rate: words[3], ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
       ...(createdUtc ? { created_utc: Number(createdUtc) } : {}),

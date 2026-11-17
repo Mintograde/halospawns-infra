@@ -93,7 +93,8 @@ export function selectProfile(envelope, profiles = ENGINE_PROFILES, buildMatchin
   const matches = profiles.filter(profile => matchesProfile(profile, envelope, buildMatching[profile.id])
     ||(playback.embeddedClient===true&&compatibleClientBuild(envelope,profile,playback.exporterRevision)));
   assert.equal(matches.length, 1, 'Unsupported film engine profile');
-  return matches[0];
+  return envelope.tick_rate === matches[0].tick_rate ? matches[0]
+    : Object.freeze({...matches[0], tick_rate:envelope.tick_rate});
 }
 
 export function profileById(id, profiles = ENGINE_PROFILES) {

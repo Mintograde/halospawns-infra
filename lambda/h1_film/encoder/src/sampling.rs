@@ -101,6 +101,19 @@ pub fn normalize(
     stride: usize,
     map: &str,
 ) -> Result<(), Box<dyn Error>> {
+    normalize_at_rate(tick, ordinal, stride, map, 120)
+}
+
+pub fn normalize_at_rate(
+    tick: &mut Value,
+    ordinal: usize,
+    stride: usize,
+    map: &str,
+    source_rate: u32,
+) -> Result<(), Box<dyn Error>> {
+    if !matches!(source_rate, 30 | 120) {
+        return Err("unsupported source rate".into());
+    }
     if !ordinal.is_multiple_of(stride) {
         return Err("tick is not on the sampling lattice".into());
     }
@@ -109,7 +122,7 @@ pub fn normalize(
     object.insert("current_tick".into(), json!(clock));
     object.insert(
         "current_game_time_seconds".into(),
-        json!(ordinal as f64 / 120.0),
+        json!(ordinal as f64 / source_rate as f64),
     );
     object.insert("multiplayer_map_name".into(), json!(map));
     let time = object
@@ -117,7 +130,7 @@ pub fn normalize(
         .and_then(Value::as_object_mut)
         .ok_or("missing game time")?;
     time.insert("game_time".into(), json!(clock));
-    let seconds = ordinal / 120;
+    let seconds = ordinal / source_rate as usize;
     time.insert(
         "real_time_elapsed".into(),
         json!(format!(
@@ -222,5 +235,18 @@ mod tests {
             replay["game_meta"]["players"]["0"]["shots_by_tick"],
             json!({"1":3.0})
         );
+    }
+    #[test]
+    fn thirty_hz_source_keeps_every_tick_and_preserves_native_units() {
+        let mut tick = json!({"current_tick":30,"current_game_time_seconds":0.25,
+            "game_time_info":{"game_time":30},
+            "players":[{"respawn_timer":7,"player_object_data":{"x_vel":0.5,
+                "airborne_ticks":13,"weapons":[{"reload_time":61}]}}]});
+        let players = tick["players"].clone();
+        normalize_at_rate(&mut tick, 30, 1, "chillout", 30).unwrap();
+        assert_eq!(tick["current_tick"], 30);
+        assert_eq!(tick["current_game_time_seconds"], 1.0);
+        assert_eq!(tick["players"], players);
+        assert!(normalize_at_rate(&mut tick, 30, 1, "chillout", 60).is_err());
     }
 }

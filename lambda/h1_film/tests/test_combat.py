@@ -45,7 +45,7 @@ class CombatTests(unittest.TestCase):
             "final_counters": {str(slot): {"kills": 1 - slot, "deaths": slot, "suicides": 0, "team_kills": 0}
                                for slot in range(2)},
         }
-        self.report = {"analytics": {"match_end_source_tick": 5}, "envelope": {"ticks": 12}}
+        self.report = {"analytics": {"match_end_source_tick": 5}, "envelope": {"tick_rate": 120, "ticks": 12}}
 
     def validate(self, native):
         cloud.validate_schema("native-analytics", native)

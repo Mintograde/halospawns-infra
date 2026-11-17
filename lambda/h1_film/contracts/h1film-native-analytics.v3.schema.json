@@ -1,4 +1,5 @@
 {
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 e6d54ffbda5038f4d9c37c3df5868c76786669576fa2afd9962f29f3950f59bd",
   "$defs": {
     "ClientMeleeTiming": {
       "additionalProperties": false,
@@ -76,7 +77,6 @@
         "minimum_recovery_ticks": {
           "exclusiveMinimum": 0,
           "maximum": 508,
-          "multipleOf": 4,
           "title": "Minimum Recovery Ticks",
           "type": "integer"
         },
@@ -1568,7 +1568,6 @@
         "minimum_recovery_ticks": {
           "exclusiveMinimum": 0,
           "maximum": 508,
-          "multipleOf": 4,
           "title": "Minimum Recovery Ticks",
           "type": "integer"
         },
@@ -1936,6 +1935,7 @@
       "type": "object"
     }
   },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "combat": {

@@ -21,6 +21,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .tick_rates import playback, source_rate_key, TICK_RATE_EXPORTER, supports_tick_rate
 from . import analytics, client_diagnostics, recorded, settings
 from .registry import IDENTITY, load_registry, matches_film, select_exporter
 
@@ -174,6 +175,9 @@ def validate_job(job):
         profile = select_exporter(profile, exporter)
     except ValueError as error:
         raise FilmError("unsupported_build") from error
+    require(supports_tick_rate(profile, film["tick_rate"]), "unsupported_build")
+    require(film["tick_rate"] == profile["tick_rate"] or (exporter or 1) >= TICK_RATE_EXPORTER, "unsupported_build")
+    profile = {**profile, "tick_rate": film["tick_rate"]}
     require(
         all(
             engine.get(key) == profile[key]
@@ -237,8 +241,8 @@ def validate_job(job):
     request = shared_parser()._viewer_request_from_payload(
         target, attempt_id=generation
     )
-    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), "unsupported_build")
-    require((request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13)) ==
+    require(request.profile_revision in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), "unsupported_build")
+    require((request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13, 14)) ==
             (job["conversion"]["film"]["engine_profile"] in ("h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1")),
             "unsupported_build")
     return request
@@ -619,7 +623,7 @@ def convert(job, film, work, deadline):
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
             "--viewer-revision",
-            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12, 13)
+            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12, 13, 14)
                 else job["viewer_artifact_target"]["profile_revision"]),
             *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
               if job["conversion"]["engine"].get("exporter_revision") is not None else []),
@@ -636,8 +640,8 @@ def convert(job, film, work, deadline):
     ticks = job["conversion"]["film"]["source_tick_count"]
     encoding = analytics._json(directory / "candidate/encoding.json")
     require(encoding.get("verification") == {
-        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13) else "inline-lossless",
-        "120hz": ticks, "30hz": None,
+        "mode": "inline-bounded-poses" if job["viewer_artifact_target"]["profile_revision"] in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14) else "inline-lossless",
+        source_rate_key(job["conversion"]["film"]["tick_rate"]): ticks, "30hz": None,
     }, "conversion_failed")
     return directory
 
@@ -664,6 +668,8 @@ def completion_proof(job, report, encoding):
         "recording_complete": False,
         "analytics_revision": encoding.get("analytics_revision", 1),
     }
+    if film["tick_rate"] != 120:
+        proof["source_tick_rate"] = film["tick_rate"]
     if pin["engine"].get("exporter_revision") is not None:
         proof["exporter_revision"] = pin["engine"]["exporter_revision"]
     if pin.get("release"):
@@ -698,6 +704,7 @@ def completion_proof(job, report, encoding):
 
 def validate_proof(pin, proof, *, analytics_revision=None):
     validate_schema("completion", proof)
+    require(proof.get("source_tick_rate", 120) == pin["film"]["tick_rate"])
     if proof.get("analytics_revision") == 5:
         require(proof["engine_profile"] in (
             "h1-performance-beta5-p9818-wasm-v1", "h1-performance-beta6-p9839-wasm-v1", "h1-performance-beta7-p9844-wasm-v1", "h1-performance-beta8-p9848-wasm-v1",
@@ -723,7 +730,7 @@ def validate_proof(pin, proof, *, analytics_revision=None):
             raise FilmError("validation_failed") from error
     if proof.get("created_utc") is not None:
         require(pin["film"]["engine_profile"] in recorded.RECORDED_PROFILES)
-        require(proof["created_utc"] + (proof.get("match_end_source_tick") or 0) / 120 <= 253402300799)
+        require(proof["created_utc"] + (proof.get("match_end_source_tick") or 0) / pin["film"]["tick_rate"] <= 253402300799)
     require(
         proof.get("analytics_revision", 1) == analytics_revision
         if analytics_revision is not None else proof.get("analytics_revision", 1) < 3
@@ -748,7 +755,7 @@ def validate_proof(pin, proof, *, analytics_revision=None):
         == pin["film"]["hash_sample_count"]
     )
     require(
-        abs(proof["recording_duration_seconds"] - proof["source_tick_count"] / 120)
+        abs(proof["recording_duration_seconds"] - proof["source_tick_count"] / pin["film"]["tick_rate"])
         < 0.000001
     )
     require(
@@ -793,7 +800,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     parts = shared.load_native_viewer_parts(
         directory / "candidate/parts-120",
         native_binary_path=extractor,
-        revision=5 if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13) else request.profile_revision,
+        revision=5 if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13, 14) else request.profile_revision,
     )
     container = shared.assemble_viewer_container(
         parts,
@@ -803,7 +810,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         if proof.get("created_utc") is not None else UNKNOWN_RECORDED_AT,
     )
     require(container.tick_count == proof["source_tick_count"])
-    if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13):
+    if request.profile_revision in (6, 7, 8, 9, 10, 11, 12, 13, 14):
         from dataclasses import replace
 
         from .match_replay import assemble_match_replay
@@ -823,7 +830,7 @@ def build_products(job, film, directory, work, deadline, source_metadata):
         parts=parts,
         container=container,
     )
-    viewer["playback"] = dict(PLAYBACK)
+    viewer["playback"] = playback(proof.get("source_tick_rate", 120))
     client_diagnostics.publish(shared, report, directory, proof, viewer)
     if job["mode"] == "viewer_rebuild":
         return "/v1/ingest/replay-viewer-artifacts", {
@@ -920,7 +927,7 @@ def replay_completion(job):
         require(payload["h1film_settings"]["raw_map_sha256"] == pin["map_binding"]["raw_source"]["sha256"])
         require(payload["h1film_settings"]["engine_profile"] == pin["film"]["engine_profile"])
     require(payload.get("source_kind") == "h1film" and "cleanup_object" not in manifest)
-    require(payload["viewer_artifact"].get("playback") == PLAYBACK)
+    require(payload["viewer_artifact"].get("playback") == playback(payload["h1film"].get("source_tick_rate", 120)))
     client_diagnostics.validate(payload["viewer_artifact"].get("h1_diagnostics"),
                                 proof, payload["viewer_artifact"])
     for key in ("generation_token", "request_epoch", "request_sequence"):

@@ -1,14 +1,14 @@
 mod analytics;
-mod counters;
 mod artifact;
+mod combat;
+mod counters;
 mod fast_schema;
+mod gameplay;
 mod native;
 mod pistol;
-mod spawns;
-mod combat;
-mod gameplay;
 mod recycle;
 mod sampling;
+mod spawns;
 mod text_equal;
 mod transport;
 
@@ -76,12 +76,14 @@ fn default_incremental_state() -> bool {
 
 impl Request {
     fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if !(1..=432_000).contains(&self.ticks) || !(1..=h1_pose_codec::MAX_PLAYERS).contains(&self.players) {
+        if !(1..=432_000).contains(&self.ticks)
+            || !(1..=h1_pose_codec::MAX_PLAYERS).contains(&self.players)
+        {
             return Err("invalid request tick or player count".into());
         }
         // Keep the original adapter's timer/score semantics. A future source ABI
         // or rate needs an explicit encoder adapter, not silent reinterpretation.
-        if self.source_tick_rate != 120 || self.export_contract != "HSFT0001" {
+        if !matches!(self.source_tick_rate, 30 | 120) || self.export_contract != "HSFT0001" {
             return Err("unsupported engine rate or export contract".into());
         }
         if !matches!(self.transport_contract.as_str(), "HSFT0001" | "HSFT0002") {
@@ -96,6 +98,7 @@ impl Request {
 
 #[derive(Default)]
 struct Observations {
+    source_rate: u32,
     legacy_analytics: bool,
     client_roster_evidence: bool,
     first_clock: Option<u64>,
@@ -185,7 +188,12 @@ impl Observations {
         }
         self.events.push(ObservedEvent {
             source_tick: ordinal,
-            time_seconds: ordinal as f64 / 120.0,
+            time_seconds: ordinal as f64
+                / if self.source_rate == 0 {
+                    120
+                } else {
+                    self.source_rate
+                } as f64,
             description,
         });
         Ok(())
@@ -230,16 +238,25 @@ impl Observations {
             // Report the actual initial indices without changing or encoding the world.
             // Only the new embedded-client recipe requests this diagnostic. Invalid,
             // empty, duplicate or unbounded rosters keep the ordinary hard failure.
-            let indices: Option<Vec<u64>> = players.iter().map(|p| p["player_index"].as_u64()).collect();
-            if self.client_roster_evidence && ordinal == 0 && !players.is_empty()
+            let indices: Option<Vec<u64>> =
+                players.iter().map(|p| p["player_index"].as_u64()).collect();
+            if self.client_roster_evidence
+                && ordinal == 0
+                && !players.is_empty()
                 && players.len() <= h1_pose_codec::MAX_PLAYERS
                 && let Some(indices) = indices
-                && indices.iter().all(|&id| id < h1_pose_codec::MAX_PLAYERS as u64)
+                && indices
+                    .iter()
+                    .all(|&id| id < h1_pose_codec::MAX_PLAYERS as u64)
                 && indices.iter().copied().collect::<BTreeSet<_>>().len() == indices.len()
             {
-                return Err(format!("client initial roster mismatch: {}", json!({
-                    "recorded_player_count": seats, "exported_player_indices": indices,
-                })).into());
+                return Err(format!(
+                    "client initial roster mismatch: {}",
+                    json!({
+                        "recorded_player_count": seats, "exported_player_indices": indices,
+                    })
+                )
+                .into());
             }
             return Err("film roster does not match engine export".into());
         }
@@ -426,7 +443,7 @@ impl Observations {
             .collect();
         let mut replay =
             json!({"summary":{"ticks_recorded":count, "ticks_elapsed":count, "ticks_dropped":0,
-            "recording_duration":request.ticks as f64/120.0, "is_full_game":self.match_end_source_tick.is_some()},
+            "recording_duration":request.ticks as f64/request.source_tick_rate as f64, "is_full_game":self.match_end_source_tick.is_some()},
             "game_meta":meta, "events":events})
             .as_object()
             .unwrap()
@@ -440,6 +457,12 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let started = Instant::now();
     let request: Request = serde_json::from_reader(BufReader::new(File::open(request_path)?))?;
     request.validate()?;
+    let stride = request.source_tick_rate as usize / 30;
+    let source_key = if request.source_tick_rate == 120 {
+        "120hz"
+    } else {
+        "source"
+    };
     artifact::select_revision(request.viewer_profile_revision)?;
     fs::create_dir(directory)?;
     let mut high = artifact::PrimaryExport::new(
@@ -451,7 +474,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         .then(|| {
             artifact::StreamingExport::new(
                 &directory.join("parts-30"),
-                sampling::sample_count(request.ticks, 4),
+                sampling::sample_count(request.ticks, stride),
                 request.zstd_level,
             )
         })
@@ -462,6 +485,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         &request.transport_contract,
     )?;
     let mut observations = Observations {
+        source_rate: request.source_tick_rate,
         legacy_analytics: request.analytics_revision == 1,
         client_roster_evidence: request.client_roster_evidence,
         ..Default::default()
@@ -470,20 +494,25 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let mut combat = (request.analytics_revision >= 4)
         .then(|| combat::Combat::new(request.combat_network_recording));
     let mut gameplay = (request.analytics_revision == 5)
-        .then(|| gameplay::Evidence::new(&directory.join("gameplay.ndjson"))).transpose()?;
+        .then(|| gameplay::Evidence::new(&directory.join("gameplay.ndjson")))
+        .transpose()?;
     let mut count = 0;
     let mut analytics = request
         .analytics_context
         .as_ref()
         .map(|_| {
-            analytics::Export::with_revision(
+            analytics::Export::with_rate(
                 &directory.join("analytics.30hz.json.zst"),
                 request.analytics_revision,
+                request.source_tick_rate,
             )
         })
         .transpose()?;
     let mut pistol = pistol::PistolCounters::default();
-    let mut spawns = native.as_ref().map(|_| spawns::Evidence::new(&directory.join("spawns.ndjson"))).transpose()?;
+    let mut spawns = native
+        .as_ref()
+        .map(|_| spawns::Evidence::new(&directory.join("spawns.ndjson")))
+        .transpose()?;
     let mut spare = Value::Null;
     let incremental = request.incremental_state
         && request.transport_contract == "HSFT0002"
@@ -493,7 +522,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         return Err("full-source verification requires incremental state".into());
     }
     #[cfg(all(feature = "cached-spawns", not(windows)))]
-    { source.cache_spawns = incremental && high.supports_cached_spawns(); }
+    {
+        source.cache_spawns = incremental && high.supports_cached_spawns();
+    }
     while let Some(mut tick) = if incremental {
         source.next_incremental_with_poses(spare, typed_poses)?
     } else {
@@ -514,7 +545,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             pistol.observe(&tick)?;
         }
         tick.as_object_mut().unwrap().remove("pistol_counters");
-        if let Some(spawns) = &mut spawns { spawns.observe(&tick, count)?; }
+        if let Some(spawns) = &mut spawns {
+            spawns.observe(&tick, count)?;
+        }
         tick.as_object_mut().unwrap().remove("spawn_events");
         if let Some(combat) = &mut combat {
             combat.observe(&tick, count)?;
@@ -530,9 +563,11 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             request.players,
             incremental.then_some(&source.objects),
         )?;
-        sampling::normalize(&mut tick, count, 1, &request.map)?;
+        sampling::normalize_at_rate(&mut tick, count, 1, &request.map, request.source_tick_rate)?;
         if let Some(analytics) = &mut analytics {
-            if count == 0 && let Some(spawns) = &source.objects.spawns {
+            if count == 0
+                && let Some(spawns) = &source.objects.spawns
+            {
                 tick["spawns"] = spawns.source().clone();
             }
             analytics.observe(&tick, count)?;
@@ -540,7 +575,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
                 tick["spawns"] = Value::Array(Vec::new());
             }
         }
-        let sample = if low.is_some() && count.is_multiple_of(4) {
+        let sample = if low.is_some() && count.is_multiple_of(stride) {
             let mut sample = tick.clone();
             if incremental {
                 sample["objects"] = source.objects.materialize();
@@ -564,7 +599,13 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         }
         spare = tick;
         if let Some(mut sample) = sample {
-            sampling::normalize(&mut sample, count, 4, &request.map)?;
+            sampling::normalize_at_rate(
+                &mut sample,
+                count,
+                stride,
+                &request.map,
+                request.source_tick_rate,
+            )?;
             low.as_mut().unwrap().push_owned(sample)?;
         }
         count += 1;
@@ -578,14 +619,14 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     }
     let high = high.finish(
         &observations.metadata(&request, 1)?,
-        &directory.join("replay.120hz.hsrdc"),
-        &format!("{}-120hz", request.replay_id),
+        &directory.join(format!("replay.{source_key}.hsrdc")),
+        &format!("{}-{source_key}", request.replay_id),
         &request.recorded_at,
     )?;
     let low = low
         .map(|writer| {
             writer.finish(
-                &observations.metadata(&request, 4)?,
+                &observations.metadata(&request, stride)?,
                 &directory.join("replay.30hz.hsrdc"),
                 &format!("{}-30hz", request.replay_id),
                 &request.recorded_at,
@@ -597,7 +638,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             writer.finish(
                 &observations.metadata_for_source_ticks(
                     &request,
-                    4,
+                    stride,
                     if request.analytics_revision == 1 {
                         count
                     } else {
@@ -612,19 +653,25 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         })
         .transpose()?;
     let mut native_product = native.map(|native| native.product());
-    if let Some(gameplay) = gameplay { gameplay.finish()?; }
-    if let Some(spawns) = spawns { spawns.finish()?; }
+    if let Some(gameplay) = gameplay {
+        gameplay.finish()?;
+    }
+    if let Some(spawns) = spawns {
+        spawns.finish()?;
+    }
     if let Some(combat) = combat {
         let product = native_product.as_mut().unwrap();
         product["schema"] = json!("halospawns.h1NativeAnalytics.v2");
         product["combat"] = combat.product()?;
     }
     if let Some(pistol) = pistol.product() {
-        native_product.as_mut().ok_or("pistol counters require native analytics")?["pistol_accuracy"] = pistol;
+        native_product
+            .as_mut()
+            .ok_or("pistol counters require native analytics")?["pistol_accuracy"] = pistol;
     }
     let report = json!({"schema":"halospawns.h1FilmEncoding.v1", "source_ticks":count,
-        "verification":{"mode":if (4..=5).contains(&request.viewer_profile_revision) { "inline-bounded-poses" } else { "inline-lossless" }, "120hz":count,
-            "30hz":low.as_ref().map(|_| sampling::sample_count(count, 4))},
+        "verification":{"mode":if (4..=5).contains(&request.viewer_profile_revision) { "inline-bounded-poses" } else { "inline-lossless" }, (source_key):count,
+            "30hz":low.as_ref().map(|_| sampling::sample_count(count, stride))},
         "export_contract":request.export_contract, "transport_contract":request.transport_contract,
         "analytics":analytics, "analytics_revision":request.analytics_revision,
         "viewer_profile_revision":request.viewer_profile_revision,
@@ -633,13 +680,13 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             "typed_poses":typed_poses,"poses_decoded":source.poses.decoded,"pose_nodes_decoded":source.poses.nodes_decoded,
             "verified_source_ticks":if request.verify_incremental_state {count} else {0}},
         "source_first_clock":observations.first_clock, "source_last_clock":observations.last_clock,
-        "source_hz":120, "sampling":{"120hz":{"stride":1,"phase":0}, "30hz":{"stride":4,"phase":0}},
+        "source_hz":request.source_tick_rate, "sampling":{(source_key):{"stride":1,"phase":0}, "30hz":{"stride":stride,"phase":0}},
         "field_units":{"respawn_timer":"output-rate ticks, positive remainder rounded up", "reload_time":"output-rate ticks, positive remainder rounded up",
             "airborne_ticks":"output-rate ticks, source saturates at 127; rounded up", "velocity":"world units per output tick",
             "melee_animation_remaining":"30 Hz animation frames", "first_person_weapon.animation_tick":"30 Hz authored animation frames",
             "events_and_chart_keys":"output sample indices; unsampled deltas mapped to the next sample, clamped at the tail",
             "score":"native mode-specific units; King uses 30 Hz ticks"},
-        "duration_seconds":count as f64/120.0, "transport_bytes":source.bytes,
+        "duration_seconds":count as f64/request.source_tick_rate as f64, "transport_bytes":source.bytes,
         "players":observations.players, "object_types":observations.object_types,
         "max_objects":observations.max_objects, "max_player_shots":observations.max_shots,
         "max_player_deaths":observations.max_deaths, "counter_events":observations.events.len(),
@@ -652,7 +699,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
         "game_type":observations.final_meta.get("game_type"), "has_teams":observations.final_meta.get("has_teams"),
         "initial_counters":observations.initial_counters,
         "final_counters":observations.previous, "zstd_level":request.zstd_level,
-        "wall_seconds":started.elapsed().as_secs_f64(), "120hz":high,"30hz":low});
+        "wall_seconds":started.elapsed().as_secs_f64(), (source_key):high,"30hz":low});
     fs::write(
         directory.join("encoding.json"),
         serde_json::to_vec_pretty(&report)?,
@@ -669,8 +716,9 @@ fn run() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         Some("encode") if args.len() == 3 => encode(Path::new(&args[1]), Path::new(&args[2])),
-        Some("verify") if args.len() == 3 => {
-            let report = artifact::verify_pair(Path::new(&args[1]), Path::new(&args[2]))?;
+        Some("verify") if matches!(args.len(), 3 | 4) => {
+            let rate = args.get(3).map(|r| r.parse()).transpose()?.unwrap_or(120);
+            let report = artifact::verify_pair_at_rate(Path::new(&args[1]), Path::new(&args[2]), rate)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(())
         }
@@ -702,12 +750,26 @@ mod observation_tests {
     fn client_roster_evidence_is_bounded_and_never_accepts_a_world() {
         for enabled in [false, true] {
             for indices in [vec![0, 1, 2, 3, 4], vec![0, 0], vec![16, 1], vec![]] {
-                let mut observations = Observations { client_roster_evidence: enabled, ..Default::default() };
+                let mut observations = Observations {
+                    client_roster_evidence: enabled,
+                    ..Default::default()
+                };
                 let mut tick = json!({"current_tick":0,"players":indices.iter().map(|id| json!({"player_index":id})).collect::<Vec<_>>()});
-                let error = observations.observe(&mut tick, 0, 4).unwrap_err().to_string();
+                let error = observations
+                    .observe(&mut tick, 0, 4)
+                    .unwrap_err()
+                    .to_string();
                 if enabled && indices == vec![0, 1, 2, 3, 4] {
-                    let evidence: Value = serde_json::from_str(error.strip_prefix("client initial roster mismatch: ").unwrap()).unwrap();
-                    assert_eq!(evidence, json!({"recorded_player_count":4,"exported_player_indices":indices}));
+                    let evidence: Value = serde_json::from_str(
+                        error
+                            .strip_prefix("client initial roster mismatch: ")
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        evidence,
+                        json!({"recorded_player_count":4,"exported_player_indices":indices})
+                    );
                 } else {
                     assert_eq!(error, "film roster does not match engine export");
                 }

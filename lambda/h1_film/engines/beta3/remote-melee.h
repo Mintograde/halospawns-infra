@@ -57,7 +57,7 @@ static int hs_remote_melee_recovery(void)
         /* The first decrement is the next 30 Hz phase. Damage happens BEFORE
          * its decrement, after offset earlier decrements. Expiry follows
          * adjusted - offset - 1 phases later. Equality never qualifies. */
-        remaining = (adjusted - offset - 1) * 4;
+        remaining = (adjusted - offset - 1) * BLAMPC_TICKS_PER_ARTEFACT_TICK;
         if (remaining <= 0) return 0;
         if (!minimum || remaining < minimum) minimum = remaining;
     }

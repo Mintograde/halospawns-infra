@@ -4,12 +4,12 @@ import {open,stat,mkdtemp,rm} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {createReadStream} from 'node:fs';
 import {sha256} from './engine-store.mjs';
-import {BETA8_MATCH_REPLAY_SCHEMA,LARGE_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_MAX_BYTES,MATCH_REPLAY_MAX_LOGICAL_BYTES,BETA7_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_SCHEMA,PARTIAL_MATCH_REPLAY_SCHEMA,COMPACT_MATCH_REPLAY_SCHEMA,ROSTER_MATCH_REPLAY_SCHEMA,UNSUPPORTED_MATCH_REPLAY_SCHEMA,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
+import {TICK_RATE_MATCH_REPLAY_SCHEMA,BETA8_MATCH_REPLAY_SCHEMA,LARGE_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_MAX_BYTES,MATCH_REPLAY_MAX_LOGICAL_BYTES,BETA7_MATCH_REPLAY_SCHEMA,MATCH_REPLAY_SCHEMA,PARTIAL_MATCH_REPLAY_SCHEMA,COMPACT_MATCH_REPLAY_SCHEMA,ROSTER_MATCH_REPLAY_SCHEMA,UNSUPPORTED_MATCH_REPLAY_SCHEMA,validateMatchReplay,readMatchReplayHeader} from './match-replay.mjs';
 import {packCompactStorage} from './pack-compact-storage.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function writeMatchReplay(path,identity,tracks,entries) {
-  const version=identity.sourceContract.profile_revision===13?8:identity.sourceContract.profile_revision===12?7:identity.sourceContract.profile_revision===11?6:identity.sourceContract.profile_revision===10?5:identity.sourceContract.profile_revision===9?4:identity.sourceContract.profile_revision===8?3:identity.sourceContract.profile_revision===7?2:1;
+  const version=identity.sourceContract.profile_revision===14?9:identity.sourceContract.profile_revision===13?8:identity.sourceContract.profile_revision===12?7:identity.sourceContract.profile_revision===11?6:identity.sourceContract.profile_revision===10?5:identity.sourceContract.profile_revision===9?4:identity.sourceContract.profile_revision===8?3:identity.sourceContract.profile_revision===7?2:1;
   const logicalLimit=version>=7?MATCH_REPLAY_MAX_LOGICAL_BYTES:MATCH_REPLAY_MAX_BYTES;
   let offset=0;
   const index=[];
@@ -33,8 +33,8 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
     index.push({...entry,offset,size_bytes:size,sha256:bytes?sha(bytes):await sha256(path)});
     offset+=size;assert.ok(offset<=logicalLimit,'Match replay exceeds logical size limit');
   }
-  const schema=version===8?BETA8_MATCH_REPLAY_SCHEMA:version===7?LARGE_MATCH_REPLAY_SCHEMA:version===6?BETA7_MATCH_REPLAY_SCHEMA:version===5?UNSUPPORTED_MATCH_REPLAY_SCHEMA:version===4?ROSTER_MATCH_REPLAY_SCHEMA:version===3?COMPACT_MATCH_REPLAY_SCHEMA:version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
-  const manifest={...identity,schema,tick_rate:120,authoritative_track:'host',tracks,entries:index};
+  const schema=version===9?TICK_RATE_MATCH_REPLAY_SCHEMA:version===8?BETA8_MATCH_REPLAY_SCHEMA:version===7?LARGE_MATCH_REPLAY_SCHEMA:version===6?BETA7_MATCH_REPLAY_SCHEMA:version===5?UNSUPPORTED_MATCH_REPLAY_SCHEMA:version===4?ROSTER_MATCH_REPLAY_SCHEMA:version===3?COMPACT_MATCH_REPLAY_SCHEMA:version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
+  const manifest={...identity,schema,tick_rate:identity.tick_rate??120,authoritative_track:'host',tracks,entries:index};
   let payload=entries.map(e=>({...e,...index.find(p=>p.id===e.id)})),scratch;
   try {
   if(version>=3) {

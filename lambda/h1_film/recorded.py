@@ -122,9 +122,9 @@ def recording_utc(report: dict) -> int | None:
     return value
 
 
-def utc_timestamp(created_utc: int, source_tick: int = 0) -> str:
+def utc_timestamp(created_utc: int, source_tick: int = 0, source_tick_rate: int = 120) -> str:
     value = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(
-        seconds=created_utc, microseconds=round(source_tick * 1_000_000 / 120)
+        seconds=created_utc, microseconds=round(source_tick * 1_000_000 / source_tick_rate)
     )
     return value.isoformat().replace("+00:00", "Z")
 
@@ -135,15 +135,15 @@ def recorded_layout(words: tuple[int, ...]) -> tuple[int, int]:
         return 448, 57
     if identity == (0x314D4C46, 2, 9111, 120) and words[16] == 480:
         return 480, 60
-    if identity == (0x314D4C46, 2, 9803, 120) and words[16] == 480:
+    if identity[:3] == (0x314D4C46, 2, 9803) and identity[3] in (30, 120) and words[16] == 480:
         return 480, 61
-    if identity == (0x314D4C46, 2, 9818, 120) and words[16] == 504:
+    if identity[:3] == (0x314D4C46, 2, 9818) and identity[3] in (30, 120) and words[16] == 504:
         return 504, 72
-    if identity == (0x314D4C46, 3, 9839, 120) and words[16] in (504, 536):
+    if identity[:3] == (0x314D4C46, 3, 9839) and identity[3] in (30, 120) and words[16] in (504, 536):
         return words[16], 77
-    if identity == (0x314D4C46, 3, 9844, 120) and words[16] in (504, 536):
+    if identity[:3] == (0x314D4C46, 3, 9844) and identity[3] in (30, 120) and words[16] in (504, 536):
         return words[16], 78
-    if identity == (0x314D4C46, 3, 9848, 120) and words[16] in (504, 536):
+    if identity[:3] == (0x314D4C46, 3, 9848) and identity[3] in (30, 120) and words[16] in (504, 536):
         return words[16], 78
     raise ValueError("Unsupported recorded evidence adapter")
 

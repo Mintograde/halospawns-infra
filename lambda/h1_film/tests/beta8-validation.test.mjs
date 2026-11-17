@@ -142,3 +142,21 @@ test('Beta 8 preserves MAP1 flags and accepts Mythic while rejecting unknown fla
   for(const [size,value] of [[3,undefined],[4,16],[4,65535],[4,0xfffe0000]])
     await assert.rejects(read(fixture({records:[[0,3,4],[1,18,size,value]]})),/teleport|record/);
 });
+
+
+test('recorded tick rate admits both upstream choices and rejects other rates', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'h1-rate-'));
+  const path = join(root, 'input.h1film');
+  try {
+    for (const rate of [30, 120]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      assert.equal((await readEnvelope(path)).tick_rate, rate);
+    }
+    for (const rate of [0, 29, 60, 121, 0xffffffff]) {
+      const bytes = fixture(); bytes.writeUInt32LE(rate, 12);
+      await writeFile(path, bytes);
+      await assert.rejects(readEnvelope(path));
+    }
+  } finally { await rm(root, {recursive: true}); }
+});

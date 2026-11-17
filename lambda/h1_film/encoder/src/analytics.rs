@@ -42,6 +42,8 @@ impl<W: Write> Write for Bounded<W> {
 // Private, non-playable input to the existing Xbox analytics extractor. Positions
 // are sampled at 30 Hz; metadata counters are observed at 120 Hz before retiming.
 pub struct Export {
+    source_rate: u32,
+    stride: usize,
     revision: u8,
     output: Bounded<BufWriter<zstd::stream::write::Encoder<'static, BufWriter<File>>>>,
     pending: Option<Value>,
@@ -66,9 +68,10 @@ fn selected_player(player: &Value) -> Value {
 
 fn select_player_reusing(player: &Value, target: &mut Value) {
     if let Some(fields) = target.as_object_mut()
-        && fields.keys().map(String::as_str).eq(
-            PLAYER_FIELDS.iter().copied().filter(|key| player.get(*key).is_some()),
-        )
+        && fields.keys().map(String::as_str).eq(PLAYER_FIELDS
+            .iter()
+            .copied()
+            .filter(|key| player.get(*key).is_some()))
     {
         for (key, value) in fields {
             crate::recycle::value(value, &player[key]);
@@ -85,6 +88,13 @@ impl Export {
     }
 
     pub fn with_revision(path: &Path, revision: u8) -> Result<Self, Box<dyn Error>> {
+        Self::with_rate(path, revision, 120)
+    }
+
+    pub fn with_rate(path: &Path, revision: u8, source_rate: u32) -> Result<Self, Box<dyn Error>> {
+        if !matches!(source_rate, 30 | 120) {
+            return Err("unsupported analytics source rate".into());
+        }
         let file = File::options().write(true).create_new(true).open(path)?;
         let mut output = Bounded {
             inner: BufWriter::with_capacity(
@@ -95,6 +105,8 @@ impl Export {
         };
         output.write_all(b"{\"ticks\":[")?;
         Ok(Self {
+            source_rate,
+            stride: source_rate as usize / 30,
             revision,
             output,
             pending: None,
@@ -115,7 +127,9 @@ impl Export {
             .ok_or("missing analytics players")?;
         if self.revision >= 4 {
             for player in players {
-                if let Some(target) = self.final_players.iter_mut()
+                if let Some(target) = self
+                    .final_players
+                    .iter_mut()
                     .find(|previous| previous["player_index"] == player["player_index"])
                 {
                     select_player_reusing(player, target);
@@ -124,7 +138,8 @@ impl Export {
                 }
             }
         } else {
-            self.final_players.resize_with(players.len(), || Value::Null);
+            self.final_players
+                .resize_with(players.len(), || Value::Null);
             for (player, target) in players.iter().zip(&mut self.final_players) {
                 select_player_reusing(player, target);
             }
@@ -134,14 +149,14 @@ impl Export {
         if tick["game_ended_this_tick"].as_bool() == Some(true) {
             self.first_ended_tick.get_or_insert(ordinal);
         }
-        if !ordinal.is_multiple_of(4) {
+        if !ordinal.is_multiple_of(self.stride) {
             return Ok(());
         }
         self.flush_pending()?;
         let mut selected = json!({
             "multiplayer_map_name": tick["multiplayer_map_name"],
-            "game_time_info": {"game_time": ordinal / 4,
-                "elapsed_seconds": ordinal as f64 / 120.0},
+            "game_time_info": {"game_time": ordinal / self.stride,
+                "elapsed_seconds": ordinal as f64 / self.source_rate as f64},
             "players": players.iter().map(|player| {
                 let mut selected = selected_player(player);
                 // The viewer retains corpses, but occupancy measures living players.
@@ -202,7 +217,10 @@ impl Export {
         if self.revision >= 4 {
             let players = pending["players"].as_array_mut().unwrap();
             for final_player in &self.final_players {
-                if !players.iter().any(|player| player["player_index"] == final_player["player_index"]) {
+                if !players
+                    .iter()
+                    .any(|player| player["player_index"] == final_player["player_index"])
+                {
                     let mut retained = final_player.clone();
                     retained["player_object_data"] = Value::Null;
                     players.push(retained);
@@ -216,18 +234,18 @@ impl Export {
         } else {
             self.first_ended_tick.map_or(source_ticks, |end| end + 1)
         };
-        if self.samples != statistics_source_ticks.div_ceil(4) {
+        if self.samples != statistics_source_ticks.div_ceil(self.stride) {
             return Err("analytics sample count differs from source".into());
         }
         let mut root = metadata.clone();
         if let Some(end) = self.first_ended_tick {
-            let seconds = end / 120;
+            let seconds = end / self.source_rate as usize;
             root.get_mut("summary").ok_or("missing analytics summary")?["game_duration_ingame"] =
                 json!(format!(
                     "{}:{:02}:{:09.6}",
                     seconds / 3600,
                     seconds / 60 % 60,
-                    end as f64 / 120.0 % 60.0
+                    end as f64 / self.source_rate as f64 % 60.0
                 ));
         }
         let mode = match self.game_type {
@@ -247,8 +265,8 @@ impl Export {
             "h1_analytics".into(),
             json!({
                 "schema": "halospawns.h1AnalyticsSource.v1", "context": context,
-                "source_ticks": source_ticks, "source_tick_rate": 120,
-                "analytics_tick_rate": 30, "position_stride": 4,
+                "source_ticks": source_ticks, "source_tick_rate": self.source_rate,
+                "analytics_tick_rate": 30, "position_stride": self.stride,
                 "analytics_revision": self.revision, "statistics_source_ticks": statistics_source_ticks,
                 "counters": if self.revision == 1 { "observed_every_source_tick" } else { "match_only_observed_every_source_tick" },
                 "postgame": if self.revision == 1 { "retained" } else { "excluded_from_statistics_retained_in_viewer" },
@@ -264,8 +282,12 @@ impl Export {
         }
         self.output.write_all(b"}")?;
         let raw_bytes = self.output.bytes;
-        let mut file = self.output.inner.into_inner()
-            .map_err(|error| error.into_error())?.finish()?;
+        let mut file = self
+            .output
+            .inner
+            .into_inner()
+            .map_err(|error| error.into_error())?
+            .finish()?;
         file.flush()?;
         let bytes = file.get_ref().metadata()?.len();
         if bytes > 64 * 1024 * 1024 {
@@ -305,10 +327,18 @@ mod tests {
         }
         assert!(buffered.bytes > 128 * 1024);
         assert_eq!(buffered.bytes, reference.bytes);
-        let actual = buffered.inner.into_inner()
-            .map_err(|error| error.into_error()).unwrap().finish().unwrap();
+        let actual = buffered
+            .inner
+            .into_inner()
+            .map_err(|error| error.into_error())
+            .unwrap()
+            .finish()
+            .unwrap();
         assert_eq!(actual, reference.inner.finish().unwrap());
-        let mut limited = Bounded { inner: BufWriter::new(Vec::new()), bytes: MAX_RAW_BYTES - 1 };
+        let mut limited = Bounded {
+            inner: BufWriter::new(Vec::new()),
+            bytes: MAX_RAW_BYTES - 1,
+        };
         assert!(limited.write_all(b"xx").is_err());
         assert_eq!(limited.bytes, MAX_RAW_BYTES - 1);
         assert!(limited.inner.buffer().is_empty());
@@ -364,7 +394,8 @@ mod tests {
         for revision in [3, 4] {
             for end in [None, Some(5)] {
                 let path = std::env::temp_dir().join(format!(
-                    "h1-roster-{}-{revision}-{end:?}.zst", std::process::id()
+                    "h1-roster-{}-{revision}-{end:?}.zst",
+                    std::process::id()
                 ));
                 let mut writer = Export::with_revision(&path, revision).unwrap();
                 for ordinal in 0..7 {
@@ -385,16 +416,26 @@ mod tests {
                             "object_ref":3,"player_object_data":{"x":20,"y":1,"z":2}
                         }));
                     }
-                    writer.observe(&json!({
-                        "game_type":2,"game_engine_has_teams":false,
-                        "multiplayer_map_name":"dread",
-                        "game_ended_this_tick":end==Some(ordinal),"players":players
-                    }), ordinal).unwrap();
+                    writer
+                        .observe(
+                            &json!({
+                                "game_type":2,"game_engine_has_teams":false,
+                                "multiplayer_map_name":"dread",
+                                "game_ended_this_tick":end==Some(ordinal),"players":players
+                            }),
+                            ordinal,
+                        )
+                        .unwrap();
                 }
-                writer.finish(
-                    json!({"summary":{},"game_meta":{},"events":[]}).as_object().unwrap(),
-                    &json!({"gametype":"Slayer"}), 7
-                ).unwrap();
+                writer
+                    .finish(
+                        json!({"summary":{},"game_meta":{},"events":[]})
+                            .as_object()
+                            .unwrap(),
+                        &json!({"gametype":"Slayer"}),
+                        7,
+                    )
+                    .unwrap();
                 let raw = zstd::decode_all(File::open(&path).unwrap()).unwrap();
                 let value: Value = serde_json::from_slice(&raw).unwrap();
                 let ticks = value["ticks"].as_array().unwrap();

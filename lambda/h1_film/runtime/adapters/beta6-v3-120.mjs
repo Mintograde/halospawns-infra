@@ -180,7 +180,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     assert.ok(size >= 504 && size <= 512 * 1024 * 1024, 'Invalid film size');
     const head = await readBlock(file, 0, 504);
     const words = Array.from({ length: 32 }, (_, index) => head.readUInt32LE(index * 4));
-    assert.ok(words[0] === 0x314d4c46 && words[1] === 3 && words[2] === 9839 && words[3] === 120 && words[5] === 32
+    assert.ok(words[0] === 0x314d4c46 && words[1] === 3 && words[2] === 9839 && [30,120].includes(words[3]) && words[5] === 32
       && words[6] === 4 && [504,536].includes(words[16]), 'Unsupported beta6 film layout');
     assert.ok(words[11] > 0 && words[11] <= 432000 && words[25] > 0 && words[25] <= 4, 'Invalid tick or seat count');
     assert.ok([13324, 13328].includes(words[4]), 'Unsupported Beta 6.1 options layout');
@@ -284,7 +284,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
         && variant.readInt32LE(128+25*4) === 0 && head.readUInt32LE(472) === 0),
     }, clientView) : undefined;
     if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;
-    return { format: 3, protocol_revision: words[2], tick_rate: 120, ticks: words[11], players, map,
+    return { format: 3, protocol_revision: words[2], tick_rate: words[3], ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
       ...(createdUtc ? { created_utc: Number(createdUtc) } : {}),

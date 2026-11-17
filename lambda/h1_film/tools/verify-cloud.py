@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--release-manifest", type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3, 4, 5), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
-    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), default=4)
+    parser.add_argument("--viewer-revision", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), default=4)
     state_mode = parser.add_mutually_exclusive_group()
     state_mode.add_argument("--generic-state", action="store_true")
     state_mode.add_argument("--verify-incremental-state", action="store_true")
@@ -199,6 +199,7 @@ def main():
             engine = {key: selected[key] for key in (
                 "format", "protocol_revision", "tick_rate", "build", "wasm_sha256", "glue_sha256"
             )}
+            engine["tick_rate"] = payload["film"]["tick_rate"]
             if args.exporter_revision != 1:
                 engine["exporter_revision"] = args.exporter_revision
             job["conversion"]["engine"] = engine
@@ -381,7 +382,7 @@ def main():
     assert payload["replay_file"]["sha256"] == source["sha256"]
     assert payload["replay_file"]["s3_version_id"] == source["s3_version_id"]
     assert payload["replay_file"]["content_type"] == "application/octet-stream"
-    assert payload["viewer_artifact"]["playback"] == cloud.PLAYBACK
+    assert payload["viewer_artifact"]["playback"] == cloud.playback(job["conversion"]["film"]["tick_rate"])
     cloud.settings.validate_product(payload["h1film_settings"])
     assert payload["h1film_settings"]["film_sha256"] == source["sha256"]
     (args.output / "finalization.json").write_text(json.dumps(payload, indent=2))

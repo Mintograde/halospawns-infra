@@ -1,3 +1,4 @@
+import {sourceRateKey,sourceReplayName} from './tick-rates.mjs';
 import assert from 'node:assert/strict';
 import {orderedPool} from './ordered-pool.mjs';
 import {readFile,writeFile,stat} from 'node:fs/promises';
@@ -46,14 +47,14 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
     const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
     const track={id,part,envelope,source_film_sha256:await sha256(film)};
-    const unsupported=unsupportedClientBuild(envelope,profileById(report.engine_profile),
+    const unsupported=unsupportedClientBuild(envelope,{...profileById(report.engine_profile),tick_rate:report.envelope.tick_rate},
       report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
     if(unsupported) {
       return {...track,status:'unavailable',failure:unsupported};
     }
     let converted;
     try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
-      'client-view':true,'embedded-match':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});
+      'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});
     } catch(error) {
       const failure=(report.exporter_revision>=16 && clientDesyncEvidence(error))
         || (report.exporter_revision>=18 && clientRosterEvidence(error));
@@ -64,7 +65,7 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
     for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
     return {...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
-      world:`${id}/candidate/replay.120hz.hsrdc`,world_sha256:converted.encoding['120hz'].sha256};
+      world:`${id}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
   });
   const result={schema:'halospawns.h1MatchTracks.v1',source_film_sha256:match.sha256,match_id:match.host.match_id,
     version:match.version,tracks};

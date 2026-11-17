@@ -88,6 +88,8 @@ def main():
                 "raw_map": host["identity"]["map_binding"]["raw_source"],
                 "match_id": payload["client"]["match_id"], "recorded_own_player": payload["client"]["recorded_own_player"],
                 "clock_source": host["identity"]["source"], "release": pin}
+            if payload["client"]["film"]["tick_rate"] != 120:
+                identity["source_tick_rate"] = payload["client"]["film"]["tick_rate"]
             target = {k: v for k, v in host_job["viewer_artifact_target"].items()
                       if k not in {"generation_token", "request_epoch", "request_sequence"}}
             job = {"schema": views.CONTRACT, "attempt_id": attempt_id, "identity": identity, "evidence": payload,

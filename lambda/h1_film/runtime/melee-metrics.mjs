@@ -9,7 +9,9 @@ const damaged = e => pair(e.before) && pair(e.after)
 // accepted original-client report clocks, a map-wide conservative timer bound,
 // and a host-observed cancellation chain. Host timing alone is never proof.
 export function deriveMeleeMetrics({events, slots, deaths, partialRecording = false, doubleMeleeDefinition = 1,
-  resolveNonMeleeFinishers = false, resolveBackwhackFinishers = false}) {
+  resolveNonMeleeFinishers = false, resolveBackwhackFinishers = false, sourceTickRate = 120}) {
+  assert.ok([30,120].includes(sourceTickRate),'Unsupported melee source rate');
+  const phase=sourceTickRate/30;
   assert.ok([1,2].includes(doubleMeleeDefinition),'Unsupported double melee definition');
   const metrics = MELEE_METRICS.map(id => ({id, definition_version: id==='double_melee_kills'?doubleMeleeDefinition:1,
     players: slots.map(slot_index => ({slot_index, value: 0, observed_count: 0,
@@ -116,7 +118,7 @@ export function deriveMeleeMetrics({events, slots, deaths, partialRecording = fa
           && hostFirst.unit===hit.attacker_unit && hostSecond.unit===hit.attacker_unit
           && hostFirst.order<first.order && first.order<hostFirst.cancel.order
           && hostFirst.cancel.order<hostSecond.order && hostSecond.order<hit.order
-          && Number.isSafeInteger(bound) && bound>0 && bound<=508 && bound%4===0
+          && Number.isSafeInteger(bound) && bound>0 && bound<=127*phase && bound%phase===0
           && hit.melee_recovery_ticks===bound && delta>0 && delta<bound) {
           count(1,{...example(first.source_tick),remote_melee_timing:{
             method:a.method??'host_accepted_reports_v1',first_damage_source_tick:first.source_tick,

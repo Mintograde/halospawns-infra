@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from .tick_rates import source_rate_key, source_replay_name, analytics_stride
 from .registry import profile_for_report
 from . import recorded
 from .combat import participant_counters, validate_combat_product
@@ -167,17 +168,17 @@ def verified_products(directory: Path, *, film_sha256: str) -> tuple[dict, dict,
     if (
         analytics.get("schema") != profile["analytics_contract"]
         or analytics.get("ticks_per_second") != 30
-        or analytics.get("ticks") != (statistics_ticks + 3) // 4
+        or analytics.get("ticks") != (statistics_ticks + analytics_stride(profile["tick_rate"]) - 1) // analytics_stride(profile["tick_rate"])
     ):
         raise ValueError("Missing 30 Hz H1 analytics contract")
     products = [
         ("analytics.30hz.json.zst", analytics, 64 * 1024 * 1024),
-        ("replay.120hz.hsrdc", encoding.get("120hz", {}), 1024 * 1024 * 1024),
+        (source_replay_name(profile["tick_rate"]), encoding.get(source_rate_key(profile["tick_rate"]), {}), 1024 * 1024 * 1024),
     ]
     if "30hz" in encoding and encoding["30hz"] is None:
         if report.get("reference") or encoding.get("verification") != {
             "mode": "inline-bounded-poses" if encoding.get("viewer_profile_revision") in (4, 5) else "inline-lossless",
-            "120hz": ticks, "30hz": None,
+            source_rate_key(profile["tick_rate"]): ticks, "30hz": None,
         }:
             raise ValueError("Missing source-rate viewer verification")
     else:
@@ -266,10 +267,10 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
             "map_resolution": "catalog_bound"
             if binding and binding.get("map_id")
             else "local_only_not_hosted",
-            "source_tick_rate": 120,
-            "viewer_tick_rate": 120,
+            "source_tick_rate": report["envelope"]["tick_rate"],
+            "viewer_tick_rate": report["envelope"]["tick_rate"],
             "analytics_tick_rate": 30,
-            "position_sampling": "every_fourth_source_tick_live_body_only",
+            "position_sampling": "every_fourth_source_tick_live_body_only" if report["envelope"]["tick_rate"] == 120 else "every_source_tick_live_body_only",
             "counter_sampling": "every_source_tick_then_aggregate_to_30hz",
             "analytics_revision": encoding.get("analytics_revision", 1),
             "postgame": "retained_in_viewer_excluded_from_statistics"
@@ -297,8 +298,8 @@ def adapt_parsed_replay(parsed: Any, *, report: dict, encoding: dict) -> Any:
     if created_utc is not None:
         start = recorded.match_start(report, encoding) if encoding.get("analytics_revision", 1) >= 3 else None
         end = encoding["analytics"].get("match_end_source_tick")
-        game["started_at"] = recorded.utc_timestamp(created_utc, start) if start is not None else None
-        game["ended_at"] = recorded.utc_timestamp(created_utc, end) if end is not None else None
+        game["started_at"] = recorded.utc_timestamp(created_utc, start, report["envelope"]["tick_rate"]) if start is not None else None
+        game["ended_at"] = recorded.utc_timestamp(created_utc, end, report["envelope"]["tick_rate"]) if end is not None else None
         metadata["h1_film"].update(
             created_utc=created_utc, recorded_at=recorded.utc_timestamp(created_utc),
             recorded_at_source="film_header_created_utc",

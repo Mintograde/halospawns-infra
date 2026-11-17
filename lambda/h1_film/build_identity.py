@@ -2,14 +2,18 @@
 
 import re
 
+from .tick_rates import supports_tick_rate
+
 BUILD_MATCHING_CONTRACT = "halospawns.h1RecordedBuild.v1"
 SOURCE_COMMIT_RULE = "source_commit_suffix_v1"
 SIMULATION_IDENTITY = ("format", "protocol_revision", "tick_rate")
 
 
 def matches_profile(profile, film, rule=None):
-    if any(type(film.get(key)) is not type(profile[key]) or film[key] != profile[key]
-           for key in SIMULATION_IDENTITY):
+    if not supports_tick_rate(profile, film.get("tick_rate")) or any(
+        type(film.get(key)) is not type(profile[key]) or film[key] != profile[key]
+        for key in ("format", "protocol_revision")
+    ):
         return False
     build = film.get("build")
     if build == profile["build"]:

@@ -10,6 +10,7 @@ import time
 import uuid
 from pathlib import Path
 
+from .tick_rates import source_rate_key, source_replay_name
 from . import analytics, cloud
 from .registry import load_registry, matches_film, select_exporter
 
@@ -62,6 +63,8 @@ def recipes():
 def validate_association(evidence):
     cloud.validate_schema("client-view-prepare", evidence)
     client, host, clock = (evidence[k] for k in ("client", "host", "clock_host"))
+    rate = client["film"]["tick_rate"]
+    require(rate == 120 or evidence["exporter_revision"] >= 41)
     require(client["recording_role"] == "client" and host["recording_role"] == clock["recording_role"] == "host")
     require(client["match_id"] != "0000000000000000")
     require(client["recorded_own_player"] == clock["recorded_own_player"] == evidence["diagnostic_recorded_own_player"])
@@ -72,7 +75,7 @@ def validate_association(evidence):
                 and film["player_count"] <= cloud.limits()["PLAYERS"])
         require(matches_film(load_registry()[PROFILE], film))
         require(item["match_id"] == client["match_id"] and item["raw_map_sha256"] == client["raw_map_sha256"]
-                and film["scenario"] == client["film"]["scenario"])
+                and film["scenario"] == client["film"]["scenario"] and film["tick_rate"] == rate)
         cloud.validate_source(item["source"], client_view=item["recording_role"] == "client")
     if host["source"] == clock["source"]:
         require(host == clock)
@@ -83,6 +86,9 @@ def validate_job(job, item):
             "requested_outputs", "viewer_artifact_target", "output"})
     require(job["schema"] == CONTRACT and job["attempt_id"] == item["attempt_id"])
     pin, evidence = job["identity"], job["evidence"]
+    rate = evidence["client"]["film"]["tick_rate"]
+    require(pin.get("source_tick_rate", 120) == rate and (rate == 120 or pin["exporter_revision"] >= 41))
+    require(all(evidence[k]["film"]["tick_rate"] == rate for k in ("host", "clock_host")))
     cloud.validate_schema("client-view-identity", pin)
     validate_association(evidence)
     require(pin["upload_id"] == item["upload_id"] == upload_id_from_key(pin["source"]["s3_key"]))
@@ -248,8 +254,8 @@ def products(job, directory, timeline_value, work):
             and all(report["provenance"][k] == pin[k] for k in ("wasm_sha256", "glue_sha256")))
     require(simulation["played_ticks"] == ticks and simulation["hash_checks"] == film["hash_sample_count"]
             and simulation["hash_mismatches"] == simulation["seed_mismatches"] == 0, "verification_failed")
-    require(encoding["verification"] == {"mode": "inline-bounded-poses", "120hz": ticks, "30hz": None}
-            and encoding["120hz"]["tickCount"] == ticks, "verification_failed")
+    require(encoding["verification"] == {"mode": "inline-bounded-poses", source_rate_key(film["tick_rate"]): ticks, "30hz": None}
+            and encoding[source_rate_key(film["tick_rate"])]["tickCount"] == ticks, "verification_failed")
     require("analytics" not in report and "client_diagnostics" not in report, "verification_failed")
     timeline_path = work / "timeline.json"
     timeline_path.write_text(json.dumps(timeline_value, separators=(",", ":"), allow_nan=False), encoding="utf-8")
@@ -259,7 +265,7 @@ def products(job, directory, timeline_value, work):
         "producer": {"release_id": os.environ["H1_WORKER_RELEASE_ID"], "image_digest": os.environ["H1_WORKER_IMAGE_DIGEST"]},
         "verification": "simulation_and_encoding_verified"}
     for name, path, template, content_type, bound in (
-        ("artifact", directory / "candidate/replay.120hz.hsrdc",
+        ("artifact", directory / "candidate" / source_replay_name(film["tick_rate"]),
          "halospawns.viewerReplay.v1.frontend-default-r5.{}.viewer-delta.v2.hsrv", "application/octet-stream", 512 * 1024**2),
         ("timeline", timeline_path, "h1-client-view-timeline.v1.{}.json", "application/json", 32 * 1024**2),
     ):
@@ -268,7 +274,7 @@ def products(job, directory, timeline_value, work):
         with path.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         if name == "artifact":
-            require(digest == encoding["120hz"]["sha256"] and size == encoding["120hz"]["sizeBytes"], "artifact_failed")
+            require(digest == encoding[source_rate_key(film["tick_rate"])]["sha256"] and size == encoding[source_rate_key(film["tick_rate"])]["sizeBytes"], "artifact_failed")
         key = job["output"]["prefix"] + template.format(digest)
         version = shared._put_immutable_file(bucket=job["output"]["s3_bucket"], key=key, path=path,
             content_type=content_type, sha256=digest, metadata={"sha256": digest})

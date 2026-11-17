@@ -10,11 +10,11 @@ mod object_state;
 mod object_transfer;
 #[path = "ordered_delta.rs"]
 mod ordered_delta;
-#[path = "pose_state.rs"]
-mod pose_state;
 #[cfg(feature = "native-pipeline")]
 #[path = "pipeline.rs"]
 mod pipeline;
+#[path = "pose_state.rs"]
+mod pose_state;
 #[path = "projection_plan.rs"]
 mod projection_plan;
 #[path = "tick_hash.rs"]
@@ -394,7 +394,9 @@ fn exact_decoded(source: &Value, decoded: &DecodedValue) -> bool {
         (Value::Number(_), DecodedValue::Number(b)) => {
             number(source).is_some_and(|a| a.to_bits() == b.to_bits())
         }
-        (Value::String(source), DecodedValue::String(decoded)) => crate::text_equal::equal(source, decoded.as_ref()),
+        (Value::String(source), DecodedValue::String(decoded)) => {
+            crate::text_equal::equal(source, decoded.as_ref())
+        }
         (Value::Array(a), DecodedValue::Array(b)) => {
             a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| exact_decoded(a, b))
         }
@@ -852,23 +854,42 @@ mod pose_tests {
         let mut ticks = source();
         for tick in &mut ticks {
             let prototype = tick["players"][0].clone();
-            tick["players"] = Value::Array((0..16).map(|slot| {
-                let mut player = prototype.clone();
-                player["player_index"] = Value::from(slot);
-                player
-            }).collect());
+            tick["players"] = Value::Array(
+                (0..16)
+                    .map(|slot| {
+                        let mut player = prototype.clone();
+                        player["player_index"] = Value::from(slot);
+                        player
+                    })
+                    .collect(),
+            );
         }
         let raw = pack_poses(&ticks, 0).unwrap();
-        let (_, mut decoded) = h1_pose_codec::wire::unpack(
-            &raw, &h1_pose_codec::settings(), &PoseBaseCodec,
-        ).unwrap();
+        let (_, mut decoded) =
+            h1_pose_codec::wire::unpack(&raw, &h1_pose_codec::settings(), &PoseBaseCodec).unwrap();
         assert_eq!(decoded[0]["players"].as_array().unwrap().len(), 16);
-        assert_eq!(decoded[1]["players"][15]["model_nodes"].as_array().unwrap().len(), 19);
+        assert_eq!(
+            decoded[1]["players"][15]["model_nodes"]
+                .as_array()
+                .unwrap()
+                .len(),
+            19
+        );
         assert!(h1_pose_codec::verify(&ticks, &mut decoded).is_ok());
         let projection = Projection::load_revision(5).unwrap();
         assert!(projection.tick.project(&ticks[0]).is_ok());
-        assert!(crate::fast_schema::Validator::for_revision(5).unwrap().is_valid(&ticks[0]));
-        assert!(Projection::load_revision(4).unwrap().tick.project(&ticks[0]).is_err());
+        assert!(
+            crate::fast_schema::Validator::for_revision(5)
+                .unwrap()
+                .is_valid(&ticks[0])
+        );
+        assert!(
+            Projection::load_revision(4)
+                .unwrap()
+                .tick
+                .project(&ticks[0])
+                .is_err()
+        );
         let extra = ticks[0]["players"][0].clone();
         ticks[0]["players"].as_array_mut().unwrap().push(extra);
         assert!(pack_poses(&ticks, 0).is_err());
@@ -1160,8 +1181,10 @@ impl StreamingExport {
     }
 
     pub fn supports_cached_spawns(&self) -> bool {
-        self.supports_incremental() && projection().is_ok_and(|projection|
-            object_state::SpawnCache::supported(projection, &self.validator))
+        self.supports_incremental()
+            && projection().is_ok_and(|projection| {
+                object_state::SpawnCache::supported(projection, &self.validator)
+            })
     }
 
     pub fn push_incremental_source(
@@ -1186,9 +1209,9 @@ impl StreamingExport {
             projection,
             &self.validator,
         )?);
-        self.pending_objects.as_mut().unwrap().spawns = self.spawn_cache.project(
-            objects.spawns.as_ref(), projection, &self.validator,
-        )?;
+        self.pending_objects.as_mut().unwrap().spawns =
+            self.spawn_cache
+                .project(objects.spawns.as_ref(), projection, &self.validator)?;
         self.collector.projection_duration += started.elapsed();
         if let Some(poses) = poses
             && poses.slices().iter().any(Option::is_some)
@@ -1648,6 +1671,14 @@ fn owned_json(value: &DecodedValue) -> Result<Value, Box<dyn Error>> {
 }
 
 fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
+    scan_at_rate(path, stride, 120)
+}
+
+fn scan_at_rate(path: &Path, stride: usize, source_rate: u32) -> Result<Scan, Box<dyn Error>> {
+    if !matches!(source_rate, 30 | 120) {
+        return Err("unsupported source rate".into());
+    }
+    let analytics_stride = source_rate as usize / 30;
     use std::io::{Seek, SeekFrom};
     let mut file = File::open(path)?;
     let size = file.metadata()?.len();
@@ -1792,14 +1823,20 @@ fn scan(path: &Path, stride: usize) -> Result<Scan, Box<dyn Error>> {
             if number(&tick["current_tick"]) != Some(tick_count as f64)
                 || number(&tick["game_time_info"]["game_time"]) != Some(tick_count as f64)
                 || number(&tick["current_game_time_seconds"])
-                    != Some((tick_count * stride) as f64 / 120.0)
+                    != Some((tick_count * stride) as f64 / source_rate as f64)
                 || tick["multiplayer_map_name"].as_str() != Some(map)
             {
                 return Err("decoded timeline or map is inconsistent".into());
             }
-            if stride == 4 || tick_count.is_multiple_of(4) {
+            if stride == analytics_stride || tick_count.is_multiple_of(analytics_stride) {
                 if stride == 1 {
-                    crate::sampling::normalize(&mut tick, tick_count, 4, map)?;
+                    crate::sampling::normalize_at_rate(
+                        &mut tick,
+                        tick_count,
+                        analytics_stride,
+                        map,
+                        source_rate,
+                    )?;
                 }
                 selected_hash.update(semantic_value_digest(&tick)?);
             }
@@ -1837,21 +1874,40 @@ pub fn validate_file(path: &Path) -> Result<Value, Box<dyn Error>> {
 }
 
 pub fn verify_pair(high_path: &Path, low_path: &Path) -> Result<Value, Box<dyn Error>> {
-    let high = scan(high_path, 1)?;
-    let low = scan(low_path, 4)?;
-    if low.manifest.tick_count != high.manifest.tick_count.div_ceil(4)
+    verify_pair_at_rate(high_path, low_path, 120)
+}
+
+pub fn verify_pair_at_rate(
+    high_path: &Path,
+    low_path: &Path,
+    source_rate: u32,
+) -> Result<Value, Box<dyn Error>> {
+    if !matches!(source_rate, 30 | 120) {
+        return Err("unsupported source rate".into());
+    }
+    let stride = source_rate as usize / 30;
+    let source_key = if source_rate == 120 {
+        "120hz"
+    } else {
+        "source"
+    };
+    let suffix = format!("-{source_key}");
+    let high = scan_at_rate(high_path, 1, source_rate)?;
+    let low = scan_at_rate(low_path, stride, source_rate)?;
+    if low.manifest.tick_count != high.manifest.tick_count.div_ceil(stride)
         || low.selected_hash != high.selected_hash
         || low.manifest.recorded_at != high.manifest.recorded_at
-        || high.manifest.replay_id.strip_suffix("-120hz").is_none()
-        || high.manifest.replay_id.strip_suffix("-120hz")
+        || high
+            .manifest
+            .replay_id
+            .strip_suffix(suffix.as_str())
+            .is_none()
+        || high.manifest.replay_id.strip_suffix(suffix.as_str())
             != low.manifest.replay_id.strip_suffix("-30hz")
     {
-        return Err(
-            "30 Hz states differ from unit-normalized every-fourth samples of the 120 Hz replay"
-                .into(),
-        );
+        return Err("30 Hz states differ from the sampled, unit-normalized source replay".into());
     }
-    let high_duration = high.manifest.tick_count as f64 / 120.0;
+    let high_duration = high.manifest.tick_count as f64 / source_rate as f64;
     for replay in [&high.manifest.replay, &low.manifest.replay] {
         if replay
             .get("summary")
@@ -1863,7 +1919,7 @@ pub fn verify_pair(high_path: &Path, low_path: &Path) -> Result<Value, Box<dyn E
         }
     }
     let mut resampled_metadata = high.manifest.replay.clone();
-    crate::sampling::retime_metadata(&mut resampled_metadata, 4, low.manifest.tick_count)?;
+    crate::sampling::retime_metadata(&mut resampled_metadata, stride, low.manifest.tick_count)?;
     for key in ["game_meta", "events"] {
         if resampled_metadata.get(key) != low.manifest.replay.get(key) {
             return Err("dual-rate metadata differs after timeline conversion".into());
@@ -1871,7 +1927,7 @@ pub fn verify_pair(high_path: &Path, low_path: &Path) -> Result<Value, Box<dyn E
     }
     Ok(
         serde_json::json!({"status":"verified", "every_fourth_state_exact_after_unit_conversion":true,
-        "120hz":{"ticks":high.manifest.tick_count,"chunks":high.manifest.chunks.len(),"sha256":high.file_hash,"bytes":high.bytes},
+        (source_key):{"ticks":high.manifest.tick_count,"chunks":high.manifest.chunks.len(),"sha256":high.file_hash,"bytes":high.bytes},
         "30hz":{"ticks":low.manifest.tick_count,"chunks":low.manifest.chunks.len(),"sha256":low.file_hash,"bytes":low.bytes},
         "duration_seconds":high_duration,"sampled_state_sha256":high.selected_hash}),
     )
@@ -1994,11 +2050,15 @@ mod incremental_tests {
                 serde_json::json!({}),
                 Value::Null,
             ] {
-                let input = serde_json::json!({"players":[{"player_index":0,"player_object_data":body}]});
+                let input =
+                    serde_json::json!({"players":[{"player_index":0,"player_object_data":body}]});
                 let borrowed = projection.tick.project(&input).unwrap();
                 let owned = projection.tick.project_owned(input.clone()).unwrap();
                 let mut reused = Value::Null;
-                projection.tick.project_reusing(&input, &mut reused).unwrap();
+                projection
+                    .tick
+                    .project_reusing(&input, &mut reused)
+                    .unwrap();
                 for output in [borrowed, owned, reused] {
                     assert_eq!(output["players"][0]["player_object_data"], body);
                 }

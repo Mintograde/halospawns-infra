@@ -17,22 +17,25 @@ const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function exportMatchReplay({film,directory,hostWorld,output,sourceContract}) {
   const report=JSON.parse(await readFile(join(directory,'report.json'),'utf8'));
-  assert.equal(report.status,'simulation_and_encoding_verified');
+  assert.ok(['simulation_and_encoding_verified','simulation_and_artifacts_verified'].includes(report.status));
   const raw=await readFile(film),match=inspectMatchFilm(raw,matchFilmPolicy(report.exporter_revision));
   assert.equal(match.sha256,report.provenance.film_sha256);
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8,9,10,11,12,13].includes(sourceContract.profile_revision);
-  const accountOptions={allowUnassignedPlayer:[11,12,13].includes(sourceContract.profile_revision)};
+  const partial=[7,8,9,10,11,12,13,14].includes(sourceContract.profile_revision);
+  const accountOptions={allowUnassignedPlayer:report.envelope.protocol_revision>=9844};
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
   assert.equal(report.exporter_revision>=18,sourceContract.profile_revision>=9,'Match roster policy differs from recipe');
   assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
+  if(sourceContract.profile_revision===14) assert.ok(report.exporter_revision>=40,'Recorded rate requires exporter 40');
+  else {
   assert.equal(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1',[11,12].includes(sourceContract.profile_revision),'Match source differs from recipe');
   if(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1')
     assert.equal(report.exporter_revision>=33,sourceContract.profile_revision===12,'Match logical size policy differs from recipe');
   assert.equal(report.engine_profile==='h1-performance-beta8-p9848-wasm-v1',sourceContract.profile_revision===13,'Beta 8 match source differs from recipe');
+  }
   const scratch=output+'.parts';await mkdir(scratch);
   const entries=[],tracks=[];
   // Compact packing immediately consumes these entries. Keep a bounded amount
@@ -137,7 +140,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     if(c.failure?.reason==='unsupported_build') {
       const envelope=await readEnvelope(join(directory,`${c.id}.h1film`),{allowClientView:true});
       assert.deepEqual(c.envelope,envelope,'Unsupported client source envelope differs');
-      assert.deepEqual(c.failure,unsupportedClientBuild(envelope,profileById(report.engine_profile),
+      assert.deepEqual(c.failure,unsupportedClientBuild(envelope,{...profileById(report.engine_profile),tick_rate:report.envelope.tick_rate},
         report.exporter_revision,BUILD_MATCHING[report.engine_profile]),'Unsupported client build evidence differs');
     }
     const unavailable=partial&&c.status==='unavailable';
@@ -164,7 +167,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     }
     tracks.push(track);
   }
-  return writeMatchReplay(output,{sourceContract,source_film_sha256:match.sha256,
+  return writeMatchReplay(output,{sourceContract,source_film_sha256:match.sha256,tick_rate:match.host.tick_rate,
     raw_map_sha256:report.provenance.map_sha256,engine_profile:report.engine_profile,
     wasm_sha256:report.provenance.wasm_sha256,glue_sha256:report.provenance.glue_sha256,match_id:match.host.match_id},tracks,entries);
 }

@@ -1,3 +1,4 @@
+import {supportsTickRate} from './tick-rates.mjs';
 import assert from 'node:assert/strict';
 
 export const BUILD_MATCHING_CONTRACT = 'halospawns.h1RecordedBuild.v1';
@@ -5,7 +6,8 @@ export const SOURCE_COMMIT_RULE = 'source_commit_suffix_v1';
 const SIMULATION_IDENTITY = ['format', 'protocol_revision', 'tick_rate'];
 
 export function matchesProfile(profile, film, rule) {
-  if (!SIMULATION_IDENTITY.every(key => film[key] === profile[key])) return false;
+  if (!SIMULATION_IDENTITY.every(key => key === 'tick_rate'
+    ? supportsTickRate(profile, film[key]) : film[key] === profile[key])) return false;
   if (film.build === profile.build) return true;
   if (rule !== SOURCE_COMMIT_RULE || typeof film.build !== 'string'
     || film.build.length < 1 || film.build.length > 63 || /[^\x20-\x7e]/.test(film.build)) return false;

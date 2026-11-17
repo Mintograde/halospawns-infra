@@ -15,7 +15,7 @@ test('camo recipes retain prior analytics and viewer formats across all families
     assert.deepEqual(recipes.find(r=>r.exporter_revision===32),{...current,exporter_revision:32});
   }
   const clients=value.client_view_recipes[profile];
-  assert.deepEqual(clients.at(-1),{...clients[0],exporter_revision:31});
+  assert.deepEqual(clients.find(r=>r.exporter_revision===31),{...clients[0],exporter_revision:31});
   for(const wrong of [undefined,'unknown']) {
     const r=structuredClone(registry);
     r.processing.requirements.player_camo_amount=wrong;
@@ -42,7 +42,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,39);
+  assert.equal(value.defaults[profile].exporter_revision,40);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -62,8 +62,8 @@ test('historical manifests do not acquire a client recipe field',()=>{
 
 test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:39,analytics_revision:5,viewer_revision:10,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10],[34,10],[36,10],[37,10],[38,10],[39,10]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:40,analytics_revision:5,viewer_revision:14,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10],[34,10],[36,10],[37,10],[38,10],[39,10],[40,14]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -138,7 +138,7 @@ test('spawn event recipes require a compatible reader and retain the prior host 
     const old=registry.processing.recipes[p.id].find(r=>r.exporter_revision===30);
     assert.deepEqual(registry.processing.recipes[p.id].find(r=>r.exporter_revision===32),{...old,exporter_revision:32});
   }
-  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
+  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,41);
 });
 
 test('large matches use a new Beta 7 recipe with unchanged binaries and a required reader',()=>{
@@ -170,7 +170,7 @@ test('neutral baseline definition adds recipes without changing retained engine 
     const r=structuredClone(registry);r.processing.requirements.spawn_neutral_baseline=wrong;
     assert.throws(()=>manifest(r));
   }
-  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,31);
+  assert.equal(registry.processing.client_view_recipes[profile].at(-1).exporter_revision,41);
 });
 
 test('Beta 8 binds the exact new source, protocol, recipe and reader without altering old defaults',()=>{
@@ -178,8 +178,8 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
   const p=registry.profiles.find(p=>p.id===id);
   assert.equal(p.source.git_commit,'3194e680896cead7326c2a3fcb9e35e85de1d7cc');
   assert.equal(p.protocol_revision,9848);
-  assert.deepEqual(value.defaults[id],{exporter_revision:39,analytics_revision:5,viewer_revision:13,max_players:16});
-  assert.deepEqual(value.recipes[id],[{...value.defaults[id],exporter_revision:35},{...value.defaults[id],exporter_revision:36},{...value.defaults[id],exporter_revision:37},{...value.defaults[id],exporter_revision:38},value.defaults[id]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:40,analytics_revision:5,viewer_revision:14,max_players:16});
+  assert.deepEqual(value.recipes[id],[...[35,36,37,38,39].map(exporter_revision=>({...value.defaults[id],exporter_revision,viewer_revision:13})),value.defaults[id]]);
   for(const mutate of [
     r=>delete r.processing.requirements.beta8,
     r=>r.processing.requirements.beta8='unknown',
@@ -191,7 +191,7 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
 test('remote melee defaults require their reader and retain all previous recipes',()=>{
   const value=manifest(registry);
   for(const p of registry.profiles.filter(p=>['beta5','beta6','beta7','beta8'].includes(p.port))) {
-    assert.equal(value.defaults[p.id].exporter_revision,39);
+    assert.equal(value.defaults[p.id].exporter_revision,40);
     assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===(p.port==='beta8'?35:34)));
   }
   const bad=structuredClone(registry);delete bad.processing.requirements.remote_melee_timing;
