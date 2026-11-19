@@ -1,0 +1,12 @@
+**
+!lambda/
+!lambda/movement_flow_worker/
+!lambda/movement_flow_worker/native/
+!lambda/movement_flow_worker/native/*.rs
+!lambda/replay_parser/
+!lambda/replay_parser/native/
+!lambda/replay_parser/native/Cargo.*
+!lambda/replay_parser/native/src/
+!lambda/replay_parser/native/src/viewer.rs
+!lambda/replay_parser/contracts/
+!lambda/replay_parser/contracts/**

@@ -236,6 +236,7 @@ locals {
     local.app_api_dev_public_routes,
     local.h1_film_api_routes,
     local.workshop_api_routes,
+    local.movement_flow_api_routes,
     [
       {
         route_key          = "$default"

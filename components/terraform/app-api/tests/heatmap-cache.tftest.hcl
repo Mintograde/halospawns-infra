@@ -57,6 +57,30 @@ run "cache_disabled_by_default" {
     ]) == 0
     error_message = "Environments must explicitly enable heatmap caching."
   }
+  assert {
+    condition = length(local.movement_flow_api_routes) == 0 && length([
+      for s in data.aws_iam_policy_document.app_runtime[0].statement : s if s.sid == "ReadMovementFields"
+    ]) == 0
+    error_message = "Movement callbacks and field reads require an enabled producer."
+  }
+}
+
+run "movement_field_delivery_and_callback" {
+  command = plan
+  variables { movement_flow_enabled = true }
+  assert {
+    condition = (
+      one(local.movement_flow_api_routes).route_key == "POST /v1/ingest/movement-flow" &&
+      one(local.movement_flow_api_routes).authorization_type == "NONE" &&
+      toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.actions
+      if s.sid == "ReadMovementFields"])) == toset(["s3:GetObject"]) &&
+      toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.resources
+        if s.sid == "ReadMovementFields"])) == toset([
+        "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/v1/movement/views/*.json"
+      ])
+    )
+    error_message = "Enable the trusted callback and read access to movement fields."
+  }
 }
 
 run "cache_is_private_and_prefix_scoped" {
@@ -65,11 +89,11 @@ run "cache_is_private_and_prefix_scoped" {
   assert {
     condition = (
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.actions
-        if s.sid == "ReadPrecomputedHeatmapIndexes"])) == toset(["s3:GetObject"]) &&
+      if s.sid == "ReadPrecomputedHeatmapIndexes"])) == toset(["s3:GetObject"]) &&
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.resources
         if s.sid == "ReadPrecomputedHeatmapIndexes"])) == toset([
-          "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/*/index.json"
-        ])
+        "arn:aws:s3:::uploads-dev-283279960672/heatmaps/precomputed/*/index.json"
+      ])
     )
     error_message = "The API reads only small indexes; the producer owns permanent product writes."
   }

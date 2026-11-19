@@ -60,6 +60,7 @@ components:
         enabled: true
         heatmap_response_cache_enabled: true
         workshop_maps_enabled: true
+        movement_flow_enabled: true
         h1_film:
           enabled: true
           processing_enabled: true
@@ -165,6 +166,7 @@ components:
             - http://127.0.0.1:5180
     map-processing:
       vars:
+        movement_flow_enabled: true
         heatmap_rollup_worker:
           precomputed_enabled: true
         workshop_maps:

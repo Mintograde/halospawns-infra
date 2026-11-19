@@ -109,6 +109,15 @@ data "aws_iam_policy_document" "app_runtime" {
   }
 
   dynamic "statement" {
+    for_each = var.movement_flow_enabled ? [1] : []
+    content {
+      sid       = "ReadMovementFields"
+      actions   = ["s3:GetObject"]
+      resources = ["${local.uploads_bucket_arn}/heatmaps/precomputed/v1/movement/views/*.json"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.heatmap_response_cache_enabled ? [1] : []
     content {
       sid       = "CacheHeatmapResponses"
