@@ -7,6 +7,18 @@ const registry=JSON.parse(readFileSync(new URL('../profiles/registry.json',impor
 const profile='h1-performance-beta5-p9818-wasm-v1';
 const manifest=r=>createReleaseManifest(r,'20261101-r1','sha256:'+'a'.repeat(64));
 
+test('every damage-aware sniper recipe retains the preceding discharge and impact recipes',()=>{
+  for (const p of registry.profiles) {
+    const revisions=registry.processing.recipes[p.id].map(r=>r.exporter_revision);
+    assert.deepEqual(revisions.slice(-3),[42,43,44]);
+  }
+  for (const requirement of ['sniper','sniper_evidence','sniper_damage']) {
+    const r=structuredClone(registry);
+    delete r.processing.requirements[requirement];
+    assert.throws(()=>manifest(r));
+  }
+});
+
 test('camo recipes retain prior analytics and viewer formats across all families and clients',()=>{
   const value=manifest(registry);
   for(const p of registry.profiles.filter(p=>p.port!=='beta8')) {
@@ -42,7 +54,7 @@ test('melee defaults retain old recipes and require the new reader',()=>{
 
 test('client release keeps authoritative defaults and registers its separate recipe',()=>{
   const value=manifest(registry);
-  assert.equal(value.defaults[profile].exporter_revision,43);
+  assert.equal(value.defaults[profile].exporter_revision,44);
   assert.equal(value.client_view_recipes[profile][0].exporter_revision,13);
   for(const mutate of [
     r=>r.processing.recipes[profile].push(r.processing.client_view_recipes[profile][0]),
@@ -62,8 +74,8 @@ test('historical manifests do not acquire a client recipe field',()=>{
 
 test('compatible client default retains the older Beta 6 recipes and exact simulation binaries',()=>{
   const id='h1-performance-beta6-p9839-wasm-v1',value=manifest(registry);
-  assert.deepEqual(value.defaults[id],{exporter_revision:43,analytics_revision:5,viewer_revision:14,max_players:16});
-  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10],[34,10],[36,10],[37,10],[38,10],[39,10],[40,14],[42,14],[43,14]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:44,analytics_revision:5,viewer_revision:14,max_players:16});
+  assert.deepEqual(value.recipes[id].map(r=>[r.exporter_revision,r.viewer_revision]),[[14,6],[15,6],[16,7],[17,8],[18,9],[19,9],[20,9],[21,9],[22,10],[23,10],[24,10],[26,10],[27,10],[28,10],[29,10],[30,10],[32,10],[34,10],[36,10],[37,10],[38,10],[39,10],[40,14],[42,14],[43,14],[44,14]]);
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===16);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===17),{...old,revision:17});
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===18),{...old,revision:18});
@@ -178,8 +190,11 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
   const p=registry.profiles.find(p=>p.id===id);
   assert.equal(p.source.git_commit,'3194e680896cead7326c2a3fcb9e35e85de1d7cc');
   assert.equal(p.protocol_revision,9848);
-  assert.deepEqual(value.defaults[id],{exporter_revision:43,analytics_revision:5,viewer_revision:14,max_players:16});
-  assert.deepEqual(value.recipes[id],[...[35,36,37,38,39].map(exporter_revision=>({...value.defaults[id],exporter_revision,viewer_revision:13})),{...value.defaults[id],exporter_revision:40},{...value.defaults[id],exporter_revision:42},value.defaults[id]]);
+  assert.deepEqual(value.defaults[id],{exporter_revision:44,analytics_revision:5,viewer_revision:14,max_players:16});
+  assert.deepEqual(value.recipes[id],[
+    ...[35,36,37,38,39].map(exporter_revision=>({...value.defaults[id],exporter_revision,viewer_revision:13})),
+    ...[40,42,43,44].map(exporter_revision=>({...value.defaults[id],exporter_revision}))
+  ]);
   for(const mutate of [
     r=>delete r.processing.requirements.beta8,
     r=>r.processing.requirements.beta8='unknown',
@@ -191,7 +206,7 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
 test('remote melee defaults require their reader and retain all previous recipes',()=>{
   const value=manifest(registry);
   for(const p of registry.profiles.filter(p=>['beta5','beta6','beta7','beta8'].includes(p.port))) {
-    assert.equal(value.defaults[p.id].exporter_revision,43);
+    assert.equal(value.defaults[p.id].exporter_revision,44);
     assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===(p.port==='beta8'?35:34)));
   }
   const bad=structuredClone(registry);delete bad.processing.requirements.remote_melee_timing;

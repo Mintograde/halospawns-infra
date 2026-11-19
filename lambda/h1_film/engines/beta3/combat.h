@@ -58,6 +58,9 @@ typedef struct {
 #endif
 #ifdef H1_SNIPER_EVIDENCE
     int excludes_sniper, direct_report;
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+    int recovered_sniper, recovered_definition;
+#endif
     hs_sniper_impact report;
 #endif
 } hs_death;
@@ -406,9 +409,18 @@ void hs_combat_death(int kind, int killer, int victim)
     if (kind == 0 && hs_aftermath_damage && hs_aftermath_target == slot && hs_sniper_scored_body != -1
         && hs_sniper_scored_body == hs_sniper_lethal_body) {
         const int owner = hs_aftermath_damage->owner_player_index;
-        if (death->weapon < 0)
-            death->excludes_sniper = (owner != killer && owner != -1 && datum_try_and_get(player_data, owner))
-                || hs_damage_excludes_sniper(hs_aftermath_damage->definition_index);
+        if (death->weapon < 0) {
+            death->excludes_sniper = owner != killer && owner != -1 && datum_try_and_get(player_data, owner);
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+            if (!death->excludes_sniper) {
+                int type = hs_sniper_damage_type(hs_aftermath_damage->definition_index, &death->recovered_definition);
+                death->excludes_sniper = type < 0;
+                death->recovered_sniper = type > 0 && owner == killer && death->killer >= 0;
+            }
+#else
+            death->excludes_sniper |= hs_damage_excludes_sniper(hs_aftermath_damage->definition_index);
+#endif
+        }
         if (death->deal && hs_sniper_direct == hs_aftermath_damage && owner == killer) {
             death->direct_report = 1;
             death->report = hs_sniper_report;

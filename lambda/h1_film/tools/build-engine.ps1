@@ -17,6 +17,7 @@ param(
     [switch]$SpawnEvents,
     [switch]$SniperKills,
     [switch]$SniperEvidence,
+    [switch]$SniperDamageGraph,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
@@ -87,6 +88,7 @@ if ($PlayerCamoAmount) { $gameplayArguments += '-DH1_PLAYER_CAMO_AMOUNT=ON' }
 if ($SpawnEvents) { $gameplayArguments += '-DH1_SPAWN_EVENTS=ON' }
 if ($SniperKills) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON' }
 if ($SniperEvidence) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON','-DH1_SNIPER_EVIDENCE=ON' }
+if ($SniperDamageGraph) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON','-DH1_SNIPER_EVIDENCE=ON','-DH1_SNIPER_DAMAGE_GRAPH=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -118,6 +120,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     spawn_events = [bool]$SpawnEvents
     sniper_kills = [bool]$SniperKills
     sniper_evidence = [bool]$SniperEvidence
+    sniper_damage_graph = [bool]$SniperDamageGraph
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

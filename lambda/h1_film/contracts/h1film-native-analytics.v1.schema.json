@@ -712,6 +712,52 @@
       "title": "SniperKillsV2",
       "type": "object"
     },
+    "SniperKillsV3": {
+      "additionalProperties": false,
+      "properties": {
+        "excluded": {
+          "items": {
+            "exclusiveMaximum": 8192,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 8192,
+          "title": "Excluded",
+          "type": "array"
+        },
+        "kills": {
+          "items": {
+            "$ref": "#/$defs/SniperKillV2"
+          },
+          "maxItems": 8192,
+          "title": "Kills",
+          "type": "array"
+        },
+        "recovered_weapons": {
+          "items": {
+            "exclusiveMaximum": 8192,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 8192,
+          "title": "Recovered Weapons",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1SniperKills.v3",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "kills",
+        "excluded",
+        "recovered_weapons"
+      ],
+      "title": "SniperKillsV3",
+      "type": "object"
+    },
     "SpawnEvent": {
       "additionalProperties": false,
       "properties": {
@@ -1096,6 +1142,9 @@
         },
         {
           "$ref": "#/$defs/SniperKillsV2"
+        },
+        {
+          "$ref": "#/$defs/SniperKillsV3"
         },
         {
           "type": "null"

@@ -78,6 +78,18 @@ test('point contacts require the original client clock, full ray, owner, weapon 
   contacts.set(key,2);ledger.tables[0].capped=true;assert.equal(read(),undefined);
 });
 
+test('a unique lethal rifle tag recovers the weapon independently of discharge evidence',()=>{
+  const d={...death,weapon_id:null}, combat={deaths:[d],weapons:[weapon]};
+  const shot={...evidence,recovered:true,deal:12};
+  const ex={excluded:new Map(),points:new Map(),damageGraph:true};
+  const run=()=>classifySniperKills(combat,new Map([['55/0',shot]]),new Map(),ex);
+  assert.deepEqual(run(),{schema:'halospawns.h1SniperKills.v3',excluded:[],recovered_weapons:[9],
+    kills:[{event_index:9,zoom:'unknown',method:'unavailable'}]});
+  ex.excluded.set('55/0',{killer:2,victim:1});assert.throws(run);
+  ex.excluded.clear();shot.victim=4;assert.throws(run);
+  shot.victim=1;d.kind='betrayal';assert.deepEqual(run().kills,[]);
+});
+
 test('only original checked updates preceding the first divergence can qualify a client discharge',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'h1-sniper-prefix-'));
   try {

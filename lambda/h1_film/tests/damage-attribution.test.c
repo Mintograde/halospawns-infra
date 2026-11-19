@@ -13,6 +13,9 @@ static effect_definition damage_effect;
 static effect_event_definition damage_event;
 static effect_part_definition damage_parts[3];
 static projectile_material_response_definition damage_response;
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+int game_time_get(void) { return 0; }
+#endif
 
 static int damage_handle(int index) { return 0x10000 | index; }
 
@@ -28,6 +31,11 @@ static void damage_reset_index(void)
 {
     hs_damage_ready = hs_damage_complete = hs_damage_tag_count = 0;
     memset(hs_damage_sources, 0, sizeof hs_damage_sources);
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+    hs_sniper_index_ready = 0;
+    memset(hs_sniper_sources, 0, sizeof hs_sniper_sources);
+    memset(hs_possible_sniper_damage, 0, sizeof hs_possible_sniper_damage);
+#endif
 }
 
 static void damage_fixture(void)
@@ -162,5 +170,29 @@ int main(void)
 #endif
     assert(hs_damage_weapon(damage_handle(10)) == -1);
     puts("damage attribution: remote vitality/deaths, tag graphs, ambiguity, cycles, bounds and shot isolation passed");
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+    {
+        int rifle = -1;
+        damage_fixture();
+        damage_tags[0].name = "weapons/sniper rifle/sniper rifle";
+        damage_parts[2].reference.group_tag = 0x64656361;
+        damage_parts[2].reference.index = damage_handle(100);
+        assert(hs_sniper_damage_type(damage_handle(10), &rifle) == 1 && rifle == damage_handle(0));
+        assert(hs_sniper_damage_type(damage_handle(11), &rifle) == -1);
+#ifndef H1_DAMAGE_ATTRIBUTION_V2
+        assert(hs_damage_weapon(damage_handle(10)) == -1);
+#endif
+        damage_triggers[1].projectile.index = damage_handle(3);
+        damage_reset_index();
+        assert(hs_sniper_damage_type(damage_handle(10), &rifle) == 0); /* shared */
+        damage_triggers[1].projectile.index = damage_handle(100);
+        damage_reset_index();
+        assert(hs_sniper_damage_type(damage_handle(10), &rifle) == 0); /* possible */
+        assert(hs_sniper_damage_type(damage_handle(11), &rifle) == -1); /* no rifle path */
+        damage_triggers[0].projectile.index = damage_handle(100);
+        damage_reset_index();
+        assert(hs_sniper_damage_type(damage_handle(11), &rifle) == 0); /* incomplete rifle */
+    }
+#endif
     return 0;
 }

@@ -96,16 +96,24 @@ static void hs_sniper_frame(void)
     hs_sniper_count = 0;
     for (i = 0; i < hs_death_count; ++i) {
         const hs_death *d = &hs_deaths[i];
+        int kind = 1, definition;
 #ifdef H1_SNIPER_EVIDENCE
         if (d->kind == 0 && d->weapon < 0 && d->excludes_sniper) {
             hs_begin(NULL, 0); hs_int(NULL, 3); hs_int(NULL, i);
             hs_int(NULL, d->killer); hs_int(NULL, d->victim); hs_end();
         }
 #endif
-        if (d->kind != 0 || d->weapon < 0 || hs_weapons[d->weapon].category != 0
-            || !hs_is_sniper(hs_weapons[d->weapon].path)) continue;
-        hs_begin(NULL, 0); hs_int(NULL, 1); hs_int(NULL, i); hs_int(NULL, d->scope);
-        hs_uint(NULL, d->deal); hs_uint(NULL, (unsigned int)hs_weapons[d->weapon].definition);
+#ifdef H1_SNIPER_DAMAGE_GRAPH
+        if (d->recovered_sniper) { kind = 6; definition = d->recovered_definition; }
+        else
+#endif
+        {
+            if (d->kind != 0 || d->weapon < 0 || hs_weapons[d->weapon].category != 0
+                || !hs_is_sniper(hs_weapons[d->weapon].path)) continue;
+            definition = hs_weapons[d->weapon].definition;
+        }
+        hs_begin(NULL, 0); hs_int(NULL, kind); hs_int(NULL, i); hs_int(NULL, d->scope);
+        hs_uint(NULL, d->deal); hs_uint(NULL, (unsigned int)definition);
         hs_int(NULL, d->physical); hs_int(NULL, d->object);
         hs_int(NULL, d->killer); hs_int(NULL, d->victim);
 #ifdef H1_SNIPER_EVIDENCE

@@ -3,10 +3,12 @@ param(
     [Parameter(Mandatory)][string]$Output,
     [ValidateSet('beta3', 'h1arena', 'beta4')][string]$Port = 'beta3',
     [switch]$DamageAttribution,
-    [switch]$DamageAttributionV2
+    [switch]$DamageAttributionV2,
+    [switch]$SniperDamageGraph
 )
 $ErrorActionPreference = 'Stop'
 if ($DamageAttributionV2 -and -not $DamageAttribution) { throw 'Damage graph v2 requires damage attribution.' }
+if ($SniperDamageGraph -and -not $DamageAttribution) { throw 'The sniper graph harness requires damage attribution.' }
 if ($DamageAttribution -and $Port -ne 'beta4') { throw 'Damage attribution requires the beta4 port.' }
 $testName = if ($DamageAttribution) { 'damage-attribution' } else { 'combat-hooks' }
 $sourcePath = (Resolve-Path -LiteralPath $Source).Path
@@ -19,6 +21,7 @@ $mounts = @('--rm', '--network', 'none',
     '--mount', "type=bind,source=$worker,target=/worker,readonly",
     '--mount', "type=bind,source=$outputPath,target=/out")
 [string[]]$damageV2Arguments = if ($DamageAttributionV2) { @('-DH1_DAMAGE_ATTRIBUTION_V2=1') } else { @() }
+if ($SniperDamageGraph) { $damageV2Arguments += '-DH1_SNIPER_KILLS=1','-DH1_SNIPER_EVIDENCE=1','-DH1_SNIPER_DAMAGE_GRAPH=1' }
 & docker run @mounts $image emcc -O2 -std=c17 -fms-extensions -fshort-wchar `
     @damageV2Arguments `
     -Wno-microsoft -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-ignored-attributes `

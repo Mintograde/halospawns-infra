@@ -27,8 +27,8 @@ async function readEvidence(file, before = Infinity) {
     for (const event of events) {
       const [kind, a, b, c, d, e, f, killer, victim, impact] = event;
       if (kind === 0) unique(fires, fireKey(a,b,c), d);
-      else if (kind === 1) unique(deaths, `${source_tick}/${a}`,
-        {scope:b, deal:c, tag:d, owner:e, unit:f, killer, victim, impact});
+      else if (kind === 1 || kind === 6) unique(deaths, `${source_tick}/${a}`,
+        {scope:b, deal:c, tag:d, owner:e, unit:f, killer, victim, impact, recovered:kind === 6});
       else if (kind === 2) deals.push({kind:3, clock:a, deal:b, physical:c, unit:d});
       else if (kind === 3) unique(excluded,`${source_tick}/${a}`,{killer:b,victim:c});
       else if (kind === 4) unique(contacts, contactKey(a,b,normalizedImpact(d)), c);
@@ -118,7 +118,7 @@ export function remoteScopes(host, source, clientFires) {
 export function classifySniperKills(combat, observations, remote, extended) {
   const rifles = new Set(combat.weapons.filter(w => w.category === 'weapon'
     && w.tag_path.toLowerCase().replaceAll('\\','/') === SNIPER).map(w => w.weapon_id));
-  const kills = [], excluded = [];
+  const kills = [], excluded = [], recoveredWeapons = [];
   let previousTick = -1, offset = 0;
   for (const death of combat.deaths) {
     if (death.source_tick !== previousTick) { previousTick = death.source_tick; offset = 0; }
@@ -126,8 +126,13 @@ export function classifySniperKills(combat, observations, remote, extended) {
     const negative = extended?.excluded.get(key);
     if (negative && death.kind === 'kill' && death.weapon_id == null
         && negative.killer === death.killer_slot && negative.victim === death.victim_slot) excluded.push(death.event_index);
-    if (death.kind !== 'kill' || !rifles.has(death.weapon_id)) continue;
     const shot = observations.get(key);
+    if (death.kind !== 'kill') continue;
+    if (!rifles.has(death.weapon_id)) {
+      if (!extended?.damageGraph || !shot?.recovered || death.weapon_id != null) continue;
+      assert.ok(!negative, 'Conflicting sniper damage attribution');
+      recoveredWeapons.push(death.event_index);
+    } else assert.ok(!shot?.recovered, 'Sniper recovery requires an unattributed combat death');
     assert.ok(shot && shot.killer === death.killer_slot && shot.victim === death.victim_slot,
       'Sniper observation differs from combat death');
     let scope = shot.scope, method = 'projectile';
@@ -146,6 +151,7 @@ export function classifySniperKills(combat, observations, remote, extended) {
     const zoom = scopeNames[scope] ?? 'unknown';
     kills.push({event_index:death.event_index, zoom, method:zoom === 'unknown' ? 'unavailable' : method});
   }
+  if (extended?.damageGraph) return {schema:'halospawns.h1SniperKills.v3',kills,excluded,recovered_weapons:recoveredWeapons};
   return extended ? {schema:'halospawns.h1SniperKills.v2',kills,excluded} : {schema:'halospawns.h1SniperKills.v1', kills};
 }
 
@@ -200,7 +206,7 @@ export async function verifyShooterSources(stage, values, host, convertFilm, dea
 
 export async function buildSniperKills(stage, film, encoding, hasTracks, exporterRevision, supplements=[]) {
   const host = await readEvidence(join(stage,'candidate','sniper.ndjson'));
-  const extended=exporterRevision>=43 ? {excluded:host.excluded,points:new Map()} : null;
+  const extended=exporterRevision>=43 ? {excluded:host.excluded,points:new Map(),damageGraph:exporterRevision>=44} : null;
   if ((hasTracks || supplements.length) && host.deals.length) {
     const tracks = hasTracks ? JSON.parse(await readFile(join(stage,'match-tracks.json'),'utf8')).tracks : [];
     const raw = await readFile(film);

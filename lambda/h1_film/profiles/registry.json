@@ -10,43 +10,43 @@
   "processing": {
     "defaults": {
       "h1-performance-beta3-p45-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1arena-197bb65c-p9111-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1-performance-beta4-p9803-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta8-p9848-wasm-v1": {
-        "exporter_revision": 43,
+        "exporter_revision": 44,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
@@ -179,6 +179,12 @@
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
+        },
+        {
+          "exporter_revision": 44,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
         }
       ],
       "h1arena-197bb65c-p9111-wasm-v1": [
@@ -268,6 +274,12 @@
         },
         {
           "exporter_revision": 43,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 44,
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
@@ -378,6 +390,12 @@
         },
         {
           "exporter_revision": 43,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 44,
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
@@ -494,6 +512,12 @@
         },
         {
           "exporter_revision": 43,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 44,
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
@@ -649,6 +673,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 44,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta7-p9844-wasm-v1": [
@@ -747,6 +777,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 44,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta8-p9848-wasm-v1": [
@@ -797,6 +833,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 44,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ]
     },
@@ -834,7 +876,8 @@
       "client_melee_timing": "halospawns.h1GameplayMetrics.v1",
       "tick_rates": "halospawns.h1TickRates.v1",
       "sniper": "halospawns.h1SniperKills.v1",
-      "sniper_evidence": "halospawns.h1SniperKills.v2"
+      "sniper_evidence": "halospawns.h1SniperKills.v2",
+      "sniper_damage": "halospawns.h1SniperKills.v3"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -1724,6 +1767,55 @@
       "revision": 43,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "0693396714fc3ec93ed0b9e7cdbe6d3f45500dfc8496bb50442c92dd5c2ac43d",
+      "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "eaac92ed694e08a5b98665ec0e796665b5eb730d4ce8b076f6e1e9336ec149bd",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "e031d5fb97b597b24b94cc2df85c67c4abb8454aae959f82c0038bfc7579bce5",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "43bab5b94429a1884bacfa59cc4c8594fb2103bcc73d6e46f7fc227c0e112aa5",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "06f8ef3cced02f5c500258ac1967a532d9a52b6e91ccee0c17e1324b666413b9",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "a0694af6ab3409fbe53689e12e469676840a3c1fbe6bb3d7c57b064bebe9bc16",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "e1d72afeb0b0b7320b93cf544c5f68c3ad8f94fe0d01c9e745f41243d511cb20",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta8-p9848-wasm-v1",
+      "revision": 44,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "a6c44a8a3cc362dd7e69343e1d0f7842441423f8b73ae67d80f97329c98a25be",
       "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
     }
   ]
