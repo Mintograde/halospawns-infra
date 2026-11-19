@@ -22,6 +22,7 @@ def package(directory):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, path in [("worker.py", SOURCE / "worker.py"),
+                           ("movement_paths.py", SOURCE / "movement_paths.py"),
                            ("heatmap_worker.py", ROLLUP / "handler.py"),
                            ("region_stats.py", ROLLUP / "region_stats.py"),
                            ("movement_field", Path(directory, "movement_field"))]:

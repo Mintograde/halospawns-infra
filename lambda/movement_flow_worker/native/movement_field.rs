@@ -11,6 +11,8 @@ mod viewer {
     include!("../viewer.rs");
     include!("../movement_viewer.rs");
 }
+#[path = "../movement_paths.rs"]
+mod movement_paths;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 type Rows = BTreeMap<[i32; 4], [i64; 8]>;
@@ -27,6 +29,7 @@ struct Point {
 }
 
 struct Field {
+    paths: Option<movement_paths::Paths>,
     clock: Option<i64>,
     previous: [Option<Point>; SLOTS],
     groups: [Rows; SLOTS],
@@ -44,6 +47,7 @@ impl Field {
             return Err("invalid movement clock".into());
         }
         Ok(Self {
+            paths: None,
             clock: None,
             previous: [None; SLOTS],
             groups: Default::default(),
@@ -78,7 +82,13 @@ impl Field {
                     && a.identity == b.identity
                 {
                     self.segment(slot, a.position, b.position)?;
+                } else if let Some(paths) = self.paths.as_mut() {
+                    paths.stop(slot);
                 }
+            }
+        } else if let Some(paths) = self.paths.as_mut() {
+            for slot in 0..SLOTS {
+                paths.stop(slot);
             }
         }
         self.previous = current;
@@ -93,6 +103,13 @@ impl Field {
         let distance = horizontal.hypot(d[1]);
         let speed = distance * f64::from(self.rate);
         if !(0.035..=MAX_SPEED).contains(&speed) {
+            if let Some(paths) = self.paths.as_mut() {
+                paths.stop(slot);
+            }
+            return Ok(());
+        }
+        if let Some(paths) = self.paths.as_mut() {
+            paths.segment(slot, a, b, self.frames as u32, self.rate, distance);
             return Ok(());
         }
         let heading = if d[1].abs() > 1.5 * horizontal {
@@ -310,11 +327,18 @@ impl<'de> Visitor<'de> for Recording<'_> {
 }
 
 fn run() -> Result<()> {
-    let args: Vec<_> = std::env::args().skip(1).collect();
+    let mut args: Vec<_> = std::env::args().skip(1).collect();
+    let paths = args.last().is_some_and(|value| value == "--paths");
+    if paths {
+        args.pop();
+    }
     let [format, path, rate, start, end, expected] = args.as_slice() else {
         return Err("expected format, file, clock and frame bounds".into());
     };
     let mut field = Field::new(rate.parse()?, start.parse()?, end.parse()?)?;
+    if paths {
+        field.paths = Some(Default::default());
+    }
     let mut src = BufReader::new(File::open(path)?);
     if format == "viewer" {
         viewer::movement_world(&mut src, &mut field, expected.parse()?)?;
@@ -339,6 +363,9 @@ fn run() -> Result<()> {
         }
     } else {
         return Err("unknown movement source".into());
+    }
+    if let Some(paths) = field.paths {
+        return paths.write(std::io::BufWriter::new(std::io::stdout().lock()));
     }
     let mut groups = BTreeMap::new();
     for (slot, rows) in field

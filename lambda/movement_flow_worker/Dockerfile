@@ -5,6 +5,7 @@ COPY lambda/replay_parser/native/src/viewer.rs native/src/
 COPY lambda/replay_parser/contracts contracts
 COPY lambda/movement_flow_worker/native/movement_field.rs native/src/bin/
 COPY lambda/movement_flow_worker/native/movement_viewer.rs native/src/
+COPY lambda/movement_flow_worker/native/movement_paths.rs native/src/
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/target \
     cargo build --locked --release --jobs 4 --bin movement_field --target x86_64-unknown-linux-gnu \

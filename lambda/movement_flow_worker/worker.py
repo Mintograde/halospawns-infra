@@ -17,6 +17,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from heatmap_worker import _api_request
+import movement_paths
 
 S3 = boto3.client("s3")
 PREFIX = "heatmaps/precomputed/v1/movement/views/"
@@ -55,9 +56,9 @@ def product_key(digest):
     return f"{PREFIX}{digest}.json"
 
 
-def publish(rows):
+def publish(rows, schema=SCHEMA):
     require(0 < len(rows) <= MAX_ROWS, "field row limit")
-    raw = json.dumps({"schema": SCHEMA, "rows": rows}, separators=(",", ":")).encode()
+    raw = json.dumps({"schema": schema, "rows": rows}, separators=(",", ":")).encode()
     require(len(raw) <= MAX_DECODED, "field exceeds delivery limit")
     digest = sha(raw)
     data = gzip.compress(raw, compresslevel=5, mtime=0)
@@ -73,7 +74,7 @@ def publish(rows):
             "decoded_size_bytes": len(raw)}
 
 
-def read_field(ref):
+def read_field(ref, schema=SCHEMA):
     response = S3.get_object(Bucket=os.environ["UPLOADS_BUCKET_NAME"], Key=product_key(ref["sha256"]))
     with response["Body"] as stream:
         require(response["ContentLength"] == ref["size_bytes"] <= MAX_STORED, "stored field size")
@@ -82,7 +83,7 @@ def read_field(ref):
     require(len(raw) == ref["decoded_size_bytes"] <= MAX_DECODED and sha(raw) == ref["sha256"],
             "field integrity")
     doc = json.loads(raw)
-    require(doc["schema"] == SCHEMA and len(doc["rows"]) == ref["rows"] <= MAX_ROWS, "field rows")
+    require(doc["schema"] == schema and len(doc["rows"]) == ref["rows"] <= MAX_ROWS, "field rows")
     return doc["rows"]
 
 
@@ -134,6 +135,7 @@ def host_range(options, source, revision):
 
 def game_product(job, directory):
     source = job["source"]
+    paths = job.get("representation") == "paths"
     bucket = os.environ["UPLOADS_BUCKET_NAME"]
     viewer = source["format"] == "viewer"
     prefix = os.environ["VIEWER_PREFIX" if viewer else "RECORDING_PREFIX"].rstrip("/") + "/"
@@ -158,12 +160,17 @@ def game_product(job, directory):
     target = Path(directory, "fields.json")
     with target.open("wb") as output:
         subprocess.run([str(Path(__file__).parent / "movement_field"), source["format"], str(path),
-                        str(rate), str(start), str(end), str(source["tick_count"] or 0)],
+                        str(rate), str(start), str(end), str(source["tick_count"] or 0),
+                        *(["--paths"] if paths else [])],
                        stdout=output, check=True, timeout=240)
     require(target.stat().st_size <= 64 << 20, "game field output limit")
     with target.open() as file:
         slots = json.load(file)
-    groups = {slot: publish(rows) for slot, rows in slots.items() if rows}
+    if paths:
+        groups = {slot: publish(movement_paths.slot_rows(rows, f"{source_hash}/{slot}"),
+                                movement_paths.SCHEMA) for slot, rows in slots.items() if rows}
+    else:
+        groups = {slot: publish(rows) for slot, rows in slots.items() if rows}
     LOG.info("Movement source %s: %d of %d source bytes, %d rows", job["revision"], size,
              source["size_bytes"], sum(ref["rows"] for ref in groups.values()))
     return {"games": 1, "observed": int(bool(groups)), "groups": groups}
@@ -183,13 +190,17 @@ def merge(group, rows):
             require(values[0] <= (1 << 53) // 4096, "movement accumulation overflow")
 
 
-def scope_product(lease):
+def scope_product(lease, representation="field"):
     groups = defaultdict(dict)
+    paths = representation == "paths"
+    add = movement_paths.merge if paths else merge
+    def read(ref):
+        return read_field(ref, movement_paths.SCHEMA) if paths else read_field(ref)
     selected = observed = 0
     after = None
     with ThreadPoolExecutor(max_workers=4) as pool:
         while True:
-            page = command("inputs", lease=lease, after=after)
+            page = command("inputs", lease=lease, after=after, representation=representation)
             if page.get("superseded"):
                 return None
             if page.get("waiting"):
@@ -199,30 +210,39 @@ def scope_product(lease):
                 selected += 1
                 slots = [(team, ref) for team, ref in game["slots"] if ref]
                 observed += bool(slots)
-                for (team, _), rows in zip(slots, pool.map(read_field, (r for _, r in slots)), strict=True):
-                    merge(groups["all"], rows)
+                for (team, _), rows in zip(slots, pool.map(read, (r for _, r in slots)), strict=True):
+                    add(groups["all"], rows)
                     if team is not None and team >= 0:
-                        merge(groups[f"team:{team}"], rows)
+                        add(groups[f"team:{team}"], rows)
                         if game["winner"] is not None:
-                            merge(groups["winning" if game["winner"] == team else "losing"], rows)
+                            add(groups["winning" if game["winner"] == team else "losing"], rows)
                 require(sum(map(len, groups.values())) <= 650000, "aggregate group limit")
             after = page["next"]
             if after is None:
                 break
-    result = {group: publish([list(k)+v for k,v in sorted(cells.items())])
-              for group, cells in groups.items() if cells}
+    if paths:
+        result = {group: publish(movement_paths.compact(cells), movement_paths.SCHEMA)
+                  for group, cells in groups.items() if cells}
+    else:
+        result = {group: publish([list(k)+v for k,v in sorted(cells.items())])
+                  for group, cells in groups.items() if cells}
     return {"games": selected, "observed": observed, "groups": result}
 
 
 def handler(event, context):
     count = 0
     while count < 16 and context.get_remaining_time_in_millis() > 270000:
-        job = command("claim")["job"]
+        # Give newly uploaded games both representations. Existing v1 readers
+        # continue to use their own immutable products during the rollout.
+        first, second = ("paths", "field") if count % 2 == 0 else ("field", "paths")
+        job = command("claim", representation=first)["job"]
+        if not job:
+            job = command("claim", representation=second)["job"]
         if not job:
             break
         try:
             if job["kind"] == "scope":
-                product = scope_product(job["lease"])
+                product = scope_product(job["lease"], job.get("representation", "field"))
             else:
                 with tempfile.TemporaryDirectory() as directory:
                     product = game_product(job, directory)
