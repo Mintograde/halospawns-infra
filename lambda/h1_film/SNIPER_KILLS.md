@@ -80,9 +80,12 @@ the start. Missing controls, a new zoom request, a body or control transition,
 and ambiguous timing disqualify the proof. Four noscopes qualified through
 injuries and a fifth through a verified prefix.
 
-Of the original 966, 671 have no matching recording of the shooter at
-discharge, 84 occur after a client simulation mismatch without enough original
-evidence to establish zoom, and one occurs after the shooter's film ends.
+Of the original 966, 671 have no matching shooter recording at discharge
+among the films attached in dev. Two additional local Beta 5 client files
+contain four of these shots. All four occur after the first verification
+mismatch in those files. Of the shots with an attached shooter film, 84
+occur after a client simulation mismatch without enough original evidence
+to establish zoom, and one occurs after the shooter's film ends.
 Host playback can repeat or drop remote inputs. A client's requested zoom
 level alone cannot establish the unit's actual zoom at discharge.
 
@@ -122,3 +125,52 @@ generations on rollback.
 
 Dev retains 510 conversions, 3,406 logical receipts, 474 approvals and 3,270
 settings snapshots. The private verification reports are under `.build/sniper/`.
+
+## Dev coverage follow-up on 2026-11-19
+
+Worker/default `20261119-r3`, policy 42, and API 300 (`fbbf93c`, CI
+44547047525) are active in dev. Beta 6–8 use exporter 45. The other four
+host profiles use 44. The image retains all 112 exporters and prior recipes.
+The release uses the existing database schema.
+
+The first backfill selected 256 games. Four follow-up reparses established
+five more noscopes across Downrush, Dread, Prisoner and Chillout. Three games
+were in both passes, for 257 distinct games across 260 completed attempts.
+The other 204 original games kept their selected artifacts and product hashes.
+Every previously known zoom classification agrees with the selected result.
+Of the original 966 unknowns, 190 were scoped and 20 were noscopes. All 455
+previously unclassified killing weapons were resolved. Nineteen were sniper
+kills with unknown zoom and 436 were other finishers. Across the 461 original
+games there are now 4,655 recorded sniper kills, with 3,462 scoped, 418
+unzoomed and 775 of unknown zoom.
+
+| Default PB2 2v2, 366 games | Before | After |
+| --- | ---: | ---: |
+| Sniper kills | 3,688+ | 3,688 |
+| Noscopes | 311+ | 330+ |
+| Players with exact sniper totals | 39 of 104 | 104 of 104 |
+| Players with exact noscope totals | 21 of 104 | 91 of 104 |
+| Games with exact noscope totals | 124 of 366 | 294 of 366 |
+
+In that cohort, 408 rifle kills still have unknown zoom. The player
+leaderboards and map, gametype and player breakdowns reconcile to the dev
+API totals. The local site passed desktop and mobile Chrome checks for exact
+counts, lower bounds, rankings and source filters.
+
+All other native analytics, scoreboard values, graphs and occupancy remained
+identical. So did 50 standalone viewer files and all 22,276 payload entries
+in 207 match files. Three separate Beta 5 shooter views were reattached with
+identical bytes and original clocks. All six views are available through the
+dev API and CDN with 428,941 frames and 3,578 verified hashes. Host finalization
+and client attachment both validate the original host and independently frozen
+shooter recording. One cached completion was redelivered to its original
+attempt. One client reservation was retried with the same request ID.
+
+All original history fingerprints are preserved. The database contains 510
+conversions, 3,666 receipts, 3,209 host reprocess attempts, 474 map approvals
+and 3,530 settings snapshots. Separate client history has 46 uploads and 47
+attempts. The final image passed all 23 packaged cases, their 69 API callbacks,
+the separate-client flow and seven retained recipes with 21 further callbacks.
+All six dev Terraform plans have zero resource changes and the API output
+refresh is applied. The worker inventory passed at activation and after the
+backfill. The work queue and dead-letter queue were empty.
