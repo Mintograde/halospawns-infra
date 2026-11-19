@@ -12,10 +12,16 @@ async function inventory() {
     profiles.push({ id: profile.id, ...hashes, ...(profile.source ? { source: profile.source } : {}) });
   }
   const exporters = [];
-  for (const entry of ENGINE_EXPORTERS) {
-    const profile = selectExporter(profileById(entry.engine_profile), entry.revision);
-    const { hashes } = await resolveEngine(profile, root);
-    exporters.push({ engine_profile: profile.id, revision: entry.revision, ...hashes });
+  // Lambda loads image blocks on demand. Overlap a bounded number of reads
+  // while validating every retained binary against its own registry entry.
+  const batchSize = 4;
+  for (let start = 0; start < ENGINE_EXPORTERS.length; start += batchSize) {
+    const batch = ENGINE_EXPORTERS.slice(start, start + batchSize);
+    exporters.push(...await Promise.all(batch.map(async entry => {
+      const profile = selectExporter(profileById(entry.engine_profile), entry.revision);
+      const { hashes } = await resolveEngine(profile, root);
+      return { engine_profile: profile.id, revision: entry.revision, ...hashes };
+    })));
   }
   const encoder = fileURLToPath(new URL('./bin/h1-film-encoder', import.meta.url));
   // The usage response proves the Linux executable can load without a film/map.
