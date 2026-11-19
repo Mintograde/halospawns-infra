@@ -31,17 +31,17 @@ Enable `movement_flow_enabled` in both dev `map-processing` and `app-api`. Apply
 
 The publisher verifies the dev account, package hash and Lambda version before moving the existing alias. The scheduler polls every two minutes. Each invocation claims bounded work through the heatmap-processing HMAC client. An abandoned lease expires after eight minutes. The public reader selects exact source and scope revisions, and a stale lease cannot overwrite a newer attempt. New source selection, game eligibility, rosters and outcomes all feed normal invalidation. The error alarm is `halospawns-dev-movement-flow-errors`.
 
-To pause generation, disable the movement schedule. Retain both migrations, all product generations and the worker version that understands `.raw2` recording revisions. Existing replay and occupancy artifacts have independent readers and lifecycles.
+To pause generation, disable the movement schedule. Retain the three movement migrations, all product generations and the worker version that understands `.raw2` recording revisions. Existing replay and occupancy artifacts have independent readers and lifecycles.
 
 ## Dev verification on November 18, 2026
 
-API 291 is built from `c459529` by CI run `44441769011`. Worker version 4 has package SHA-256 `goKohg8gN6He8WnEBV+LzOYGjNY4ABSgclWVOl74LcM=` in Lambda's base64 format.
+Dev API 292 is built from `3770ea9` by CI run `44443402415`. Its 231 Python files match the source. Worker version 4 has package SHA-256 `goKohg8gN6He8WnEBV+LzOYGjNY4ABSgclWVOl74LcM=` in Lambda's base64 format. Both deployed packages were verified against their source.
 
 - All 540 selected recordings contain movement. The 488 viewer worlds and 52 original recordings produced 298 current aggregate builds. The default PB2 2v2 map cohort covers 356 games on 30 maps. There are currently no linked canonical-player appearances in this cohort.
 - All 2,271 distinct current fields passed size, SHA-256, schema and row-count checks, covering 3,443,770 rows. An independent sum of every contributing slot reproduced all five selections for a 64-game map exactly.
 - Current fields occupy 64.43 MiB compressed. PostgreSQL's build table and indexes including earlier generations occupy 872 KiB. The median all-player map field is 111.7 KiB compressed.
 - The 373 multi-world sources held 51.58 GB of match objects. Their extracted host worlds totaled 9.76 GB, plus small index reads. Host extraction did not require a game re-simulation.
 - On an 8,746-row field, 900 local Node samples with 760 particles gave a 0.08 ms p95 simulation update. Drawing and browser composition have separate costs. Chrome checks covered actual pixels, frozen and animated frames, projection reuse, filters, and the 3D draw on desktop and mobile viewports.
-- Six packaged worker tests, isolated PostgreSQL selection tests, API CI, both frontend builds and both frontend unit suites passed. The frontend is local for user testing.
+- Six packaged worker tests, isolated PostgreSQL selection and slot invalidation, 37 Terraform checks, API CI, both frontend builds and both frontend unit suites passed. The frontend is local for user testing.
 
 The API repository documents route parameters and delivery states in `docs/movement-flow.md`. Local verification outputs are in `.build/movement-flow/`.
