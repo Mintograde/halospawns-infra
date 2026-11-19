@@ -8,6 +8,7 @@ import {linkedPull, pairShotVerdicts} from './diagnostics-codec.mjs';
 import {bindGameplayDeals, recordedGameplaySources, rows} from './gameplay-source.mjs';
 import {readEnvelope} from './film.mjs';
 import {sha256} from './engine-store.mjs';
+import {originalUnzoomedShots} from './sniper-zoom-reset.mjs';
 
 const SNIPER = 'weapons/sniper rifle/sniper rifle';
 const scopeNames = ['unknown', 'unzoomed', 'zoomed'];
@@ -20,6 +21,7 @@ function unique(index, key, value) {
 async function readEvidence(file, before = Infinity) {
   assert.ok((await stat(file)).size <= 128 * 1024 * 1024, 'Oversized sniper evidence');
   const fires = new Map(), deaths = new Map(), deals = [], excluded = new Map(), contacts = new Map();
+  const anchors = [];
   let capped = false;
   for await (const line of createInterface({input: createReadStream(file), crlfDelay: Infinity})) {
     const {source_tick, events} = JSON.parse(line);
@@ -32,10 +34,11 @@ async function readEvidence(file, before = Infinity) {
       else if (kind === 2) deals.push({kind:3, clock:a, deal:b, physical:c, unit:d});
       else if (kind === 3) unique(excluded,`${source_tick}/${a}`,{killer:b,victim:c});
       else if (kind === 4) unique(contacts, contactKey(a,b,normalizedImpact(d)), c);
+      else if (kind === 7) anchors.push([source_tick, a]);
       else { assert.equal(kind,5); capped = true; }
     }
   }
-  return {fires, deaths, deals, excluded, contacts:capped ? new Map() : contacts};
+  return {fires, deaths, deals, excluded, contacts:capped ? new Map() : contacts, anchors};
 }
 
 const contactKey = (clock,weapon,impact) => [clock,weapon,...impact].join('/');
@@ -60,6 +63,10 @@ export async function verifiedPrefix(file, track) {
   if (f?.network_refused !== 0 || f.played_ticks !== e.ticks || f.hash_checks !== e.hash_samples) return 0;
   if (f.reason === 'roster_mismatch' && !f.seed_mismatches && !f.hash_mismatches) return Infinity;
   if (f.reason !== 'simulation_desync') return 0;
+  return (await samplesBeforeMismatch(file,e,f.first_mismatch_update)).before;
+}
+
+export async function samplesBeforeMismatch(file, e, mismatch) {
   const input = await open(file);
   try {
     const read = async (n,at) => {
@@ -71,14 +78,14 @@ export async function verifiedPrefix(file, track) {
     const samples=await read(8+16*e.hash_samples,trailer);
     assert.equal(samples.toString('ascii',0,4),'TRL1');
     assert.equal(samples.readUInt32LE(4),e.hash_samples);
-    let previous=-1, last=e.first_update;
+    let previous=-1, last=e.first_update, checks=0;
     for (let i=0;i<e.hash_samples;i++) {
       const tick=samples.readUInt32LE(8+i*16);
-      if (tick <= previous || tick < e.first_update || tick >= e.first_update+e.ticks) return 0;
+      if (tick <= previous || tick < e.first_update || tick >= e.first_update+e.ticks) return {before:0,checks:0};
       previous=tick;
-      if (tick < f.first_mismatch_update) last=tick;
+      if (tick < mismatch) { last=tick; checks++; }
     }
-    return last-e.first_update;
+    return {before:last-e.first_update, checks};
   } finally { await input.close(); }
 }
 
@@ -108,7 +115,8 @@ export function remoteScopes(host, source, clientFires) {
           || shot.client_tick > shot.sent_client_tick) continue;
       const key = fireKey(pull.client_tick, pull.owner, pull.weapon_tag);
       if (identities.get(key) !== index) continue;
-      unique(byVerdict, v.index, {scope:fires.get(key), tag:pull.weapon_tag, owner:v.owner, unit:v.object});
+      unique(byVerdict, v.index, {scope:fires.get(key), tag:pull.weapon_tag, owner:v.owner, unit:v.object,
+        account:account.hash, clock:pull.client_tick});
     }
   }
   for (const [deal, verdictIndex] of links) scopes.set(deal, byVerdict.get(verdictIndex));
@@ -146,6 +154,10 @@ export function classifySniperKills(combat, observations, remote, extended) {
       if (point === 1 || point === 2) {
         if (scope && scope !== point) scope=0;
         else if (!scope) { scope=point; method='client_impact'; }
+      }
+      if (extended?.resets?.has(shot.deal)) {
+        if (client?.scope === 2 || point === 2) scope = 0;
+        else if (!scope) { scope = 1; method = 'client_zoom_reset'; }
       }
     }
     const zoom = scopeNames[scope] ?? 'unknown';
@@ -211,18 +223,30 @@ export async function buildSniperKills(stage, film, encoding, hasTracks, exporte
     const tracks = hasTracks ? JSON.parse(await readFile(join(stage,'match-tracks.json'),'utf8')).tracks : [];
     const raw = await readFile(film);
     const source=recordedGameplaySources(raw,exporterRevision), fires = new Map(), worlds = new Map();
+    const divergent = new Map();
     for (const track of tracks) {
       const part = track.part;
       if ((!extended && (track.status !== 'available' || !part.account_size))
           || track.envelope.recorded_own_player !== part.player
           || !(track.envelope.recorded_local_player_mask & (1 << part.player))) continue;
-      const before=extended ? await verifiedPrefix(join(stage,track.id+'.h1film'),track) : Infinity;
-      if (!before) continue;
+      let before=extended ? await verifiedPrefix(join(stage,track.id+'.h1film'),track) : Infinity;
+      const resetEligible = exporterRevision >= 45 && track.failure?.reason === 'simulation_desync'
+        && track.failure.played_ticks === track.envelope.ticks
+        && track.failure.hash_checks === track.envelope.hash_samples && part.account_size;
+      if (!before && !resetEligible) continue;
       let evidenceFile=join(stage,track.id,'candidate','sniper.ndjson');
       if (track.status==='unavailable') {
         const partial=join(stage,track.id+'.partial'), rerun=join(partial,'verified-sniper.ndjson');
         try { await access(rerun); evidenceFile=rerun; }
         catch (e) { if (e.code!=='ENOENT') throw e; evidenceFile=join(partial,'candidate','sniper.ndjson'); }
+        if (resetEligible && !before && track.failure.network_refused) {
+          try {
+            const proof = JSON.parse(await readFile(join(partial,'sniper-prefix.json'),'utf8'));
+            assert.equal(proof.source_sha256,track.source_film_sha256);
+            before=proof.before;
+            evidenceFile=join(partial,'sniper-prefix.ndjson');
+          } catch (e) { if (e.code!=='ENOENT') throw e; }
+        }
       }
       const evidence=await readEvidence(evidenceFile,before);
       unique(worlds,part.player,evidence);
@@ -231,6 +255,7 @@ export async function buildSniperKills(stage, film, encoding, hasTracks, exporte
       if (account.readInt32LE(28) !== part.player) continue;
       const hash = createHash('sha256').update(account).digest('hex');
       unique(fires, hash, evidence.fires);
+      if (resetEligible) unique(divergent, hash, {track,anchors:evidence.anchors});
     }
     for (const entry of supplements) {
       const evidence=await readEvidence(entry.file);
@@ -247,7 +272,26 @@ export async function buildSniperKills(stage, film, encoding, hasTracks, exporte
       }
     }
     if (extended) extended.points=impactScopes(host,source,worlds);
-    return classifySniperKills(encoding.native_analytics.combat,host.deaths,remoteScopes(host,source,fires),extended);
+    const remote=remoteScopes(host,source,fires);
+    if (divergent.size) {
+      extended.resets = new Set();
+      for (const [hash, data] of divergent) {
+        if (!data) continue;
+        const shots = [];
+        for (const death of host.deaths.values()) {
+          const client = remote.get(death?.deal);
+          if (client?.account !== hash || !death?.impact || client.tag !== death.tag
+              || client.owner !== death.owner || client.unit !== death.impact[3]) continue;
+          shots.push({deal:death.deal, clock:client.clock, body:death.impact[2]});
+        }
+        const account=source.accounts.find(a=>a.hash===hash);
+        if (!shots.length || !account) continue;
+        const resets = await originalUnzoomedShots(join(stage,data.track.id+'.h1film'),
+          data.track,rows(account,'client','hits'),shots,data.anchors);
+        for (const deal of resets) extended.resets.add(deal);
+      }
+    }
+    return classifySniperKills(encoding.native_analytics.combat,host.deaths,remote,extended);
   }
   return classifySniperKills(encoding.native_analytics.combat, host.deaths, new Map(),extended);
 }

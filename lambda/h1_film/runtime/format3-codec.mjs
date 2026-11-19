@@ -44,7 +44,7 @@ export function unpackNetworkColumns(bytes,count) {
   return out;
 }
 
-export async function inspectTickBlocks(file,start,end,frames) {
+export async function inspectTickBlocks(file,start,end,frames,observeBlock) {
   let at=start,rawTotal=0,frameTotal=0;
   while(at<end) {
     assert.ok(at+32<=end,'Truncated FTCK header');
@@ -60,6 +60,7 @@ export async function inspectTickBlocks(file,start,end,frames) {
     assert.equal(raw.length,w[1],'FTCK size mismatch');
     assert.equal(fnv1a(packed),w[7],'FTCK checksum mismatch');
     assert.equal(w[5],frameTotal,'Noncontiguous FTCK frames');
+    if (observeBlock) observeBlock(raw,frameTotal,w[6]);
     rawTotal+=raw.length;frameTotal+=w[6];
     assert.ok(rawTotal<=512*1024*1024,'Tick expansion limit exceeded');
     at+=32+packed.length;

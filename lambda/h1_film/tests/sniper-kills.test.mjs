@@ -41,7 +41,7 @@ test('binds local-seat-zero original pulls to the physical player in a verified 
   const host = {deals:[{kind:3, clock:24, deal:12, physical:2, unit:108}]};
   const fires = new Map([['client', new Map([['20/2/93',1]])]]);
   assert.deepEqual(remoteScopes(host,{ledger,accounts:[account]},fires).get(12),
-    {scope:1,tag:93,owner:2,unit:108});
+    {scope:1,tag:93,owner:2,unit:108,account:'client',clock:20});
   assert.equal(remoteScopes(host,{ledger,accounts:[account]},new Map()).size, 0);
   ledger.tables[0].capped=true;
   assert.equal(remoteScopes(host,{ledger,accounts:[account]},fires).size, 0);

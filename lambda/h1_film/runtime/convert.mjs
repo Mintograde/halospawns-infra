@@ -14,8 +14,8 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
-import {buildSniperKills, verifyShooterSources} from './sniper-kills.mjs';
-import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
+import {buildSniperKills, samplesBeforeMismatch, verifyShooterSources} from './sniper-kills.mjs';
+import {ClientDesync,completedClientDesync,canVerifyRejectedClient,clientDesyncEvidence} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
@@ -163,6 +163,7 @@ export async function convertFilm(options) {
   assert.ok([1, 2, 3, 4, 5].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
   request.sniper_evidence = profile.exporter_revision >= 42;
+  if (profile.exporter_revision >= 45 && values['client-view']) request.sniper_zoom_anchors = true;
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
   request.verify_incremental_state = Boolean(values['verify-incremental-state']);
@@ -446,7 +447,8 @@ export async function convertFilm(options) {
         assert.ok(!expired, 'Client verification timed out or was interrupted');
         let capture, captured;
         if (profile.exporter_revision >= 43) {
-          capture = spawn(values.encoder, ['capture-sniper', String(native.envelope.ticks),
+          const command = profile.exporter_revision >= 45 ? 'capture-sniper-zoom' : 'capture-sniper';
+          capture = spawn(values.encoder, [command, String(native.envelope.ticks),
             join(stage,'verified-sniper.ndjson')], {cwd:work,windowsHide:true,stdio:['pipe',logFd,logFd]});
           captured = completion(capture);
           capture.stdin.on('error', () => kill());
@@ -475,6 +477,43 @@ export async function convertFilm(options) {
           report.client_verification_failure=roster;
           error=new ClientRosterMismatch(roster,error);
         }
+      }
+    }
+    const desync = clientDesyncEvidence(error);
+    if (!expired && values['embedded-match'] && profile.exporter_revision >= 45 && desync?.network_refused) {
+      const film = join(work,'input.h1film');
+      const {before,checks} = await samplesBeforeMismatch(film,native.envelope,desync.first_mismatch_update);
+      const ticks = before + 1;
+      if (before > 0 && checks > 0) {
+        let applications = 0;
+        await readEnvelope(film,{allowClientView:true,observeRecord:(frame,type)=>{
+          if (frame < native.envelope.first_update + ticks && ![3,9,13,14,15,81,82].includes(type)) applications++;
+        }});
+        const prefixArgs = [...engineArgs];
+        prefixArgs[prefixArgs.indexOf('--ticks') + 1] = String(ticks);
+        const logPath=join(stage,'sniper-prefix.log'), log=openSync(logPath,'wx');
+        try {
+          const capture=spawn(values.encoder,['capture-sniper-zoom',String(ticks),join(stage,'sniper-prefix.ndjson')],
+            {cwd:work,windowsHide:true,stdio:['pipe',log,log]});
+          const captured=completion(capture);
+          capture.stdin.on('error',()=>{});
+          if (process.platform==='linux') capture.stdin._handle?.setBlocking(true);
+          const child=spawn(process.execPath,prefixArgs,{cwd:work,windowsHide:true,stdio:['ignore',log,log,capture.stdin],
+            env:{...environment,H1_EXPORT_METRICS:join(work,'sniper-prefix-metrics.json')},
+            timeout:Math.max(1,Math.floor(timeout-(performance.now()-started))),killSignal:'SIGKILL'});
+          const engine=await completion(child);
+          capture.stdin.end();
+          const encoder=await captured;
+          const output=await readFile(logPath,'utf8');
+          if (!expired && engine.code===0 && encoder.code===0
+              && output.includes(`[film] played ${ticks} ticks of`)
+              && output.includes(`[film] self-check: 0 seed mismatches, 0 of ${checks} hash samples differed,`)
+              && output.includes(`[film] network changes put back: ${applications}, 0 refused`)
+              && output.includes('[film] VERDICT: clean -- every replayed tick matched the recording')
+              && await sha256(film)===filmHash) {
+            await save(join(stage,'sniper-prefix.json'),{source_sha256:filmHash,before,checks,applications});
+          }
+        } finally { closeSync(log); }
       }
     }
     report.status = 'failed';

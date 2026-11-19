@@ -1140,6 +1140,44 @@
       "title": "SniperKillV2",
       "type": "object"
     },
+    "SniperKillV3": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {
+          "exclusiveMaximum": 8192,
+          "minimum": 0,
+          "title": "Event Index",
+          "type": "integer"
+        },
+        "method": {
+          "enum": [
+            "projectile",
+            "client_pull",
+            "client_impact",
+            "client_zoom_reset",
+            "unavailable"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "zoom": {
+          "enum": [
+            "unzoomed",
+            "zoomed",
+            "unknown"
+          ],
+          "title": "Zoom",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_index",
+        "zoom",
+        "method"
+      ],
+      "title": "SniperKillV3",
+      "type": "object"
+    },
     "SniperKills": {
       "additionalProperties": false,
       "properties": {
@@ -1214,7 +1252,7 @@
         },
         "kills": {
           "items": {
-            "$ref": "#/$defs/SniperKillV2"
+            "$ref": "#/$defs/SniperKillV3"
           },
           "maxItems": 8192,
           "title": "Kills",

@@ -68,7 +68,10 @@ def validate_native_product(product: dict, *, encoding: dict, report: dict) -> N
         expected = [d["event_index"] for d in combat["deaths"]
                     if d["kind"] == "kill" and (d["weapon_id"] in rifles or d["event_index"] in recovered)]
         if [k["event_index"] for k in sniper["kills"]] != expected or any(
-            (k["zoom"] == "unknown") != (k["method"] == "unavailable") for k in sniper["kills"]
+            (k["zoom"] == "unknown") != (k["method"] == "unavailable")
+            or k["method"] == "client_zoom_reset" and (report["exporter_revision"] < 45
+                                                       or k["zoom"] != "unzoomed")
+            for k in sniper["kills"]
         ):
             raise ValueError("Invalid sniper kill classification")
     end = report["analytics"].get("match_end_source_tick")

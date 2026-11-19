@@ -49,7 +49,7 @@ async function readBlock(file, offset, length) {
 const CLIENT_FIXED_SIZES = new Map([[64,4],[65,132],[66,4],[67,68],[68,44],[69,64],[70,112],[71,16],[73,64],[80,0],[81,0],[82,0],[83,16]]);
 const CLIENT_BATCH_STRIDES = new Map([[74,8],[75,11],[76,5],[77,3],[78,5]]);
 
-async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers, recoveryContext, clientView = false) {
+async function inspectNetwork(file, offset, size, firstTick, ticks, players, localPlayers, recoveryContext, clientView = false, observeRecord) {
   assert.ok(size >= 32 && size <= 96 * 1024 * 1024 + 32, 'Invalid FNET size');
   const header = await readBlock(file, offset, 32);
   const words = Array.from({ length: 8 }, (_, index) => header.readUInt32LE(index * 4));
@@ -103,6 +103,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
           at+=5+count;
         }
       }
+      if (observeRecord) observeRecord(tick, type, raw.subarray(position + 8, position + 8 + length));
       if (clientView && type === 64) {
         const gameTick = raw.readInt32LE(position + 8);
         assert.ok(gameTick >= 0 && gameTick <= 0x7fffffff - ticks, 'Invalid client clock');
@@ -173,7 +174,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path, {allowClientView = false,botAwareHost = false} = {}) {
+export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, observeTickBlock, observeRecord} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -234,7 +235,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
           &&row.readUInt16LE(2)===0,'Invalid recorded team');
       }
     }
-    await inspectTickBlocks(file,stream,trailer,words[11]);
+    await inspectTickBlocks(file,stream,trailer,words[11],observeTickBlock);
     const tail = await readBlock(file, trailer, 8), samples = tail.readUInt32LE(4);
     assert.ok(tail.readUInt32LE(0) === 0x314c5254 && samples > 0 && samples <= 40000, 'Invalid hash trailer');
     const end = trailer + 8 + samples * 16;
@@ -288,7 +289,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25], {
       botAwareHost,rosterEvidence,teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+19*4) === 0
         && variant.readInt32LE(128+25*4) === 0 && head.readUInt32LE(472) === 0),
-    }, clientView) : undefined;
+    }, clientView, observeRecord) : undefined;
     if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;
     return { format: 3, protocol_revision: words[2], tick_rate: words[3], ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],

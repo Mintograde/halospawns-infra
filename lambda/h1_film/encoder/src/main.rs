@@ -56,6 +56,8 @@ struct Request {
     client_roster_evidence: bool,
     #[serde(default)]
     sniper_evidence: bool,
+    #[serde(default)]
+    sniper_zoom_anchors: bool,
 }
 fn default_analytics_revision() -> u8 {
     2
@@ -556,7 +558,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
                 .ok_or("missing sniper discharge evidence")?;
             // Host kill bounds come from the authoritative combat collector. A
             // client's independently advancing clock must retain all its fires.
-            output.write_events(events, count, false, SNIPER_FRAME_LIMIT)?;
+            write_sniper_evidence(output, events, &tick, count, request.sniper_zoom_anchors)?;
         } else if sniper_events.is_some() {
             return Err("unexpected sniper evidence for retained exporter".into());
         }
@@ -730,7 +732,24 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
 // still needs all engine frames so its final hash verdict can qualify a shot.
 const SNIPER_FRAME_LIMIT: usize = 256 + 64 + 2048 + 256 + 1;
 
-fn capture_sniper(ticks: usize, path: &Path) -> Result<(), Box<dyn Error>> {
+fn write_sniper_evidence(output: &mut gameplay::Evidence, events: &[Value], tick: &Value,
+                         count: usize, sample_zoom: bool) -> Result<(), Box<dyn Error>> {
+    if !sample_zoom || count % 60 != 0 {
+        return output.write_events(events, count, false, SNIPER_FRAME_LIMIT);
+    }
+    let mut sampled = events.to_vec();
+    for player in tick["players"].as_array().ok_or("missing client players")? {
+        let body = &player["player_object_data"];
+        if body["zoom_level"].as_i64() == Some(-1) && body["health"].as_f64().is_some_and(|h| h > 0.0) {
+            if let Some(id) = body["object_id"].as_u64() {
+                sampled.push(json!([7, id]));
+            }
+        }
+    }
+    output.write_events(&sampled, count, false, SNIPER_FRAME_LIMIT + 16)
+}
+
+fn capture_sniper(ticks: usize, path: &Path, sample_zoom: bool) -> Result<(), Box<dyn Error>> {
     if !(1..=432000).contains(&ticks) { return Err("invalid client tick count".into()); }
     let input = io::stdin();
     let mut source = transport::Stream::with_contract(BufReader::with_capacity(65536, input.lock()), "HSFT0002")?;
@@ -740,7 +759,7 @@ fn capture_sniper(ticks: usize, path: &Path) -> Result<(), Box<dyn Error>> {
     while let Some(tick) = source.next_reusing(spare)? {
         if count >= ticks { return Err("too many client frames".into()); }
         let events = tick["sniper_events"].as_array().ok_or("missing client sniper events")?;
-        output.write_events(events, count, false, SNIPER_FRAME_LIMIT)?;
+        write_sniper_evidence(&mut output, events, &tick, count, sample_zoom)?;
         spare = tick;
         count += 1;
     }
@@ -756,7 +775,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         Some("encode") if args.len() == 3 => encode(Path::new(&args[1]), Path::new(&args[2])),
-        Some("capture-sniper") if args.len() == 3 => capture_sniper(args[1].parse()?, Path::new(&args[2])),
+        Some("capture-sniper" | "capture-sniper-zoom") if args.len() == 3 =>
+            capture_sniper(args[1].parse()?, Path::new(&args[2]), args[0] == "capture-sniper-zoom"),
         Some("verify") if matches!(args.len(), 3 | 4) => {
             let rate = args.get(3).map(|r| r.parse()).transpose()?.unwrap_or(120);
             let report = artifact::verify_pair_at_rate(Path::new(&args[1]), Path::new(&args[2]), rate)?;
@@ -908,7 +928,7 @@ mod observation_tests {
             incremental_state: true,
             typed_poses: true,
             verify_incremental_state: false,
-            client_roster_evidence: false, sniper_evidence: false,
+            client_roster_evidence: false, sniper_evidence: false, sniper_zoom_anchors: false,
             analytics_revision: 2,
             combat_network_recording: false,
             ticks: 5,
@@ -1148,7 +1168,7 @@ mod observation_tests {
                 incremental_state: true,
                 typed_poses: true,
                 verify_incremental_state: false,
-                client_roster_evidence: false, sniper_evidence: false,
+                client_roster_evidence: false, sniper_evidence: false, sniper_zoom_anchors: false,
                 analytics_revision: 2,
                 combat_network_recording: false,
                 ticks: 12,
