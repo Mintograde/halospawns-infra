@@ -198,6 +198,11 @@ def validate_job(job):
     require(missing_size or binding["raw_source"]["size_bytes"] == film["map_size_bytes"])
     validate_source(conversion["source"])
     validate_source(binding["raw_source"], raw_map=True)
+    if conversion.get("sniper_clients"):
+        require(engine.get("exporter_revision", 1) >= 43
+                and film["engine_profile"] == "h1-performance-beta5-p9818-wasm-v1")
+        for client in conversion["sniper_clients"]:
+            validate_source(client["source"], client_view=True)
     generation = job["attempt_id"] or job["upload_id"]
     require(job["generation_token"] == generation)
     require(job["job_id"] == f"h1film:{job['upload_id']}:generation:{generation}")
@@ -597,6 +602,14 @@ def convert(job, film, work, deadline):
         ],
     }
     (work / "maps.json").write_text(json.dumps(catalog), encoding="utf-8")
+    supplements = []
+    for index, pin in enumerate(job["conversion"].get("sniper_clients") or []):
+        path = work / f"shooter-{index}.h1film"
+        download(pin["source"], path, client_view=True)
+        supplements.append({"film": str(path), "sha256": pin["source"]["sha256"],
+                            "player": pin["player"], "match_id": pin["match_id"]})
+    if supplements:
+        (work / "shooter-sources.json").write_text(json.dumps(supplements), encoding="utf-8")
     timeout = int(deadline - time.monotonic() - 180)
     require(timeout >= 30, "conversion_failed")
     directory = work / "conversion"
@@ -620,6 +633,7 @@ def convert(job, film, work, deadline):
             "--skip-readback",
             "--source-viewer-only",
             "--analytics",
+            *(["--shooter-sources", str(work / "shooter-sources.json")] if supplements else []),
             "--analytics-revision",
             str(job.get("analytics_revision") or 2),
             "--viewer-revision",

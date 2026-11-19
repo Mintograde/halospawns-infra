@@ -14,7 +14,7 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
-import {buildSniperKills} from './sniper-kills.mjs';
+import {buildSniperKills, verifyShooterSources} from './sniper-kills.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
@@ -81,7 +81,8 @@ export async function convertFilm(options) {
     'Client view requires a new candidate exporter pin');
   const registry = JSON.parse(await readFile(values['candidate-registry'] || new URL('../profiles/registry.json', import.meta.url), 'utf8'));
   const clientRecipes = registry.processing?.client_view_recipes?.[profile.id] ?? [];
-  if (values['client-view'] && !values['candidate-registry'] && !(['beta6','beta7','beta8'].includes(profile.port)&&values['embedded-match'])) {
+  const shooterEvidence=values.shooterEvidence===true && profile.port==='beta5' && profile.exporter_revision>=43;
+  if (values['client-view'] && !shooterEvidence && !values['candidate-registry'] && !(['beta6','beta7','beta8'].includes(profile.port)&&values['embedded-match'])) {
     assert.ok(clientRecipes.some(r => r.exporter_revision === profile.exporter_revision && r.analytics_revision === analyticsRevision
       && r.viewer_revision === 5 && r.max_players >= envelope.players), 'Unregistered client-view recipe');
   } else if (!values['client-view']) {
@@ -411,8 +412,10 @@ export async function convertFilm(options) {
     if (values.analytics && request.sniper_evidence) {
       const path = join(stage, 'candidate', 'encoding.json');
       const encoding = JSON.parse(await readFile(path, 'utf8'));
+      const supplements=values['shooter-sources'] ? await verifyShooterSources(
+        stage,values,report,convertFilm,started+timeout) : [];
       encoding.native_analytics.sniper = await buildSniperKills(stage, values.film, encoding,
-        Boolean(report.match_tracks), profile.exporter_revision);
+        Boolean(report.match_tracks), profile.exporter_revision,supplements);
       await save(path, encoding);
       if (report.encoding) report.encoding.native_analytics = encoding.native_analytics;
     }
@@ -441,11 +444,21 @@ export async function convertFilm(options) {
       verificationEnv.H1_EXPORT_METRICS = join(work, 'client-verification-metrics.json');
       try {
         assert.ok(!expired, 'Client verification timed out or was interrupted');
+        let capture, captured;
+        if (profile.exporter_revision >= 43) {
+          capture = spawn(values.encoder, ['capture-sniper', String(native.envelope.ticks),
+            join(stage,'verified-sniper.ndjson')], {cwd:work,windowsHide:true,stdio:['pipe',logFd,logFd]});
+          captured = completion(capture);
+          capture.stdin.on('error', () => kill());
+          if (process.platform === 'linux') capture.stdin._handle?.setBlocking(true);
+        }
         const child = spawn(process.execPath, engineArgs, {cwd: work,
-          env: verificationEnv, windowsHide: true, stdio: ['ignore', logFd, logFd, sink],
+          env: verificationEnv, windowsHide: true, stdio: ['ignore', logFd, logFd, capture?.stdin ?? sink],
           timeout: Math.max(1, Math.floor(timeout - (performance.now() - started))),
           killSignal: 'SIGKILL'});
         report.client_verification_exit = await completion(child);
+        if (capture) capture.stdin.end();
+        if (captured) assert.equal((await captured).code,0,'Incomplete sniper verification stream');
       } finally { closeSync(logFd); closeSync(sink); }
       assert.ok(!expired, 'Client verification timed out or was interrupted');
       assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Client source changed');

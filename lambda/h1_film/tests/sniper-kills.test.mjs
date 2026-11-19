@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {classifySniperKills, remoteScopes} from '../runtime/sniper-kills.mjs';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {classifySniperKills,impactScopes,normalizedImpact,remoteScopes,verifiedPrefix} from '../runtime/sniper-kills.mjs';
 
 const weapon = {weapon_id:4, category:'weapon', tag_path:'weapons\\sniper rifle\\sniper rifle'};
 const death = {event_index:9, source_tick:55, killer_slot:2, victim_slot:1, kind:'kill', weapon_id:4};
@@ -42,4 +45,53 @@ test('binds local-seat-zero original pulls to the physical player in a verified 
   assert.equal(remoteScopes(host,{ledger,accounts:[account]},new Map()).size, 0);
   ledger.tables[0].capped=true;
   assert.equal(remoteScopes(host,{ledger,accounts:[account]},fires).size, 0);
+});
+
+test('binds the original struck object to the depleted parent only on a proven lethal call',()=>{
+  const impact=[45,65538,355,117,0,0,0,0,0,0,1065353216,0,0];
+  const host={...evidence,deal:15,impact},original={tag:93,unit:117,owner:2,scope:2};
+  const combat={weapons:[weapon],deaths:[death,{...death,event_index:10,weapon_id:null}]};
+  const obs=new Map([['55/0',host]]), remote=new Map([[15,original]]);
+  const ex={excluded:new Map([['55/1',{killer:2,victim:1}]]),points:new Map()};
+  const run=()=>classifySniperKills(combat,obs,remote,ex);
+  assert.deepEqual(run().kills,[{event_index:9,zoom:'zoomed',method:'client_pull'}]);
+  assert.deepEqual(run().excluded,[10]);
+  assert.equal(classifySniperKills(combat,obs,remote).kills[0].zoom,'unknown');
+  ex.points.set(15,1);assert.equal(run().kills[0].zoom,'unknown');
+  remote.clear();assert.equal(run().kills[0].method,'client_impact');
+  ex.excluded.get('55/1').killer=4;assert.deepEqual(run().excluded,[]);
+});
+
+test('point contacts require the original client clock, full ray, owner, weapon and accepted report',()=>{
+  const impact=[45,65538,355,117,0,0,0,0,0,0,1065353216,0,0];
+  assert.deepEqual(normalizedImpact([...impact.slice(0,10),1073741824,0,0]),impact);
+  const v=Buffer.alloc(88);v.writeUInt32LE(72);v[5]=3;v[6]=2;v.writeInt32LE(117,8);v.writeInt32LE(60,16);
+  const ledger={tables:[{name:'verdicts',stride:88,count:1,bytes:v}]};
+  const host={deaths:new Map([['0/0',{...evidence,deal:15,impact}]]),deals:[{kind:3,deal:15,clock:72,physical:2,unit:117}]};
+  const contacts=new Map(),worlds=new Map([[2,{contacts}]]);
+  const read=()=>impactScopes(host,{ledger,accounts:[]},worlds).get(15);
+  for (const key of [[60,93,...impact],[59,94,...impact],[59,93,...impact.slice(0,-1),1]]) {
+    contacts.set(key.join('/'),1);assert.equal(read(),undefined);
+  }
+  const key=[59,93,...impact].join('/');contacts.set(key,2);assert.equal(read(),2);
+  contacts.set(key,null);assert.equal(read(),undefined);
+  contacts.set(key,2);ledger.tables[0].capped=true;assert.equal(read(),undefined);
+});
+
+test('only original checked updates preceding the first divergence can qualify a client discharge',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'h1-sniper-prefix-'));
+  try {
+    const path=join(dir,'source'), bytes=Buffer.alloc(64+8+3*16);
+    bytes.writeUInt32LE(64,48);bytes.write('TRL1',64);bytes.writeUInt32LE(3,68);
+    [101,141,220].forEach((u,i)=>bytes.writeUInt32LE(u,72+16*i));await writeFile(path,bytes);
+    const envelope={ticks:125,first_update:101,hash_samples:3};
+    const failure={reason:'simulation_desync',network_refused:0,played_ticks:125,
+      hash_checks:3,first_mismatch_update:180,hash_mismatches:1,seed_mismatches:2};
+    const track={status:'unavailable',failure,envelope};
+    assert.equal(await verifiedPrefix(path,track),40);
+    failure.first_mismatch_update=141;assert.equal(await verifiedPrefix(path,track),0);
+    Object.assign(failure,{reason:'roster_mismatch',seed_mismatches:0,hash_mismatches:0});
+    assert.equal(await verifiedPrefix(path,track),Infinity);
+    failure.network_refused=1;assert.equal(await verifiedPrefix(path,track),0);
+  } finally { await rm(dir,{recursive:true,force:true}); }
 });

@@ -16,6 +16,7 @@ param(
     [switch]$PlayerCamoAmount,
     [switch]$SpawnEvents,
     [switch]$SniperKills,
+    [switch]$SniperEvidence,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
@@ -54,6 +55,7 @@ if ($RemoteMelee) { $variant += '-remote-melee-v1' }
 if ($PlayerCamoAmount) { $variant += '-player-camo-amount-v1' }
 if ($SpawnEvents) { $variant += '-spawn-events-v1' }
 if ($SniperKills) { $variant += '-sniper-kills-v1' }
+if ($SniperEvidence) { $variant += '-sniper-evidence-v2' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -84,6 +86,7 @@ if ($RemoteMelee) { $gameplayArguments += '-DH1_REMOTE_MELEE_EXPORT=ON' }
 if ($PlayerCamoAmount) { $gameplayArguments += '-DH1_PLAYER_CAMO_AMOUNT=ON' }
 if ($SpawnEvents) { $gameplayArguments += '-DH1_SPAWN_EVENTS=ON' }
 if ($SniperKills) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON' }
+if ($SniperEvidence) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON','-DH1_SNIPER_EVIDENCE=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -114,6 +117,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     player_camo_amount = [bool]$PlayerCamoAmount
     spawn_events = [bool]$SpawnEvents
     sniper_kills = [bool]$SniperKills
+    sniper_evidence = [bool]$SniperEvidence
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

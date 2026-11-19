@@ -47,6 +47,16 @@ def validate_native_product(product: dict, *, encoding: dict, report: dict) -> N
         raise ValueError("Sniper evidence differs from exporter recipe")
     if sniper is not None:
         combat = product["combat"]
+        extended = report["exporter_revision"] >= 43
+        version = 2 if extended else 1
+        if sniper.get("schema") != f"halospawns.h1SniperKills.v{version}":
+            raise ValueError("Sniper definition differs from exporter recipe")
+        if extended:
+            excluded = sniper["excluded"]
+            unknown_weapons = {d["event_index"] for d in combat["deaths"]
+                               if d["kind"] == "kill" and d["weapon_id"] is None}
+            if excluded != sorted(set(excluded)) or not set(excluded) <= unknown_weapons:
+                raise ValueError("Invalid non-sniper lethal damage attribution")
         rifles = {w["weapon_id"] for w in combat["weapons"] if w["category"] == "weapon"
                   and w["tag_path"].replace("\\", "/").lower() == "weapons/sniper rifle/sniper rifle"}
         expected = [d["event_index"] for d in combat["deaths"]

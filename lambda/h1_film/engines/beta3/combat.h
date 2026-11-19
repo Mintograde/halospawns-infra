@@ -31,6 +31,19 @@ typedef struct {
 typedef struct { int handle; hs_lineage lineage; } hs_binding;
 typedef struct { char path[241]; int category, definition; } hs_weapon;
 typedef struct { unsigned int id; int slot, weapon; } hs_shot;
+#ifdef H1_SNIPER_EVIDENCE
+#include "headers/damage_data_flags.h"
+#include "headers/object_being_damaged_flags.h"
+/* Fields copied verbatim into a non-area point report and back into an accepted
+ * host DEAL. Keep the full struck handle distinct from the body that died. */
+typedef struct {
+    int tag, owner, shooter_body, struck;
+    unsigned int vectors[9];
+} hs_sniper_impact;
+static const damage_data *hs_sniper_incoming, *hs_sniper_direct;
+static hs_sniper_impact hs_sniper_report;
+static int hs_sniper_target = -1, hs_sniper_lethal_body = -1, hs_sniper_scored_body = -1;
+#endif
 typedef struct {
     hs_lineage lineage;
     int attacker, victim, relationship;
@@ -42,6 +55,10 @@ typedef struct {
 #ifdef H1_SNIPER_KILLS
     int scope, physical, object;
     unsigned int deal;
+#endif
+#ifdef H1_SNIPER_EVIDENCE
+    int excludes_sniper, direct_report;
+    hs_sniper_impact report;
 #endif
 } hs_death;
 
@@ -228,12 +245,27 @@ void object_cause_damage(damage_data *damage, int object, short node, short regi
     short material, const real_vector3d *normal)
 {
     int previous = hs_headshot_target;
+#ifdef H1_SNIPER_EVIDENCE
+    const damage_data *previous_direct = hs_sniper_direct;
+    hs_sniper_direct = NULL;
+    if (hs_sniper_incoming && object == hs_sniper_target
+        && damage->definition_index == hs_sniper_incoming->definition_index
+        && damage->owner_player_index == hs_sniper_incoming->owner_player_index) {
+        hs_sniper_incoming = NULL;
+        if (hs_sniper_impact_of(&hs_sniper_report, damage, object)) hs_sniper_direct = damage;
+    } else if (!previous_direct) {
+        hs_sniper_predicted(damage, object);
+    }
+#endif
 #ifdef H1_MELEE_EXPORT
     int previous_backwhack = hs_melee_backwhack_target;
     hs_melee_backwhack_target = -1;
 #endif
     hs_headshot_target = -1;
     hs_original_object_cause_damage(damage, object, node, region, material, normal);
+#ifdef H1_SNIPER_EVIDENCE
+    hs_sniper_direct = previous_direct;
+#endif
     hs_headshot_target = previous;
 #ifdef H1_MELEE_EXPORT
     hs_melee_backwhack_target = previous_backwhack;
@@ -245,7 +277,7 @@ void hs_combat_headshot(int object)
     hs_headshot_target = object;
 }
 
-#ifdef H1_DAMAGE_ATTRIBUTION
+#if defined(H1_DAMAGE_ATTRIBUTION) || defined(H1_SNIPER_EVIDENCE)
 #include "../beta4/damage-attribution.h"
 #endif
 
@@ -305,6 +337,10 @@ void object_damage_aftermath(int object, damage_data *damage, unsigned int flags
     const damage_data *previous_damage = hs_aftermath_damage;
     hs_lineage previous_lineage = hs_aftermath_lineage;
     int previous_target = hs_aftermath_target, previous_headshot = hs_aftermath_headshot;
+#ifdef H1_SNIPER_EVIDENCE
+    int previous_lethal = hs_sniper_lethal_body;
+    hs_sniper_lethal_body = actual && (flags & (1u << _object_being_damaged_body_depleted_bit)) ? object : -1;
+#endif
 #ifdef H1_MELEE_EXPORT
     int previous_object = hs_melee_aftermath_object;
     hs_melee_aftermath_object = object;
@@ -314,6 +350,9 @@ void object_damage_aftermath(int object, damage_data *damage, unsigned int flags
     hs_aftermath_lineage = hs_damage_lineage(damage);
     hs_aftermath_headshot = actual ? hs_headshot_target == object : -1;
     hs_original_object_damage_aftermath(object, damage, flags, shield, health, multiplier, part, actual);
+#ifdef H1_SNIPER_EVIDENCE
+    hs_sniper_lethal_body = previous_lethal;
+#endif
     hs_aftermath_damage = previous_damage;
     hs_aftermath_lineage = previous_lineage;
     hs_aftermath_target = previous_target;
@@ -363,6 +402,19 @@ void hs_combat_death(int kind, int killer, int victim)
 #endif
         if (kind == 0 && death->weapon >= 0) death->headshot = hs_aftermath_headshot;
     }
+#ifdef H1_SNIPER_EVIDENCE
+    if (kind == 0 && hs_aftermath_damage && hs_aftermath_target == slot && hs_sniper_scored_body != -1
+        && hs_sniper_scored_body == hs_sniper_lethal_body) {
+        const int owner = hs_aftermath_damage->owner_player_index;
+        if (death->weapon < 0)
+            death->excludes_sniper = (owner != killer && owner != -1 && datum_try_and_get(player_data, owner))
+                || hs_damage_excludes_sniper(hs_aftermath_damage->definition_index);
+        if (death->deal && hs_sniper_direct == hs_aftermath_damage && owner == killer) {
+            death->direct_report = 1;
+            death->report = hs_sniper_report;
+        }
+    }
+#endif
 #ifdef H1_GAMEPLAY_EXPORT
     hs_gameplay_death(death);
 #endif
@@ -371,8 +423,15 @@ void hs_combat_death(int kind, int killer, int victim)
 void game_statistics_record_kill(int object, int player, int owner, short team)
 {
     int previous = hs_scoring_death;
+#ifdef H1_SNIPER_EVIDENCE
+    int previous_body = hs_sniper_scored_body;
+    hs_sniper_scored_body = object;
+#endif
     hs_scoring_death = 1;
     hs_original_game_statistics_record_kill(object, player, owner, team);
+#ifdef H1_SNIPER_EVIDENCE
+    hs_sniper_scored_body = previous_body;
+#endif
     hs_scoring_death = previous;
 }
 

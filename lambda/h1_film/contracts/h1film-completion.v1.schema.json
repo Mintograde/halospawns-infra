@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 21922759096e3fe3a58d44e97f340f02807785b9facbfab00f09bcf4c012f47a",
+  "$comment": "Generated from API schemas/h1films.py SHA256 317d2bfb27e7b54e9504311875f8960c6f58e4a7b27011716f3251c4909239f2",
   "$defs": {
     "H1FilmBotNetworkHost": {
       "additionalProperties": false,

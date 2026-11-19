@@ -1103,6 +1103,43 @@
       "title": "SniperKill",
       "type": "object"
     },
+    "SniperKillV2": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {
+          "exclusiveMaximum": 8192,
+          "minimum": 0,
+          "title": "Event Index",
+          "type": "integer"
+        },
+        "method": {
+          "enum": [
+            "projectile",
+            "client_pull",
+            "client_impact",
+            "unavailable"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "zoom": {
+          "enum": [
+            "unzoomed",
+            "zoomed",
+            "unknown"
+          ],
+          "title": "Zoom",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_index",
+        "zoom",
+        "method"
+      ],
+      "title": "SniperKillV2",
+      "type": "object"
+    },
     "SniperKills": {
       "additionalProperties": false,
       "properties": {
@@ -1125,6 +1162,41 @@
         "kills"
       ],
       "title": "SniperKills",
+      "type": "object"
+    },
+    "SniperKillsV2": {
+      "additionalProperties": false,
+      "properties": {
+        "excluded": {
+          "items": {
+            "exclusiveMaximum": 8192,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 8192,
+          "title": "Excluded",
+          "type": "array"
+        },
+        "kills": {
+          "items": {
+            "$ref": "#/$defs/SniperKillV2"
+          },
+          "maxItems": 8192,
+          "title": "Kills",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1SniperKills.v2",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "kills",
+        "excluded"
+      ],
+      "title": "SniperKillsV2",
       "type": "object"
     },
     "SpawnEvent": {
@@ -1512,10 +1584,14 @@
           "$ref": "#/$defs/SniperKills"
         },
         {
+          "$ref": "#/$defs/SniperKillsV2"
+        },
+        {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Sniper"
     },
     "spawn_metrics": {
       "anyOf": [

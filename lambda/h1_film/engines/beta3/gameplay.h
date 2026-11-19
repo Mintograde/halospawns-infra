@@ -52,7 +52,19 @@ int blampc_universal_film_deal(const void *bytes, int size, int object, short no
     e->deal = hs_gameplay_deal; e->unit = object;
     e->physical = damage->owner_player_index == -1 ? -1 : (unsigned short)damage->owner_player_index;
     e->slot = hs_slot(damage->owner_player_index);
+#ifdef H1_SNIPER_EVIDENCE
+    const damage_data *prior = hs_sniper_incoming;
+    int prior_target = hs_sniper_target;
+    hs_sniper_impact prior_report = hs_sniper_report;
+    hs_sniper_incoming = damage;
+    hs_sniper_target = object;
+#endif
     result = hs_original_universal_film_deal(bytes, size, object, node, region, material, normal);
+#ifdef H1_SNIPER_EVIDENCE
+    hs_sniper_incoming = prior;
+    hs_sniper_target = prior_target;
+    hs_sniper_report = prior_report;
+#endif
     hs_gameplay_deal = previous;
     return result;
 }

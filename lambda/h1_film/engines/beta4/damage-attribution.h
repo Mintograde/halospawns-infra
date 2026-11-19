@@ -13,6 +13,9 @@ enum { HS_DAMAGE_TAG = 0x6a707421, HS_EFFECT_TAG = 0x65666665,
 
 typedef struct { int definition, category, status; } hs_damage_source;
 static hs_damage_source hs_damage_sources[65536];
+#ifdef H1_SNIPER_EVIDENCE
+static unsigned char hs_possible_sniper_damage[65536];
+#endif
 static unsigned int hs_damage_visited[65536], hs_damage_visit;
 static int hs_damage_ready, hs_damage_complete, hs_damage_tag_count, hs_damage_budget;
 
@@ -44,6 +47,10 @@ static int hs_damage_block(const tag_block *block)
 static void hs_damage_bind(int damage, int definition, int category)
 {
     hs_damage_source *source = &hs_damage_sources[(unsigned short)damage];
+#ifdef H1_SNIPER_EVIDENCE
+    if (category == 0 && hs_is_sniper(global_tag_instances[(unsigned short)definition].name))
+        hs_possible_sniper_damage[(unsigned short)damage] = 1;
+#endif
     if (!source->status) *source = (hs_damage_source){definition, category, 1};
     else if (source->definition != definition || source->category != category) source->status = 2;
 }
@@ -65,7 +72,7 @@ static void hs_damage_walk(int handle, int definition, int category, int depth)
             int part;
             for (part = 0; part < hs_damage_block(&event->parts); ++part) {
                 const effect_part_definition *entry = &((const effect_part_definition *)event->parts.address)[part];
-#ifdef H1_DAMAGE_ATTRIBUTION_V2
+#if defined(H1_DAMAGE_ATTRIBUTION_V2) || (defined(H1_SNIPER_EVIDENCE) && !defined(H1_DAMAGE_ATTRIBUTION))
                 /* Decals cannot lead to damage. Some maps retain a stale runtime
                  * handle for a grenade scorch mark. Do not let that visual-only
                  * reference invalidate the graph; keep all other checks intact. */
@@ -151,3 +158,15 @@ static int hs_damage_weapon(int damage)
     source = &hs_damage_sources[(unsigned short)damage];
     return source->status == 1 ? hs_catalogue(source->definition, source->category) : -1;
 }
+
+#ifdef H1_SNIPER_EVIDENCE
+static int hs_damage_excludes_sniper(int damage)
+{
+    const cache_file_tag_instance *tag;
+    if (!hs_damage_ready) hs_damage_index();
+    if (!hs_damage_complete || damage == -1 || (unsigned short)damage >= hs_damage_tag_count) return 0;
+    tag = &global_tag_instances[(unsigned short)damage];
+    return tag->tag_index == damage && tag->base_address && tag->group_tag == HS_DAMAGE_TAG
+        && !hs_possible_sniper_damage[(unsigned short)damage];
+}
+#endif

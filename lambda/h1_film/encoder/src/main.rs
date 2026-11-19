@@ -556,7 +556,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
                 .ok_or("missing sniper discharge evidence")?;
             // Host kill bounds come from the authoritative combat collector. A
             // client's independently advancing clock must retain all its fires.
-            output.write_events(events, count, false, 256 + 64 + 2048)?;
+            output.write_events(events, count, false, SNIPER_FRAME_LIMIT)?;
         } else if sniper_events.is_some() {
             return Err("unexpected sniper evidence for retained exporter".into());
         }
@@ -726,6 +726,28 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// The roster-verification replay has no viewer and no authoritative PGCR. It
+// still needs all engine frames so its final hash verdict can qualify a shot.
+const SNIPER_FRAME_LIMIT: usize = 256 + 64 + 2048 + 256 + 1;
+
+fn capture_sniper(ticks: usize, path: &Path) -> Result<(), Box<dyn Error>> {
+    if !(1..=432000).contains(&ticks) { return Err("invalid client tick count".into()); }
+    let input = io::stdin();
+    let mut source = transport::Stream::with_contract(BufReader::with_capacity(65536, input.lock()), "HSFT0002")?;
+    let mut output = gameplay::Evidence::new(path)?;
+    let mut spare = Value::Null;
+    let mut count = 0;
+    while let Some(tick) = source.next_reusing(spare)? {
+        if count >= ticks { return Err("too many client frames".into()); }
+        let events = tick["sniper_events"].as_array().ok_or("missing client sniper events")?;
+        output.write_events(events, count, false, SNIPER_FRAME_LIMIT)?;
+        spare = tick;
+        count += 1;
+    }
+    if count != ticks { return Err("incomplete client evidence".into()); }
+    output.finish()
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -734,6 +756,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         Some("encode") if args.len() == 3 => encode(Path::new(&args[1]), Path::new(&args[2])),
+        Some("capture-sniper") if args.len() == 3 => capture_sniper(args[1].parse()?, Path::new(&args[2])),
         Some("verify") if matches!(args.len(), 3 | 4) => {
             let rate = args.get(3).map(|r| r.parse()).transpose()?.unwrap_or(120);
             let report = artifact::verify_pair_at_rate(Path::new(&args[1]), Path::new(&args[2]), rate)?;

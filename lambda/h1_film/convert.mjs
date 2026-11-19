@@ -21,6 +21,7 @@ const { values } = parseArgs({ options: {
   'engine-permissions': { type: 'boolean', default: false },
   analytics: { type: 'boolean', default: false }, 'map-catalog': { type: 'string' },
   'analytics-revision': { type: 'string', default: '2' },
+  'shooter-sources': { type: 'string' },
 } });
 
 try {
