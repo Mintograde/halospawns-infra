@@ -177,8 +177,8 @@ components:
           steam_session_parameter: /halospawns/dev/workshop-maps/steam-session
         h1_film:
           enabled: true
-          image_tag: 20261117-r1
-          default_release: 20261117-r1
+          image_tag: 20261118-r2
+          default_release: 20261118-r2
           memory_mb: 3008
           intake_configured: true
           event_source_enabled: true

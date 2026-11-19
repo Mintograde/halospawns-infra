@@ -1,3 +1,16 @@
+option(H1_SNIPER_KILLS "Observe shooter zoom at sniper discharge" OFF)
+if(H1_SNIPER_KILLS)
+    if(NOT H1_COMBAT_EXPORT)
+        message(FATAL_ERROR "Sniper observations require combat export")
+    endif()
+    if(TARGET blampc)
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c" TARGET_DIRECTORY blampc
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_SNIPER_KILLS=1)
+    else()
+        set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/export.c"
+            APPEND PROPERTY COMPILE_DEFINITIONS H1_SNIPER_KILLS=1)
+    endif()
+endif()
 option(H1_SPAWN_EVENTS "Observe successful spawn selections and original ratings" OFF)
 if(H1_SPAWN_EVENTS)
     if(NOT H1_COMBAT_EXPORT)

@@ -19,13 +19,14 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
     for (const recipe of recipes[profile.id]) {
       if(recipe.exporter_revision>=40) {
         assert.equal(requirements.tick_rates,"halospawns.h1TickRates.v1");
-        assert.ok(['beta4','beta5','beta6','beta7','beta8'].includes(profile.port));
+        if(recipe.exporter_revision<42) assert.ok(['beta4','beta5','beta6','beta7','beta8'].includes(profile.port));
         if(['beta6','beta7','beta8'].includes(profile.port))assert.equal(recipe.viewer_revision,14);
       }
       if(recipe.viewer_revision===14)assert.ok(recipe.exporter_revision>=40);
       if(recipe.exporter_revision>=39)
         assert.equal(requirements.client_melee_timing,'halospawns.h1GameplayMetrics.v1');
-      if(recipe.exporter_revision>=36 && profile.port!=='beta4') {
+      if(recipe.exporter_revision>=42) assert.equal(requirements.sniper,'halospawns.h1SniperKills.v1');
+      if(recipe.exporter_revision>=36 && ['beta5','beta6','beta7','beta8'].includes(profile.port)) {
         assert.equal(requirements.remote_melee_timing,'halospawns.h1GameplayMetrics.v1');
         assert.equal(recipe.analytics_revision,5);
       }
@@ -48,7 +49,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.equal(requirements.network_host_bots,'halospawns.h1NetworkHostBots.v1');
       }
       if(recipe.viewer_revision!==14)assert.equal(profile.port==='beta8',recipe.viewer_revision===13);
-      if(profile.port==='beta8') assert.ok([35,36,37,38,39,40].includes(recipe.exporter_revision));
+      if(profile.port==='beta8') assert.ok([35,36,37,38,39,40,42].includes(recipe.exporter_revision));
       if(recipe.viewer_revision!==14)assert.equal(profile.port==='beta7',[11,12].includes(recipe.viewer_revision));
       if(profile.port==='beta7')assert.equal(recipe.exporter_revision>=33,[12,14].includes(recipe.viewer_revision));
       if(recipe.viewer_revision===12)assert.equal(requirements.large_match_replay,'halospawns.h1MatchReplay.v7');

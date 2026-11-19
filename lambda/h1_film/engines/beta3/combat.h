@@ -21,7 +21,13 @@ extern void hs_original_object_cause_damage(damage_data *, int, short, short, sh
 extern void hs_original_object_damage_aftermath(int, damage_data *, unsigned int, float, float, float, short, unsigned char);
 extern void hs_original_game_statistics_record_kill(int, int, int, short);
 
-typedef struct { unsigned int shot; int weapon, owner; } hs_lineage;
+typedef struct {
+    unsigned int shot;
+    int weapon, owner;
+#ifdef H1_SNIPER_KILLS
+    int scope;
+#endif
+} hs_lineage;
 typedef struct { int handle; hs_lineage lineage; } hs_binding;
 typedef struct { char path[241]; int category, definition; } hs_weapon;
 typedef struct { unsigned int id; int slot, weapon; } hs_shot;
@@ -33,6 +39,10 @@ typedef struct {
 typedef struct {
     int kind, killer, victim, weapon, headshot, killer_present, victim_present;
     float killer_position[3], victim_position[3];
+#ifdef H1_SNIPER_KILLS
+    int scope, physical, object;
+    unsigned int deal;
+#endif
 } hs_death;
 
 static hs_lineage hs_current = {0, -1, -1};
@@ -98,12 +108,18 @@ static hs_lineage hs_bound(hs_binding *bindings, int handle)
 #ifdef H1_GAMEPLAY_EXPORT
 #include "gameplay.h"
 #endif
+#ifdef H1_SNIPER_KILLS
+#include "sniper.h"
+#endif
 
 void hs_combat_discharge(int weapon, int owner)
 {
     object_header_datum *header = lookup(weapon, 2);
     int player = player_index_from_unit_index(owner), slot = hs_slot(player);
     hs_current = (hs_lineage){0, -1, player};
+#ifdef H1_SNIPER_KILLS
+    hs_current.scope = hs_sniper_discharge(header, owner, player);
+#endif
     if (!hs_active() || slot < 0) return;
     hs_current.weapon = header ? hs_catalogue(header->datum->definition_index, 0) : -1;
     if (hs_current.weapon < 0) { hs_missing(0); return; }
@@ -335,6 +351,16 @@ void hs_combat_death(int kind, int killer, int victim)
     if (hs_aftermath_damage && hs_aftermath_target == slot
         && hs_aftermath_damage->owner_player_index == killer) {
         death->weapon = hs_aftermath_lineage.weapon;
+#ifdef H1_SNIPER_KILLS
+        death->scope = hs_aftermath_lineage.shot ? hs_aftermath_lineage.scope : 0;
+        death->physical = (unsigned short)killer;
+#ifdef H1_GAMEPLAY_EXPORT
+        death->deal = hs_gameplay_deal;
+#ifdef H1_MELEE_EXPORT
+        death->object = hs_melee_aftermath_object;
+#endif
+#endif
+#endif
         if (kind == 0 && death->weapon >= 0) death->headshot = hs_aftermath_headshot;
     }
 #ifdef H1_GAMEPLAY_EXPORT
@@ -390,6 +416,9 @@ static void hs_coordinates(const char *key, int present, const float *position)
 static void hs_combat_frame(int clock)
 {
     int index;
+#ifdef H1_SNIPER_KILLS
+    hs_sniper_frame();
+#endif
     (void)clock;
     hs_begin("combat", 1);
     hs_string("schema", "halospawns.h1CombatSource.v1");

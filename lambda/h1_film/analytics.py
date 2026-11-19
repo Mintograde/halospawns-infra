@@ -42,6 +42,19 @@ NATIVE_METRICS = {
 def validate_native_product(product: dict, *, encoding: dict, report: dict) -> None:
     """Check semantic invariants that are not expressible in the DTO JSON schema."""
     validate_pistol(product.get("pistol_accuracy"), encoding=encoding, report=report)
+    sniper = product.get("sniper")
+    if (sniper is not None) != ((report.get("exporter_revision") or 1) >= 42):
+        raise ValueError("Sniper evidence differs from exporter recipe")
+    if sniper is not None:
+        combat = product["combat"]
+        rifles = {w["weapon_id"] for w in combat["weapons"] if w["category"] == "weapon"
+                  and w["tag_path"].replace("\\", "/").lower() == "weapons/sniper rifle/sniper rifle"}
+        expected = [d["event_index"] for d in combat["deaths"]
+                    if d["kind"] == "kill" and d["weapon_id"] in rifles]
+        if [k["event_index"] for k in sniper["kills"]] != expected or any(
+            (k["zoom"] == "unknown") != (k["method"] == "unavailable") for k in sniper["kills"]
+        ):
+            raise ValueError("Invalid sniper kill classification")
     end = report["analytics"].get("match_end_source_tick")
     validate_spawns(product.get("spawn_metrics"), exporter_revision=report.get("exporter_revision"),
                     slots=encoding["players"], stop=end if end is not None else report["envelope"]["ticks"],

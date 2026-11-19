@@ -10,43 +10,43 @@
   "processing": {
     "defaults": {
       "h1-performance-beta3-p45-wasm-v1": {
-        "exporter_revision": 34,
+        "exporter_revision": 42,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1arena-197bb65c-p9111-wasm-v1": {
-        "exporter_revision": 34,
+        "exporter_revision": 42,
         "analytics_revision": 4,
         "viewer_revision": 4,
         "max_players": 4
       },
       "h1-performance-beta4-p9803-wasm-v1": {
-        "exporter_revision": 40,
+        "exporter_revision": 42,
         "analytics_revision": 4,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta5-p9818-wasm-v1": {
-        "exporter_revision": 40,
+        "exporter_revision": 42,
         "analytics_revision": 5,
         "viewer_revision": 5,
         "max_players": 16
       },
       "h1-performance-beta6-p9839-wasm-v1": {
-        "exporter_revision": 40,
+        "exporter_revision": 42,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta7-p9844-wasm-v1": {
-        "exporter_revision": 40,
+        "exporter_revision": 42,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
       },
       "h1-performance-beta8-p9848-wasm-v1": {
-        "exporter_revision": 40,
+        "exporter_revision": 42,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
@@ -167,6 +167,12 @@
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
+        },
+        {
+          "exporter_revision": 42,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
         }
       ],
       "h1arena-197bb65c-p9111-wasm-v1": [
@@ -244,6 +250,12 @@
         },
         {
           "exporter_revision": 34,
+          "analytics_revision": 4,
+          "viewer_revision": 4,
+          "max_players": 4
+        },
+        {
+          "exporter_revision": 42,
           "analytics_revision": 4,
           "viewer_revision": 4,
           "max_players": 4
@@ -342,6 +354,12 @@
         },
         {
           "exporter_revision": 40,
+          "analytics_revision": 4,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 42,
           "analytics_revision": 4,
           "viewer_revision": 5,
           "max_players": 16
@@ -446,6 +464,12 @@
         },
         {
           "exporter_revision": 40,
+          "analytics_revision": 5,
+          "viewer_revision": 5,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 42,
           "analytics_revision": 5,
           "viewer_revision": 5,
           "max_players": 16
@@ -589,6 +613,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 42,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta7-p9844-wasm-v1": [
@@ -675,6 +705,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 42,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ],
       "h1-performance-beta8-p9848-wasm-v1": [
@@ -713,6 +749,12 @@
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
+        },
+        {
+          "exporter_revision": 42,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
         }
       ]
     },
@@ -748,7 +790,8 @@
       "beta8": "halospawns.h1Beta8.v1",
       "remote_melee_timing": "halospawns.h1GameplayMetrics.v1",
       "client_melee_timing": "halospawns.h1GameplayMetrics.v1",
-      "tick_rates": "halospawns.h1TickRates.v1"
+      "tick_rates": "halospawns.h1TickRates.v1",
+      "sniper": "halospawns.h1SniperKills.v1"
     },
     "client_view_recipes": {
       "h1-performance-beta5-p9818-wasm-v1": [
@@ -1540,6 +1583,55 @@
       "revision": 40,
       "transport_contract": "HSFT0002",
       "wasm_sha256": "11dc370e8d0df41548271745c1f220ddde00ee11578799711311dd9fedfdfb89",
+      "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
+    },
+    {
+      "engine_profile": "h1-performance-beta3-p45-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "c7097ff1f9cdf5e3faf4316c4203f07eedb8cd16f8bab3e8cd742d17434ed888",
+      "glue_sha256": "f9ef73522692ffc0067378d67ef7dac7ab4bbc67f7dab8a85f0624c3b4c17bdc"
+    },
+    {
+      "engine_profile": "h1arena-197bb65c-p9111-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "db6e0ebaa9f3f33b9dae24d292c3063d32c1d14faea265527b57994b039dd074",
+      "glue_sha256": "930fa1d2133f1a03d73a787346f5d1f85c8ebd1d4d782ce50dba2a36161bcae2"
+    },
+    {
+      "engine_profile": "h1-performance-beta4-p9803-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "281a05b04fc260b67cfcb0c784eadac67c5147686a3c6e68b1c3c78149d27892",
+      "glue_sha256": "7b8471463e4d6dcae563c23dce3a7ccd36c6e4f3e5a27b969c15d907ce345b54"
+    },
+    {
+      "engine_profile": "h1-performance-beta5-p9818-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "9843fdd9fd076ad9026d32856b91aa33a35f1e56714cf7de86475e57cef14710",
+      "glue_sha256": "ef6ef93363fac552ce02642513f79f983cd265bfc6bce1b12facc61fa05627f8"
+    },
+    {
+      "engine_profile": "h1-performance-beta6-p9839-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "d42cd2dd09bc6fc16eaae1389c052b93ff429e77a0d456a6a4c69bb5c4de17be",
+      "glue_sha256": "722e5e7bc52140f4bef40f26c9cdb419bb823ca59b6b1567379531d7f3267917"
+    },
+    {
+      "engine_profile": "h1-performance-beta7-p9844-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "09fefc4ad39a97b6c5bb190d3e1147d2d8687ac58d9814fe68211b483327971d",
+      "glue_sha256": "fac19de82c4e4fa711f301e35c51dd1edfea24746edc15c7ae6e11ee127b0985"
+    },
+    {
+      "engine_profile": "h1-performance-beta8-p9848-wasm-v1",
+      "revision": 42,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "c0caa841e1624ce2b3d32fca38cf6766447d6774967d3e139cc59244e163f33c",
       "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
     }
   ]

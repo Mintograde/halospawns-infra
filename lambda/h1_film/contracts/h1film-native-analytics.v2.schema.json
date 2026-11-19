@@ -1067,6 +1067,66 @@
       "title": "PistolPlayer",
       "type": "object"
     },
+    "SniperKill": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {
+          "exclusiveMaximum": 8192,
+          "minimum": 0,
+          "title": "Event Index",
+          "type": "integer"
+        },
+        "method": {
+          "enum": [
+            "projectile",
+            "client_pull",
+            "unavailable"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "zoom": {
+          "enum": [
+            "unzoomed",
+            "zoomed",
+            "unknown"
+          ],
+          "title": "Zoom",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_index",
+        "zoom",
+        "method"
+      ],
+      "title": "SniperKill",
+      "type": "object"
+    },
+    "SniperKills": {
+      "additionalProperties": false,
+      "properties": {
+        "kills": {
+          "items": {
+            "$ref": "#/$defs/SniperKill"
+          },
+          "maxItems": 8192,
+          "title": "Kills",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1SniperKills.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "kills"
+      ],
+      "title": "SniperKills",
+      "type": "object"
+    },
     "SpawnEvent": {
       "additionalProperties": false,
       "properties": {
@@ -1445,6 +1505,17 @@
       "const": "halospawns.h1NativeAnalytics.v2",
       "title": "Schema",
       "type": "string"
+    },
+    "sniper": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SniperKills"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "spawn_metrics": {
       "anyOf": [

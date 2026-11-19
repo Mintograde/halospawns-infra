@@ -54,6 +54,8 @@ struct Request {
     verify_incremental_state: bool,
     #[serde(default)]
     client_roster_evidence: bool,
+    #[serde(default)]
+    sniper_evidence: bool,
 }
 fn default_analytics_revision() -> u8 {
     2
@@ -496,6 +498,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let mut gameplay = (request.analytics_revision == 5)
         .then(|| gameplay::Evidence::new(&directory.join("gameplay.ndjson")))
         .transpose()?;
+    let mut sniper = request.sniper_evidence
+        .then(|| gameplay::Evidence::new(&directory.join("sniper.ndjson")))
+        .transpose()?;
     let mut count = 0;
     let mut analytics = request
         .analytics_context
@@ -545,6 +550,16 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
             pistol.observe(&tick)?;
         }
         tick.as_object_mut().unwrap().remove("pistol_counters");
+        let sniper_events = tick.as_object_mut().unwrap().remove("sniper_events");
+        if let Some(output) = &mut sniper {
+            let events = sniper_events.as_ref().and_then(Value::as_array)
+                .ok_or("missing sniper discharge evidence")?;
+            // Host kill bounds come from the authoritative combat collector. A
+            // client's independently advancing clock must retain all its fires.
+            output.write_events(events, count, false, 256 + 64 + 2048)?;
+        } else if sniper_events.is_some() {
+            return Err("unexpected sniper evidence for retained exporter".into());
+        }
         if let Some(spawns) = &mut spawns {
             spawns.observe(&tick, count)?;
         }
@@ -655,6 +670,9 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     let mut native_product = native.map(|native| native.product());
     if let Some(gameplay) = gameplay {
         gameplay.finish()?;
+    }
+    if let Some(sniper) = sniper {
+        sniper.finish()?;
     }
     if let Some(spawns) = spawns {
         spawns.finish()?;
@@ -867,7 +885,7 @@ mod observation_tests {
             incremental_state: true,
             typed_poses: true,
             verify_incremental_state: false,
-            client_roster_evidence: false,
+            client_roster_evidence: false, sniper_evidence: false,
             analytics_revision: 2,
             combat_network_recording: false,
             ticks: 5,
@@ -1107,7 +1125,7 @@ mod observation_tests {
                 incremental_state: true,
                 typed_poses: true,
                 verify_incremental_state: false,
-                client_roster_evidence: false,
+                client_roster_evidence: false, sniper_evidence: false,
                 analytics_revision: 2,
                 combat_network_recording: false,
                 ticks: 12,

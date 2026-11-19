@@ -44,7 +44,11 @@ impl Evidence {
             return Err("missing gameplay evidence".into());
         }
         let events = frame["events"].as_array().ok_or("missing gameplay events")?;
-        if events.len() > 2048 { return Err("gameplay frame exceeds budget".into()); }
+        self.write_events(events, ordinal, tick["game_ended_this_tick"].as_bool() == Some(true), 2048)
+    }
+
+    pub fn write_events(&mut self, events: &[Value], ordinal: usize, ended: bool, limit: usize) -> Result<(), Box<dyn Error>> {
+        if events.len() > limit { return Err("evidence frame exceeds budget".into()); }
         if !events.is_empty() && !self.ended {
             let mut line = serde_json::to_vec(&json!({"source_tick":ordinal,"events":events}))?;
             line.push(b'\n');
@@ -52,7 +56,7 @@ impl Evidence {
             if self.bytes > 128 * 1024 * 1024 { return Err("gameplay evidence exceeds budget".into()); }
             self.output.write_all(&line)?;
         }
-        self.ended |= tick["game_ended_this_tick"].as_bool() == Some(true);
+        self.ended |= ended;
         Ok(())
     }
 

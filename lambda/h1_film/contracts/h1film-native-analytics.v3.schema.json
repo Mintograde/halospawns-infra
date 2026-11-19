@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 e6d54ffbda5038f4d9c37c3df5868c76786669576fa2afd9962f29f3950f59bd",
+  "$comment": "Generated from API schemas/h1film_gameplay.py SHA256 dc805b889266fa41ea46d744fa5ba1a322ce080e1ccd4043333fe00add9782b8",
   "$defs": {
     "ClientMeleeTiming": {
       "additionalProperties": false,
@@ -1609,6 +1609,66 @@
       "title": "RemoteMeleeTiming",
       "type": "object"
     },
+    "SniperKill": {
+      "additionalProperties": false,
+      "properties": {
+        "event_index": {
+          "exclusiveMaximum": 8192,
+          "minimum": 0,
+          "title": "Event Index",
+          "type": "integer"
+        },
+        "method": {
+          "enum": [
+            "projectile",
+            "client_pull",
+            "unavailable"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "zoom": {
+          "enum": [
+            "unzoomed",
+            "zoomed",
+            "unknown"
+          ],
+          "title": "Zoom",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_index",
+        "zoom",
+        "method"
+      ],
+      "title": "SniperKill",
+      "type": "object"
+    },
+    "SniperKills": {
+      "additionalProperties": false,
+      "properties": {
+        "kills": {
+          "items": {
+            "$ref": "#/$defs/SniperKill"
+          },
+          "maxItems": 8192,
+          "title": "Kills",
+          "type": "array"
+        },
+        "schema": {
+          "const": "halospawns.h1SniperKills.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "kills"
+      ],
+      "title": "SniperKills",
+      "type": "object"
+    },
     "SpawnEvent": {
       "additionalProperties": false,
       "properties": {
@@ -1990,6 +2050,17 @@
       "const": "halospawns.h1NativeAnalytics.v3",
       "title": "Schema",
       "type": "string"
+    },
+    "sniper": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SniperKills"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "spawn_metrics": {
       "anyOf": [

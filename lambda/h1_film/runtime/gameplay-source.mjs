@@ -10,7 +10,7 @@ import {classifyGameplayMetrics} from './gameplay-metrics.mjs';
 import {addGameplayEstimates} from './gameplay-estimates.mjs';
 import {deriveMeleeMetrics} from './melee-metrics.mjs';
 
-function rows(account,kind,name) {
+export function rows(account,kind,name) {
   const t=account?.tables.find(t=>t.name===name);
   if(!t || t.capped) return null;
   return Array.from({length:t.count},(_,i)=>decodeDiagnosticRow(kind,name,t.bytes.subarray(i*t.stride,(i+1)*t.stride),i));

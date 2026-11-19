@@ -14,6 +14,7 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
+import {buildSniperKills} from './sniper-kills.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
@@ -160,6 +161,7 @@ export async function convertFilm(options) {
   request.viewer_profile_revision = Number(values['viewer-revision'] ?? 4);
   assert.ok([1, 2, 3, 4, 5].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
+  request.sniper_evidence = profile.exporter_revision >= 42;
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
   request.verify_incremental_state = Boolean(values['verify-incremental-state']);
@@ -405,6 +407,14 @@ export async function convertFilm(options) {
       }
       report.timing.match_wait_seconds = (performance.now() - matchStarted) / 1000;
       assert.ok(!expired,'Match conversion timed out');
+    }
+    if (values.analytics && request.sniper_evidence) {
+      const path = join(stage, 'candidate', 'encoding.json');
+      const encoding = JSON.parse(await readFile(path, 'utf8'));
+      encoding.native_analytics.sniper = await buildSniperKills(stage, values.film, encoding,
+        Boolean(report.match_tracks), profile.exporter_revision);
+      await save(path, encoding);
+      if (report.encoding) report.encoding.native_analytics = encoding.native_analytics;
     }
     report.timing.total_seconds = (performance.now() - totalStarted) / 1000;
     await save(join(stage, 'report.json'), report);
