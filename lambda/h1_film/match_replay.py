@@ -44,6 +44,11 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
         else:
             item.update(world_sha256=entries[track["world"]]["sha256"],
                         verified_hash_count=track["verification"]["hash_checks"])
+            recovery = entries.get(f'{track["id"]}/verification/pov-recovery-v1')
+            if recovery:
+                require(revision == 14 and track["role"] == "client"
+                        and recovery["kind"] == "diagnostic-table" and recovery["size_bytes"] <= 4096)
+                item["recovery_sha256"] = recovery["sha256"]
         item.update(alignment="authoritative" if track["role"] == "host"
                     else track["alignment"]["method"],
                     diagnostic_counts={t["name"]: t["count"] for t in track.get("tables", [])})

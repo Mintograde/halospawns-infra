@@ -12,6 +12,7 @@ import {readEnvelope} from './film.mjs';
 import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
 import {clientRosterEvidence} from './client-roster.mjs';
+import {preparePovRecovery,IncompletePovRecovery} from './pov-recovery.mjs';
 import {unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
@@ -52,20 +53,36 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     if(unsupported) {
       return {...track,status:'unavailable',failure:unsupported};
     }
-    let converted;
-    try { converted=await convertFilm({...values,film,output:join(stage,id),analytics:false,reference:undefined,'engine-root':undefined,
-      'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5',timeout:String(remaining)});
+    const options={...values,film,analytics:false,reference:undefined,'engine-root':undefined,
+      'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5'};
+    let converted, directory=id;
+    try { converted=await convertFilm({...options,output:join(stage,id),timeout:String(remaining)});
     } catch(error) {
       const failure=(report.exporter_revision>=16 && clientDesyncEvidence(error))
         || (report.exporter_revision>=18 && clientRosterEvidence(error));
       if(!failure)throw error;
       assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
-      return {...track,status:'unavailable',failure};
+      const unavailable={...track,status:'unavailable',failure};
+      if(report.exporter_revision<46||failure.reason!=='simulation_desync')return unavailable;
+      const plan=preparePovRecovery(bytes,match,track,await readFile(film),failure);
+      if(!plan)return unavailable;
+      directory=id+'-recovered';
+      const seconds=(deadline-performance.now())/1000;
+      assert.ok(seconds>1,'Match conversion timed out before client recovery');
+      try {
+        converted=await convertFilm({...options,output:join(stage,directory),timeout:String(seconds),povRecovery:plan});
+      } catch(retryError) {
+        if(clientDesyncEvidence(retryError)||clientRosterEvidence(retryError))return unavailable;
+        for(let e=retryError;e;e=e.cause)if(e instanceof IncompletePovRecovery)return unavailable;
+        throw retryError;
+      }
+      assert.ok(converted.pov_recovery,'Verified recovery lacks its proof');
     }
     assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
     for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
     return {...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
-      world:`${id}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
+      ...(converted.pov_recovery?{recovery:converted.pov_recovery}:{}),
+      world:`${directory}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
   });
   const result={schema:'halospawns.h1MatchTracks.v1',source_film_sha256:match.sha256,match_id:match.host.match_id,
     version:match.version,tracks};

@@ -14,6 +14,7 @@ import { exportDiagnostics } from './export-diagnostics.mjs';
 import {recoveryEngineValue} from './roster-recovery.mjs';
 import { validateBuildMatching } from './build-identity.mjs';
 import {convertMatchTracks} from './convert-match-tracks.mjs';
+import {finishPovRecovery} from './pov-recovery.mjs';
 import {buildSniperKills, samplesBeforeMismatch, verifyShooterSources} from './sniper-kills.mjs';
 import {ClientDesync,completedClientDesync,canVerifyRejectedClient,clientDesyncEvidence} from './client-desync.mjs';
 import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roster.mjs';
@@ -182,7 +183,13 @@ export async function convertFilm(options) {
   const stagingSeconds = (performance.now() - totalStarted) / 1000;
 
   const environment = Object.fromEntries(Object.entries(process.env)
-    .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|H1_ROSTER_|VIEWER_ARTIFACT_)/i.test(key)));
+    .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|H1_ROSTER_|H1_POV_|VIEWER_ARTIFACT_)/i.test(key)));
+  if (values.povRecovery) {
+    assert.ok(profile.exporter_revision>=46 && values['embedded-match'] && values['client-view'] &&
+      !values.analytics && request.source_viewer_only,'POV recovery requires an embedded viewer world');
+    await writeFile(join(work,'pov-recovery.bin'),values.povRecovery.input,{flag:'wx'});
+    environment.H1_POV_RECOVERY='1';
+  }
   if (recovery) environment.H1_ROSTER_RECOVERY = recoveryEngineValue(recovery);
   Object.assign(environment, { BLAMPC_FILM_RING: '0', BLAMPC_FILM_KEYFRAME_TICKS: '432001',
     BLAMPC_FILM_START_HOST: '1', BLAMPC_FILM_VIEW_DELIVERED: '1', BLAMPC_STATS_DIR: join(work, 'stats'),
@@ -302,6 +309,7 @@ export async function convertFilm(options) {
       if (failure) throw new ClientDesync(failure,error);
       throw error;
     }
+    if (values.povRecovery) report.pov_recovery=finishPovRecovery(log,values.povRecovery);
     if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
     if (analyticsRevision === 5) {
@@ -480,7 +488,7 @@ export async function convertFilm(options) {
       }
     }
     const desync = clientDesyncEvidence(error);
-    if (!expired && values['embedded-match'] && profile.exporter_revision >= 45 && desync?.network_refused) {
+    if (!expired && !values.povRecovery && values['embedded-match'] && profile.exporter_revision >= 45 && desync?.network_refused) {
       const film = join(work,'input.h1film');
       const {before,checks} = await samplesBeforeMismatch(film,native.envelope,desync.first_mismatch_update);
       const ticks = before + 1;

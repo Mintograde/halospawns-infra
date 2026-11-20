@@ -13,6 +13,8 @@ import {sha256} from './engine-store.mjs';
 import {unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 import {readEnvelope} from './film.mjs';
+import {completedClientDesync} from './client-desync.mjs';
+import {preparePovRecovery,finishPovRecovery,recoveryEntryId} from './pov-recovery.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export async function exportMatchReplay({film,directory,hostWorld,output,sourceContract}) {
@@ -145,6 +147,19 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     }
     const unavailable=partial&&c.status==='unavailable';
     if(!unavailable)assert.equal(await sha256(join(directory,c.world)),c.world_sha256);
+    if(c.recovery) {
+      assert.ok(!unavailable&&sourceContract.profile_revision===14&&report.exporter_revision>=46);
+      const firstRun=join(directory,c.id+'.partial');
+      let log;
+      try {log=await readFile(join(firstRun,'client-verification.log'),'utf8');}
+      catch(error){if(error.code!=='ENOENT')throw error;log=await readFile(join(firstRun,'playback.log'),'utf8');}
+      assert.deepEqual(completedClientDesync(log,c.envelope),c.recovery.original_failure);
+      const plan=preparePovRecovery(raw,match,c,bytes,c.recovery.original_failure);
+      assert.ok(plan,'Recovery is not bound to the original recordings');
+      const recoveredLog=await readFile(join(directory,c.id+'-recovered','playback.log'),'utf8');
+      assert.deepEqual(finishPovRecovery(recoveredLog,plan),c.recovery);
+      await add(recoveryEntryId(c.id),'diagnostic-table',Buffer.from(JSON.stringify(c.recovery)));
+    }
     const track={id:c.id,role:'client',source_film_sha256:c.source_film_sha256,frame_count:c.envelope.ticks,
       first_update:c.envelope.first_update,...(unavailable?{status:'unavailable',failure:c.failure}:
         {...(partial?{status:'available'}:{}),viewer_revision:5,world:world(`${c.id}/world`,join(directory,c.world)),verification:c.verification}),

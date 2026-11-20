@@ -18,10 +18,12 @@ param(
     [switch]$SniperKills,
     [switch]$SniperEvidence,
     [switch]$SniperDamageGraph,
+    [switch]$VerifiedPovRecovery,
     [int]$Jobs = 12,
     [string]$Volume = 'halospawns-h1-engine-builds'
 )
 $ErrorActionPreference = 'Stop'
+if ($VerifiedPovRecovery -and (-not $ClientView -or $Port -notin @('beta6','beta7','beta8'))) { throw 'Verified POV recovery requires an embedded-client engine.' }
 if ($RemoteMelee -and -not $Melee) { throw 'Remote melee requires melee evidence.' }
 if ($SpawnEvents -and -not $Combat) { throw 'Spawn events require observational export.' }
 if ($PlayerCamoAmount -and -not $Combat) { throw 'Player camo amount requires the observational export build.' }
@@ -57,6 +59,7 @@ if ($PlayerCamoAmount) { $variant += '-player-camo-amount-v1' }
 if ($SpawnEvents) { $variant += '-spawn-events-v1' }
 if ($SniperKills) { $variant += '-sniper-kills-v1' }
 if ($SniperEvidence) { $variant += '-sniper-evidence-v2' }
+if ($VerifiedPovRecovery) { $variant += '-verified-pov-recovery-v1' }
 $cacheBuild = "/cache/builds/$Port/$($inputs.source.sha256)/$($inputs.port_source.sha256)/$variant"
 New-Item -ItemType Directory -Path $buildPath | Out-Null
 $inputJson | Set-Content -LiteralPath (Join-Path $buildPath 'build-inputs.json') -Encoding utf8
@@ -89,6 +92,7 @@ if ($SpawnEvents) { $gameplayArguments += '-DH1_SPAWN_EVENTS=ON' }
 if ($SniperKills) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON' }
 if ($SniperEvidence) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON','-DH1_SNIPER_EVIDENCE=ON' }
 if ($SniperDamageGraph) { $gameplayArguments += '-DH1_SNIPER_KILLS=ON','-DH1_SNIPER_EVIDENCE=ON','-DH1_SNIPER_DAMAGE_GRAPH=ON' }
+if ($VerifiedPovRecovery) { $gameplayArguments += '-DH1_VERIFIED_POV_RECOVERY=ON' }
 & docker run @mounts $image emcmake cmake -S "/worker/engines/$Port/wasm" -B $cacheBuild -G 'Unix Makefiles' "-DH1_SOURCE=$sourceStage" "-DH1_COMBAT_EXPORT=$combatFlag" @networkReplayArguments @damageArguments @finiteArguments @rosterArguments @clientViewArguments @gameplayArguments @revisionArguments
 if ($LASTEXITCODE) { throw "WASM configure failed: $LASTEXITCODE" }
 $log = Join-Path $buildPath ('build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -121,6 +125,7 @@ if ($LASTEXITCODE -or (($afterJson | ConvertFrom-Json | ConvertTo-Json -Depth 8 
     sniper_kills = [bool]$SniperKills
     sniper_evidence = [bool]$SniperEvidence
     sniper_damage_graph = [bool]$SniperDamageGraph
+    verified_pov_recovery = [bool]$VerifiedPovRecovery
     wasm_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.wasm')).Hash.ToLowerInvariant()
     glue_sha256 = (Get-FileHash -LiteralPath (Join-Path $buildPath 'h1-film.js')).Hash.ToLowerInvariant()
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $buildPath 'build-candidate.json') -Encoding utf8

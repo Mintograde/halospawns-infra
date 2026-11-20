@@ -298,3 +298,6 @@ target_sources(h1-film PRIVATE "${H1_SOURCE}/host/platform/posix/blampc_film_kfb
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/gameplay.cmake")
 hs_gameplay_target(h1-film)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../pov-recovery/port.cmake")
+hs_verified_pov_target(h1-film)

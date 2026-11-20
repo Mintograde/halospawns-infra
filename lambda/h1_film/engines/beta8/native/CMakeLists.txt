@@ -110,3 +110,6 @@ set_target_properties(blampc PROPERTIES OUTPUT_NAME "h1-film-export")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../beta3/gameplay.cmake")
 hs_gameplay_target(blampc)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../pov-recovery/port.cmake")
+hs_verified_pov_target(blampc)

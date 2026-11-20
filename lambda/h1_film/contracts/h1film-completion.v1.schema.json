@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 317d2bfb27e7b54e9504311875f8960c6f58e4a7b27011716f3251c4909239f2",
+  "$comment": "Generated from API schemas/h1films.py SHA256 80f14fa2bc7d2b78c272505fffbd451b2ed38bd37e390991d7f931533f984dfa",
   "$defs": {
     "H1FilmBotNetworkHost": {
       "additionalProperties": false,
@@ -507,6 +507,19 @@
           "default": null,
           "title": "Recorded Own Player"
         },
+        "recovery_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recovery Sha256"
+        },
         "role": {
           "enum": [
             "host",
@@ -746,6 +759,19 @@
           ],
           "default": null,
           "title": "Recorded Own Player"
+        },
+        "recovery_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recovery Sha256"
         },
         "role": {
           "const": "client",

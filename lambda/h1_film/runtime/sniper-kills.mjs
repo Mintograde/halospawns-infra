@@ -224,7 +224,9 @@ export async function buildSniperKills(stage, film, encoding, hasTracks, exporte
     const raw = await readFile(film);
     const source=recordedGameplaySources(raw,exporterRevision), fires = new Map(), worlds = new Map();
     const divergent = new Map();
-    for (const track of tracks) {
+    for (const recorded of tracks) {
+      // Viewer recovery does not upgrade shooter evidence for host analytics.
+      const track=recorded.recovery ? {...recorded,status:'unavailable',failure:recorded.recovery.original_failure} : recorded;
       const part = track.part;
       if ((!extended && (track.status !== 'available' || !part.account_size))
           || track.envelope.recorded_own_player !== part.player
