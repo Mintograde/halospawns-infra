@@ -9,3 +9,7 @@ Each verified world carries its own clock, roster and source film hash. Its matc
 ## Building and rollback
 
 Use the exporter 45 build flags for the appropriate pinned engine plus `-VerifiedPovRecovery` in `tools/build-engine.ps1`. Native parity builds use `-DH1_VERIFIED_POV_RECOVERY=ON`. The recovery input is internal to the second embedded-client invocation. Preserve the old exporters, match v9 reader and every selected or archived generation when rolling back the default. The original evidence and historical replay bytes remain available for review.
+
+## Dev release
+
+Dev worker and default `20261120-r1` run under policy 43. API 301 and frontend `3713dab` read the recovery receipt. The packaged worker reproduced 14 audited worlds from the selected dev sources. Eight belong to juanch0, five to xzr and one to zut. Those worlds cover 974,315 recorded ticks and 8,125 matching world hashes. All 33 other audited desynchronized views retained their unavailable result.
