@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 import worker
 
@@ -28,6 +28,19 @@ def extract(ticks, rate=30, start=0, end=432001):
 
 
 class MovementTests(unittest.TestCase):
+    def test_handler_uses_one_idle_command_and_honors_the_leased_format(self):
+        context = Mock()
+        context.get_remaining_time_in_millis.return_value = 350000
+        job = {"kind": "scope", "lease": "example"}
+        with patch.object(worker, "command", side_effect=[{"job": job}, {}, {"job": None}]) as api:
+            with patch.object(worker, "scope_product", return_value={}) as product:
+                self.assertEqual(worker.handler({}, context), {"processed": 1})
+        product.assert_called_once_with("example", "field")
+        self.assertEqual(api.call_args_list, [
+            call("claim_any", representation="paths"), call("complete", lease="example", product={}),
+            call("claim_any", representation="field"),
+        ])
+
     def test_source_rate_independent_distance_and_moving_time(self):
         for rate in (30, 120):
             rows = extract([tick(i, i/rate) for i in range(rate+1)], rate)["0"]

@@ -61,6 +61,7 @@ components:
         heatmap_response_cache_enabled: true
         workshop_maps_enabled: true
         movement_flow_enabled: true
+        homepage_snapshot_enabled: true
         h1_film:
           enabled: true
           processing_enabled: true

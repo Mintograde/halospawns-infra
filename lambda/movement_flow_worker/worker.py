@@ -234,10 +234,8 @@ def handler(event, context):
     while count < 16 and context.get_remaining_time_in_millis() > 270000:
         # Give newly uploaded games both representations. Existing v1 readers
         # continue to use their own immutable products during the rollout.
-        first, second = ("paths", "field") if count % 2 == 0 else ("field", "paths")
-        job = command("claim", representation=first)["job"]
-        if not job:
-            job = command("claim", representation=second)["job"]
+        preferred = "paths" if count % 2 == 0 else "field"
+        job = command("claim_any", representation=preferred)["job"]
         if not job:
             break
         try:
