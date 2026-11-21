@@ -1,5 +1,29 @@
 # H1 Film Compatibility
 
+## Empty Beta 8 embedded-client build labels (exporter 47)
+
+Some 30 Hz Beta 8 match films contain an embedded client whose 64-byte build
+field is entirely zero. Exporter 46 stopped the whole conversion when it could
+not select an engine for that client, even after verifying the host.
+
+Exporter 47 can try the verified host's Beta 8 engine for this client. The
+required evidence includes format 3, protocol 9848, source commit
+`3194e680896cead7326c2a3fcb9e35e85de1d7cc`, the same nonzero match ID,
+scenario, recorded player and local-player mask. Both the embedded and restored
+headers must have the original zero-filled field. The converter preserves the
+client bytes and requires the normal recorded checks for its own timeline.
+Host and separate-client intake continue to require their own build evidence.
+Frozen exporter 46 jobs retain their original behavior.
+
+Dev release `20261121-r1`, policy 44 and API 302 recovered seven failed uploads
+using their exact stored source versions. Each had four embedded clients,
+including an unlabeled recording by `0m3N meg`. All 35 selected perspectives
+verified 683,684 frames and 5,714 recorded hashes with zero mismatches. The 28
+client worlds matched the offline conversions byte for byte. The seven host
+worlds also matched after accounting for the new upload ID in each viewer
+index. Each new ticket records its original upload and source version.
+Rollback requires retaining the revision 47 reader, recipe and selected files.
+
 ## Missing embedded-client match IDs (exporter 27)
 
 Beta 6.1's pinned `blampc_film_bake.c::same_match` treats a zero match ID as
