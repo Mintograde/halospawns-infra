@@ -1,9 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {unsupportedClientBuild,compatibleClientBuild} from '../runtime/client-build.mjs';
+import {unsupportedClientBuild, compatibleClientBuild, hostForEmptyClientBuild} from '../runtime/client-build.mjs';
 import {profileById,BUILD_MATCHING,selectProfile,resolveMap} from '../runtime/profiles.mjs';
 const profile=profileById('h1-performance-beta6-p9839-wasm-v1'),rule=BUILD_MATCHING[profile.id];
 const envelope={format:3,protocol_revision:9839,tick_rate:120,recording_kind:'client-view',build:'2026-11-08 - ec92e0bb'};
+
+test('a verified Beta 8 host can select its pinned engine for its own unlabeled 30 Hz client', () => {
+  const beta8 = profileById('h1-performance-beta8-p9848-wasm-v1');
+  const host = {format:3, protocol_revision:9848, tick_rate:30, map:'prisoner', match_id:'0123456789abcdef'};
+  const report = {engine_profile:beta8.id, exporter_revision:47, provenance:{engine_source:beta8.source}, simulation:{hash_checks:97}};
+  const film = {...host, map_bytes:1024, recording_kind:'client-view', build:'', recorded_own_player:0,
+    recorded_local_player_mask:1, hash_samples:97};
+  const playback = {embeddedClient:true, exporterRevision:47, verifiedClientHost:hostForEmptyClientBuild(report,host,0)};
+  const selected = selectProfile(film,undefined,undefined,playback);
+  assert.equal(selected.id,beta8.id);
+  assert.equal(selected.tick_rate,30);
+  const map = {engine_profile:beta8.id, scenario:'prisoner', size_bytes:1024, sha256:'a'.repeat(64)};
+  assert.deepEqual(resolveMap(selected,film,{schema:'halospawns.h1FilmMapCatalog.v1',maps:[map]},undefined,playback),map);
+  assert.equal(film.build,'');
+  for (const opts of [{},{...playback,embeddedClient:false},{...playback,verifiedClientHost:undefined},{...playback,exporterRevision:46}])
+    assert.throws(() => selectProfile(film,undefined,undefined,opts),/Unsupported film engine/);
+  for (const change of [{recording_kind:'host'},{build:' '},{build:'2026-11-14 - badc0ffe'},{tick_rate:120},
+    {format:2},{protocol_revision:9844},{match_id:'0000000000000000'},{map:'chillout'},{recorded_own_player:1},
+    {recorded_local_player_mask:0},{hash_samples:0}])
+    assert.throws(() => selectProfile({...film,...change},undefined,undefined,playback),/Unsupported film engine/);
+  for (const change of [{exporter_revision:46},{engine_profile:profile.id},{provenance:{engine_source:profile.source}},{simulation:undefined}])
+    assert.equal(hostForEmptyClientBuild({...report,...change},host,0),undefined);
+  for (const change of [{match_id:'0000000000000000'},{tick_rate:120},{format:2},{protocol_revision:9844}])
+    assert.equal(hostForEmptyClientBuild(report,{...host,...change},0),undefined);
+});
 
 test('an unsupported embedded build is explicit and never claims a simulated world',()=>{
   assert.deepEqual(unsupportedClientBuild(envelope,profile,22,rule),{reason:'unsupported_build',

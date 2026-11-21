@@ -21,7 +21,7 @@ import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roste
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
 import {buildSpawnMetrics} from './spawn-metrics.mjs';
-import {compatibleClientBuild} from './client-build.mjs';
+import {compatibleClientBuild, EMPTY_CLIENT_BUILD_EXPORTER} from './client-build.mjs';
 
 export async function convertFilm(options) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
@@ -70,6 +70,7 @@ export async function convertFilm(options) {
     exporters = validateExporters(candidate, profiles);
   }
   const playback = {embeddedClient:values['embedded-match']===true&&values['client-view']===true,
+    verifiedClientHost:values.verifiedClientHost,
     exporterRevision:values['exporter-revision']===undefined?undefined:Number(values['exporter-revision'])};
   const profile = selectExporter(selectProfile(envelope, profiles, buildMatching, playback),
     playback.exporterRevision, exporters);
@@ -137,10 +138,12 @@ export async function convertFilm(options) {
   await copyFile(map, join(work, 'maps', native.envelope.map + '.map'));
   await copyFile(values.film, join(work, 'input.h1film'));
   let playbackFilm='input.h1film';
+  let verifyHostFirst = false;
   if(['beta6','beta7','beta8'].includes(profile.port)&&!values['client-view']) {
     const bytes=await readFile(join(work,playbackFilm));
     if(bytes.readUInt32LE(64)===536) {
       const match=inspectMatchFilm(bytes,matchFilmPolicy(profile.exporter_revision));
+      verifyHostFirst = profile.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && match.parts.some(p => p.envelope.build === '');
       playbackFilm='authoritative.h1film';
       await writeFile(join(work,playbackFilm),bytes.subarray(match.host_offset,match.host_offset+match.host_size),{flag:'wx'});
       assert.deepEqual(await readEnvelope(join(work,playbackFilm),envelopeOptions),envelope,'Embedded host envelope differs');
@@ -225,6 +228,8 @@ export async function convertFilm(options) {
     ...(playback.embeddedClient&&compatibleClientBuild(envelope,profile,profile.exporter_revision)?{
       client_build_compatibility:{rule:'beta6_ec92e0bb_client_v1',recorded_build:envelope.build,
         canonical_source_commit:profile.source.git_commit}}:{}),
+    ...(playback.verifiedClientHost ? {client_build_compatibility:{rule:'verified_host_empty_client_build_v1',
+      recorded_build:envelope.build, canonical_source_commit:profile.source.git_commit, ...playback.verifiedClientHost}} : {}),
     ...(mapBinding ? { map_binding: mapBinding } : {}),
     provenance: { film_sha256: native.provenance.film_sha256, map_sha256: native.provenance.map_sha256,
       ...(profile.source ? { engine_source: profile.source } : {}),
@@ -268,7 +273,7 @@ export async function convertFilm(options) {
     const engine = spawn(process.execPath, engineArgs,
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });
     const simulated = completion(engine);
-    if (values['overlap-host'] && ['beta6','beta7','beta8'].includes(profile.port) && !values['client-view']) {
+    if (values['overlap-host'] && !verifyHostFirst && ['beta6','beta7','beta8'].includes(profile.port) && !values['client-view']) {
       // Every view uses its own work directory and verified engine/map/source pins.
       // Capture failures immediately, but do not publish until host and clients pass.
       matchConversion = convertMatchTracks(stage, values, report, convertFilm, started + timeout)

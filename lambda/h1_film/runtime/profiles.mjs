@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { matchesProfile, validateBuildMatching } from './build-identity.mjs';
-import {compatibleClientBuild} from './client-build.mjs';
+import {compatibleClientBuild, matchesEmptyClientBuild} from './client-build.mjs';
 
 export const REGISTRY_SCHEMA = 'halospawns.h1EngineRegistry.v1';
 const ID = /^[a-z0-9][a-z0-9-]{0,95}$/;
@@ -91,6 +91,7 @@ export function assertRetainedExporters(current, previous) {
 
 export function selectProfile(envelope, profiles = ENGINE_PROFILES, buildMatching = BUILD_MATCHING, playback = {}) {
   const matches = profiles.filter(profile => matchesProfile(profile, envelope, buildMatching[profile.id])
+    || matchesEmptyClientBuild(envelope, profile, playback)
     ||(playback.embeddedClient===true&&compatibleClientBuild(envelope,profile,playback.exporterRevision)));
   assert.equal(matches.length, 1, 'Unsupported film engine profile');
   return envelope.tick_rate === matches[0].tick_rate ? matches[0]

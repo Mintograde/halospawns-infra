@@ -13,7 +13,7 @@ import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
 import {clientRosterEvidence} from './client-roster.mjs';
 import {preparePovRecovery,IncompletePovRecovery} from './pov-recovery.mjs';
-import {unsupportedClientBuild} from './client-build.mjs';
+import {EMPTY_CLIENT_BUILD_EXPORTER, hostForEmptyClientBuild, unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
@@ -41,7 +41,15 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
       } finally {closeSync(log);}
     } else await writeFile(film,bytes.subarray(part.offset,part.offset+part.size),{flag:'wx'});
     assert.equal((await stat(film)).size,part.rest.whole_size,'Restored client size differs');
-    if(part.rest.fnv1a)assert.equal(fnv1a(await readFile(film)),part.rest.fnv1a,'Restored client checksum differs');
+    const checkEmptyLabel = report.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && part.envelope.build === ''
+      && bytes.subarray(part.offset + 384, part.offset + 448).every(b => b === 0);
+    let verifiedClientHost;
+    if (part.rest.fnv1a || checkEmptyLabel) {
+      const restored = await readFile(film);
+      if (part.rest.fnv1a) assert.equal(fnv1a(restored),part.rest.fnv1a,'Restored client checksum differs');
+      if (checkEmptyLabel && restored.subarray(384,448).every(b => b === 0))
+        verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
+    }
     const envelope=await readEnvelope(film,{allowClientView:true});
     assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
     assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
@@ -53,7 +61,7 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
     if(unsupported) {
       return {...track,status:'unavailable',failure:unsupported};
     }
-    const options={...values,film,analytics:false,reference:undefined,'engine-root':undefined,
+    const options={...values,film,verifiedClientHost,analytics:false,reference:undefined,'engine-root':undefined,
       'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5'};
     let converted, directory=id;
     try { converted=await convertFilm({...options,output:join(stage,id),timeout:String(remaining)});
