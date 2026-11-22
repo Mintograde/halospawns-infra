@@ -21,7 +21,7 @@ import {ClientRosterMismatch,completedClientRosterMismatch} from './client-roste
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
 import {buildSpawnMetrics} from './spawn-metrics.mjs';
-import {compatibleClientBuild, EMPTY_CLIENT_BUILD_EXPORTER} from './client-build.mjs';
+import {compatibleClientBuild, EMPTY_CLIENT_BUILD_EXPORTER, CLIENT_TEXT_SETTINGS_EXPORTER} from './client-build.mjs';
 import {OPENING_GRENADES_EXPORTER, OpeningInventoryDesync, recordedOpening, verifyOpening} from './opening-grenades.mjs';
 
 export async function convertFilm(options) {
@@ -72,6 +72,8 @@ async function convertAttempt(options, opening) {
     assert.equal(Number(values['viewer-revision']),5,'Client view requires viewer revision 5');
   }
   const envelopeOptions={allowClientView:Boolean(values['client-view']),
+    allowTextClientSettings:values['embedded-match'] === true && values.verifiedClientHost?.tick_rate === 120
+      && Number(values['exporter-revision']) >= CLIENT_TEXT_SETTINGS_EXPORTER,
     botAwareHost:Number(values['exporter-revision'])>=26};
   const envelope = await readEnvelope(values.film,envelopeOptions);
   if(values['client-view']) assert.equal(envelope.recording_kind,'client-view','Expected a client-view recording');
@@ -525,7 +527,7 @@ async function convertAttempt(options, opening) {
       const ticks = before + 1;
       if (before > 0 && checks > 0) {
         let applications = 0;
-        await readEnvelope(film,{allowClientView:true,observeRecord:(frame,type)=>{
+        await readEnvelope(film,{...envelopeOptions,observeRecord:(frame,type)=>{
           if (frame < native.envelope.first_update + ticks && ![3,9,13,14,15,81,82].includes(type)) applications++;
         }});
         const prefixArgs = [...engineArgs];

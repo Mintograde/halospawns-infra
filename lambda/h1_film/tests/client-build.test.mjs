@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {unsupportedClientBuild, compatibleClientBuild, hostForEmptyClientBuild} from '../runtime/client-build.mjs';
+import {unsupportedClientBuild, compatibleClientBuild, hostForEmptyClientBuild, playbackBuildMatches} from '../runtime/client-build.mjs';
 import {profileById,BUILD_MATCHING,selectProfile,resolveMap} from '../runtime/profiles.mjs';
 const profile=profileById('h1-performance-beta6-p9839-wasm-v1'),rule=BUILD_MATCHING[profile.id];
 const envelope={format:3,protocol_revision:9839,tick_rate:120,recording_kind:'client-view',build:'2026-11-08 - ec92e0bb'};
+
+test('an unlabeled 120 Hz Beta 8 client requires its verified host and the new recipe', () => {
+  const beta8=profileById('h1-performance-beta8-p9848-wasm-v1');
+  const host={format:3,protocol_revision:9848,tick_rate:120,map:'dread',match_id:'0123456789abcdef'};
+  const report={engine_profile:beta8.id,exporter_revision:49,provenance:{engine_source:beta8.source},simulation:{hash_checks:440}};
+  const client={...host,build:'',recording_kind:'client-view',recorded_own_player:1,recorded_local_player_mask:2,hash_samples:440};
+  const playback={embeddedClient:true,exporterRevision:49,verifiedClientHost:hostForEmptyClientBuild(report,host,1)};
+  assert.equal(selectProfile(client,undefined,undefined,playback).id,beta8.id);
+  assert.equal(hostForEmptyClientBuild({...report,exporter_revision:48},host,1),undefined);
+  assert.throws(()=>selectProfile(client,undefined,undefined,{...playback,exporterRevision:48}));
+  for(const change of [{tick_rate:30},{match_id:'0000000000000000'},{recorded_local_player_mask:1},{recorded_own_player:0}])
+    assert.throws(()=>selectProfile({...client,...change},undefined,undefined,playback));
+});
+
+test('alternate options require the engine to read both recorded texts', () => {
+  const client={text_settings_options_bytes:13368,gametype:'TEAM SLAYER 50'};
+  const build='[film] RECORDED BY ANOTHER BUILD -- "unnamed", wire revision 9848 (this build is 9848). Its settings were read from their TEXT, so it replays exactly';
+  const variant='[film] gametype: the film\'s own record of "TEAM SLAYER 50" (from its text)';
+  const log=build+'\n'+variant+'\n';
+  assert.equal(playbackBuildMatches(log,client),true);
+  for(const bad of [build,variant,log.replace('9848','9839'),log.replace('from its text','raw'),log+build])
+    assert.equal(playbackBuildMatches(bad,client),false);
+  assert.equal(playbackBuildMatches(log,{}),false);
+});
 
 test('a verified Beta 8 host can select its pinned engine for its own unlabeled 30 Hz client', () => {
   const beta8 = profileById('h1-performance-beta8-p9848-wasm-v1');

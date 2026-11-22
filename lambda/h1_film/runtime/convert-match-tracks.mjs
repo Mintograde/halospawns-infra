@@ -55,7 +55,7 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
       if (restored.subarray(384,448).every(b => b === 0))
         verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
     }
-    const envelope=await readEnvelope(film,{allowClientView:true});
+    const envelope=await readEnvelope(film,{allowClientView:true,allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
     assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
     assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
     assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');

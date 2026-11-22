@@ -178,7 +178,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, observeTickBlock, observeRecord} = {}) {
+export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, allowTextClientSettings = false, observeTickBlock, observeRecord} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -188,9 +188,12 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     assert.ok(words[0] === 0x314d4c46 && words[1] === 3 && words[2] === 9848 && [30,120].includes(words[3]) && words[5] === 32
       && words[6] === 4 && [504,536].includes(words[16]), 'Unsupported beta8 film layout');
     assert.ok(words[11] > 0 && words[11] <= 432000 && words[25] > 0 && words[25] <= 4, 'Invalid tick or seat count');
-    assert.ok([13360, 13364].includes(words[4]), 'Unsupported Beta 8 options layout');
     const flags = words[7], network = Boolean(flags & 2), universal = Boolean(flags & 8);
     const clientView = Boolean(flags & 64);
+    const textSettings = allowTextClientSettings && allowClientView && clientView && words[3] === 120
+      && words[4] === 13368 && words[22] === 440 && words[24] > 0 && words[24] <= 1024 * 1024
+      && head.readBigUInt64LE(488) !== 0n && head.subarray(384,448).every(byte => byte === 0);
+    assert.ok(textSettings || [13360, 13364].includes(words[4]), 'Unsupported Beta 8 options layout');
     // Beta 8 writes MAP_SOURCE even for a local map with no Workshop identity.
     assert.equal(flags & ~((allowClientView ? 123 : 59) | 128), 0, 'Unknown film flags');
     assert.ok(!clientView || network && universal, 'Client view requires UNIVERSAL networking');
@@ -248,14 +251,6 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     spans.push([trailer, end]);
     spans.sort((left, right) => left[0] - right[0]);
     for (let index = 1; index < spans.length; index++) assert.ok(spans[index - 1][1] <= spans[index][0], 'Overlapping sections');
-    const configuredBots = words[4] === 13364 ? (await readBlock(file, words[18] + 13360, 4)).readUInt32LE(0) : 0;
-    assert.ok(words[4] === 13360 || (configuredBots > 0 && configuredBots <= 11
-      && (network || players + configuredBots <= 12)),
-      'Invalid Beta 8 bot roster');
-    // record_begin preserves the local lobby setting even on a network client.
-    // blampc_bots_create_players returns before spawning on network playback;
-    // the recorded network roster already describes the actual participants.
-    const bots = network ? 0 : configuredBots;
     assert.ok(words[20] > 0 && words[20] <= 1024 * 1024, 'Invalid Beta 8 settings size');
     const settings = (await readBlock(file, words[19], words[20])).toString('utf8');
     const botSettings = new Map();
@@ -269,7 +264,19 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
       assert.ok(!botSettings.has(key), 'Duplicate Beta 8 bot setting');
       botSettings.set(key, field[2]);
     }
-    assert.equal(botSettings.get('bots') ?? '0', String(configuredBots), 'Beta 8 bot count differs from recorded settings');
+    const declaredBots = botSettings.get('bots') ?? '0';
+    let configuredBots = 0;
+    if (textSettings) {
+      configuredBots = Number(declaredBots);
+      assert.ok(Number.isInteger(configuredBots) && configuredBots >= 0 && configuredBots <= 11, 'Invalid Beta 8 bot roster');
+    } else if (words[4] === 13364) {
+      configuredBots = (await readBlock(file, words[18] + 13360, 4)).readUInt32LE(0);
+      assert.ok(configuredBots > 0 && configuredBots <= 11 && (network || players + configuredBots <= 12),
+        'Invalid Beta 8 bot roster');
+    }
+    // Network playback uses the recorded player roster even when the recorder's local lobby had bots configured.
+    const bots = network ? 0 : configuredBots;
+    assert.equal(declaredBots, String(configuredBots), 'Beta 8 bot count differs from recorded settings');
     if (configuredBots) {
       assert.match(botSettings.get('bot_skill') ?? '', /^[0-4]$/, 'Invalid Beta 8 bot skill');
       const teams = (botSettings.get('bot_teams') ?? '').split(',').map(team => team.trim());
@@ -299,6 +306,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     return { format: 3, protocol_revision: words[2], tick_rate: words[3], ticks: words[11], players, map,
       map_bytes: words[15], hash_samples: samples, hash_period: words[13], first_update: words[10],
       end_reason: words[14], gametype: text(256, 384), build: text(384, 448),
+      ...(textSettings ? {text_settings_options_bytes:words[4]} : {}),
       ...(createdUtc ? { created_utc: Number(createdUtc) } : {}),
       ...(allowClientView ? {recording_kind:clientView?'client-view':'host',
         match_id:head.readBigUInt64LE(488).toString(16).padStart(16,'0'),

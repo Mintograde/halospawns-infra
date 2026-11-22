@@ -1,6 +1,7 @@
 // Only a completed, source-bound simulation with an explicit desync verdict may
 // lose its client world. Crashes, timeouts, bad inputs and incomplete logs fail.
 import {rejectedClientRoster} from './client-roster.mjs';
+import {playbackBuildMatches} from './client-build.mjs';
 export class ClientDesync extends Error {
   constructor(evidence, cause) {
     super('Client simulation desynchronized', {cause});
@@ -20,7 +21,7 @@ export function canVerifyRejectedClient(profile, values, report, encoderLog) {
 }
 
 export function completedClientDesync(log, envelope) {
-  if (/NOT ONE CONTROL PUSH|RECORDED BY ANOTHER BUILD|the gametype is resolved by NAME/.test(log)) return null;
+  if (!playbackBuildMatches(log, envelope) || /NOT ONE CONTROL PUSH|the gametype is resolved by NAME/.test(log)) return null;
   const played = [...log.matchAll(/\[film\] played (\d+) ticks? of/g)].at(-1);
   const checks = [...log.matchAll(/self-check: (\d+) seed mismatch(?:es)?, (\d+) of (\d+) hash samples? differed, (\d+) control push(?:es)?/g)].at(-1);
   const verdict = [...log.matchAll(/VERDICT: DESYNCED, first at update (\d+)/g)].at(-1);

@@ -1,5 +1,6 @@
 // Frozen format-2 / 120 Hz adapter. New wire formats get a separate adapter.
 import assert from 'node:assert/strict';
+import {playbackBuildMatches} from '../client-build.mjs';
 import { open } from 'node:fs/promises';
 
 export async function readEnvelope(path) {
@@ -45,7 +46,7 @@ export async function readEnvelope(path) {
 }
 
 export function verifyPlayback(log, envelope) {
-  assert.ok(!/DESYNC|NOT ONE CONTROL PUSH|RECORDED BY ANOTHER BUILD|the gametype is resolved by NAME/.test(log),
+  assert.ok(playbackBuildMatches(log, envelope) && !/DESYNC|NOT ONE CONTROL PUSH|the gametype is resolved by NAME/.test(log),
     'Simulation diverged or recorded build/settings differ');
   const played = [...log.matchAll(/\[film\] played (\d+) ticks? of/g)].at(-1);
   const checks = [...log.matchAll(/self-check: (\d+) seed mismatch(?:es)?, (\d+) of (\d+) hash samples? differed, (\d+) control push(?:es)?/g)].at(-1);

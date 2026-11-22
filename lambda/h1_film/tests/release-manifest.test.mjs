@@ -191,14 +191,14 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
   const p=registry.profiles.find(p=>p.id===id);
   assert.equal(p.source.git_commit,'3194e680896cead7326c2a3fcb9e35e85de1d7cc');
   assert.equal(p.protocol_revision,9848);
-  assert.deepEqual(value.defaults[id],{exporter_revision:48,analytics_revision:5,viewer_revision:14,max_players:16});
+  assert.deepEqual(value.defaults[id],{exporter_revision:49,analytics_revision:5,viewer_revision:14,max_players:16});
   const old=registry.exporters.find(e=>e.engine_profile===id&&e.revision===46);
   assert.deepEqual(registry.exporters.find(e=>e.engine_profile===id&&e.revision===47),{...old,revision:47});
   const camo=registry.exporters.find(e=>e.engine_profile===id&&e.revision===48);
   assert.notEqual(camo.wasm_sha256,old.wasm_sha256);
   assert.deepEqual(value.recipes[id],[
     ...[35,36,37,38,39].map(exporter_revision=>({...value.defaults[id],exporter_revision,viewer_revision:13})),
-    ...[40,42,43,44,45,46,47,48].map(exporter_revision=>({...value.defaults[id],exporter_revision}))
+    ...[40,42,43,44,45,46,47,48,49].map(exporter_revision=>({...value.defaults[id],exporter_revision}))
   ]);
   for(const mutate of [
     r=>delete r.processing.requirements.beta8,
@@ -211,7 +211,7 @@ test('Beta 8 binds the exact new source, protocol, recipe and reader without alt
 test('remote melee defaults require their reader and retain all previous recipes',()=>{
   const value=manifest(registry);
   for(const p of registry.profiles.filter(p=>['beta5','beta6','beta7','beta8'].includes(p.port))) {
-    assert.equal(value.defaults[p.id].exporter_revision,{beta5:44,beta6:46,beta7:46,beta8:48}[p.port]);
+    assert.equal(value.defaults[p.id].exporter_revision,{beta5:44,beta6:46,beta7:46,beta8:49}[p.port]);
     assert.ok(value.recipes[p.id].some(r=>r.exporter_revision===(p.port==='beta8'?35:34)));
   }
   const bad=structuredClone(registry);delete bad.processing.requirements.remote_melee_timing;

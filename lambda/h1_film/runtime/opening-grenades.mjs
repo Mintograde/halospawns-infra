@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {readEnvelope} from './film.mjs';
 import {inspectMatchFilm, matchFilmPolicy} from './match-film.mjs';
 import {restoreMatchPart} from './convert-match-tracks.mjs';
+import {CLIENT_TEXT_SETTINGS_EXPORTER} from './client-build.mjs';
 
 export const OPENING_GRENADES_EXPORTER = 48;
 const unitName = unit => unit.toString(16).toUpperCase().padStart(8,'0');
@@ -103,7 +104,8 @@ export async function recordedOpening(error, deadline) {
     const film = await restoreMatchPart(directory,values,bytes,part,deadline);
     try {
       const witness = openingInventoryWitness(spawns,Math.min(envelope.tick_rate,mismatch-1));
-      const source = await readEnvelope(film,{allowClientView:true,observeRecord:witness.record});
+      const source = await readEnvelope(film,{allowClientView:true,observeRecord:witness.record,
+        allowTextClientSettings:Number(values['exporter-revision']) >= CLIENT_TEXT_SETTINGS_EXPORTER});
       if (source.recording_kind !== 'client-view' || source.recorded_own_player !== part.player ||
           !(source.recorded_local_player_mask & (1 << part.player)) || source.match_id !== match.host.match_id) return null;
       views.push({player:part.player,rows:witness.rows()});
