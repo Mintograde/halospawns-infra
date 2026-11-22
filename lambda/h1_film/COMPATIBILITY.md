@@ -1,5 +1,47 @@
 # H1 Film Compatibility
 
+## Beta 8 dropped camouflage and opening host state (exporter 48)
+
+Picking up dropped active camouflage announces how many seconds remain. The
+WASM port now supplies the MSVC three-argument `_vswprintf` entry point using
+its existing UTF-16 formatter. This fixes both November 19 recordings that
+aborted in `blampc_camo_drop_announce_pickup`.
+
+The initial host roster supplies each player's recorded free-for-all team.
+Wizard used teams 0 and 2. Assigning consecutive local teams changed the kill
+credit at tick 46,951, applied a suicide respawn penalty and caused the first
+seed mismatch at update 47,621.
+
+For a Beta 8 host match that reports a seed mismatch, the worker can replay
+from update zero with corroborated opening grenade counts. It binds the host's
+live unit states at update one to the exact slot and salted object handle at
+each opening spawn. At least two distinct embedded perspectives must agree,
+and each included perspective must supply the opening inventory for every
+player. The engine applies the counts only at the opening spawn and enforces
+the variant's carrying limits. Later respawns use the recorded variant.
+
+In the November 21 Hang 'Em High match, all four perspectives recorded four
+frags and one plasma per player at the opening. The variant gave later
+respawns four frags and zero plasmas. Using that later loadout at the opening
+changed BIFF NASTY's first throw to a frag and diverged at update 486. Replaying
+all 60,251 host ticks with the opening stock matches every recorded seed,
+all 503 world hashes, 362 damage entries and 74 deaths.
+
+Dev worker/default `20261121-r2`, policy 45 and API 306 processed fresh uploads
+of the four original S3 object versions. The packaged worker verified all four
+locally before the retries. The selected dev artifacts match their local
+playback data for all 12 worlds, covering 614,317 frames and 5,129 recorded
+world hashes with zero seed or world-hash mismatches. All 954 recorded damage
+entries and 153 deaths match. The separate visual-detail check reported effects
+differences at 18 host samples and matched all eight client tracks.
+
+| Film | Original failed upload | Recovered dev replay |
+| --- | --- | --- |
+| Chillout, Nov 19 20:30:40 | `06900b96-071e-4ea2-a069-152d6ce54833` | `87f34d09-c23e-4abb-99fe-96cca9f700a2` |
+| Hang 'Em High, Nov 19 07:42:39 | `98eabefd-a00a-4106-a39a-051ec70c6f2e` | `4ac59f50-a0af-4006-abd2-55785e4bb597` |
+| Wizard, Nov 21 09:45:52 | `0a058f5c-c52f-49d9-a9e0-38a6887fb2d3` | `a00100d0-2236-4c97-8676-2f585d4a7d8c` |
+| Hang 'Em High, Nov 21 21:59:21 | `e617d675-8bbc-4613-9d29-00a56b209a20` | `f1d7c6e1-6471-4d33-9e8a-ec95983e1b24` |
+
 ## Empty Beta 8 embedded-client build labels (exporter 47)
 
 Some 30 Hz Beta 8 match films contain an embedded client whose 64-byte build
