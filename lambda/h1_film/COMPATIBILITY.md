@@ -1,5 +1,44 @@
 # H1 Film Compatibility
 
+## Beta 8 embedded client recordings at 120 Hz (exporter 49)
+
+Some 120 Hz matches have an embedded client with a zero-filled build label.
+Five November 22 team games contain two such clients. The client recorded by
+`0m3N meg` uses an options layout the pinned engine already reads. The client
+recorded by `nexy dre` uses a 13,368-byte options layout and includes the
+settings and gametype as text. The 12:54 Dread free-for-all also contains the
+latter client.
+
+Exporter 49 can select the source-pinned Beta 8 engine for either client after
+the enclosing host passes replay verification. Both headers must agree on the
+nonzero match ID, scenario, protocol, clock and player association. For the
+13,368-byte layout the engine must acknowledge loading the recording's own
+settings and gametype text. It reads the original client bytes. Every world
+still has to pass its seed, sampled world hash, input and network checks.
+Exporter 48 and earlier retain their original recording rules.
+
+The 12:41 Dread (`aa537979-6341-4115-a9e9-e3bdf0704b6a`) has an additional
+host failure at update 28,047. The source-pinned Linux server reproduced the
+same disagreement after restoring the recording's own snapshot at update
+25,200. The initial grenade inventories in the available opening client
+records agree with the replay. The cause of the host divergence is unresolved.
+
+Dev release `20261122-r1`, policy 46 and API 309 processed the six recordings
+below from their original S3 versions. All 33 perspectives replayed 2,362,040
+frames and passed 19,701 sampled hashes with zero seed mismatches, hash
+mismatches or refused network changes. The six simulated hosts matched 3,583
+recorded damage events and 748 deaths. Each selected dev artifact matched its
+offline replay across all client worlds and the host timeline.
+
+| Recording on November 22 | Original upload | Recovered dev replay |
+| --- | --- | --- |
+| 12:54 Dread | `2ca470b2-a1b9-49d4-96f6-ae1d6b854933` | `8daae3d5-09be-40f4-8760-2b21f59754ed` |
+| 14:40 Hang 'Em High | `51f52536-f5e6-4e48-ad73-83d562014022` | `4859dc9d-6c05-412e-9129-38c0d2054d48` |
+| 14:51 Prisoner | `844c3eef-add4-4c24-8f08-dd64aa67d84b` | `410140c6-490d-46b6-9a70-872cc6b24d09` |
+| 15:01 Dammy | `98b30b53-8296-448d-9e9a-7539a2e282ed` | `94fb201a-e462-4f43-89ab-e16545c0c1e5` |
+| 15:12 Dread | `1d4bc899-2ffb-4dae-8836-819f9abb30b8` | `fda4ade8-7735-4d7f-8028-9167cd695dca` |
+| 15:19 Downrush | `19e4ef50-3e36-4a75-bbb9-bbc29057bbc4` | `15a50e40-0cf6-4473-8db1-538fc8a2cb33` |
+
 ## Beta 8 dropped camouflage and opening host state (exporter 48)
 
 Picking up dropped active camouflage announces how many seconds remain. The
