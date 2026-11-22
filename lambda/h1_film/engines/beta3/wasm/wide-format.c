@@ -139,3 +139,9 @@ int _vsnwprintf(wchar_t *buffer, size_t capacity, const wchar_t *format, va_list
     if (out.length < capacity) buffer[out.length] = 0;
     return out.length > capacity ? -1 : (int)out.length;
 }
+
+/* The engine's usprintf uses the three-argument MSVC CRT entry point.
+ * Its caller supplies the storage. Keep the same UTF-16 and varargs ABI. */
+int _vswprintf(wchar_t *buffer, const wchar_t *format, va_list args) {
+    return _vsnwprintf(buffer, SIZE_MAX, format, args);
+}

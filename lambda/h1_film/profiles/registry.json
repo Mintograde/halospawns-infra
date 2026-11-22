@@ -46,7 +46,7 @@
         "max_players": 16
       },
       "h1-performance-beta8-p9848-wasm-v1": {
-        "exporter_revision": 47,
+        "exporter_revision": 48,
         "analytics_revision": 5,
         "viewer_revision": 14,
         "max_players": 16
@@ -878,6 +878,12 @@
         },
         {
           "exporter_revision": 47,
+          "analytics_revision": 5,
+          "viewer_revision": 14,
+          "max_players": 16
+        },
+        {
+          "exporter_revision": 48,
           "analytics_revision": 5,
           "viewer_revision": 14,
           "max_players": 16
@@ -1910,6 +1916,13 @@
       "transport_contract": "HSFT0002",
       "wasm_sha256": "b724862d2c9f41380e09b4bc5eba83d6567df240e89074bebf4a8732113f0885",
       "glue_sha256": "3d785055230368af5ec9bba5863826573c63e5ad5464230f1f1b185551483258"
+    },
+    {
+      "engine_profile": "h1-performance-beta8-p9848-wasm-v1",
+      "revision": 48,
+      "transport_contract": "HSFT0002",
+      "wasm_sha256": "37ea1897cd14568e0fb9ef570fd813836373a292d2756af403b46520e09ddfea",
+      "glue_sha256": "7831471950beac4b41fad3280e640f179eac742d1e475b0c98b0cf169bea5e41"
     }
   ]
 }

@@ -16,38 +16,43 @@ import {preparePovRecovery,IncompletePovRecovery} from './pov-recovery.mjs';
 import {EMPTY_CLIENT_BUILD_EXPORTER, hostForEmptyClientBuild, unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 
+export async function restoreMatchPart(stage,values,bytes,part,deadline) {
+  const id=`client-${part.index}`,film=join(stage,`${id}.h1film`);
+  if(part.rest.flags&1) {
+    // Use the pinned upstream restorer for the RNET shared-message representation.
+    // Validate its complete result before allowing any simulation or publication.
+    const args=['--permission',`--allow-fs-read=${values.film}`,`--allow-fs-read=${dirname(values.engine)}`,
+      `--allow-fs-read=${stage}`,
+      `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs',import.meta.url))}`,
+      `--allow-fs-write=${film}`,'--import',new URL('./engine-permissions.mjs',import.meta.url).href,
+      values.engine,'--film-part-export',values.film,String(part.index),film];
+    const timeout=Math.min(60000,Math.floor(deadline-performance.now()));assert.ok(timeout>0,'Match conversion timed out');
+    const log=openSync(join(stage,`${id}-restore.log`),'wx');
+    try {
+      const child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',log,log],timeout,
+        env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(BLAMPC_|H1_EXPORT_|AWS_)/i.test(k)))});
+      const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
+      assert.equal(code,0,'Thin client restoration failed');
+    } finally {closeSync(log);}
+  } else await writeFile(film,bytes.subarray(part.offset,part.offset+part.size),{flag:'wx'});
+  assert.equal((await stat(film)).size,part.rest.whole_size,'Restored client size differs');
+  if (part.rest.fnv1a) assert.equal(fnv1a(await readFile(film)),part.rest.fnv1a,'Restored client checksum differs');
+  return film;
+}
+
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
   const policy=matchFilmPolicy(report.exporter_revision);
   const match=inspectMatchFilm(bytes,policy);
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
   const tracks=await orderedPool(match.parts,Number(values['client-concurrency'] ?? 1),async part => {
-    const id=`client-${part.index}`,film=join(stage,`${id}.h1film`);
-    if(part.rest.flags&1) {
-      // Use the pinned upstream restorer for the RNET shared-message representation.
-      // Validate its complete result before allowing any simulation or publication.
-      const args=['--permission',`--allow-fs-read=${values.film}`,`--allow-fs-read=${dirname(values.engine)}`,
-        `--allow-fs-read=${stage}`,
-        `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs',import.meta.url))}`,
-        `--allow-fs-write=${film}`,'--import',new URL('./engine-permissions.mjs',import.meta.url).href,
-        values.engine,'--film-part-export',values.film,String(part.index),film];
-      const timeout=Math.min(60000,Math.floor(deadline-performance.now()));assert.ok(timeout>0,'Match conversion timed out');
-      const log=openSync(join(stage,`${id}-restore.log`),'wx');
-      try {
-        const child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',log,log],timeout,
-          env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(BLAMPC_|H1_EXPORT_|AWS_)/i.test(k)))});
-        const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
-        assert.equal(code,0,'Thin client restoration failed');
-      } finally {closeSync(log);}
-    } else await writeFile(film,bytes.subarray(part.offset,part.offset+part.size),{flag:'wx'});
-    assert.equal((await stat(film)).size,part.rest.whole_size,'Restored client size differs');
+    const id=`client-${part.index}`,film=await restoreMatchPart(stage,values,bytes,part,deadline);
     const checkEmptyLabel = report.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && part.envelope.build === ''
       && bytes.subarray(part.offset + 384, part.offset + 448).every(b => b === 0);
     let verifiedClientHost;
-    if (part.rest.fnv1a || checkEmptyLabel) {
+    if (checkEmptyLabel) {
       const restored = await readFile(film);
-      if (part.rest.fnv1a) assert.equal(fnv1a(restored),part.rest.fnv1a,'Restored client checksum differs');
-      if (checkEmptyLabel && restored.subarray(384,448).every(b => b === 0))
+      if (restored.subarray(384,448).every(b => b === 0))
         verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
     }
     const envelope=await readEnvelope(film,{allowClientView:true});

@@ -56,7 +56,7 @@ export function createReleaseManifest(registry, releaseId, imageDigest) {
         assert.equal(requirements.network_host_bots,'halospawns.h1NetworkHostBots.v1');
       }
       if(recipe.viewer_revision!==14)assert.equal(profile.port==='beta8',recipe.viewer_revision===13);
-      if(profile.port==='beta8') assert.ok([35,36,37,38,39,40,42,43,44,45,46,47].includes(recipe.exporter_revision));
+      if(profile.port==='beta8') assert.ok([35,36,37,38,39,40,42,43,44,45,46,47,48].includes(recipe.exporter_revision));
       if(recipe.viewer_revision!==14)assert.equal(profile.port==='beta7',[11,12].includes(recipe.viewer_revision));
       if(profile.port==='beta7')assert.equal(recipe.exporter_revision>=33,[12,14].includes(recipe.viewer_revision));
       if(recipe.viewer_revision===12)assert.equal(requirements.large_match_replay,'halospawns.h1MatchReplay.v7');

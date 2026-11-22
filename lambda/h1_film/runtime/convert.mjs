@@ -3,7 +3,7 @@ import {TICK_RATE_EXPORTER,sourceRateKey,sourceReplayName,analyticsStride} from 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
-import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { devNull } from 'node:os';
@@ -22,8 +22,29 @@ import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {buildGameplayMetrics} from './gameplay-source.mjs';
 import {buildSpawnMetrics} from './spawn-metrics.mjs';
 import {compatibleClientBuild, EMPTY_CLIENT_BUILD_EXPORTER} from './client-build.mjs';
+import {OPENING_GRENADES_EXPORTER, OpeningInventoryDesync, recordedOpening, verifyOpening} from './opening-grenades.mjs';
 
 export async function convertFilm(options) {
+  const deadline = performance.now() + 1000 * Number(options.timeout ?? 1800);
+  try { return await convertAttempt(options); }
+  catch (failure) {
+    const desync = failure.cause;
+    if (!(desync instanceof OpeningInventoryDesync)) throw failure;
+    const plan = await recordedOpening(desync,deadline);
+    if (!plan) throw failure;
+    const remaining = (deadline-performance.now())/1000;
+    assert.ok(remaining > 1,'Conversion timed out before recorded opening inventory replay');
+    assert.equal(desync.stage,resolve(options.output)+'.partial');
+    const diagnostics = desync.stage+'.original-desync';
+    await mkdir(diagnostics);
+    for (const name of ['report.json','playback.log','encode.log'])
+      await rename(join(desync.stage,name),join(diagnostics,name));
+    await rm(desync.stage,{recursive:true});
+    return convertAttempt({...options,timeout:String(remaining)},plan);
+  }
+}
+
+async function convertAttempt(options, opening) {
   const values = { timeout: '1800', 'trusted-local': false, 'skip-readback': false,
     analytics: false, ...options };
   const totalStarted = performance.now();
@@ -187,6 +208,10 @@ export async function convertFilm(options) {
 
   const environment = Object.fromEntries(Object.entries(process.env)
     .filter(([key]) => !/^(BLAMPC_|H1_EXPORT_|H1_ROSTER_|H1_POV_|VIEWER_ARTIFACT_)/i.test(key)));
+  if (opening) {
+    for (const row of opening.rows)
+      environment[`H1_EXPORT_OPENING_GRENADES_${row.slot}_${row.unit}`] = `${row.frags},${row.plasmas}`;
+  }
   if (values.povRecovery) {
     assert.ok(profile.exporter_revision>=46 && values['embedded-match'] && values['client-view'] &&
       !values.analytics && request.source_viewer_only,'POV recovery requires an embedded viewer world');
@@ -314,6 +339,7 @@ export async function convertFilm(options) {
       if (failure) throw new ClientDesync(failure,error);
       throw error;
     }
+    if (opening) report.opening_inventory_recovery=verifyOpening(log,opening);
     if (values.povRecovery) report.pov_recovery=finishPovRecovery(log,values.povRecovery);
     if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
@@ -533,6 +559,13 @@ export async function convertFilm(options) {
     report.error = error.message;
     report.wall_seconds = (performance.now() - started) / 1000;
     await save(join(stage, 'report.json'), report);
+    if (!expired && !opening && profile.port === 'beta8' && profile.exporter_revision >= OPENING_GRENADES_EXPORTER &&
+        values['trusted-local'] && !values['client-view'] && playbackFilm === 'authoritative.h1film' &&
+        (report.engine_exit?.code !== 0 || !report.simulation)) {
+      const log = await readFile(join(stage,'playback.log'),'utf8');
+      if (log.includes('FILM DESYNCED AT UPDATE'))
+        error = new OpeningInventoryDesync(stage,values,native.envelope,filmHash,log,error);
+    }
     throw new Error(`${error.message}\nDiagnostics: ${stage}`, { cause: error });
   } finally {
     // A failed host must not leave client children running past this conversion.

@@ -4,6 +4,14 @@
 #include <stdio.h>
 
 int _vsnwprintf(wchar_t *, size_t, const wchar_t *, va_list);
+int _vswprintf(wchar_t *, const wchar_t *, va_list);
+static int usprintf_format(wchar_t *out, const wchar_t *spec, ...) {
+    va_list args;
+    va_start(args, spec);
+    int result = _vswprintf(out, spec, args);
+    va_end(args);
+    return result;
+}
 static int format(wchar_t *out, size_t capacity, const wchar_t *spec, ...) {
     va_list args;
     va_start(args, spec);
@@ -16,6 +24,8 @@ static void equal(const wchar_t *a, const wchar_t *b) {
 }
 int main(void) {
     wchar_t out[256];
+    assert(usprintf_format(out, L"%d SECONDS OF CAMO LEFT", 17) == 23);
+    equal(out, L"17 SECONDS OF CAMO LEFT");
     assert(format(out, 256, L"%s killed %s (%d)", L"Alpha", L"Jos\u00e9", 42) == 22);
     equal(out, L"Alpha killed Jos\u00e9 (42)");
     format(out, 256, L"%ls %hs %S %c %% %08X %I64d %.2f", L"wide", "ascii", "bytes", '!', 0x1234u, 1234567890123ll, 1.25);
