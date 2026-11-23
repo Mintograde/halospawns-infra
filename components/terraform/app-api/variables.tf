@@ -141,6 +141,12 @@ variable "heatmap_response_cache_enabled" {
   default     = false
 }
 
+variable "player_distribution_cache_enabled" {
+  description = "Enable the private, disposable S3 cache for player distributions."
+  type        = bool
+  default     = false
+}
+
 variable "uploads" {
   description = "Uploads bucket prefixes and presigned URL behavior exposed to the app API."
   type = object({

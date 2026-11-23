@@ -127,6 +127,15 @@ data "aws_iam_policy_document" "app_runtime" {
   }
 
   dynamic "statement" {
+    for_each = var.player_distribution_cache_enabled ? [1] : []
+    content {
+      sid       = "CachePlayerDistributions"
+      actions   = ["s3:GetObject", "s3:PutObject"]
+      resources = ["${aws_s3_bucket.artifacts[0].arn}/cache/player-distributions/*"]
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.workshop_maps_enabled ? [1] : []
     content {
       sid       = "ReadImmutableWorkshopMaps"

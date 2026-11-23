@@ -1,7 +1,8 @@
 import {sourceRateKey,sourceReplayName} from './tick-rates.mjs';
 import assert from 'node:assert/strict';
+import {remoteMatchTracks} from './world-pool.mjs';
 import {orderedPool} from './ordered-pool.mjs';
-import {readFile,writeFile,stat} from 'node:fs/promises';
+import {open,readFile,writeFile,stat} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {spawn} from 'node:child_process';
 import {openSync,closeSync} from 'node:fs';
@@ -40,63 +41,80 @@ export async function restoreMatchPart(stage,values,bytes,part,deadline) {
   return film;
 }
 
+export async function convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part) {
+  const policy=matchFilmPolicy(report.exporter_revision);
+  const id=`client-${part.index}`,film=await restoreMatchPart(stage,values,bytes,part,deadline);
+  const checkEmptyLabel = report.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && part.envelope.build === ''
+    && bytes.subarray(part.offset + 384, part.offset + 448).every(b => b === 0);
+  let verifiedClientHost;
+  if (checkEmptyLabel) {
+    const restored = await open(film);
+    try {
+      const label = Buffer.alloc(64);
+      assert.equal((await restored.read(label,0,64,384)).bytesRead,64);
+      if (label.every(b => b === 0))
+        verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
+    } finally { await restored.close(); }
+  }
+  const filmHash = await sha256(film);
+  const envelope=await readEnvelope(film,{allowClientView:true,botAwareHost:report.exporter_revision>=26,
+    allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
+  assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
+  assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
+  assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
+  const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
+  const track={id,part,envelope,source_film_sha256:filmHash};
+  const unsupported=unsupportedClientBuild(envelope,{...profileById(report.engine_profile),tick_rate:report.envelope.tick_rate},
+    report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
+  if(unsupported) {
+    return {...track,status:'unavailable',failure:unsupported};
+  }
+  const options={...values,film,verifiedClientHost,inspectedClient:{envelope,filmHash},analytics:false,reference:undefined,'engine-root':undefined,
+    'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5'};
+  let converted, directory=id;
+  try { converted=await convertFilm({...options,output:join(stage,id),timeout:String(remaining)});
+  } catch(error) {
+    const failure=(report.exporter_revision>=16 && clientDesyncEvidence(error))
+      || (report.exporter_revision>=18 && clientRosterEvidence(error));
+    if(!failure)throw error;
+    assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
+    const unavailable={...track,status:'unavailable',failure};
+    if(report.exporter_revision<46||failure.reason!=='simulation_desync')return unavailable;
+    const plan=preparePovRecovery(bytes,match,track,await readFile(film),failure);
+    if(!plan)return unavailable;
+    directory=id+'-recovered';
+    const seconds=(deadline-performance.now())/1000;
+    assert.ok(seconds>1,'Match conversion timed out before client recovery');
+    try {
+      converted=await convertFilm({...options,output:join(stage,directory),timeout:String(seconds),povRecovery:plan});
+    } catch(retryError) {
+      if(clientDesyncEvidence(retryError)||clientRosterEvidence(retryError))return unavailable;
+      for(let e=retryError;e;e=e.cause)if(e instanceof IncompletePovRecovery)return unavailable;
+      throw retryError;
+    }
+    assert.ok(converted.pov_recovery,'Verified recovery lacks its proof');
+  }
+  assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
+  for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
+  return {...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
+    ...(converted.pov_recovery?{recovery:converted.pov_recovery}:{}),
+    world:`${directory}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
+}
+
 export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
   const bytes=await readFile(values.film);
   const policy=matchFilmPolicy(report.exporter_revision);
   const match=inspectMatchFilm(bytes,policy);
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
-  const tracks=await orderedPool(match.parts,Number(values['client-concurrency'] ?? 1),async part => {
-    const id=`client-${part.index}`,film=await restoreMatchPart(stage,values,bytes,part,deadline);
-    const checkEmptyLabel = report.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && part.envelope.build === ''
-      && bytes.subarray(part.offset + 384, part.offset + 448).every(b => b === 0);
-    let verifiedClientHost;
-    if (checkEmptyLabel) {
-      const restored = await readFile(film);
-      if (restored.subarray(384,448).every(b => b === 0))
-        verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
-    }
-    const envelope=await readEnvelope(film,{allowClientView:true,allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
-    assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
-    assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
-    assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
-    const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
-    const track={id,part,envelope,source_film_sha256:await sha256(film)};
-    const unsupported=unsupportedClientBuild(envelope,{...profileById(report.engine_profile),tick_rate:report.envelope.tick_rate},
-      report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
-    if(unsupported) {
-      return {...track,status:'unavailable',failure:unsupported};
-    }
-    const options={...values,film,verifiedClientHost,analytics:false,reference:undefined,'engine-root':undefined,
-      'client-view':true,'embedded-match':true,'trusted-local':true,'skip-readback':true,'source-viewer-only':true,'analytics-revision':'2','viewer-revision':'5'};
-    let converted, directory=id;
-    try { converted=await convertFilm({...options,output:join(stage,id),timeout:String(remaining)});
-    } catch(error) {
-      const failure=(report.exporter_revision>=16 && clientDesyncEvidence(error))
-        || (report.exporter_revision>=18 && clientRosterEvidence(error));
-      if(!failure)throw error;
-      assert.equal(await sha256(film),track.source_film_sha256,'Client source changed');
-      const unavailable={...track,status:'unavailable',failure};
-      if(report.exporter_revision<46||failure.reason!=='simulation_desync')return unavailable;
-      const plan=preparePovRecovery(bytes,match,track,await readFile(film),failure);
-      if(!plan)return unavailable;
-      directory=id+'-recovered';
-      const seconds=(deadline-performance.now())/1000;
-      assert.ok(seconds>1,'Match conversion timed out before client recovery');
-      try {
-        converted=await convertFilm({...options,output:join(stage,directory),timeout:String(seconds),povRecovery:plan});
-      } catch(retryError) {
-        if(clientDesyncEvidence(retryError)||clientRosterEvidence(retryError))return unavailable;
-        for(let e=retryError;e;e=e.cause)if(e instanceof IncompletePovRecovery)return unavailable;
-        throw retryError;
-      }
-      assert.ok(converted.pov_recovery,'Verified recovery lacks its proof');
-    }
-    assert.equal(converted.provenance.map_sha256,report.provenance.map_sha256);
-    for(const key of ['wasm_sha256','glue_sha256'])assert.equal(converted.provenance[key],report.provenance[key]);
-    return {...track,...(report.exporter_revision>=16?{status:'available'}:{}),verification:converted.simulation,
-      ...(converted.pov_recovery?{recovery:converted.pov_recovery}:{}),
-      world:`${directory}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
-  });
+  const local = part => convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part);
+  const concurrency = Number(values['client-concurrency'] ?? 1);
+  let tracks;
+  if (values['world-socket']) {
+    tracks = await remoteMatchTracks({bytes, match, report, stage, socket:values['world-socket'],
+      hostReady:values.hostReady, deadline, concurrency, local});
+  } else {
+    tracks = await orderedPool(match.parts, concurrency, local);
+  }
   const result={schema:'halospawns.h1MatchTracks.v1',source_film_sha256:match.sha256,match_id:match.host.match_id,
     version:match.version,tracks};
   await writeFile(join(stage,'match-tracks.json'),JSON.stringify(result),{flag:'wx'});

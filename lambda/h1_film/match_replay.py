@@ -17,7 +17,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
     output = work / "match.hsrv"
     request = work / "match-request.json"
     request.write_text(json.dumps({
-        "film": str(film), "directory": str(directory), "hostWorld": str(host.path),
+        "film": str(film), "directory": str(directory), "hostWorld": str(host.path), "hostWorldSha256": host.sha256,
         "output": str(output), "sourceContract": {
             **contract.source_contract, "tick_count": host.tick_count,
         },

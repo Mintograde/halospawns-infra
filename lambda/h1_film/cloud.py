@@ -450,7 +450,11 @@ def run_bounded(
                     time.monotonic() < deadline and peak_rss < 2400 * 1024,
                     "conversion_failed",
                 )
-                time.sleep(0.25)
+                # Wake on completion as well as the next resource check.
+                try:
+                    process.wait(timeout=0.25)
+                except subprocess.TimeoutExpired:
+                    pass
         finally:
             if sys.platform == "win32":
                 if process.poll() is None:
@@ -580,14 +584,9 @@ def inspect_film(path, work, deadline, *, intake=None):
     }
 
 
-def convert(job, film, work, deadline):
-    binding = job["conversion"]["map_binding"]
+def stage_map(binding, work):
     (work / "maps").mkdir()
-    download(
-        binding["raw_source"],
-        work / "maps" / f"{binding['scenario']}.map",
-        raw_map=True,
-    )
+    download(binding["raw_source"], work / "maps" / f"{binding['scenario']}.map", raw_map=True)
     catalog = {
         "schema": "halospawns.h1FilmMapCatalog.v1",
         "maps": [
@@ -602,6 +601,13 @@ def convert(job, film, work, deadline):
         ],
     }
     (work / "maps.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+
+def convert(job, film, work, deadline):
+    from .world_pool import world_pool
+
+    binding = job["conversion"]["map_binding"]
+    stage_map(binding, work)
     supplements = []
     for index, pin in enumerate(job["conversion"].get("sniper_clients") or []):
         path = work / f"shooter-{index}.h1film"
@@ -613,42 +619,39 @@ def convert(job, film, work, deadline):
     timeout = int(deadline - time.monotonic() - 180)
     require(timeout >= 30, "conversion_failed")
     directory = work / "conversion"
-    run_bounded(
-        [
-            "node",
-            str(NODE_ROOT / "convert.mjs"),
-            "--film",
-            str(film),
-            "--assets",
-            str(work),
-            "--encoder",
-            str(NODE_ROOT / "bin/h1-film-encoder"),
-            "--output",
-            str(directory),
-            "--map-catalog",
-            str(work / "maps.json"),
-            "--profile",
-            binding["engine_profile"],
-            "--trusted-local",
-            "--skip-readback",
-            "--source-viewer-only",
-            "--analytics",
-            *(["--shooter-sources", str(work / "shooter-sources.json")] if supplements else []),
-            "--analytics-revision",
-            str(job.get("analytics_revision") or 2),
-            "--viewer-revision",
-            str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12, 13, 14)
-                else job["viewer_artifact_target"]["profile_revision"]),
-            *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
-              if job["conversion"]["engine"].get("exporter_revision") is not None else []),
-            "--engine-permissions",
-            "--timeout",
-            str(timeout),
-        ],
-        work,
-        deadline - 180,
-        output_name="convert.log",
-    )
+    arguments = [
+        "node",
+        str(NODE_ROOT / "convert.mjs"),
+        "--film",
+        str(film),
+        "--assets",
+        str(work),
+        "--encoder",
+        str(NODE_ROOT / "bin/h1-film-encoder"),
+        "--output",
+        str(directory),
+        "--map-catalog",
+        str(work / "maps.json"),
+        "--profile",
+        binding["engine_profile"],
+        "--trusted-local",
+        "--skip-readback",
+        "--source-viewer-only",
+        "--analytics",
+        *(["--shooter-sources", str(work / "shooter-sources.json")] if supplements else []),
+        "--analytics-revision",
+        str(job.get("analytics_revision") or 2),
+        "--viewer-revision",
+        str(5 if job["viewer_artifact_target"]["profile_revision"] in (6, 7, 8, 9, 10, 11, 12, 13, 14)
+            else job["viewer_artifact_target"]["profile_revision"]),
+        *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
+          if job["conversion"]["engine"].get("exporter_revision") is not None else []),
+        "--engine-permissions",
+        "--timeout",
+        str(timeout),
+    ]
+    with world_pool(job, film, work, deadline - 180) as world_options:
+        run_bounded(arguments + world_options, work, deadline - 180, output_name="convert.log")
     # The encoder compares every decoded tick to its source and checks every
     # compressed chunk. Require that evidence before omitting the second scan.
     ticks = job["conversion"]["film"]["source_tick_count"]
@@ -785,6 +788,8 @@ def build_products(job, film, directory, work, deadline, source_metadata):
     report, encoding, sidecar = analytics.verified_products(
         directory, film_sha256=source["sha256"]
     )
+    if counts := report.get("world_pool"):
+        LOGGER.info("h1_world_pool remote=%d local=%d", counts["remote"], counts["local"])
     proof = completion_proof(job, report, encoding)
     film_settings = settings.extract(film, report=report, encoding=encoding) if job["mode"] != "viewer_rebuild" else None
     extractor = shared._native_extractor_path()

@@ -74,20 +74,22 @@ function stableCallback(value, report) {
   return result;
 }
 
-for (const name of ['finalization.json', 'full-reparse-completion.json', 'viewer-rebuild-completion.json']) {
+const baseline = await load(values.baseline, 'verification.json');
+const candidate = await load(values.candidate, 'verification.json');
+assert.deepEqual(candidate.product_modes, baseline.product_modes);
+const initialOnly = baseline.product_modes?.length === 1 && baseline.product_modes[0] === 'initial';
+for (const name of initialOnly ? ['finalization.json'] : ['finalization.json', 'full-reparse-completion.json', 'viewer-rebuild-completion.json']) {
   assert.deepEqual(stableCallback(await load(values.candidate, name), after),
     stableCallback(await load(values.baseline, name), before), name);
 }
-const baseline = await load(values.baseline, 'verification.json');
-const candidate = await load(values.candidate, 'verification.json');
 for (const field of ['status', 'aws_access', 'api_access', 'film_sha256', 'source_ticks',
-  'hash_checks', 'conversions', 'idempotent_callbacks', 'product_modes', 'viewer_bytes']) {
+  'hash_checks', 'conversions', 'idempotent_callbacks', 'viewer_bytes']) {
   assert.deepEqual(candidate[field], baseline[field], field);
 }
 const summary = {
   status: changedExporter ? 'identical_products_with_verified_exporter_change'
     : 'identical_products_except_operational_metrics', film_sha256: candidate.film_sha256,
-  full_export_parity: changedExporter,
+  full_export_parity: changedExporter, product_modes: candidate.product_modes,
   source_ticks: candidate.source_ticks, hash_checks: candidate.hash_checks,
   baseline_conversion_seconds: before.timing.total_seconds,
   candidate_conversion_seconds: after.timing.total_seconds,
@@ -96,5 +98,20 @@ const summary = {
   harness_speedup: baseline.total_seconds / candidate.total_seconds,
   runtime_fraction: candidate.total_seconds / baseline.total_seconds,
 };
+// Older harnesses only measured execution with additional product checks.
+// Keep that estimate separate from directly observed wall and callback times.
+async function loadStages(directory) {
+  try { return await load(directory, 'stages.json'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+const [baseStages, candidateStages] = await Promise.all([values.baseline, values.candidate].map(loadStages));
+for (const [name, key] of [['worker_wall', 'first_execution_seconds'], ['first_completion', 'first_completion_seconds'],
+  ['first_execution', 'first_execution_less_extra_finalizations_seconds']]) {
+  const baselineSeconds = baseStages?.[key], candidateSeconds = candidateStages?.[key];
+  if (baselineSeconds > 0 && candidateSeconds > 0) {
+    summary[name] = {baseline_seconds: baselineSeconds, candidate_seconds: candidateSeconds,
+      fraction: candidateSeconds / baselineSeconds, speedup: baselineSeconds / candidateSeconds};
+  }
+}
 if (values.output) await writeFile(values.output, JSON.stringify(summary, null, 2) + '\n', { flag: 'wx' });
 console.log(JSON.stringify(summary, null, 2));

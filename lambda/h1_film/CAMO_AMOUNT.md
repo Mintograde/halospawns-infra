@@ -141,3 +141,22 @@ reports. Promotion evidence is in
 the successful bounded warm health is `.build/camo/warm-health-r3.json`.
 Rollback must retain the camo reader capability, every registered recipe and
 the original immutable generations.
+
+## Local viewer rendering follow-up
+
+The user's subsequent check of the same replay confirmed the regenerated values
+arrive in the local viewer, including continuous firing/recovery transitions.
+Two frontend omissions were corrected locally: the separate first-person
+hands/weapon runtime now consumes camo, and built-in material alpha cutoffs scale
+with opacity to preserve translucent armor instead of discarding it below 0.5.
+The initial material-property checks had not covered those rendering cases.
+Diagnostic skeleton overlays remain opaque; source prototypes and ghost styling
+remain independent. No worker/API release or further reprocessing is needed.
+
+Chrome verifies 16 host/client zero/partial/full/rewind cases, eight actual
+framebuffer comparisons against the same opaque pose/background, and eight
+single/split first-person cases at 1440x900 and 390x844. At about 0:29 Lan Donkey
+is visibly translucent. All 82 focused / 1,823 viewer tests (one optional fixture
+skip) and both builds pass. Evidence: `.build/camo-followup/probe.json`,
+`verified.json`, `fixed-*.png` and build/test logs. Frontend remains local and
+uncommitted; an already open replay should be reloaded to select the new artifact.

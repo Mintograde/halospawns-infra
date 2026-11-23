@@ -94,11 +94,12 @@ class LocalS3:
         return {"VersionId": "local-derived-v1"}
 
 
-def main():
+def main(*, on_first_completion=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--film", required=True, type=Path)
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--initial-only", action="store_true", help="Time normal intake without also building reparse and viewer-rebuild products")
     parser.add_argument("--release-manifest", type=Path)
     parser.add_argument("--analytics-revision", type=int, choices=(1, 2, 3, 4, 5), default=3)
     parser.add_argument("--exporter-revision", type=int, default=1)
@@ -162,6 +163,7 @@ def main():
     real_convert, real_execute = cloud.convert, cloud.execute
     real_products = cloud.build_products
     real_run_bounded = cloud.run_bounded
+    pending_product_checks = None
 
     def run_bounded(command, *values, **options):
         if len(command) > 1 and command[1].endswith("convert.mjs"):
@@ -180,6 +182,7 @@ def main():
             raise
 
     def api(method, path, payload):
+        nonlocal pending_product_checks
         assert method == "POST"
         if path == "/v1/ingest/h1films/intake":
             assert payload["source"] == source and payload["recording_role"] == "host"
@@ -223,6 +226,14 @@ def main():
             "/v1/ingest/replay-viewer-artifacts",
         }
         callback.append((path, copy.deepcopy(payload)))
+        if len(callback) == 1:
+            # The worker has persisted its receipt and delivered its first
+            # callback. Extra verification can still use its temporary files.
+            if on_first_completion is not None:
+                on_first_completion()
+        if pending_product_checks is not None:
+            checks, pending_product_checks = pending_product_checks, None
+            checks()
         return {"data": {"ok": True}}
 
     def convert(*values):
@@ -266,7 +277,13 @@ def main():
             raise
 
     def products(current, film, directory, work, deadline, metadata):
+        nonlocal pending_product_checks
         initial = real_products(current, film, directory, work, deadline, metadata)
+        if not args.initial_only:
+            pending_product_checks = lambda: check_other_modes(initial, current, film, directory, work, deadline, metadata)
+        return initial
+
+    def check_other_modes(initial, current, film, directory, work, deadline, metadata):
         for mode in ("viewer_rebuild", "full_reparse"):
             name = mode.replace("_", "-")
             retry = json.loads(
@@ -312,7 +329,6 @@ def main():
                 json.dumps(payload, indent=2)
             )
             (args.output / f"{name}-job.json").write_text(json.dumps(retry, indent=2))
-        return initial
 
     with patch("boto3.client"):
         shared = cloud.shared_parser()
@@ -405,7 +421,7 @@ def main():
         "conversions": len(converted),
         "idempotent_callbacks": len(callback),
         "total_seconds": round(time.monotonic() - started, 3),
-        "product_modes": ["initial", "viewer_rebuild", "full_reparse"],
+        "product_modes": ["initial"] if args.initial_only else ["initial", "viewer_rebuild", "full_reparse"],
         "viewer_bytes": payload["viewer_artifact"]["size_bytes"],
         "exporter_revision": args.exporter_revision,
         "viewer_revision": args.viewer_revision,

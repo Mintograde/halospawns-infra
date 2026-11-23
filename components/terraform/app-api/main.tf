@@ -118,6 +118,9 @@ locals {
       ASSET_CLOUDFRONT_KEY_PAIR_ID                = local.asset_delivery.key_pair_id
       ASSET_CLOUDFRONT_PRIVATE_KEY_PARAMETER_NAME = local.asset_delivery.private_key_parameter_name
     },
+    var.player_distribution_cache_enabled ? {
+      PLAYER_DISTRIBUTION_CACHE_BUCKET = aws_s3_bucket.artifacts[0].bucket
+    } : {},
     var.heatmap_response_cache_enabled ? {
       HEATMAP_RESPONSE_CACHE_BUCKET = aws_s3_bucket.artifacts[0].bucket
     } : {},
@@ -380,6 +383,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
       id     = "heatmap-cache-delete-markers"
       status = "Enabled"
       filter { prefix = "cache/heatmaps/" }
+      expiration { expired_object_delete_marker = true }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.player_distribution_cache_enabled ? [1] : []
+    content {
+      id     = "player-distribution-cache-expiration"
+      status = "Enabled"
+      filter { prefix = "cache/player-distributions/" }
+      expiration { days = 1 }
+      noncurrent_version_expiration { noncurrent_days = 1 }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.player_distribution_cache_enabled ? [1] : []
+    content {
+      id     = "player-distribution-cache-delete-markers"
+      status = "Enabled"
+      filter { prefix = "cache/player-distributions/" }
       expiration { expired_object_delete_marker = true }
     }
   }

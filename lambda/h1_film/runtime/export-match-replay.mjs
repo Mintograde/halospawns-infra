@@ -9,7 +9,6 @@ import {readRawPad} from './format3-pad.mjs';
 import {unpackMszip} from './adapters/beta5-v2-120.mjs';
 import {unpackNetworkColumns} from './format3-codec.mjs';
 import {writeMatchReplay} from './pack-match-replay.mjs';
-import {sha256} from './engine-store.mjs';
 import {unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 import {readEnvelope} from './film.mjs';
@@ -17,7 +16,7 @@ import {completedClientDesync} from './client-desync.mjs';
 import {preparePovRecovery,finishPovRecovery,recoveryEntryId} from './pov-recovery.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-export async function exportMatchReplay({film,directory,hostWorld,output,sourceContract}) {
+export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha256,output,sourceContract}) {
   const report=JSON.parse(await readFile(join(directory,'report.json'),'utf8'));
   assert.ok(['simulation_and_encoding_verified','simulation_and_artifacts_verified'].includes(report.status));
   const raw=await readFile(film),match=inspectMatchFilm(raw,matchFilmPolicy(report.exporter_revision));
@@ -44,10 +43,11 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
   // of intermediate data in memory instead of writing and rereading it.
   let bufferedBytes=0;
   const bufferLimit=128*1024*1024;
+  const compact = sourceContract.profile_revision >= 8;
   async function add(id,kind,bytes,extra={}) {
     assert.ok(bytes.length>0);
     let storage;
-    if(sourceContract.profile_revision>=8&&bytes.length<=bufferLimit-bufferedBytes) {
+    if(compact&&bytes.length<=bufferLimit-bufferedBytes) {
       // A small slice must not pin a much larger decompressed/source buffer.
       bufferedBytes+=bytes.length;storage={bytes:Buffer.from(bytes)};
     } else {
@@ -56,7 +56,16 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     }
     entries.push({id,kind,compression:'identity',...storage,...extra});return id;
   }
-  function world(id,path) {entries.push({id,kind:'world',compression:'identity',path});return id;}
+  function world(id,path,worldHash) {entries.push({id,kind:'world',compression:'identity',path,worldHash});return id;}
+  // Compact readers reconstruct these entries from other stored bytes. Keep
+  // their independently computed pins, without copying the expanded data.
+  function derived(id, kind, length, hash) {
+    entries.push({id,kind,compression:'identity',derived:{length,hash}});
+    return id;
+  }
+  function derivedBytes(id, kind, bytes) {
+    return compact ? derived(id,kind,bytes.length,digest(bytes)) : add(id,kind,bytes);
+  }
   function section(bytes,at) {
     const start=bytes.readUInt32LE(at),size=bytes.readUInt32LE(at+4);
     assert.ok(start<=bytes.length&&size<=bytes.length-start);
@@ -66,7 +75,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     track.tables??=[];
     for(const table of account.tables) {
       if(!table.count) {track.tables.push({kind,name:table.name,count:0,stride:table.stride,capped:table.capped});continue;}
-      const entry=await add(`${track.id}/${kind}/${table.name}`,'diagnostic-table',table.bytes);
+      const entry=await derivedBytes(`${track.id}/${kind}/${table.name}`,'diagnostic-table',table.bytes);
       const chunks=[];
       for(let first=0;first<table.count;first+=2048) {
         const count=Math.min(2048,table.count-first),offset=first*table.stride,size=count*table.stride;
@@ -101,13 +110,14 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     if(rawPad) {
       const pad=readRawPad(rawPad),{events,samples,...metadata}=pad;
       track.pad={...metadata,original:await add(`${track.id}/recorded/pad`,'raw-pad',rawPad)};
-      if(events.length)track.pad.events=await add(`${track.id}/pad/events`,'raw-pad',events);
-      if(samples.length)track.pad.samples=await add(`${track.id}/pad/samples`,'raw-pad',samples);
+      if(events.length)track.pad.events=await derivedBytes(`${track.id}/pad/events`,'raw-pad',events);
+      if(samples.length)track.pad.samples=await derivedBytes(`${track.id}/pad/samples`,'raw-pad',samples);
     }
     const network=section(bytes,448);
     if(network) {
       track.recorded_sections.network=await add(`${track.id}/recorded/network`,'network-observations',network);
-      const blocks=[],decoded=[];let at=32,offset=0;
+      const blocks=[],decoded=[],hash=compact ? createHash('sha256') : null;
+      let at=32,offset=0;
       for(let i=0;i<network.readUInt32LE(24);i++) {
         const [size,packedSize,first,last,count,flags]=Array.from({length:6},(_,j)=>network.readUInt32LE(at+j*4));at+=24;
         const packed=network.subarray(at,at+packedSize);at+=packedSize;
@@ -115,16 +125,22 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
         const block=flags&2?unpackNetworkColumns(expanded,count):expanded;
         assert.equal(block.length,size);
         blocks.push({offset,size_bytes:size,first_tick:first,last_tick:last,count,sha256:digest(block)});
-        offset+=size;assert.ok(offset<=512*1024*1024);decoded.push(block);
+        offset+=size;assert.ok(offset<=512*1024*1024);
+        if (hash) hash.update(block);
+        else decoded.push(block);
       }
-      if(offset)track.network={entry:await add(`${track.id}/network/records`,'network-observations',Buffer.concat(decoded)),
-        format:'h1arena.fnet-records.v2',blocks};
+      if(offset) {
+        const id = track.id + '/network/records';
+        const entry = hash ? derived(id,'network-observations',offset,hash.digest('hex'))
+          : await add(id,'network-observations',Buffer.concat(decoded));
+        track.network={entry,format:'h1arena.fnet-records.v2',blocks};
+      }
     }
   }
   const host={id:'host',role:'host',source_film_sha256:digest(raw.subarray(match.host_offset,match.host_offset+match.host_size)),
     ...(partial?{status:'available'}:{}),
     frame_count:report.envelope.ticks,first_update:report.envelope.first_update,viewer_revision:5,
-    world:world('host/world',hostWorld),verification:report.simulation};
+    world:world('host/world',hostWorld,hostWorldSha256),verification:report.simulation};
   await recorded(host,raw.subarray(match.host_offset,match.host_offset+match.host_size));tracks.push(host);
   const hostAccountOffset=raw.readUInt32LE(match.host_offset+496),hostAccountSize=raw.readUInt32LE(match.host_offset+500);
   if(hostAccountSize&&!match.parts.some(p=>p.account_offset===match.host_offset+hostAccountOffset&&p.account_size===hostAccountSize)) {
@@ -146,7 +162,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
         report.exporter_revision,BUILD_MATCHING[report.engine_profile]),'Unsupported client build evidence differs');
     }
     const unavailable=partial&&c.status==='unavailable';
-    if(!unavailable)assert.equal(await sha256(join(directory,c.world)),c.world_sha256);
+    if(!unavailable)assert.match(c.world_sha256,/^[0-9a-f]{64}$/);
     if(c.recovery) {
       assert.ok(!unavailable&&sourceContract.profile_revision===14&&report.exporter_revision>=46);
       const firstRun=join(directory,c.id+'.partial');
@@ -162,7 +178,7 @@ export async function exportMatchReplay({film,directory,hostWorld,output,sourceC
     }
     const track={id:c.id,role:'client',source_film_sha256:c.source_film_sha256,frame_count:c.envelope.ticks,
       first_update:c.envelope.first_update,...(unavailable?{status:'unavailable',failure:c.failure}:
-        {...(partial?{status:'available'}:{}),viewer_revision:5,world:world(`${c.id}/world`,join(directory,c.world)),verification:c.verification}),
+        {...(partial?{status:'available'}:{}),viewer_revision:5,world:world(`${c.id}/world`,join(directory,c.world),c.world_sha256),verification:c.verification}),
       recorded_own_player:part.player,ends_early:Boolean(part.flags&1),
       recorded_trust:{inputs:part.inputs_trust,messages:part.messages_trust,reason:part.reason},
       clocks:c.envelope.network.clocks,alignment:{method:'unavailable',reason:'client_account_not_recorded'}};

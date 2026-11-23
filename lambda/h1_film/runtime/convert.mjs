@@ -75,7 +75,10 @@ async function convertAttempt(options, opening) {
     allowTextClientSettings:values['embedded-match'] === true && values.verifiedClientHost?.tick_rate === 120
       && Number(values['exporter-revision']) >= CLIENT_TEXT_SETTINGS_EXPORTER,
     botAwareHost:Number(values['exporter-revision'])>=26};
-  const envelope = await readEnvelope(values.film,envelopeOptions);
+  // Embedded parts have just passed the same complete envelope inspection.
+  // Bind that result to the hash taken before inspection and to the staged input.
+  const inspected = values['client-view'] && values['embedded-match'] && values.inspectedClient;
+  const envelope = inspected ? inspected.envelope : await readEnvelope(values.film,envelopeOptions);
   if(values['client-view']) assert.equal(envelope.recording_kind,'client-view','Expected a client-view recording');
   const native = values.reference
     ? JSON.parse(await readFile(join(values.reference, 'report.json'), 'utf8'))
@@ -136,6 +139,7 @@ async function convertAttempt(options, opening) {
   if (missingMapSize) assert.ok(values['map-catalog'], 'Missing recorded size requires a reviewed map catalog');
   else assert.equal(actualMapSize, native.envelope.map_bytes, 'Map size differs from recorded cache');
   const filmHash = await sha256(values.film), mapHash = await sha256(map);
+  if (inspected) assert.equal(filmHash, inspected.filmHash, 'Inspected client source changed');
   const engineHashes = engine.hashes;
   let mapBinding;
   if (values['map-catalog']) {
@@ -264,6 +268,7 @@ async function convertAttempt(options, opening) {
   const kill = () => { for (const child of children) if (child.exitCode === null) child.kill('SIGKILL'); };
   const timer = setTimeout(() => { expired = true; kill(); }, timeout);
   let monitor, monitorDone, engineArgs, matchConversion;
+  const hostPlayback = Promise.withResolvers();
   const interrupted = () => { expired = true; kill(); };
   process.on('SIGINT', interrupted);
   process.on('SIGTERM', interrupted);
@@ -300,10 +305,11 @@ async function convertAttempt(options, opening) {
     const engine = spawn(process.execPath, engineArgs,
       { cwd: work, env: environment, windowsHide: true, stdio: ['ignore', engineLog, engineLog, encoder.stdin] });
     const simulated = completion(engine);
-    if (values['overlap-host'] && !verifyHostFirst && ['beta6','beta7','beta8'].includes(profile.port) && !values['client-view']) {
+    if (values['overlap-host'] && (!verifyHostFirst || values['world-socket'])
+        && ['beta6','beta7','beta8'].includes(profile.port) && !values['client-view']) {
       // Every view uses its own work directory and verified engine/map/source pins.
       // Capture failures immediately, but do not publish until host and clients pass.
-      matchConversion = convertMatchTracks(stage, values, report, convertFilm, started + timeout)
+      matchConversion = convertMatchTracks(stage, {...values, hostReady:hostPlayback.promise}, report, convertFilm, started + timeout)
         .then(value => ({ok: true, value}), error => ({ok: false, error}));
     }
     if (process.platform === 'win32' && values['trusted-local']) {
@@ -342,33 +348,30 @@ async function convertAttempt(options, opening) {
       throw error;
     }
     if (opening) report.opening_inventory_recovery=verifyOpening(log,opening);
+    hostPlayback.resolve(true);
     if (values.povRecovery) report.pov_recovery=finishPovRecovery(log,values.povRecovery);
     if (values.reference) assert.equal(report.simulation.control_pushes, native.simulation.control_pushes);
     report.status = 'simulation_verified_pending_artifact_comparison';
+    const encodingPath = join(stage,'candidate','encoding.json');
+    const encoding = analyticsRevision === 5 || values.analytics || values['trusted-local']
+      ? JSON.parse(await readFile(encodingPath,'utf8')) : null;
     if (analyticsRevision === 5) {
       const gameplayStarted = performance.now();
       assert.ok(['beta5','beta6','beta7','beta8'].includes(profile.port) && profile.exporter_revision >= 19,
         'Gameplay metrics require a registered gameplay exporter');
-      const encodingPath = join(stage,'candidate','encoding.json');
-      const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
       encoding.native_analytics.gameplay = await buildGameplayMetrics({film:values.film,
         evidence:join(stage,'candidate','gameplay.ndjson'),encoding,includeEstimates:profile.exporter_revision>=21,
         definitionVersion:profile.exporter_revision>=24?2:1,exporterRevision:profile.exporter_revision});
       encoding.native_analytics.schema = 'halospawns.h1NativeAnalytics.v3';
-      await save(encodingPath,encoding);
       report.timing.gameplay_seconds = (performance.now() - gameplayStarted) / 1000;
     }
     if (values.analytics && profile.exporter_revision >= 32) {
-      const encodingPath = join(stage,'candidate','encoding.json');
-      const encoding = JSON.parse(await readFile(encodingPath,'utf8'));
       encoding.native_analytics.spawn_metrics = await buildSpawnMetrics({
         evidence:join(stage,'candidate','spawns.ndjson'),encoding,
         definitionVersion:profile.exporter_revision >= 34 ? 2 : 1});
-      await save(encodingPath,encoding);
     }
     if (values.analytics) {
       const path = join(stage, 'candidate', 'analytics.30hz.json.zst');
-      const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
       const end = encoding.analytics.match_end_source_tick;
       assert.ok(end === null || (Number.isInteger(end) && end >= 0 && end < native.envelope.ticks));
       const statisticsTicks = analyticsRevision === 1 || end === null ? native.envelope.ticks : end + 1;
@@ -380,7 +383,6 @@ async function convertAttempt(options, opening) {
       report.analytics = { ...encoding.analytics, sha256: await sha256(path) };
     }
     if (values['trusted-local']) {
-      const encoding = JSON.parse(await readFile(join(stage, 'candidate', 'encoding.json'), 'utf8'));
       report.encoding = Object.fromEntries(Object.entries(encoding).filter(([key]) => key !== 'source_events'));
       assert.equal(encoding.source_ticks, native.envelope.ticks);
       const rates = [[sourceKey, native.envelope.ticks]];
@@ -452,15 +454,13 @@ async function convertAttempt(options, opening) {
       assert.ok(!expired,'Match conversion timed out');
     }
     if (values.analytics && request.sniper_evidence) {
-      const path = join(stage, 'candidate', 'encoding.json');
-      const encoding = JSON.parse(await readFile(path, 'utf8'));
       const supplements=values['shooter-sources'] ? await verifyShooterSources(
         stage,values,report,convertFilm,started+timeout) : [];
       encoding.native_analytics.sniper = await buildSniperKills(stage, values.film, encoding,
         Boolean(report.match_tracks), profile.exporter_revision,supplements);
-      await save(path, encoding);
-      if (report.encoding) report.encoding.native_analytics = encoding.native_analytics;
     }
+    if (analyticsRevision === 5 || (values.analytics && profile.exporter_revision >= 32))
+      await save(encodingPath,encoding);
     report.timing.total_seconds = (performance.now() - totalStarted) / 1000;
     await save(join(stage, 'report.json'), report);
     await save(join(stage, 'candidate', 'report.json'), report);
@@ -468,6 +468,7 @@ async function convertAttempt(options, opening) {
     await rename(stage, values.output);
     return report;
   } catch (error) {
+    hostPlayback.resolve(false);
     kill();
     await Promise.all(completions);
     if (monitorDone) {

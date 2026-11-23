@@ -1,5 +1,7 @@
 # H1 Film Worker
 
+Dev worker `20261123-r1` processes up to eight embedded perspectives per film in parallel. The AWS measurements cover nine-perspective Jaywalk and eight-perspective Dread FFA. [H1 film processing latency](WORLD_POOL.md)
+
 See [analytics ideas](ANALYTICS_IDEAS.md) for candidate stats, metrics, replay
 scenarios, evidence requirements, and suggested priorities for future review.
 

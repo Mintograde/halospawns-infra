@@ -8,6 +8,7 @@ const { values } = parseArgs({ options: {
   'client-view': { type: 'boolean', default: false },
   'client-concurrency': { type: 'string', default: '1' },
   'overlap-host': { type: 'boolean', default: false },
+  'world-socket': { type: 'string' },
   'export-buffer-bytes': { type: 'string' },
   'exporter-revision': { type: 'string' }, 'viewer-revision': { type: 'string' },
   encoder: { type: 'string' }, reference: { type: 'string' }, output: { type: 'string' },

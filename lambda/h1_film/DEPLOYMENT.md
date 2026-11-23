@@ -1,5 +1,9 @@
 # H1 film Lambda integration
 
+## Parallel world conversion in dev (2026-11-23)
+
+Dev policy 47 selects `20261123-r1` on API 310. The intake worker invokes version 1 of the world Lambda, capped at eight children per film and 32 across dev. Both functions use 3,008 MB. The selected Jaywalk replay took 20.9% of the sequential worker's time, and Dread FFA took 31.3–33.2% in two runs. Both selected replay hashes and deterministic callback payloads matched their published versions. Set `worlds_per_film` to zero to stop dispatch while retaining the private scratch lifecycle. [Measurements and deployment evidence](WORLD_POOL.md)
+
 ## Mirrored-host double melees deployed (2026-11-16)
 
 Mirrored-host double-melee detection is deployed in dev as worker/default
@@ -108,6 +112,34 @@ and stored generation on rollback.
 See [DOUBLE_MELEE.md](DOUBLE_MELEE.md) for proof, exact deployment commands and
 validation evidence. Handoff `20261115-infra-api-svelte-double-melee` is complete in all three repositories.
 
+## Beta 8 deployed (2026-11-14)
+
+Beta 8 is active in dev as worker/default `20261114-r3`, policy 34, API 266
+(`eebd1fd`, CI 43611516616), with additive migration
+`20261114040000_h1film_beta8.sql`. Exact `beta-8` / `3194e680` source supports
+format 3 / protocol 9848 / 120 Hz, client-decided teleports, Mythic bots and
+host/embedded-client worlds. Beta 8 adds 35/5/13 and match v8; all seven profiles,
+66 exporters and old recipes remain. Seventy PB2 approvals match Beta 4/5/6/7
+with immutable audited lineage; 22 MCC multiplayer maps use the existing
+automatic policy. `halo1_pc_pb2_beta8` shares assets at engine revision 1.
+Seven source-generated presets and real setting labels/default comparisons are
+available through the API and local frontend. All 428 conversions, 2,226
+receipts, 382 prior approvals and 2,090 settings snapshots are unchanged
+(474 approvals total). Native/WASM full streams match for ten generated worlds:
+16,812 ticks / 146 hashes. All 13 final packaged cases / 39 exact API callbacks,
+separate client flow, Chrome desktop/mobile readers, unit suites and both
+frontend builds pass. First live health and all six no-op postplans pass;
+queue/DLQ are empty. Candidate r2 was registered but never installed/activated:
+the API guard caught its filename suffix. Do not promote r2. Final r3 corrects
+only that suffix and preserves all replay bytes and previous names. Frontend
+stays local/uncommitted; no live upload, historical reparse or prod action.
+No exact-source player Beta 8 film was available; generated fixtures are not
+live player canaries. Keep migration/readers/engine/approvals and every recipe
+on rollback.
+
+See `BETA8.md` for exact hashes, validation limits, component plan/apply commands
+and evidence; handoff `20261114-infra-api-svelte-beta8` is complete in all three repositories.
+
 ## Neutral-baseline spawn backfill completed (2026-11-14 UTC)
 
 The user-authorized neutral-baseline backfill is complete in dev: all 339
@@ -155,6 +187,25 @@ Evidence: infra `.build/spawn-neutral-baseline/COMPLETED.json`,
 `postplans-resume.log`. The original pause is retained as
 `PAUSED-20261114T035241Z.json`; authorization and live pins are in
 `RESUME-APPROVED.json` and `api-pin-resume.json`.
+
+## 2026-11-14: Shared database storage before baseline resume
+
+Shared storage is deployed in dev as API 265 (`42bd83d`, CI 43562257607).
+Migrations `20261114020000_h1film_shared_storage.sql` and
+`20261114030000_h1film_native_read_expansion.sql` are applied. Database allocation
+is 355.43 / 500 MB. All historical hashes, 1,895 receipts, 1,759 settings snapshots
+and 426,792 logical values remain; 415 settings sets / 103,550 physical values
+and 338 native documents replace redundant copies. New completions return small
+acknowledgements with lossless SQL snapshots; old archived callbacks retain their
+original responses. All hot data remains in PostgreSQL. Keep these readers,
+migrations and the earlier S3 archive reader on rollback. Sampled warm reads are
+unchanged or faster; the TOAST expansion fix is required for career performance.
+The local site reuses detail analytics; frontend changes remain local/uncommitted.
+The neutral-baseline backfill remained paused during this storage release.
+Its later user-authorized completion is recorded above; original evidence and
+worker/default 20261114-r1 / policy 33 remain. See `../../../halospawns-api/docs/h1film-shared-storage.md` and completed handoff
+`20261114-api-infra-svelte-shared-storage`.
+
 
 ## Receipt archive reader and database recovery (2026-11-14 UTC)
 
@@ -241,7 +292,6 @@ Exact commands from the infra root:
 - `scripts/plan.ps1 dev`: all six components are no-op.
 
 Only the dev account/profile was used; no AWS/profile/session blocker remains.
-
 
 
 ## Improbable spawn metrics deployed (2026-11-12)
@@ -475,6 +525,30 @@ Evidence: `.build/melee-deploy/`, publication
 `.build/h1-promotions/20261112-013728-8d1ade1e6c26462bb59ce73390e8da15/`.
 Live browser evidence is in sibling Svelte `smoke-runs/melee-deploy-20261112/`.
 
+## Most three-shots record API deployed (2026-11-11 UTC)
+
+Dev API **248** (`f133141`, CI **43093137198**) adds a single-match three-shot
+record from retained complete verified definition-2 gameplay totals. Existing
+filters, tied holders and unavailable/zero distinctions apply. H1 worker/default
+**20261111-r3**, policy **27**, and Xbox **stats-20261111** remain unchanged.
+No migration, reparse or worker release was needed. All 2,219 API tests/320
+skips, 19 local PostgreSQL cases, 844 site tests and both frontend builds pass.
+Live Chrome validates cumulative/player/map cards, exact links, unavailable
+Xbox data and 1600/390/320 px layouts without errors or overflow. Default PB2
+2v2 remains 218 games; its record is Bibleman with 9 on Dreadnought (November 8).
+Frontend help/test changes remain local/uncommitted; no prod action.
+
+Commands from the infra root: `scripts/plan.ps1 dev app-api` showed only API
+version output 247 -> 248. `atmos terraform plan app-api -s dev -refresh-only
+-out=L:/bens_stuff/projects/halospawns-infra/.build/three-shot-record-api-refresh.tfplan`
+created the saved plan. `terraform -chdir=components/terraform/app-api show -json`
+inspection confirmed zero resource actions and exactly that output change before
+applying the saved plan with `terraform -chdir=components/terraform/app-api apply`.
+Apply reports zero added/changed/destroyed. `scripts/plan.ps1 dev` confirms all
+six components are no-op. No AWS/session blocker. Only this deployment log is
+edited in infra; evidence is under `.build/three-shot-record-*`, sibling API
+`.build/career/three-shot-*` and frontend `smoke-runs/three-shot-record-20261111/`.
+
 ## Native pistol counters deployed (2026-11-11 UTC)
 
 Dev API **247** (`01b747c6b2e046131d6eb5bf0ac5b0f7dbff66b7`, CI
@@ -612,6 +686,89 @@ edits are limited to pistol explanations in `CareerTotals`, `StatsHelp` and
 `PaceHelp`, preserving the user's other local work.
 Retain the `pistol_accuracy` reader capability, immutable old generations and
 every engine/recipe on rollback.
+
+## Single-match record holders API deployed (2026-11-11 UTC)
+
+Dev API **245** (`7aa0a04`, CI **43068464695**) adds scoped record player lists:
+winning teams for win margins, complete rosters for longest/shortest games,
+and tied individual holders in the selected match. Personal pages retain team
+and match rosters. H1 worker/default **20261111-r1**, policy **26**, and Xbox
+**stats-20261111** remain. No migration, reparse or worker release was needed.
+Frontend Single-match records and source-selected generic damage labels remain
+local/uncommitted. CI passes 2,196 tests/313 skips, Ruff/native checks and
+packaging; twelve local PostgreSQL cases, 843 site tests and both builds pass.
+Live Chrome validates cumulative/player/map cards, links and source changes
+at 1600/768/390/320 px without errors or overflow. PB2 2v2 remains 216 games;
+all-source 2v2 remains 220.
+
+The focused postplan showed only API version output 244 -> 245. Saved
+refresh-only plan `.build/record-api-refresh.tfplan` was inspected for zero
+resource actions and exactly that output change before applying. Apply reports
+zero resources added/changed/destroyed; `.build/record-api-final-plan.log` is
+no-op. Evidence: sibling API `.build/career/record-*`, `docs/career-stats.md`,
+and frontend `smoke-runs/single-match-records-20261111/`. No prod action.
+
+## Stats pace API deployed (2026-11-11 UTC)
+
+API **244** (`8ca5dd9`, CI **43062225674**) adds player-minute kill/damage rates,
+ranked pistol accuracy and shortest-match records. H1 worker/default
+**20261111-r1**, policy **26**, and Xbox **stats-20261111** remain. No migration,
+reparse, worker release or prod action. Frontend remains local/uncommitted.
+CI passes 2,196 tests/310 skips, Ruff/native checks and packaging; 26 focused
+API cases including isolated PostgreSQL and 840 frontend tests pass, as do
+both builds. Live Chrome validates cumulative/player/map rates, sorting,
+record links and hover/focus/touch help across desktop/mobile widths, without
+API/browser errors or page overflow. Dev remains 220 2v2 games/89 ranked players.
+
+`scripts/plan.ps1 dev app-api` found only API version output 243 -> 244. Saved
+refresh-only plan `.build/pace-api-refresh.tfplan` was inspected for zero
+resource actions and exactly that output change before applying. Apply reports
+zero resources added/changed/destroyed; `.build/pace-api-final-plan.log` is
+no-op. Evidence: sibling API `.build/career/pace-*`, `docs/career-stats.md`, and
+frontend `smoke-runs/stats-pace-20261111/`.
+
+## Stats map identity API deployed (2026-11-11 UTC)
+
+API **243** (`53a5b55`, CI **43058547327**) adds career map origin/runtime
+metadata and PB2 presentation labels. H1 worker/default **20261111-r1**,
+policy **26**, and Xbox **stats-20261111** remain unchanged. No migration,
+reparse, worker release or prod action. Frontend changes remain local.
+CI passes 2,196 tests/308 skips, Ruff, native checks and packaging; twelve
+local PostgreSQL cases and 839 site tests pass, as do both frontend builds.
+Live Chrome verifies distinct Prisoner labels, source filtering, map links and
+details at desktop/mobile widths without API/browser errors or page overflow.
+The default frontend 2v2 population remains 220 games.
+
+`scripts/plan.ps1 dev app-api` found only version output 242 -> 243. The saved
+refresh-only plan `.build/map-identity-api-refresh.tfplan` was inspected to
+verify zero resource actions and exactly that output change, then applied
+with zero resources added/changed/destroyed. The final focused plan is no-op
+in `.build/map-identity-api-final-plan.log`. See sibling API
+`docs/career-stats.md`, `.build/career/map-identity-*`, and frontend
+`smoke-runs/map-stats-identity-20261111/`.
+
+## Career statistics API deployed (2026-11-11 UTC)
+
+API **242** (`4c19759`, CI **43053050660**) exposes richer query-time career,
+record and gametype/map/category summaries from retained analytics. H1 worker/
+default **20261111-r1**, policy **26**, and Xbox **stats-20261111** remain.
+No schema migration, source rewrite, reparse, worker release or prod action.
+The frontend remains local/uncommitted. API CI passes 2,196 tests/307 skips,
+Ruff, native validation and packaging; twelve distinct local PostgreSQL cases
+and 834 site tests pass. Live Chrome verifies totals, coverage, record links,
+scope filters, rankings and desktop/mobile layouts without API/browser errors.
+Default qualification remains 242 games/95 identities.
+
+Infra commands: `scripts/plan.ps1 dev app-api` found only the API version output
+241 -> 242. `atmos terraform plan app-api -s dev -refresh-only
+-out=L:/bens_stuff/projects/halospawns-infra/.build/career-api-refresh.tfplan`
+saved a plan verified to have no resource actions and exactly that output
+change. Applying the saved plan with `terraform -chdir=components/terraform/app-api
+apply -input=false L:/bens_stuff/projects/halospawns-infra/.build/career-api-refresh.tfplan`
+reports zero resources added/changed/destroyed. The final focused plan is no-op,
+recorded in `.build/career-api-final-plan.log`. No AWS/session blocker.
+See sibling API `docs/career-stats.md`, `.build/career/`, and frontend
+`smoke-runs/career-20261111/`.
 
 ## Name statistics roster evidence deployed (2026-11-11 UTC)
 

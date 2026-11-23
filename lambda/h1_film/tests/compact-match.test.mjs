@@ -37,7 +37,7 @@ function mszip(bytes) {
   return Buffer.concat(parts);
 }
 
-async function fixture() {
+async function fixture(changeEntries) {
   const dir=await mkdtemp(join(tmpdir(),'h1-compact-'));
   try {
     const world=Buffer.alloc(40);world.write('HSRDC002');world.writeUInt32LE(1,16);
@@ -56,9 +56,29 @@ async function fixture() {
     client.pad={seats:1,stride:14,count:2,event_count:0,event_size:16,original:add('client-0/recorded/pad','raw-pad',pad),samples:add('client-0/pad/samples','raw-pad',pad.subarray(64))};
     const identity={sourceContract:{schema:'halospawns.viewerReplay.v1',profile:'frontend-default',profile_revision:8,projection_sha256:'5501eb4b77cfca3aa76863bf33ff9819715ca22a07da6b7e5df51006a26783ef',tick_count:2},
       source_film_sha256:'1'.repeat(64),raw_map_sha256:'2'.repeat(64),engine_profile:'h1-performance-beta6-p9839-wasm-v1',wasm_sha256:'3'.repeat(64),glue_sha256:'4'.repeat(64),match_id:'1234567890123456'};
+    changeEntries?.(entries);
     const path=join(dir,'source.hsrv');await writeMatchReplay(path,identity,[host,client],entries);return await readFile(path);
   } finally {await rm(dir,{recursive:true,force:true});}
 }
+
+test('compact packing independently checks derived pins and checks world pins during the copy',async()=>{
+  function usePins(entries) {
+    for (const e of entries) {
+      if (e.kind==='world') e.worldHash=sha(e.bytes);
+      if (e.id.endsWith('/network/records') || e.id.endsWith('/pad/samples')) {
+        e.derived={length:e.bytes.length, hash:sha(e.bytes)};
+        delete e.bytes;
+      }
+    }
+  }
+  assert.deepEqual(await fixture(usePins),await fixture());
+  await assert.rejects(fixture(entries=>{
+    usePins(entries);entries.find(e=>e.derived).derived.hash='0'.repeat(64);
+  }));
+  await assert.rejects(fixture(entries=>{
+    usePins(entries);entries[0].worldHash='0'.repeat(64);
+  }),/changed during packing/);
+});
 
 test('compact worlds seek directly while duplicate tables reconstruct exactly',async()=>{
   const bytes=await fixture(),requests=[];

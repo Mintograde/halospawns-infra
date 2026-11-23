@@ -41,6 +41,7 @@ export async function packCompactStorage(index,tracks,entries,scratch,matchId,ac
   const bufferLimit=16*1024*1024;
   for(const e of index) {
     if(e.storage)continue;const source=sources.get(e.id),blocks=[];
+    assert.ok(!source.derived,'Missing reconstruction for a derived entry');
     if(e.kind==='world') {
       blocks.push({logical_offset:0,offset,size_bytes:e.size_bytes,decoded_size_bytes:e.size_bytes,codec:'identity',sha256:e.sha256});
       physical.push({...source,size_bytes:e.size_bytes,sha256:e.sha256});offset+=e.size_bytes;

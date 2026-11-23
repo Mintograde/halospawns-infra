@@ -53,6 +53,16 @@ function Get-Manifest {
     $manifest
 }
 
+function Get-WorkerPlan {
+    param([string]$Path, [string[]]$Targets = @())
+    $arguments = @('-chdir=components/terraform/map-processing', 'plan', '-no-color',
+        '-var-file=dev-map-processing.terraform.tfvars.json', "-out=$Path")
+    foreach ($target in $Targets) { $arguments += "-target=$target" }
+    Invoke-Checked terraform $arguments | Out-Host
+    $planData = Invoke-Checked terraform @('-chdir=components/terraform/map-processing', 'show', '-json', $Path) | ConvertFrom-Json
+    $planData.resource_changes | Where-Object { $_.mode -eq 'managed' -and ($_.change.actions -join ',') -ne 'no-op' }
+}
+
 Push-Location -LiteralPath $repo
 try {
     $account = (Invoke-Aws @('sts', 'get-caller-identity', '--query', 'Account', '--output', 'text')).Trim()
@@ -78,10 +88,36 @@ try {
     & ./scripts/plan.ps1 $Stack map-processing
     if ($LASTEXITCODE -ne 0) { throw 'Worker plan failed.' }
     $plan = Join-Path $evidence 'worker.planfile'
-    Invoke-Checked terraform @('-chdir=components/terraform/map-processing', 'plan', '-no-color',
-        '-var-file=dev-map-processing.terraform.tfvars.json', "-out=$plan") | Out-Host
-    $planData = Invoke-Checked terraform @('-chdir=components/terraform/map-processing', 'show', '-json', $plan) | ConvertFrom-Json
-    $changes = @($planData.resource_changes | Where-Object { ($_.change.actions -join ',') -ne 'no-op' })
+    $changes = @(Get-WorkerPlan $plan)
+    $poolCapacity = if ($desired.PSObject.Properties['world_pool_capacity']) { [int]$desired.world_pool_capacity } else { 0 }
+    $worldResources = @(
+        'aws_s3_bucket.h1_world[0]', 'aws_s3_bucket_public_access_block.h1_world[0]',
+        'aws_s3_bucket_versioning.h1_world[0]', 'aws_s3_bucket_lifecycle_configuration.h1_world[0]',
+        'aws_cloudwatch_log_group.h1_world[0]', 'aws_iam_role.h1_world[0]',
+        'aws_iam_role_policy.h1_world[0]', 'aws_lambda_function.h1_world[0]',
+        'aws_iam_role_policy.h1_film_worlds[0]'
+    )
+    $worldUpdates = @('aws_lambda_function.h1_world[0]', 'aws_iam_role_policy.h1_film_worlds[0]')
+    $worldChanges = @($changes | Where-Object { $_.address -in $worldResources })
+    if ($worldChanges.Count) {
+        foreach ($change in $changes) {
+            $action = $change.change.actions -join ','
+            if ($change.address -eq 'aws_lambda_function.h1_film[0]' -and $action -eq 'update') { continue }
+            if ($poolCapacity -gt 0 -and $change.address -in $worldResources -and
+                ($action -eq 'create' -or ($action -eq 'update' -and $change.address -in $worldUpdates))) { continue }
+            throw "Unexpected resource action: $action $($change.address)"
+        }
+        # Publish the child first so the parent plan contains the exact qualified ARN and bucket.
+        $worldPlan = Join-Path $evidence 'worlds.planfile'
+        $staged = @(Get-WorkerPlan $worldPlan $worldResources)
+        $expected = @($worldChanges | ForEach-Object { "$($_.address) $($_.change.actions -join ',')" } | Sort-Object)
+        $actions = @($staged | ForEach-Object { "$($_.address) $($_.change.actions -join ',')" } | Sort-Object)
+        if (($actions -join "`n") -ne ($expected -join "`n")) { throw 'World pool actions changed between plans.' }
+        Copy-Item -LiteralPath $plan -Destination (Join-Path $evidence 'combined.planfile')
+        Invoke-Checked terraform @('-chdir=components/terraform/map-processing', 'apply', '-no-color', $worldPlan) | Out-Host
+        $changes = @(Get-WorkerPlan $plan)
+    }
+    $worldKeys = @('H1_WORLD_FUNCTION', 'H1_WORLD_BUCKET', 'H1_WORLD_CONCURRENCY')
     foreach ($change in $changes) {
         if ($change.address -ne 'aws_lambda_function.h1_film[0]' -or ($change.change.actions -join ',') -ne 'update') {
             throw "Unexpected resource action: $($change.address). Review the saved plan before proceeding."
@@ -95,9 +131,30 @@ try {
         }
         $oldEnvironment = $change.change.before.environment[0].variables
         $newEnvironment = $change.change.after.environment[0].variables
+        if ($change.change.after.image_uri -ne $image -or $newEnvironment.H1_WORKER_IMAGE_DIGEST -ne $installed.image_digest) {
+            throw 'Planned worker image differs from the verified manifest.'
+        }
         foreach ($property in @($oldEnvironment.PSObject.Properties.Name + $newEnvironment.PSObject.Properties.Name) | Sort-Object -Unique) {
-            if ($property -eq 'H1_WORKER_IMAGE_DIGEST') { continue }
+            if ($property -eq 'H1_WORKER_IMAGE_DIGEST' -or $property -in $worldKeys) { continue }
             if ($oldEnvironment.$property -ne $newEnvironment.$property) { throw "Unexpected environment change: $property" }
+        }
+        $limit = if ($desired.PSObject.Properties['worlds_per_film']) { [int]$desired.worlds_per_film } else { 8 }
+        if ($poolCapacity -gt 0 -and $limit -gt 0) {
+            $function = $newEnvironment.H1_WORLD_FUNCTION
+            if ($function -notmatch '^arn:aws:lambda:us-east-1:283279960672:function:halospawns-h1-world-dev:[1-9][0-9]*$' -or
+                [int]$newEnvironment.H1_WORLD_CONCURRENCY -ne $limit) { throw 'Planned parent world configuration differs.' }
+            $child = Invoke-Aws @('lambda', 'get-function', '--function-name', $function) | ConvertFrom-Json
+            $reservation = Invoke-Aws @('lambda', 'get-function-concurrency', '--function-name', $child.Configuration.FunctionName) | ConvertFrom-Json
+            $childEnv = $child.Configuration.Environment.Variables
+            if ($child.Code.ResolvedImageUri -ne $image -or $childEnv.H1_WORKER_IMAGE_DIGEST -ne $installed.image_digest -or
+                $childEnv.H1_WORKER_MODE -ne 'world' -or $childEnv.H1_UPLOADS_BUCKET -ne $bucket -or
+                $childEnv.H1_WORLD_BUCKET -ne $newEnvironment.H1_WORLD_BUCKET -or
+                $child.Configuration.MemorySize -ne $change.change.after.memory_size -or
+                $reservation.ReservedConcurrentExecutions -ne $poolCapacity) {
+                throw 'Published world worker configuration differs from the parent.'
+            }
+        } elseif (@($worldKeys | Where-Object { $_ -in $newEnvironment.PSObject.Properties.Name }).Count) {
+            throw 'Disabled pool still has dispatch settings.'
         }
     }
     if ($changes.Count) {

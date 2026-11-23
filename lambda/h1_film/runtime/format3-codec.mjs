@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import {unpackMszip} from './adapters/beta5-v2-120.mjs';
 
-export function fnv1a(bytes) {
-  let hash=0x811c9dc5;
-  for(const byte of bytes) hash=Math.imul(hash^byte,0x01000193)>>>0;
-  return hash;
+export function fnv1a(bytes, hash=0x811c9dc5) {
+  for(let i=0;i<bytes.length;i++) hash=Math.imul(hash^bytes[i],0x01000193);
+  return hash>>>0;
 }
 
 // Pinned upstream blampc_film_net_uncolumns: time/head byte columns followed

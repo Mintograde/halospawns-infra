@@ -13,10 +13,13 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
   const logicalLimit=version>=7?MATCH_REPLAY_MAX_LOGICAL_BYTES:MATCH_REPLAY_MAX_BYTES;
   let offset=0;
   const index=[];
-  for(const {bytes,path,...entry} of entries) {
-    assert.ok(Buffer.isBuffer(bytes)||typeof path==='string');
-    const size=bytes?.length??(await stat(path)).size;
-    assert.ok(size>0&&size<=MATCH_REPLAY_MAX_BYTES,'Match entry exceeds size limit');
+  for(const {bytes,path,derived,worldHash,...entry} of entries) {
+    if (derived) {
+      assert.ok(version>=3 && entry.kind!=='world' && !bytes && !path);
+      assert.match(derived.hash,/^[0-9a-f]{64}$/);
+    } else assert.ok(Buffer.isBuffer(bytes)||typeof path==='string');
+    const size=derived?.length??bytes?.length??(await stat(path)).size;
+    assert.ok(Number.isSafeInteger(size)&&size>0&&size<=MATCH_REPLAY_MAX_BYTES,'Match entry exceeds size limit');
     if(entry.kind==='world') {
       const file=path?await open(path,'r'):null;
       try {
@@ -30,18 +33,25 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
         entry.index_size_bytes=length;entry.index_sha256=sha(index);
       } finally {await file?.close();}
     }
-    index.push({...entry,offset,size_bytes:size,sha256:bytes?sha(bytes):await sha256(path)});
+    // The copy loop below verifies every physical byte against this pin. A
+    // verified world already supplies its digest, including a rebound host.
+    if (worldHash !== undefined) {
+      assert.equal(entry.kind,'world');
+      assert.match(worldHash,/^[0-9a-f]{64}$/);
+    }
+    const hash=worldHash??derived?.hash??(bytes?sha(bytes):await sha256(path));
+    index.push({...entry,offset,size_bytes:size,sha256:hash});
     offset+=size;assert.ok(offset<=logicalLimit,'Match replay exceeds logical size limit');
   }
   const schema=version===9?TICK_RATE_MATCH_REPLAY_SCHEMA:version===8?BETA8_MATCH_REPLAY_SCHEMA:version===7?LARGE_MATCH_REPLAY_SCHEMA:version===6?BETA7_MATCH_REPLAY_SCHEMA:version===5?UNSUPPORTED_MATCH_REPLAY_SCHEMA:version===4?ROSTER_MATCH_REPLAY_SCHEMA:version===3?COMPACT_MATCH_REPLAY_SCHEMA:version===2?PARTIAL_MATCH_REPLAY_SCHEMA:MATCH_REPLAY_SCHEMA;
   const manifest={...identity,schema,tick_rate:identity.tick_rate??120,authoritative_track:'host',tracks,entries:index};
-  let payload=entries.map(e=>({...e,...index.find(p=>p.id===e.id)})),scratch;
+  let payload,scratch;
   try {
   if(version>=3) {
     scratch=await mkdtemp(join(dirname(path),'.compact-'));
     const packed=await packCompactStorage(index,tracks,entries,scratch,identity.match_id,{allowUnassignedPlayer:version>=6});
     manifest.logical_size_bytes=offset;payload=packed.physical;offset=packed.size;
-  }
+  } else payload=entries.map((e,i)=>({...e,...index[i]}));
   const raw=Buffer.from(JSON.stringify(manifest)),header=Buffer.alloc(64),size=64+raw.length+offset;
   assert.ok(size<=MATCH_REPLAY_MAX_BYTES,'Match replay exceeds physical file size limit');
   header.write(`H1MV000${version}`);header.writeUInt32LE(version,8);header.writeUInt32LE(64,12);
@@ -56,7 +66,7 @@ export async function writeMatchReplay(path,identity,tracks,entries) {
     await write(header);await write(raw);
     for(const entry of payload) {
       const check=createHash('sha256');let size=0;
-      for await(const bytes of entry.bytes?[entry.bytes]:createReadStream(entry.path)) {
+      for await(const bytes of entry.bytes?[entry.bytes]:createReadStream(entry.path,{highWaterMark:1024*1024})) {
         check.update(bytes);size+=bytes.length;await write(bytes);
       }
       assert.equal(size,entry.size_bytes,'Entry changed during packing');

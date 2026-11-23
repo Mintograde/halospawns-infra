@@ -29,17 +29,20 @@ fn schema_field<'a>(validator: &'a Validator, key: &str) -> Option<&'a Validator
 
 impl Layout {
     pub(super) fn compile(projection: &Projection, validator: &Validator) -> Option<Self> {
-        if projection.revision != 4 || MAX_JSON_DEPTH < 8 {
+        if !matches!(projection.revision, 4 | 5) || MAX_JSON_DEPTH < 8 {
             return None;
         }
         let CompiledProjection::Array {
-            limit: 4,
+            limit: player_limit,
             take_first: false,
             items: player,
         } = field(&projection.tick, "players")?
         else {
             return None;
         };
+        if *player_limit > h1_pose_codec::MAX_PLAYERS {
+            return None;
+        }
         let CompiledProjection::Array {
             limit,
             take_first: false,
@@ -121,42 +124,50 @@ mod tests {
 
     #[test]
     fn typed_pose_schema_proof_matches_complete_validation() {
-        let projection = Projection::load_revision(4).unwrap();
-        let validator = Validator::for_revision(4).unwrap();
-        let layout = Layout::compile(&projection, &validator).unwrap();
-        for value in [
-            -1_000_000_000.,
-            1_000_000_000.,
-            0.,
-            -0.0,
-            f32::from_bits(1_000_000_000f32.to_bits() + 1) as f64,
-            -f32::MAX as f64,
-            f32::MAX as f64,
-        ] {
-            let mut source = pose_tests::source().remove(0);
-            source["players"][0]["model_nodes"][0][0] = Value::from(value);
-            let bytes = crate::transport::tests::packed_stream(&[source]);
-            let mut input =
-                crate::transport::Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
-            let tick = input
-                .next_incremental_with_poses(Value::Null, true)
-                .unwrap()
-                .unwrap();
-            assert_eq!(input.poses.decoded, 1);
-            input.verify_incremental_source(&tick).unwrap();
-            let mut materialized = tick.clone();
-            input.poses.materialize(&mut materialized).unwrap();
-            let expected = projection.tick.project(&materialized).unwrap();
-            let projected = projection.tick.project(&tick).unwrap();
-            assert!(validator.is_valid(&projected));
-            assert_eq!(
-                layout.validate(&input.poses).is_ok(),
-                validator.is_valid(&expected)
-            );
-            assert_eq!(
-                layout.validate(&input.poses).is_ok(),
-                projection.tick_validator.is_valid(&expected)
-            );
+        for revision in [4, 5] {
+            let projection = Projection::load_revision(revision).unwrap();
+            let validator = Validator::for_revision(revision).unwrap();
+            let layout = Layout::compile(&projection, &validator).unwrap();
+            for value in [
+                -1_000_000_000.,
+                1_000_000_000.,
+                0.,
+                -0.0,
+                f32::from_bits(1_000_000_000f32.to_bits() + 1) as f64,
+                -f32::MAX as f64,
+                f32::MAX as f64,
+            ] {
+                let mut source = pose_tests::source().remove(0);
+                source["players"][0]["model_nodes"][0][0] = Value::from(value);
+                let player = source["players"][0].clone();
+                // Exercise the final supported slot in the expanded revision.
+                if revision == 5 {
+                    source["players"] = Value::Array(vec![player; h1_pose_codec::MAX_PLAYERS]);
+                }
+                let source_players = source["players"].as_array().unwrap().len();
+                let bytes = crate::transport::tests::packed_stream(&[source]);
+                let mut input =
+                    crate::transport::Stream::with_contract(&bytes[..], "HSFT0002").unwrap();
+                let tick = input
+                    .next_incremental_with_poses(Value::Null, true)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(input.poses.decoded, source_players as u64);
+                input.verify_incremental_source(&tick).unwrap();
+                let mut materialized = tick.clone();
+                input.poses.materialize(&mut materialized).unwrap();
+                let expected = projection.tick.project(&materialized).unwrap();
+                let projected = projection.tick.project(&tick).unwrap();
+                assert!(validator.is_valid(&projected));
+                assert_eq!(
+                    layout.validate(&input.poses).is_ok(),
+                    validator.is_valid(&expected)
+                );
+                assert_eq!(
+                    layout.validate(&input.poses).is_ok(),
+                    projection.tick_validator.is_valid(&expected)
+                );
+            }
         }
     }
 

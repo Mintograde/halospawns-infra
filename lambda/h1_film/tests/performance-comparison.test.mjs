@@ -22,12 +22,18 @@ test('performance comparison ignores spatial timings but preserves artifact iden
         provenance: { film_sha256: 'film', map_sha256: 'map', wasm_sha256: 'wasm', glue_sha256: 'glue' },
         timing: { total_seconds: 1 } });
       save(root, 'verification.json', { status: 'verified', total_seconds: 1 });
+      save(root, 'stages.json', {first_completion_seconds:root === baseline ? 20 : 5,
+        first_execution_seconds:root === baseline ? 24 : 8,
+        first_execution_less_extra_finalizations_seconds:root === baseline ? 41 : 17});
       for (const name of ['finalization.json', 'full-reparse-completion.json', 'viewer-rebuild-completion.json']) {
         save(root, name, payload(root === baseline ? 1 : 0));
       }
     }
     const matched = compare();
     assert.equal(matched.status, 0, matched.stderr);
+    assert.deepEqual(JSON.parse(matched.stdout).first_completion,
+      {baseline_seconds:20, candidate_seconds:5, fraction:0.25, speedup:4});
+    assert.equal(JSON.parse(matched.stdout).worker_wall.speedup, 3);
     const changed = payload(0);
     changed.spatial_artifact.sha256 = 'different-artifact';
     save(candidate, 'full-reparse-completion.json', changed);

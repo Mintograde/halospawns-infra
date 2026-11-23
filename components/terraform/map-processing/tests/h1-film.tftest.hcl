@@ -81,6 +81,7 @@ run "foundation_has_no_intake_permissions_or_mapping" {
   assert {
     condition = (
       length(aws_iam_role_policy.h1_film_intake) == 0 &&
+      length(aws_lambda_function.h1_world) == 0 && length(aws_s3_bucket.h1_world) == 0 &&
       length(aws_lambda_event_source_mapping.h1_film) == 0 &&
       aws_lambda_function.h1_film[0].reserved_concurrent_executions == 0
     )
@@ -172,6 +173,73 @@ run "queue_cap_above_reservation_is_rejected" {
   }
   expect_failures = [var.h1_film]
 }
+
+run "world_pool_is_separate_from_parent_capacity" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled              = true
+      image_tag            = "fixture-v1"
+      memory_mb            = 3008
+      intake_configured    = true
+      reserved_concurrency = 50
+      maximum_concurrency  = 50
+      world_pool_capacity  = 24
+      worlds_per_film      = 6
+    }
+  }
+  assert {
+    condition = (
+      aws_lambda_function.h1_film[0].reserved_concurrent_executions == 50 &&
+      aws_lambda_function.h1_world[0].reserved_concurrent_executions == 24 &&
+      aws_lambda_function.h1_world[0].publish &&
+      aws_lambda_function.h1_world[0].image_uri == aws_lambda_function.h1_film[0].image_uri &&
+      aws_lambda_function.h1_world[0].image_config[0].command[0] == "h1_film.world_pool.handler" &&
+      aws_lambda_function.h1_film[0].environment[0].variables["H1_WORLD_CONCURRENCY"] == "6" &&
+      !contains(keys(aws_lambda_function.h1_world[0].environment[0].variables), "APP_API_BASE_URL") &&
+      aws_s3_bucket_versioning.h1_world[0].versioning_configuration[0].status == "Enabled"
+    )
+    error_message = "World workers need a separate pool, a pinned matching image, private versioned scratch, and a bounded parent."
+  }
+}
+
+run "world_pool_rejects_excess_per_film_concurrency" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled             = true
+      image_tag           = "fixture-v1"
+      memory_mb           = 3008
+      intake_configured   = true
+      world_pool_capacity = 6
+      worlds_per_film     = 8
+    }
+  }
+  expect_failures = [var.h1_film]
+}
+
+run "world_dispatch_can_stop_while_fragments_expire" {
+  command = plan
+  variables {
+    h1_film = {
+      enabled             = true
+      image_tag           = "fixture-v1"
+      memory_mb           = 3008
+      intake_configured   = true
+      world_pool_capacity = 24
+      worlds_per_film     = 0
+    }
+  }
+  assert {
+    condition = (
+      length(aws_s3_bucket_lifecycle_configuration.h1_world) == 1 &&
+      length(aws_lambda_function.h1_world) == 1 &&
+      !contains(keys(aws_lambda_function.h1_film[0].environment[0].variables), "H1_WORLD_FUNCTION")
+    )
+    error_message = "Stopping dispatch must retain the versioned scratch lifecycle."
+  }
+}
+
 run "queue_cap_below_aws_minimum_is_rejected" {
   command = plan
   variables {

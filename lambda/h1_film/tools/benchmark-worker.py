@@ -19,6 +19,8 @@ def main():
     evidence = Path(os.environ["H1_BENCH_EVIDENCE"])
     evidence.mkdir(parents=True, exist_ok=True)
     spans = []
+    first_started = None
+    first_completion = None
     bounded = cloud.run_bounded
     convert = cloud.convert
     products = cloud.build_products
@@ -41,7 +43,8 @@ def main():
     def run_bounded(command, *args, **kwargs):
         command = list(command)
         if any(str(arg).endswith("/convert.mjs") for arg in command):
-            command += ["--client-concurrency", os.environ.get("H1_BENCH_CLIENTS", "1")]
+            if "H1_BENCH_CLIENTS" in os.environ:
+                command += ["--client-concurrency", os.environ["H1_BENCH_CLIENTS"]]
             if os.environ.get("H1_BENCH_OVERLAP") == "1":
                 command += ["--overlap-host"]
         name = kwargs.get("output_name", "command.log")
@@ -68,7 +71,14 @@ def main():
         return timed("finalize_" + job["mode"], products, job, *args, **kwargs)
 
     def execution(*args, **kwargs):
+        nonlocal first_started
+        if first_started is None:
+            first_started = time.monotonic()
         return timed("execute_with_extra_callback_checks", execute, *args, **kwargs)
+
+    def completion_received():
+        nonlocal first_completion
+        first_completion = time.monotonic() - first_started
 
     cloud.run_bounded = run_bounded
     cloud.convert = conversion
@@ -80,13 +90,17 @@ def main():
     spec.loader.exec_module(module)
     started = time.monotonic()
     try:
-        module.main()
+        module.main(on_first_completion=completion_received)
     finally:
         metrics = {"scope": "offline packaged worker; excludes AWS/API latency and cold start",
                    "harness_seconds": time.monotonic() - started, "spans": spans}
+        if first_completion is not None:
+            metrics["first_completion_seconds"] = first_completion
         finals = [span["seconds"] for span in spans if span["stage"].startswith("finalize_")]
         executions = [span["seconds"] for span in spans if span["stage"] == "execute_with_extra_callback_checks"]
-        if executions and len(finals) == 3:
+        if executions and len(finals) == 1 and first_completion is not None:
+            metrics["first_execution_seconds"] = executions[0]
+        elif executions and len(finals) == 3:
             metrics["first_execution_less_extra_finalizations_seconds"] = executions[0] - sum(finals[1:])
         for name in ("memory.peak", "cpu.stat", "memory.events",
                      "memory/memory.max_usage_in_bytes", "memory/memory.failcnt",

@@ -7,6 +7,7 @@ import os
 import subprocess
 
 from . import cloud
+from .world_pool import delivery
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
@@ -60,7 +61,8 @@ def handler(event, context):
     try:
         item = cloud.work_from_record(record)
         if item is not None:
-            cloud.execute(item, context)
+            with delivery(record):
+                cloud.execute(item, context)
     except cloud.FilmError as error:
         LOGGER.warning(
             "h1_failure reason=%s retryable=%s", error.reason, error.retryable

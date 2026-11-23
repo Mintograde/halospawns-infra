@@ -12,11 +12,25 @@ variable "h1_film" {
     event_source_enabled = optional(bool, false)
     reserved_concurrency = optional(number, 0)
     maximum_concurrency  = optional(number)
+    world_pool_capacity  = optional(number, 0)
+    worlds_per_film      = optional(number, 8)
     max_size_bytes       = optional(number, 536870912)
     max_source_ticks     = optional(number, 432000)
     max_players          = optional(number, 16)
   })
   default = {}
+
+  validation {
+    condition = (
+      var.h1_film.world_pool_capacity >= 0 && var.h1_film.world_pool_capacity <= 50 &&
+      floor(var.h1_film.world_pool_capacity) == var.h1_film.world_pool_capacity &&
+      var.h1_film.worlds_per_film >= 0 && var.h1_film.worlds_per_film <= 8 &&
+      floor(var.h1_film.worlds_per_film) == var.h1_film.worlds_per_film &&
+      (var.h1_film.world_pool_capacity == 0 || (var.h1_film.intake_configured && var.h1_film.enabled &&
+      var.h1_film.worlds_per_film <= var.h1_film.world_pool_capacity))
+    )
+    error_message = "The optional embedded-world pool needs configured intake, up to 8 workers per film and a separate reservation of at most 50."
+  }
 
   validation {
     condition = (
@@ -209,6 +223,10 @@ resource "aws_lambda_function" "h1_film" {
       VIEWER_ARTIFACT_PREFIX                     = "${local.replay_viewer_artifact_prefix}/"
       SPATIAL_ARTIFACT_PREFIX                    = "${local.replay_spatial_artifact_prefix}/"
       REPLAY_EXTRACTOR_MODE                      = "native"
+      } : {}, local.h1_world_pool && var.h1_film.worlds_per_film > 0 ? {
+      H1_WORLD_FUNCTION    = aws_lambda_function.h1_world[0].qualified_arn
+      H1_WORLD_BUCKET      = aws_s3_bucket.h1_world[0].id
+      H1_WORLD_CONCURRENCY = tostring(var.h1_film.worlds_per_film)
     } : {})
   }
 
@@ -234,7 +252,7 @@ resource "aws_lambda_function" "h1_film" {
     }
   }
 
-  depends_on = [aws_iam_role_policy.h1_film_logs, aws_iam_role_policy.h1_film_intake]
+  depends_on = [aws_iam_role_policy.h1_film_logs, aws_iam_role_policy.h1_film_intake, aws_iam_role_policy.h1_film_worlds]
 }
 
 resource "aws_lambda_event_source_mapping" "h1_film" {
