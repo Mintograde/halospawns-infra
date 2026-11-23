@@ -1,5 +1,29 @@
 # H1 film Lambda integration
 
+## Capped embedded client recordings in dev (2026-11-23)
+
+Dev policy 48 selects worker `20261123-r2` and world Lambda version 2. API 311 and viewer `146de7f` read match format v10. Exporter 50 checks the recorder’s FNET cap flag and retained records for each embedded client in Betas 6–8. A capped track carries its original source identity, network records and last recorded frame. The viewer disables that track and labels it from its own recorded roster. Each playable world must pass its own simulation checks. The release retains all seven engine profiles and all 118 previous exporters. [Converter and dev stack changes](https://github.com/Mintograde/halospawns-infra/commit/430a2d540c2a93a248999773049c2d0daf458806) · [API deployment](https://github.com/Mintograde/halospawns-api/actions/runs/45198566754) · [Viewer deployment](https://github.com/Mintograde/halospawns-svelte/actions/runs/45200383259)
+
+Chillout upload `a48901d3-85f1-4f78-9644-88a10cae0681` was recovered through a fresh upload, `ccd6801c-405e-5b8f-85dd-f1154f06b7f5`, using the exact original S3 version. Kelley’s 312,237 retained network records end at frame 52,200 (7:15). The host, nofo and Bourne each verified 64,222 frames and pSylence verified 64,227. All 2,144 hash checks passed. Desktop and mobile Chrome played all four views and verified the disabled Kelley entry and paused seeking. The CDN response matched the selected artifact’s SHA-256. [Recovered replay](https://dev.halospawns.com/viewer/replay/2a3e62a2-a48c-49f4-8704-af8142d1e519)
+
+All 24 packaged cases passed initial conversion, viewer rebuild and full reprocessing against the deployed API. The separate client flow passed. The 23 prior cases retained player statistics and all 1,583 match payload entries. The original failed upload, its source version and all prior history fingerprints were verified after recovery.
+
+The dev migration was `20261123010000_h1film_capped_client_network.sql`. Under the `halospawns-dev` profile, the focused and aggregate plans showed three resource updates in `map-processing` for the child function, its invocation policy and the parent function. The promotion applied the reviewed child and parent plans in order. The `app-api` state output was refreshed from 309 to 311. All six final plans had zero resource or output changes. The processing queue and dead-letter queue were empty.
+
+```powershell
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+./scripts/promote-h1-film.ps1 -Stack dev
+# Terraform apply commands run by the promotion
+$promotion = (Resolve-Path '.build/h1-promotions/20261123-151329-d9761c3462ff44819fea21cdd2e7b856').Path
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worlds.planfile"
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worker.planfile"
+# State-only API output refresh and final verification
+terraform -chdir=components/terraform/app-api apply -input=false dev-app-api.planfile
+./scripts/plan.ps1 dev app-api
+./scripts/plan.ps1 dev
+```
+
 ## Parallel world conversion in dev (2026-11-23)
 
 Dev policy 47 selects `20261123-r1` on API 310. The intake worker invokes version 1 of the world Lambda, capped at eight children per film and 32 across dev. Both functions use 3,008 MB. The selected Jaywalk replay took 20.9% of the sequential worker's time, and Dread FFA took 31.3–33.2% in two runs. Both selected replay hashes and deterministic callback payloads matched their published versions. Set `worlds_per_film` to zero to stop dispatch while retaining the private scratch lifecycle. [Measurements and deployment evidence](WORLD_POOL.md)
