@@ -63,7 +63,7 @@ override_data {
     uploads_bucket_name      = "fixture-uploads"
     file_uploaded_topic_arns = { films = "arn:aws:sns:us-east-1:283279960672:films" }
     pipelines = {
-      films = { unprocessed_prefix = "films/unprocessed/", queue_arn = "arn:aws:sqs:us-east-1:283279960672:films" }
+      films = { unprocessed_prefix = "films/unprocessed/", queue_arn = "arn:aws:sqs:us-east-1:283279960672:films", queue_url = "https://sqs.us-east-1.amazonaws.com/283279960672/films" }
       maps = {
         unprocessed_prefix = "maps/unprocessed/", processed_prefix = "maps/processed/", failed_prefix = "maps/failed/"
         queue_arn          = "arn:aws:sqs:us-east-1:283279960672:maps"
@@ -99,6 +99,8 @@ run "intake_is_wired_but_disabled" {
       aws_lambda_function.h1_film[0].reserved_concurrent_executions == 0 &&
       !aws_lambda_event_source_mapping.h1_film[0].enabled &&
       aws_lambda_event_source_mapping.h1_film[0].batch_size == 1 &&
+      aws_lambda_function.h1_film[0].environment[0].variables.H1_QUEUE_URL == "https://sqs.us-east-1.amazonaws.com/283279960672/films" &&
+      length([for s in jsondecode(aws_iam_role_policy.h1_film_intake[0].policy).Statement : s if contains(s.Action, "sqs:ChangeMessageVisibility") && s.Resource == ["arn:aws:sqs:us-east-1:283279960672:films"]]) == 1 &&
       !contains(flatten([for s in jsondecode(aws_iam_role_policy.h1_film_intake[0].policy).Statement : s.Action]), "s3:DeleteObject")
     )
     error_message = "Wiring must not activate consumption or permit source deletion."

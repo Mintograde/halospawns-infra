@@ -589,6 +589,36 @@ class CloudTests(unittest.TestCase):
             )
             report.assert_not_called()
 
+    def test_retry_only_shortens_the_failed_delivery_and_keeps_partial_failure(self):
+        queue_url = "https://sqs.us-east-1.amazonaws.com/283279960672/films-processing-queue"
+        delivery = {**record({}), "receiptHandle": "current-receipt",
+                    "attributes": {"ApproximateReceiveCount": "1"}}
+        event = {"Records": [delivery]}
+        failure = {"batchItemFailures": [{"itemIdentifier": delivery["messageId"]}]}
+        with (
+            patch.dict(os.environ, {"H1_QUEUE_URL": queue_url}),
+            patch.object(cloud, "work_from_record", return_value=self.job),
+            patch.object(cloud, "execute") as execute,
+            patch.object(worker.boto3, "client") as client,
+            patch.object(worker.random, "randint", side_effect=lambda low, high: high) as jitter,
+        ):
+            self.assertEqual(worker.handler(event, None), {"batchItemFailures": []})
+            client.assert_not_called()
+            execute.side_effect = cloud.FilmError("retry_pending", retryable=True)
+            for count, floor in ((1, 60), (2, 120), (3, 240), (20, 480)):
+                delivery["attributes"]["ApproximateReceiveCount"] = str(count)
+                self.assertEqual(worker.handler(event, None), failure)
+                jitter.assert_called_with(floor, 2 * floor)
+                client.return_value.change_message_visibility.assert_called_with(
+                    QueueUrl=queue_url, ReceiptHandle="current-receipt", VisibilityTimeout=2 * floor,
+                )
+            client.return_value.change_message_visibility.side_effect = RuntimeError("SQS unavailable")
+            self.assertEqual(worker.handler(event, None), failure)
+            client.reset_mock()
+            delivery["eventSourceARN"] = "arn:aws:sqs:us-east-1:283279960672:another-queue"
+            self.assertEqual(worker.handler(event, None), failure)
+            client.assert_not_called()
+
     def test_persisted_completion_pin_and_callback_are_rechecked(self):
         payload = fixture("completion")
         manifest = self.shared._completion_manifest(

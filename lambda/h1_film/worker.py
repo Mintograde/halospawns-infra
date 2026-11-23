@@ -4,13 +4,44 @@ import json
 import hashlib
 import logging
 import os
+import random
 import subprocess
+
+import boto3
+from botocore.config import Config
 
 from . import cloud
 from .world_pool import delivery
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
+
+
+def retry_record(record):
+    failure = {"batchItemFailures": [{"itemIdentifier": record["messageId"]}]}
+    queue_url = os.environ.get("H1_QUEUE_URL")
+    if not (
+        queue_url and record.get("receiptHandle") and record.get("eventSource") == "aws:sqs"
+        and record.get("eventSourceARN") == os.environ.get("H1_QUEUE_ARN")
+    ):
+        return failure
+    try:
+        delivery_count = int(record["attributes"]["ApproximateReceiveCount"])
+        # Spread callbacks after a burst. Every new delivery starts with the
+        # full lease for conversion; only the finished invocation releases it early.
+        floor = 60 * 2 ** min(max(delivery_count - 1, 0), 3)
+        delay = random.randint(floor, 2 * floor)
+        client = boto3.client("sqs", config=Config(
+            connect_timeout=2, read_timeout=3, retries={"total_max_attempts": 1},
+        ))
+        client.change_message_visibility(
+            QueueUrl=queue_url, ReceiptHandle=record["receiptHandle"], VisibilityTimeout=delay,
+        )
+        LOGGER.info("h1_retry_scheduled receive_count=%d delay_seconds=%d", delivery_count, delay)
+    except Exception as error:
+        # Preserve the original message and redrive policy even if SQS is unavailable.
+        LOGGER.warning("h1_retry_visibility_failed type=%s", type(error).__name__)
+    return failure
 
 
 def handler(event, context):
@@ -73,9 +104,9 @@ def handler(event, context):
                 return {"batchItemFailures": []}
             except Exception:
                 LOGGER.warning("h1_failure_status_retry")
-        return {"batchItemFailures": [{"itemIdentifier": record["messageId"]}]}
     except Exception as error:
         # No raw film strings, credentials, event payloads or API responses in logs.
         LOGGER.error("h1_retryable_failure type=%s", type(error).__name__)
-        return {"batchItemFailures": [{"itemIdentifier": record["messageId"]}]}
-    return {"batchItemFailures": []}
+    else:
+        return {"batchItemFailures": []}
+    return retry_record(record)

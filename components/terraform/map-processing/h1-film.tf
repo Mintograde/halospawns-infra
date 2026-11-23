@@ -147,7 +147,7 @@ resource "aws_iam_role_policy" "h1_film_intake" {
       },
       {
         Effect   = "Allow"
-        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
         Resource = [local.h1_film_pipeline.queue_arn]
       },
       {
@@ -212,6 +212,7 @@ resource "aws_lambda_function" "h1_film" {
       H1_WORKER_IMAGE_DIGEST = data.aws_ecr_image.h1_film[0].image_digest
       }, local.h1_film_intake ? {
       H1_QUEUE_ARN                               = local.h1_film_pipeline.queue_arn
+      H1_QUEUE_URL                               = local.h1_film_pipeline.queue_url
       H1_TOPIC_ARN                               = data.terraform_remote_state.uploads_ingest.outputs.file_uploaded_topic_arns["films"]
       H1_UPLOADS_BUCKET                          = data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_name
       H1_MAX_SIZE_BYTES                          = tostring(var.h1_film.max_size_bytes)
