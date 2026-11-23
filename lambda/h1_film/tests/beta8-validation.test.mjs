@@ -53,6 +53,31 @@ async function inspect(bytes,check) {
 }
 const read=bytes=>inspect(bytes,path=>readEnvelope(path,{allowClientView:true}));
 
+test('only the embedded client policy admits the exact capped flag after validating the remaining stream',async()=>{
+  const admitted=bytes=>inspect(bytes,path=>readEnvelope(path,{allowClientView:true,allowCappedClientNetwork:true}));
+  const client=fixture({client:true,records:[[0,64,4],[1,83,16]]});
+  const offset=client.readUInt32LE(448);
+  client.writeUInt32LE(1,offset+20);
+  assert.deepEqual((await admitted(client)).network.failure,{
+    reason:'capped_network',flags:1,record_count:2,last_recorded_frame:1,
+  });
+  await assert.rejects(read(client),/FNET flags/);
+  const host=fixture();
+  host.writeUInt32LE(1,host.readUInt32LE(448)+20);
+  await assert.rejects(admitted(host),/FNET flags/);
+  client.writeUInt32LE(3,offset+20);
+  await assert.rejects(admitted(client),/FNET flags/);
+  client.writeUInt32LE(1,offset+20);
+  client.writeUInt32LE(3,offset+12);
+  await assert.rejects(admitted(client),/record count mismatch/);
+  const empty=client.subarray(0,offset+32);
+  empty.writeUInt32LE(32,452);
+  for(const word of [12,16,24,28]) empty.writeUInt32LE(0,offset+word);
+  assert.deepEqual((await admitted(empty)).network.failure,{
+    reason:'capped_network',flags:1,record_count:0,last_recorded_frame:null,
+  });
+});
+
 test('Beta 8 host classification reads bounded START items and preserves older recipes',async()=>{
   const readHost=bytes=>inspect(bytes,path=>readEnvelope(path,{botAwareHost:true}));
   const bytes=fixture({players:5,startBots:3,records:[[0,3,4,16]]});

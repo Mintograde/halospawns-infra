@@ -42,7 +42,8 @@ export function validateCompactStorage(m,header) {
   }
   const logicalLimit=((header.version===7&&m.schema==='halospawns.h1MatchReplay.v7')
     ||(header.version===8&&m.schema==='halospawns.h1MatchReplay.v8')
-    ||(header.version===9&&m.schema==='halospawns.h1MatchReplay.v9'))?2147483648:LIMIT;
+    ||(header.version===9&&m.schema==='halospawns.h1MatchReplay.v9')
+    ||(header.version===10&&m.schema==='halospawns.h1MatchReplay.v10'))?2147483648:LIMIT;
   check(integer(m.logical_size_bytes,1,logicalLimit)&&logical===m.logical_size_bytes&&physical+header.body_offset===header.size_bytes,'container coverage differs');
 }
 

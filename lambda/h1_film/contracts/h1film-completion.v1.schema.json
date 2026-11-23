@@ -1,6 +1,49 @@
 {
-  "$comment": "Generated from API schemas/h1films.py SHA256 80f14fa2bc7d2b78c272505fffbd451b2ed38bd37e390991d7f931533f984dfa",
+  "$comment": "Generated from API schemas/h1films.py SHA256 7ed3f706088acdd21c9efb73cf0c0b03157e4f028550981478cc1b16e008c921",
   "$defs": {
+    "H1CappedNetworkFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "flags": {
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Flags",
+          "type": "integer"
+        },
+        "last_recorded_frame": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Recorded Frame"
+        },
+        "reason": {
+          "const": "capped_network",
+          "title": "Reason",
+          "type": "string"
+        },
+        "record_count": {
+          "maximum": 67108864,
+          "minimum": 0,
+          "title": "Record Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "flags",
+        "record_count",
+        "last_recorded_frame"
+      ],
+      "title": "H1CappedNetworkFailure",
+      "type": "object"
+    },
     "H1FilmBotNetworkHost": {
       "additionalProperties": false,
       "properties": {
@@ -188,7 +231,7 @@
           "type": "integer"
         },
         "viewer_revision": {
-          "maximum": 14,
+          "maximum": 15,
           "minimum": 1,
           "title": "Viewer Revision",
           "type": "integer"
@@ -385,7 +428,8 @@
             "halospawns.h1MatchReplay.v6",
             "halospawns.h1MatchReplay.v7",
             "halospawns.h1MatchReplay.v8",
-            "halospawns.h1MatchReplay.v9"
+            "halospawns.h1MatchReplay.v9",
+            "halospawns.h1MatchReplay.v10"
           ],
           "title": "Schema",
           "type": "string"
@@ -682,6 +726,7 @@
         "failure": {
           "discriminator": {
             "mapping": {
+              "capped_network": "#/$defs/H1CappedNetworkFailure",
               "roster_mismatch": "#/$defs/H1RosterMismatchFailure",
               "simulation_desync": "#/$defs/H1MatchFailure",
               "unsupported_build": "#/$defs/H1UnsupportedBuildFailure"
@@ -697,6 +742,9 @@
             },
             {
               "$ref": "#/$defs/H1UnsupportedBuildFailure"
+            },
+            {
+              "$ref": "#/$defs/H1CappedNetworkFailure"
             }
           ],
           "title": "Failure"

@@ -54,7 +54,8 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   const header = await readBlock(file, offset, 32);
   const words = Array.from({ length: 8 }, (_, index) => header.readUInt32LE(index * 4));
   assert.ok(words[0] === 0x54454e46 && words[1] === 2 && words[2] === 32, 'Unsupported FNET layout');
-  assert.equal(words[5], 0, 'Capped or unknown FNET flags');
+  const capped = clientView && recoveryContext.allowCappedClientNetwork && words[5] === 1;
+  if (!capped) assert.equal(words[5], 0, 'Capped or unknown FNET flags');
   assert.equal(words[7], size - 32, 'Invalid FNET packed size');
   assert.ok(words[6] <= Math.floor(words[7] / 24), 'Invalid FNET block count');
   let cursor = 32, count = 0, rawBytes = 0, previous = -1, applications = 0;
@@ -151,8 +152,10 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
   assert.equal(count, words[3], 'FNET record count mismatch');
   assert.equal(rawBytes, words[4], 'FNET byte count mismatch');
   if (clientView) {
-    assert.ok(clocks.length && clocks[0].frame === firstTick, 'Client film lacks initial clock');
-    return {records:count,applications,blocks:words[6],clocks};
+    assert.ok(clocks.length ? clocks[0].frame === firstTick : capped, 'Client film lacks initial clock');
+    return {records:count,applications,blocks:words[6],clocks,
+      ...(capped ? {failure:{reason:'capped_network',flags:words[5],record_count:count,
+        last_recorded_frame:count ? previous : null}} : {})};
   }
   const roster_recovery = undefined;
   const hostSlots = Array.from({ length: players }, (_, slot) => slot)
@@ -178,7 +181,7 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, allowTextClientSettings = false, observeTickBlock, observeRecord} = {}) {
+export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, allowCappedClientNetwork = false, allowTextClientSettings = false, observeTickBlock, observeRecord} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -299,7 +302,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
         firstHash:firstSample.readBigUInt64LE(8),players});
     }
     const net = universal ? await inspectNetwork(file, netOffset, netSize, words[10], words[11], players, words[25], {
-      botAwareHost,rosterEvidence,teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+19*4) === 0
+      botAwareHost,allowCappedClientNetwork,rosterEvidence,teams:words[30],namesSize,ffa:Boolean(variant && variant.readInt32LE(128+19*4) === 0
         && variant.readInt32LE(128+25*4) === 0 && head.readUInt32LE(472) === 0),
     }, clientView, observeRecord) : undefined;
     if (net?.roster_recovery) players = net.roster_recovery.initial_player_count;

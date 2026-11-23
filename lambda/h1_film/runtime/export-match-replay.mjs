@@ -24,13 +24,14 @@ export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha25
   const converted=JSON.parse(await readFile(join(directory,'match-tracks.json'),'utf8'));
   assert.equal(converted.source_film_sha256,match.sha256);
   assert.equal(converted.tracks.length,match.parts.length);
-  const partial=[7,8,9,10,11,12,13,14].includes(sourceContract.profile_revision);
+  const partial=[7,8,9,10,11,12,13,14,15].includes(sourceContract.profile_revision);
   const accountOptions={allowUnassignedPlayer:report.envelope.protocol_revision>=9844};
   assert.equal(report.exporter_revision>=16,partial,'Match policy differs from recipe');
   assert.equal(report.exporter_revision>=17,sourceContract.profile_revision>=8,'Match storage differs from recipe');
   assert.equal(report.exporter_revision>=18,sourceContract.profile_revision>=9,'Match roster policy differs from recipe');
   assert.equal(report.exporter_revision>=22,sourceContract.profile_revision>=10,'Match client build policy differs from recipe');
-  if(sourceContract.profile_revision===14) assert.ok(report.exporter_revision>=40,'Recorded rate requires exporter 40');
+  assert.equal(report.exporter_revision>=50,sourceContract.profile_revision===15,'Capped network policy differs from recipe');
+  if(sourceContract.profile_revision>=14) assert.ok(report.exporter_revision>=40,'Recorded rate requires exporter 40');
   else {
   assert.equal(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1',[11,12].includes(sourceContract.profile_revision),'Match source differs from recipe');
   if(report.engine_profile==='h1-performance-beta7-p9844-wasm-v1')
@@ -155,6 +156,23 @@ export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha25
     assert.equal(c.id,`client-${index}`);
     const bytes=await readFile(join(directory,`${c.id}.h1film`));
     assert.equal(digest(bytes),c.source_film_sha256);
+    // Bind the client disposition to the original recorder flag and validated extent.
+    if (report.exporter_revision >= 50) {
+      const base = bytes.readUInt32LE(448);
+      assert.ok(base >= 504 && bytes.readUInt32LE(452) >= 32 && base + bytes.readUInt32LE(452) <= bytes.length);
+      assert.equal(bytes.readUInt32LE(base),0x54454e46,'Client FNET header differs');
+      const flags = bytes.readUInt32LE(base + 20);
+      assert.ok(flags === 0 || flags === 1,'Unknown client FNET flags');
+      assert.equal(flags === 1, c.failure?.reason === 'capped_network', 'Capped client status differs from source');
+      if (flags === 1) {
+        assert.equal(c.status, 'unavailable');
+        const envelope = await readEnvelope(join(directory,c.id+'.h1film'), {
+          allowClientView:true, allowCappedClientNetwork:true, allowTextClientSettings:true, botAwareHost:true,
+        });
+        assert.deepEqual(c.envelope,envelope);
+        assert.deepEqual(c.failure,envelope.network.failure);
+      }
+    }
     if(c.failure?.reason==='unsupported_build') {
       const envelope=await readEnvelope(join(directory,`${c.id}.h1film`),{allowClientView:true});
       assert.deepEqual(c.envelope,envelope,'Unsupported client source envelope differs');
@@ -164,7 +182,7 @@ export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha25
     const unavailable=partial&&c.status==='unavailable';
     if(!unavailable)assert.match(c.world_sha256,/^[0-9a-f]{64}$/);
     if(c.recovery) {
-      assert.ok(!unavailable&&sourceContract.profile_revision===14&&report.exporter_revision>=46);
+      assert.ok(!unavailable&&sourceContract.profile_revision>=14&&report.exporter_revision>=46);
       const firstRun=join(directory,c.id+'.partial');
       let log;
       try {log=await readFile(join(firstRun,'client-verification.log'),'utf8');}

@@ -58,12 +58,15 @@ export async function convertMatchTrack(stage,values,report,convertFilm,deadline
   }
   const filmHash = await sha256(film);
   const envelope=await readEnvelope(film,{allowClientView:true,botAwareHost:report.exporter_revision>=26,
-    allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
+    allowCappedClientNetwork:report.exporter_revision >= 50, allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
   assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
   assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
   assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
   const remaining=(deadline-performance.now())/1000;assert.ok(remaining>1,'Match conversion timed out');
   const track={id,part,envelope,source_film_sha256:filmHash};
+  if (envelope.network?.failure) {
+    return {...track,status:'unavailable',failure:envelope.network.failure};
+  }
   const unsupported=unsupportedClientBuild(envelope,{...profileById(report.engine_profile),tick_rate:report.envelope.tick_rate},
     report.exporter_revision,BUILD_MATCHING[report.engine_profile]);
   if(unsupported) {

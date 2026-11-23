@@ -37,7 +37,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
         item = {key: track[key] for key in (
             "id", "role", "source_film_sha256", "frame_count", "first_update",
         )}
-        if revision in (7, 8, 9, 10, 11, 12, 13, 14):
+        if revision in (7, 8, 9, 10, 11, 12, 13, 14, 15):
             item["status"] = track["status"]
         if track.get("status") == "unavailable":
             item["failure"] = track["failure"]
@@ -46,7 +46,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
                         verified_hash_count=track["verification"]["hash_checks"])
             recovery = entries.get(f'{track["id"]}/verification/pov-recovery-v1')
             if recovery:
-                require(revision == 14 and track["role"] == "client"
+                require(revision >= 14 and track["role"] == "client"
                         and recovery["kind"] == "diagnostic-table" and recovery["size_bytes"] <= 4096)
                 item["recovery_sha256"] = recovery["sha256"]
         item.update(alignment="authoritative" if track["role"] == "host"
@@ -70,7 +70,7 @@ def assemble_match_replay(film, directory, host, work, deadline, revision=6):
         chunk_count=len(entries), manifest=manifest,
         metrics={**host.metrics, "match_pack_duration_ms": round((time.perf_counter()-started)*1000),
                  **({"unavailable_client_count": sum(t.get("status") == "unavailable" for t in tracks)}
-                    if revision in (7, 8, 9, 10, 11, 12, 13, 14) else {}),
+                    if revision in (7, 8, 9, 10, 11, 12, 13, 14, 15) else {}),
                  "match_view_count": len(tracks), "artifact_bytes": result["size_bytes"],
                  "artifact_uncompressed_bytes": result["size_bytes"], "compression_ratio": 1},
     )

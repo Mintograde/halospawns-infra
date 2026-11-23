@@ -1,6 +1,8 @@
 // Browser-safe range reader for the single-file H1 match replay container.
 // Each world retains the proven viewer-5 codec and its own clock and roster.
 import {validateCompactStorage,compactRangeReader} from './compact-storage.mjs';
+export const CAPPED_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v10';
+export const CAPPED_MATCH_PROJECTION='c2f74d10fd84dec79d786d4fed9239c69795dc735b8ad97f5f4edc3be0f7d261';
 export const TICK_RATE_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v9';
 export const TICK_RATE_MATCH_PROJECTION='55639f911e42f0c150f3967e57369df99ade1ce370f47c69f567aca40abefc27';
 export const BETA8_MATCH_REPLAY_SCHEMA='halospawns.h1MatchReplay.v8';
@@ -36,7 +38,7 @@ export function readMatchReplayHeader(bytes) {
   check(bytes.length===64,'invalid header size');
   const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   const version=v.getUint32(8,true);
-  check([1,2,3,4,5,6,7,8,9].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV000${version}`
+  check([1,2,3,4,5,6,7,8,9,10].includes(version)&&new TextDecoder().decode(bytes.subarray(0,8))===`H1MV${String(version).padStart(4,'0')}`
     &&v.getUint32(12,true)===64&&v.getUint32(24,true)===0&&v.getUint32(28,true)===0,'unsupported header');
   const manifest_bytes=v.getUint32(16,true),size_bytes=v.getUint32(20,true);
   check(integer(manifest_bytes,1,MATCH_REPLAY_MAX_MANIFEST)&&integer(size_bytes,64+manifest_bytes,MATCH_REPLAY_MAX_BYTES),'invalid bounds');
@@ -44,15 +46,16 @@ export function readMatchReplayHeader(bytes) {
     manifest_sha256:[...bytes.subarray(32,64)].map(b=>b.toString(16).padStart(2,'0')).join('')};
 }
 export function validateMatchReplay(m,header) {
-  const variable=m?.schema===TICK_RATE_MATCH_REPLAY_SCHEMA;
+  const capped=m?.schema===CAPPED_MATCH_REPLAY_SCHEMA;
+  const variable=capped||m?.schema===TICK_RATE_MATCH_REPLAY_SCHEMA;
   const beta8=m?.schema===BETA8_MATCH_REPLAY_SCHEMA,large=variable||beta8||m?.schema===LARGE_MATCH_REPLAY_SCHEMA,beta7=large||m?.schema===BETA7_MATCH_REPLAY_SCHEMA,unsupported=beta7||m?.schema===UNSUPPORTED_MATCH_REPLAY_SCHEMA,roster=unsupported||m?.schema===ROSTER_MATCH_REPLAY_SCHEMA;
   const compact=roster||m?.schema===COMPACT_MATCH_REPLAY_SCHEMA,partial=compact||m?.schema===PARTIAL_MATCH_REPLAY_SCHEMA;
-  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(variable?9:beta8?8:large?7:beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
+  check((partial||m?.schema===MATCH_REPLAY_SCHEMA)&&header.version===(capped?10:variable?9:beta8?8:large?7:beta7?6:unsupported?5:roster?4:compact?3:partial?2:1)
     &&hash.test(m.source_film_sha256)&&hash.test(m.raw_map_sha256),'invalid source');
   check((variable?['h1-performance-beta6-p9839-wasm-v1','h1-performance-beta7-p9844-wasm-v1','h1-performance-beta8-p9848-wasm-v1'].includes(m.engine_profile):m.engine_profile===(beta8?'h1-performance-beta8-p9848-wasm-v1':beta7?'h1-performance-beta7-p9844-wasm-v1':'h1-performance-beta6-p9839-wasm-v1'))&&hash.test(m.wasm_sha256)&&hash.test(m.glue_sha256),'invalid engine');
   check(/^[a-f0-9]{16}$/.test(m.match_id)&&m.match_id!=='0000000000000000'&&(variable?[30,120].includes(m.tick_rate):m.tick_rate===120)&&m.authoritative_track==='host','invalid match');
   check(m.sourceContract?.schema==='halospawns.viewerReplay.v1'&&m.sourceContract.profile==='frontend-default'
-    &&m.sourceContract.profile_revision===(variable?14:beta8?13:large?12:beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(variable?TICK_RATE_MATCH_PROJECTION:beta8?BETA8_MATCH_PROJECTION:large?LARGE_MATCH_PROJECTION:beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
+    &&m.sourceContract.profile_revision===(capped?15:variable?14:beta8?13:large?12:beta7?11:unsupported?10:roster?9:compact?8:partial?7:6)&&m.sourceContract.projection_sha256===(capped?CAPPED_MATCH_PROJECTION:variable?TICK_RATE_MATCH_PROJECTION:beta8?BETA8_MATCH_PROJECTION:large?LARGE_MATCH_PROJECTION:beta7?BETA7_MATCH_PROJECTION:unsupported?UNSUPPORTED_MATCH_PROJECTION:roster?ROSTER_MATCH_PROJECTION:compact?COMPACT_MATCH_PROJECTION:partial?PARTIAL_MATCH_PROJECTION:'17891e012b67f5b7e998cf1cc724a1728d18b3df5556559e90fc4ee47c0dc2c2'),
     'invalid source contract');
   check(Array.isArray(m.entries)&&m.entries.length>0&&m.entries.length<=512,'invalid entries');
   const entries=new Map();let end=0;
@@ -77,7 +80,12 @@ export function validateMatchReplay(m,header) {
     if(t.status==='unavailable') {
       check(i>0&&t.world===undefined&&t.viewer_revision===undefined&&t.verification===undefined,'unavailable world is playable');
       const f=t.failure;
-      if(unsupported&&f?.reason==='unsupported_build') {
+      if (capped && f?.reason === 'capped_network') {
+        check(f.flags === 1 && integer(f.record_count,0,67108864)
+          && (f.record_count ? integer(f.last_recorded_frame,t.first_update,t.first_update+t.frame_count) : f.last_recorded_frame === null)
+          && Object.keys(f).sort().join(',') === 'flags,last_recorded_frame,reason,record_count'
+          && typeof t.recorded_sections?.network === 'string','invalid capped network evidence');
+      } else if(unsupported&&f?.reason==='unsupported_build') {
         check(typeof f.recorded_build==='string'&&/^[\x20-\x7e]{1,63}$/.test(f.recorded_build)
           &&f.format===3&&f.protocol_revision===(variable?{'h1-performance-beta6-p9839-wasm-v1':9839,'h1-performance-beta7-p9844-wasm-v1':9844,'h1-performance-beta8-p9848-wasm-v1':9848}[m.engine_profile]:beta8?9848:beta7?9844:9839)&&f.tick_rate===m.tick_rate
           &&Object.keys(f).sort().join(',')==='format,protocol_revision,reason,recorded_build,tick_rate',
@@ -133,6 +141,11 @@ export function validateMatchReplay(m,header) {
         &&integer(b.first_tick,0,2147483647)&&integer(b.last_tick,b.first_tick,2147483647)&&hash.test(b.sha256),'invalid network block');end+=b.size_bytes;}
       check(end===e.size_bytes,'invalid network coverage');
     }
+    if (t.failure?.reason === 'capped_network') {
+      const blocks=t.network?.blocks ?? [];
+      check(t.failure.record_count === blocks.reduce((total,b)=>total+b.count,0)
+        && t.failure.last_recorded_frame === (blocks.at(-1)?.last_tick ?? null),'capped network extent differs');
+    }
     if(t.pad) {
       const p=t.pad;ref(p.original,'raw-pad');
       check(integer(p.seats,1,4)&&p.stride===14&&integer(p.count,0,432000)&&integer(p.event_count,0,65536)&&p.event_size===16,'invalid pad');
@@ -142,12 +155,12 @@ export function validateMatchReplay(m,header) {
     if(i===0) continue;
     check(integer(t.recorded_own_player,0,15)&&typeof t.ends_early==='boolean','invalid client coverage');
     check([0,1,2].includes(t.recorded_trust?.inputs)&&[0,1,2].includes(t.recorded_trust?.messages),'invalid recorded trust');
-    check(Array.isArray(t.clocks)&&t.clocks.length>0&&t.clocks.length<=432000,'missing client clock');
+    check(Array.isArray(t.clocks)&&t.clocks.length<=432000,'missing client clock');
     let previous=-1;
     for(const c of t.clocks) {
       check(integer(c.frame,0,t.frame_count-1)&&c.frame>previous&&integer(c.game_tick,0,2147051647),'invalid client clock');previous=c.frame;
     }
-    check(t.clocks[0].frame===0,'missing initial client clock');
+    check(t.clocks.length ? t.clocks[0].frame===0 : t.failure?.reason==='capped_network','missing initial client clock');
     if(t.alignment?.method==='unavailable') {check(t.alignment.reason==='client_account_not_recorded','invalid missing alignment');continue;}
     check(t.alignment?.method==='recorded-client-clock-v1'&&Array.isArray(t.alignment.rows)&&t.alignment.rows.length<=65536,'invalid alignment');
     check(entries.get(t.alignment.account_entry)?.kind==='client-account','unbound alignment account');

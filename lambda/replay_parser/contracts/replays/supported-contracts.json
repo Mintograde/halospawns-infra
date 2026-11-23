@@ -164,6 +164,16 @@
       "projection_file": "frontend-default.v14.projection.json",
       "manifest_schema_sha256": "c826f120944c321877296fe1e4fed8e692b447eb958f697875206570db2c7e6c",
       "status": "supported"
+    },
+    {
+      "schema": "halospawns.viewerReplay.v1",
+      "profile": "frontend-default",
+      "profile_revision": 15,
+      "projection_sha256": "c2f74d10fd84dec79d786d4fed9239c69795dc735b8ad97f5f4edc3be0f7d261",
+      "schema_file": "halospawns.viewerReplay.v1.frontend-default.v15.schema.json",
+      "projection_file": "frontend-default.v15.projection.json",
+      "manifest_schema_sha256": "4dd74b0033a9f7645cdd3ff49d4813ef2838735b91a9d6878e64b88c98387e43",
+      "status": "supported"
     }
   ],
   "supported_encodings": [
@@ -331,6 +341,18 @@
       "manifest_schema_sha256": "c826f120944c321877296fe1e4fed8e692b447eb958f697875206570db2c7e6c",
       "encoding_file": "h1-match-replay.v9.encoding.json",
       "encoding_sha256": "2949fa348e086bc65f8e155c0b9a5953be6b4386b29e4f59481c846784355764",
+      "media_type": "application/vnd.halospawns.replay-delta",
+      "outer_compression": "identity",
+      "status": "supported"
+    },
+    {
+      "artifact_kind": "viewer_replay_delta",
+      "format": "halospawns.h1MatchReplay.v10",
+      "container_version": 10,
+      "manifest_schema_file": "halospawns.h1MatchReplay.v10.manifest.schema.json",
+      "manifest_schema_sha256": "4dd74b0033a9f7645cdd3ff49d4813ef2838735b91a9d6878e64b88c98387e43",
+      "encoding_file": "h1-match-replay.v10.encoding.json",
+      "encoding_sha256": "37663b3b4fa91ef0d4b0a499053f498af9145fb3aac118864a0a9ded3cf9e164",
       "media_type": "application/vnd.halospawns.replay-delta",
       "outer_compression": "identity",
       "status": "supported"
