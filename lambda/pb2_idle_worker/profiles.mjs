@@ -85,21 +85,36 @@ export async function inputProfiles(job, read) {
     const pad = readRawPad(rawPad);
     if (!pad.count || pad.flags & 2) return;
     const copy = Boolean(pad.flags & 16);
-    const slots = network ? Array.from({length:16},(_,i)=>i).filter(i => pad.locals & (1<<i))
+    let mask = pad.locals;
+    if (network && !(pad.flags & 4)) {
+      // Original Beta 4/5 PAD1 has no local mask. Its envelope records the
+      // recorder's first slot and (Beta 5) local mask. Mirrors omit this pad.
+      if (word(h,4) !== 2 || ![9803,9818].includes(word(h,8)) || copy) return;
+      const packed = word(h,124), own = (packed >>> 8) & 255, players = packed & 255;
+      if (players > 8 || own >= players || (client && own !== boundSlot) || pad.seats !== word(h,100)) return;
+      mask = (packed >>> 16) & 255;
+      // The original recorder assigned unmasked local seats consecutively from own.
+      if (!mask) mask = ((1 << pad.seats) - 1) << own;
+      if ((mask & -mask) !== (1 << own) || (mask >>> players)) return;
+    }
+    const slots = network ? Array.from({length:16},(_,i)=>i).filter(i => mask & (1<<i))
       : Array.from({length:pad.seats},(_,i)=>i);
-    if (network && !(pad.flags & 4) || slots.length !== pad.seats
+    if (slots.length !== pad.seats
       || client && (copy || !slots.includes(boundSlot))) return;
     const rawRoster = header >= 464 ? await section(456,464) : null;
-    if (rawRoster) assert.ok(rawRoster.length >= 16 && word(rawRoster,0) === 0x52545352
+    const names = rawRoster && rawRoster.length === 196 && word(rawRoster,0) === 0x454d414e;
+    if (rawRoster && !names) assert.ok(rawRoster.length >= 16 && word(rawRoster,0) === 0x52545352
       && word(rawRoster,4) <= 16 && 16 + 28*word(rawRoster,4) <= rawRoster.length);
     const settings = copy ? new Map() : readSettings(await section(76,1024*1024) ?? Buffer.alloc(0));
     const build = h.toString('utf8',384,448).split('\0')[0];
     for (const [seat,slot] of slots.entries()) {
       if (!roster.has(slot) || (client && slot !== boundSlot)) continue;
       if (rawRoster) {
-        if (slot >= word(rawRoster,4)) continue;
-        const name = rawRoster.toString('utf16le',20+28*slot,44+28*slot).split('\0')[0].trim();
+        if (slot >= (names ? 8 : word(rawRoster,4))) continue;
+        const at = names ? 4+24*slot : 20+28*slot;
+        const name = rawRoster.toString('utf16le',at,at+24).split('\0')[0].trim();
         if (name && roster.get(slot).trim().toLowerCase() !== name.toLowerCase()) continue;
+        if (!name && names && network && !job.stable) continue;
       } else if (network && !job.stable) continue;
       const counts = seatSamples(pad,seat);
       if (!counts.controller && !counts.mouse) continue;

@@ -32,3 +32,47 @@ test('copied host inputs never inherit recorder settings, unmatched and scripted
   assert.deepEqual(await inspect(film([[1]],{client:true}),1),[]);
   assert.equal((await inspect(film([[2]],{client:true}),2))[0].recording,'client');
 });
+
+function legacyFilm(sources, {protocol=9818, own=2, mask=4, name='Alpha', client=true}={}) {
+  const bytes = film(sources,{client});
+  bytes.writeUInt32LE(2,4);
+  bytes.writeUInt32LE(protocol,8);
+  bytes.writeUInt32LE(1,100);
+  bytes.writeUInt32LE((mask << 16) | (own << 8) | 3,124);
+  const pad = bytes.readUInt32LE(104);
+  bytes.writeUInt32LE(0,pad+28);
+  bytes.writeUInt32LE(0,pad+52);
+  const names = Buffer.alloc(196);
+  names.writeUInt32LE(0x454d414e);
+  names.write(name,4+2*24,24,'utf16le');
+  bytes.writeUInt32LE(names.length,460);
+  return Buffer.concat([bytes.subarray(0,bytes.readUInt32LE(456)),names]);
+}
+
+test('Beta 4 and 5 attribute original input through their own envelope and NAME roster',async()=>{
+  const [client] = await inspect(legacyFilm([[2],[2],[1],[1,1]]),2);
+  assert.deepEqual([client.slot,client.name,client.recording,client.controller,client.mouse],[2,'Alpha','client',1,2]);
+  assert.equal(client.profile.mouse_sensitivity,1.2);
+  const [host] = await inspect(legacyFilm([[1]],{protocol:9803,mask:0,client:false}));
+  assert.deepEqual([host.slot,host.recording,host.controller],[2,'host',1]);
+  for (const options of [{own:1},{mask:5},{name:'Another'},{protocol:9848}]) {
+    assert.deepEqual(await inspect(legacyFilm([[1]],options),2),[]);
+  }
+  assert.deepEqual(await inspect(legacyFilm([[0],[3],[4]]),2),[]);
+  const mirror = legacyFilm([[1]]);
+  mirror.writeUInt32LE(0,104);
+  mirror.writeUInt32LE(0,108);
+  assert.deepEqual(await inspect(mirror,2),[]);
+});
+
+test('legacy split-screen seats keep separate samples and the source roster order',async()=>{
+  const bytes = legacyFilm([[1],[2]],{protocol:9803,own:1,mask:0,client:false});
+  const pad = bytes.readUInt32LE(104), names = bytes.readUInt32LE(456);
+  bytes.writeUInt32LE(2,100);
+  bytes.writeUInt32LE(2,pad+12);
+  bytes.writeUInt32LE(1,pad+20);
+  bytes.write('Bravo',names+4+24,24,'utf16le');
+  const job = {film:{size_bytes:bytes.length},stable:true,roster:[{slot:1,name:'Bravo'},{slot:2,name:'Alpha'}]};
+  const rows = await inputProfiles(job,async(at,n)=>bytes.subarray(at,at+n));
+  assert.deepEqual(rows.map(r=>[r.name,r.controller,r.mouse]),[['Bravo',1,0],['Alpha',0,1]]);
+});

@@ -30,5 +30,8 @@ host, embedded client and selected separate client recordings. This uses
 independent leases and a separate evidence table. It reads only the headers,
 rosters, raw input and configuration ranges. The public product contains
 input method counts and allowlisted settings for identifiable seats.
+Original Beta 4 and Beta 5 pads use the film envelope's recorder slot and local
+seat count or mask. Their NAME roster links those seats to game participants.
+Mirrors from these versions omit the pad and contribute no sampled input.
 Historical runs can invoke the worker with `{"task":"inputs"}`. Run both
 `tests/input.test.mjs` and `tests/profiles.test.mjs` for the two readers.
