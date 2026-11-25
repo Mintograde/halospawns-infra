@@ -108,6 +108,14 @@ if (checkWorker) {
           || key === 'artifact_source_ratio' || key === 'compression_ratio') delete viewer.metadata.metrics[key];
     }
     for (const key of ['parse_duration_ms','process_peak_rss_kib']) delete product.spatial_artifact.metadata[key];
+    const release = product.h1film.release;
+    if (release) {
+      const job = await read('job.json');
+      assert.deepEqual(release, job.conversion.release, 'Completion differs from its pinned release');
+      assert.equal(release.recipe.exporter_revision, product.h1film.exporter_revision);
+      for (const key of ['release_id','image_digest','manifest_sha256','policy_revision']) delete release[key];
+      delete release.recipe.exporter_revision;
+    }
     delete product.h1film.producer;
     delete product.h1film.exporter_revision;
     const match = product.h1film.match_replay;

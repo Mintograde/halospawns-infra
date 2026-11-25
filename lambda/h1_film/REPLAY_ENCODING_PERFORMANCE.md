@@ -1,6 +1,6 @@
 # Full-fidelity replay encoding
 
-The November 25 local candidate reduced six complete viewer files from **651,990,242 to 595,922,580 bytes**, saving **56,067,662 bytes (8.60%)** against worker `20261125-r1`. Including the 214,902-byte Beta 5 diagnostic sidecar and all six spatial occupancy artifacts, the totals are 652,316,825 and 596,249,163 bytes. Every sidecar and occupancy SHA-256 matched. The 80% size target would require the viewer files to fit in 130.4 MB.
+In local benchmarks, worker `20261125-r2` reduced six complete viewer files from **651,990,242 to 595,922,580 bytes**, saving **56,067,662 bytes (8.60%)** against worker `20261125-r1`. Including the 214,902-byte Beta 5 diagnostic sidecar and all six spatial occupancy artifacts, the totals are 652,316,825 and 596,249,163 bytes. Every sidecar and occupancy SHA-256 matched. The 80% size target would require the viewer files to fit in 130.4 MB.
 
 ## Measurements
 
@@ -36,6 +36,8 @@ A separate experiment transposed fields into columns on six 2,048-tick base-stat
 
 The comparison used the Svelte viewer's match range reader and delta decoder on both files. It checked all 611 chunks independently in reverse order, every decoded world value including signed zero, the uncompressed skeletal channel bytes, and all 406 embedded diagnostic entries. Across 24 perspectives the worker verified 1,231,037 ticks and 10,270 recorded hashes. The completion comparisons cover native statistics, graphs, occupancy, settings, clock alignment, source identities and the separate diagnostic sidecar. Chrome 157 fetched HTTP ranges and decoded first, middle and last chunks for all 24 perspectives. All 72 paired seeks returned matching sampled frames and reconstructed player poses.
 
+The release check repeated the full comparison on all 25 packaged films against the previous dev image. The viewers matched across 90 playable perspectives, 4,714,773 ticks, 39,343 recorded hashes, 2,343 chunks and 1,638 embedded diagnostic entries. The replay files took 2,053,460,732 bytes, down from 2,250,407,198 bytes (8.75%). When comparing published releases, the tool checks each completion against the release and recipe in its own pinned `job.json`.
+
 All seven host profiles retain their previous simulator hashes and viewer/analytics contracts. Beta 3, Arena, Beta 4 and Beta 5 move from host exporter 44 to 45. Betas 6 and 7 move from 50 to 52, and Beta 8 moves from 51 to 52. The separate Beta 5 client stays on 41. Its 5,134-frame replay is byte-identical, and all 43 clock alignment rows match. The release inventory includes all 129 exporter entries. The sibling API validated the candidate against 57 prior release manifests.
 
 Separate Arena, Beta 4 and Beta 6 fixtures exercised the initial, viewer rebuild and full reparse callback contracts. Retained Beta 5 and Beta 7 recipes reproduced their complete archived files byte for byte. An injected remote-client failure on Worthy produced the same final SHA-256 through the parent fallback.
@@ -46,7 +48,7 @@ Private release staging copies each distinct binary once and hard-links identica
 
 ## Reproduce
 
-The local baseline image is `halospawns-h1-film:20261125-r1` (`sha256:b4a189254d5713725438be2dfb007e7c844082f1561a2013f0780802ccd9d752`). The frozen local candidate is `h1-film-perf:verified` (`sha256:df5aca1413c97f4daff60727463787ce93eea9d51a09fc66b007829c763d7b0f`). It packages the compiled Linux encoder, worker runtime and registry over the released image. A clean Dockerfile build exhausted the shared builder's disk space while importing the private engine store. The compact staging tree passed the release audit independently. All measurements and callbacks were local.
+The local baseline image is `halospawns-h1-film:20261125-r1` (`sha256:b4a189254d5713725438be2dfb007e7c844082f1561a2013f0780802ccd9d752`). The frozen local candidate is `h1-film-perf:verified` (`sha256:df5aca1413c97f4daff60727463787ce93eea9d51a09fc66b007829c763d7b0f`). It packages the compiled Linux encoder, worker runtime and registry over the released image. A clean Dockerfile build exhausted the shared builder's disk space while importing the private engine store. The compact staging tree passed the release audit independently. Timing measurements used the local harness.
 
 From Linux or WSL, run the pool harness once per image and film with a fresh evidence directory. Supply the released recipe explicitly when benchmarking an older image against the checkout's newer registry. Use `--warm` to start the child containers before timing a fresh conversion. `--keep-viewer` copies the initial replay into the evidence directory after the measured interval.
 

@@ -1,5 +1,34 @@
 # H1 film Lambda integration
 
+## Full-fidelity replay encoding in dev (2026-11-25)
+
+Dev policy 51 selects `20261125-r2` with API `live=330`. The intake Lambda dispatches to world Lambda version 5. Both use image `sha256:0a547c829863643e024efc332565f99c6da0305d499fcb16ef8f47442cc50285`. The first live inventory check verified the compiled encoder and every binary pin across seven engine profiles and 129 exporters. The release catalog retained all 57 previous manifests. [Worker source](https://github.com/Mintograde/halospawns-infra/commit/1d459f4d93e451cc711fdf5de2689e85cee63d4f) · [API deployment](https://github.com/Mintograde/halospawns-api/actions/runs/45675554519)
+
+The packaged release passed initial conversion, viewer rebuild and full reprocessing for 25 films. The exact deployed API package accepted all 75 callbacks plus the separate Beta 5 client-view flow. All 4,714,773 decoded ticks across 90 playable perspectives matched the previous release, with the same statistics, poses and diagnostic payloads. Total replay size fell from 2,250.4 MB to 2,053.5 MB. [Full measurements and reproduction steps](REPLAY_ENCODING_PERFORMANCE.md)
+
+An isolated invocation of world Lambda version 5 converted a labeled Derelict perspective from the original dev S3 film and map versions. It reproduced the packaged world SHA-256 across 91,560 frames and 763 recorded hashes. Its only write was a versioned fragment in the private scratch bucket. The before/after history comparison matched all 1,799 conversions, 4,932 receipts, 474 map approvals and 4,796 settings snapshots. The public API health check passed and the processing and dead-letter queues were empty.
+
+The dev plans contained three in-place resource updates in `map-processing`. The promotion applied the world Lambda and its invocation policy, followed by the intake Lambda. A separate state-only apply refreshed the `app-api` version output from 329 to 330. All six final dev plans had zero resource and output changes. The saved promotion directory was `.build/h1-promotions/20261125-185250-625ec6864812459ebe4f7c0f1d919134`. The commands below used `halospawns-dev` in `us-east-1`.
+
+```powershell
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+./scripts/plan.ps1 dev app-api
+$apiPlan = (Resolve-Path '.build/h1film-perf-pass/dev/api-output.planfile').Path
+terraform -chdir=components/terraform/app-api apply -input=false -no-color $apiPlan
+./scripts/plan.ps1 dev app-api
+./scripts/promote-h1-film.ps1 -Stack dev
+
+# Saved plans applied inside the promotion
+$promotion = (Resolve-Path '.build/h1-promotions/20261125-185250-625ec6864812459ebe4f7c0f1d919134').Path
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worlds.planfile"
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worker.planfile"
+
+foreach ($component in 'app-api','map-processing','frontend-site','uploads-ingest','ecr','tfstate-backend') {
+    ./scripts/plan.ps1 dev $component
+}
+```
+
 ## Derelict embedded client recovery in dev (2026-11-25)
 
 Derelict upload `e9674e02-5266-4cd1-9857-f6f0e6be4799` failed after the Beta 8 server recording passed all 802 sampled world hashes. The embedded recording for `0m3N meg` had a zero-filled engine build label and match ID. Exporter 50 rejected it during profile selection. The 23,382,074-byte file in `V:\gitgudreplays` matched the original S3 version byte for byte, with SHA-256 `e656cfbd4e0d9f062f188550fdad7c5577b4236d6e33545ba0b14fa2eee59900`.
