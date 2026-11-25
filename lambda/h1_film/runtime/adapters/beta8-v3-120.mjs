@@ -181,7 +181,8 @@ async function inspectNetwork(file, offset, size, firstTick, ticks, players, loc
     max_player_slot: maxPlayerSlot, ...(host ? { host } : {}), ...(roster_recovery ? {roster_recovery} : {}) };
 }
 
-export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, allowCappedClientNetwork = false, allowTextClientSettings = false, observeTickBlock, observeRecord} = {}) {
+export async function readEnvelope(path, {allowClientView = false,botAwareHost = false, allowCappedClientNetwork = false,
+  allowTextClientSettings = false, allowMissingTextSettingsId = false, observeTickBlock, observeRecord} = {}) {
   const file = await open(path, 'r');
   try {
     const { size } = await file.stat();
@@ -195,7 +196,7 @@ export async function readEnvelope(path, {allowClientView = false,botAwareHost =
     const clientView = Boolean(flags & 64);
     const textSettings = allowTextClientSettings && allowClientView && clientView && words[3] === 120
       && words[4] === 13368 && words[22] === 440 && words[24] > 0 && words[24] <= 1024 * 1024
-      && head.readBigUInt64LE(488) !== 0n && head.subarray(384,448).every(byte => byte === 0);
+      && (head.readBigUInt64LE(488) !== 0n || allowMissingTextSettingsId) && head.subarray(384,448).every(byte => byte === 0);
     assert.ok(textSettings || [13360, 13364].includes(words[4]), 'Unsupported Beta 8 options layout');
     // Beta 8 writes MAP_SOURCE even for a local map with no Workshop identity.
     assert.equal(flags & ~((allowClientView ? 123 : 59) | 128), 0, 'Unknown film flags');

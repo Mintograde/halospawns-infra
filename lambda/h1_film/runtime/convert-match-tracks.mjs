@@ -4,7 +4,8 @@ import {remoteMatchTracks} from './world-pool.mjs';
 import {orderedPool} from './ordered-pool.mjs';
 import {open,readFile,writeFile,stat} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
-import {spawn} from 'node:child_process';
+import {execFile,spawn} from 'node:child_process';
+import {promisify} from 'node:util';
 import {openSync,closeSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {inspectMatchFilm,matchFilmPolicy,recordedMatchIdsCompatible} from './match-film.mjs';
@@ -14,24 +15,43 @@ import {sha256} from './engine-store.mjs';
 import {clientDesyncEvidence} from './client-desync.mjs';
 import {clientRosterEvidence} from './client-roster.mjs';
 import {preparePovRecovery,IncompletePovRecovery} from './pov-recovery.mjs';
-import {EMPTY_CLIENT_BUILD_EXPORTER, hostForEmptyClientBuild, unsupportedClientBuild} from './client-build.mjs';
+import {EMPTY_CLIENT_BUILD_EXPORTER, RECHECK_CLIENT_MATCH_EXPORTER, hostForEmptyClientBuild,
+  recheckedClientMatch, unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
+
+const runEngine = promisify(execFile);
+const permissionModule = new URL('./engine-permissions.mjs',import.meta.url);
+function readEngineArgs(values) {
+  return ['--permission', `--allow-fs-read=${values.film}`, `--allow-fs-read=${dirname(values.engine)}`,
+    `--allow-fs-read=${fileURLToPath(permissionModule)}`, '--import', permissionModule.href];
+}
+function engineEnvironment() {
+  return Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(BLAMPC_|H1_EXPORT_|AWS_)/i.test(k)));
+}
+
+function lazyMatchCheck(stage, values, deadline) {
+  let run;
+  return () => {
+    const timeout = Math.floor(deadline - performance.now());
+    assert.ok(timeout > 0, 'Match conversion timed out before checking client inputs');
+    run ??= runEngine(process.execPath, [...readEngineArgs(values), values.engine, '--film-match-check', values.film],
+      {cwd:stage, env:engineEnvironment(), timeout, killSignal:'SIGKILL', maxBuffer:256*1024, windowsHide:true});
+    return run;
+  };
+}
 
 export async function restoreMatchPart(stage,values,bytes,part,deadline) {
   const id=`client-${part.index}`,film=join(stage,`${id}.h1film`);
   if(part.rest.flags&1) {
     // Use the pinned upstream restorer for the RNET shared-message representation.
     // Validate its complete result before allowing any simulation or publication.
-    const args=['--permission',`--allow-fs-read=${values.film}`,`--allow-fs-read=${dirname(values.engine)}`,
-      `--allow-fs-read=${stage}`,
-      `--allow-fs-read=${fileURLToPath(new URL('./engine-permissions.mjs',import.meta.url))}`,
-      `--allow-fs-write=${film}`,'--import',new URL('./engine-permissions.mjs',import.meta.url).href,
+    const args=[...readEngineArgs(values),`--allow-fs-read=${stage}`,`--allow-fs-write=${film}`,
       values.engine,'--film-part-export',values.film,String(part.index),film];
     const timeout=Math.min(60000,Math.floor(deadline-performance.now()));assert.ok(timeout>0,'Match conversion timed out');
     const log=openSync(join(stage,`${id}-restore.log`),'wx');
     try {
       const child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',log,log],timeout,
-        env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(BLAMPC_|H1_EXPORT_|AWS_)/i.test(k)))});
+        env:engineEnvironment()});
       const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
       assert.equal(code,0,'Thin client restoration failed');
     } finally {closeSync(log);}
@@ -41,7 +61,8 @@ export async function restoreMatchPart(stage,values,bytes,part,deadline) {
   return film;
 }
 
-export async function convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part) {
+export async function convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part,
+  checkMatch = lazyMatchCheck(stage,values,deadline)) {
   const policy=matchFilmPolicy(report.exporter_revision);
   const id=`client-${part.index}`,film=await restoreMatchPart(stage,values,bytes,part,deadline);
   const checkEmptyLabel = report.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && part.envelope.build === ''
@@ -56,9 +77,16 @@ export async function convertMatchTrack(stage,values,report,convertFilm,deadline
         verifiedClientHost = hostForEmptyClientBuild(report, match.host, part.player);
     } finally { await restored.close(); }
   }
+  if (verifiedClientHost && report.exporter_revision >= RECHECK_CLIENT_MATCH_EXPORTER &&
+      part.envelope.match_id === '0000000000000000') {
+    const {stdout} = await checkMatch();
+    const evidence = recheckedClientMatch(stdout,match.parts,part);
+    if (evidence) verifiedClientHost.match_check = evidence;
+  }
   const filmHash = await sha256(film);
   const envelope=await readEnvelope(film,{allowClientView:true,botAwareHost:report.exporter_revision>=26,
-    allowCappedClientNetwork:report.exporter_revision >= 50, allowTextClientSettings:verifiedClientHost?.tick_rate === 120});
+    allowCappedClientNetwork:report.exporter_revision >= 50, allowTextClientSettings:verifiedClientHost?.tick_rate === 120,
+    allowMissingTextSettingsId:Boolean(verifiedClientHost?.match_check)});
   assert.equal(envelope.recorded_own_player,part.player,'Recorded client player differs');
   assert.equal(envelope.match_id,part.envelope.match_id,'Restored client match ID changed');
   assert.ok(recordedMatchIdsCompatible(envelope.match_id,match.host.match_id,policy),'Restored client match differs');
@@ -109,7 +137,8 @@ export async function convertMatchTracks(stage,values,report,convertFilm,deadlin
   const policy=matchFilmPolicy(report.exporter_revision);
   const match=inspectMatchFilm(bytes,policy);
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
-  const local = part => convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part);
+  const checkMatch = lazyMatchCheck(stage,values,deadline);
+  const local = part => convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part,checkMatch);
   const concurrency = Number(values['client-concurrency'] ?? 1);
   let tracks;
   if (values['world-socket']) {

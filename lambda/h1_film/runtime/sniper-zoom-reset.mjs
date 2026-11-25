@@ -81,7 +81,9 @@ export async function originalUnzoomedShots(file, track, hits, shots, anchors, i
       data.readFloatLE(80), data.readFloatLE(84));
     if (receipts.get(key)?.has(frame)) append(resets, body, frame);
   }
-  await inspect(file, {allowClientView:true, allowTextClientSettings:e.text_settings_options_bytes === 13368, observeTickBlock, observeRecord});
+  await inspect(file, {allowClientView:true, allowTextClientSettings:e.text_settings_options_bytes === 13368,
+    allowMissingTextSettingsId:e.text_settings_options_bytes === 13368 && e.match_id === '0000000000000000',
+    observeTickBlock, observeRecord});
   if (!layoutOk) return results;
   for (const shot of shots) {
     const fire = clockFrame(shot.clock);

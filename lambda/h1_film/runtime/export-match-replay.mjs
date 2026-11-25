@@ -9,7 +9,7 @@ import {readRawPad} from './format3-pad.mjs';
 import {unpackMszip} from './adapters/beta5-v2-120.mjs';
 import {unpackNetworkColumns} from './format3-codec.mjs';
 import {writeMatchReplay} from './pack-match-replay.mjs';
-import {unsupportedClientBuild} from './client-build.mjs';
+import {RECHECK_CLIENT_MATCH_EXPORTER,unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
 import {readEnvelope} from './film.mjs';
 import {completedClientDesync} from './client-desync.mjs';
@@ -168,6 +168,7 @@ export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha25
         assert.equal(c.status, 'unavailable');
         const envelope = await readEnvelope(join(directory,c.id+'.h1film'), {
           allowClientView:true, allowCappedClientNetwork:true, allowTextClientSettings:true, botAwareHost:true,
+          allowMissingTextSettingsId:report.exporter_revision >= RECHECK_CLIENT_MATCH_EXPORTER && c.envelope.text_settings_options_bytes === 13368,
         });
         assert.deepEqual(c.envelope,envelope);
         assert.deepEqual(c.failure,envelope.network.failure);

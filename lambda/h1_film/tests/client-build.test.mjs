@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {unsupportedClientBuild, compatibleClientBuild, hostForEmptyClientBuild, playbackBuildMatches} from '../runtime/client-build.mjs';
+import {unsupportedClientBuild, compatibleClientBuild, hostForEmptyClientBuild, playbackBuildMatches,
+  recheckedClientMatch} from '../runtime/client-build.mjs';
 import {profileById,BUILD_MATCHING,selectProfile,resolveMap} from '../runtime/profiles.mjs';
 const profile=profileById('h1-performance-beta6-p9839-wasm-v1'),rule=BUILD_MATCHING[profile.id];
 const envelope={format:3,protocol_revision:9839,tick_rate:120,recording_kind:'client-view',build:'2026-11-08 - ec92e0bb'};
@@ -27,6 +28,36 @@ test('alternate options require the engine to read both recorded texts', () => {
   for(const bad of [build,variant,log.replace('9848','9839'),log.replace('from its text','raw'),log+build])
     assert.equal(playbackBuildMatches(bad,client),false);
   assert.equal(playbackBuildMatches(log,{}),false);
+});
+
+test('an unlabeled client with an absent ID needs its own positive upstream input and message checks', () => {
+  const beta8 = profileById('h1-performance-beta8-p9848-wasm-v1');
+  const host = {format:3, protocol_revision:9848, tick_rate:120, map:'dere', match_id:'79e9f291cf23402f'};
+  const report = {engine_profile:beta8.id, exporter_revision:51, provenance:{engine_source:beta8.source}, simulation:{hash_checks:802}};
+  const client = {...host, build:'', match_id:'0000000000000000', recording_kind:'client-view',
+    recorded_own_player:1, recorded_local_player_mask:2, hash_samples:664};
+  const part = {index:0, player:1, reason:'inputs: 26677 of 26677 match from t12'};
+  const measured = '[trust] player 1: inputs: 26677 of 26677 match from t12; messages: 191615 match (191615 states, 0 off the table) (1172 ms)';
+  const baked = '[bake] part 0, player 1: baked CLIENT RECORD: MATCHES HOST (' + part.reason + '); now CLIENT RECORD: MATCHES HOST (' + part.reason + ')';
+  const log = measured + '\n' + baked;
+  const check = recheckedClientMatch(log,[part],part);
+  assert.deepEqual(check,{part_index:0,player:1,inputs:26677,messages:191615});
+  for (const bad of [baked, log.replace('26677 of','26676 of'), log.replace('191615 match','0 match'),
+    log.replace('[trust] player 1','[trust] player 2'), log.replace('part 0,','part 1,'), log+'\n'+baked]) {
+    assert.equal(recheckedClientMatch(bad,[part],part),null);
+  }
+  assert.equal(recheckedClientMatch(log,[{...part,reason:'line one\nline two'}],part),null);
+  const verified = hostForEmptyClientBuild(report,host,1);
+  const playback = {embeddedClient:true, exporterRevision:51, verifiedClientHost:{...verified,match_check:check}};
+  assert.equal(selectProfile(client,undefined,undefined,playback).id,beta8.id);
+  for (const opts of [{...playback,verifiedClientHost:verified},{...playback,exporterRevision:50},
+    {...playback,embeddedClient:false},{...playback,verifiedClientHost:{...verified,match_check:{...check,player:2}}}]) {
+    assert.throws(()=>selectProfile(client,undefined,undefined,opts),/Unsupported film engine/);
+  }
+  for (const change of [{match_id:'1234567890abcdef'},{recorded_own_player:2},{recorded_local_player_mask:1},
+    {map:'wizard'},{build:' '},{hash_samples:0}]) {
+    assert.throws(()=>selectProfile({...client,...change},undefined,undefined,playback),/Unsupported film engine/);
+  }
 });
 
 test('a verified Beta 8 host can select its pinned engine for its own unlabeled 30 Hz client', () => {

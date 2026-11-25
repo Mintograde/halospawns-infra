@@ -1,5 +1,22 @@
 # H1 Film Compatibility
 
+## Beta 8 clients missing both the build label and match ID
+
+Exporter 51 can replay an embedded Beta 8 client with both fields zero. After
+the host verifies, its pinned engine runs `--film-match-check` on the original
+match. For the indexed part and recording player, the engine must independently
+match the client inputs against those taken by the host and corroborate the
+recorded network messages. The worker then plays the original client through
+its own recorded end and checks its RNG seeds and sampled world hashes.
+The client report includes the measured input and message counts. The original
+zero ID, clock, recording length and clock-alignment evidence are preserved.
+
+The Derelict film from November 25 exercises this case. For `0m3N meg` the
+engine matched 26,677 inputs and 191,615 messages, then verified 79,680 frames
+and 664 sampled hashes. Exporter 50 reproduces the original profile-selection
+failure. Exporter 51 uses the same Beta 8 simulation binaries and match v10
+reader.
+
 ## Beta 8 embedded client recordings at 120 Hz (exporter 49)
 
 Some 120 Hz matches have an embedded client with a zero-filled build label.

@@ -5,6 +5,7 @@ import {matchesProfile} from './build-identity.mjs';
 
 export const EMPTY_CLIENT_BUILD_EXPORTER = 47;
 export const CLIENT_TEXT_SETTINGS_EXPORTER = 49;
+export const RECHECK_CLIENT_MATCH_EXPORTER = 51;
 const BETA8_PROFILE = 'h1-performance-beta8-p9848-wasm-v1';
 const BETA8_SOURCE = '3194e680896cead7326c2a3fcb9e35e85de1d7cc';
 
@@ -29,9 +30,27 @@ export function matchesEmptyClientBuild(envelope, profile, playback) {
     && envelope.build === '' && envelope.format === profile.format && envelope.protocol_revision === profile.protocol_revision
     && envelope.tick_rate === (host.tick_rate ?? 30)
     && (envelope.tick_rate === 30 || (playback.exporterRevision >= CLIENT_TEXT_SETTINGS_EXPORTER && envelope.tick_rate === 120))
-    && envelope.map === host.map && envelope.match_id === host.match_id
+    && envelope.map === host.map && (envelope.match_id === host.match_id ||
+      (playback.exporterRevision >= RECHECK_CLIENT_MATCH_EXPORTER && envelope.match_id === '0000000000000000'
+        && host.match_check?.player === host.player && host.match_check.inputs > 0 && host.match_check.messages > 0))
     && envelope.recorded_own_player === host.player && (envelope.recorded_local_player_mask & (1 << host.player))
     && envelope.hash_samples > 0);
+}
+
+// --film-match-check prints the newly measured counts immediately before each
+// indexed bake summary. The bake summary also echoes text stored in the film.
+export function recheckedClientMatch(log, parts, part) {
+  if (parts.some(p => /[\r\n]/.test(p.reason))) return null;
+  const lines = log.split(/\r?\n/);
+  const summaries = [];
+  for (const [i, line] of lines.entries()) {
+    if (line.startsWith('[bake] part ')) summaries.push(i);
+  }
+  const i = summaries[part.index];
+  if (summaries.length !== parts.length || !lines[i]?.startsWith(`[bake] part ${part.index}, player ${part.player}: baked `)) return null;
+  const counts = /^\[trust\] player (\d+): inputs: ([1-9]\d*) of \2 match from t\d+; messages: ([1-9]\d*) match \(\d+ states, \d+ off the table\) \(\d+ ms\)$/.exec(lines[i-1]);
+  if (!counts || Number(counts[1]) !== part.player) return null;
+  return {part_index:part.index, player:part.player, inputs:Number(counts[2]), messages:Number(counts[3])};
 }
 
 // Beta 8's film_classify can read both the settings and gametype from the

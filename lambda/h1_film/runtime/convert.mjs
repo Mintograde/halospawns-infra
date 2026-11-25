@@ -72,6 +72,7 @@ async function convertAttempt(options, opening) {
     assert.equal(Number(values['viewer-revision']),5,'Client view requires viewer revision 5');
   }
   const envelopeOptions={allowClientView:Boolean(values['client-view']),
+    allowMissingTextSettingsId:Boolean(values.verifiedClientHost?.match_check),
     allowTextClientSettings:values['embedded-match'] === true && values.verifiedClientHost?.tick_rate === 120
       && Number(values['exporter-revision']) >= CLIENT_TEXT_SETTINGS_EXPORTER,
     botAwareHost:Number(values['exporter-revision'])>=26};
@@ -259,7 +260,8 @@ async function convertAttempt(options, opening) {
     ...(playback.embeddedClient&&compatibleClientBuild(envelope,profile,profile.exporter_revision)?{
       client_build_compatibility:{rule:'beta6_ec92e0bb_client_v1',recorded_build:envelope.build,
         canonical_source_commit:profile.source.git_commit}}:{}),
-    ...(playback.verifiedClientHost ? {client_build_compatibility:{rule:'verified_host_empty_client_build_v1',
+    ...(playback.verifiedClientHost ? {client_build_compatibility:{
+      rule:playback.verifiedClientHost.match_check ? 'verified_host_rechecked_client_inputs_v1' : 'verified_host_empty_client_build_v1',
       recorded_build:envelope.build, canonical_source_commit:profile.source.git_commit, ...playback.verifiedClientHost}} : {}),
     ...(mapBinding ? { map_binding: mapBinding } : {}),
     provenance: { film_sha256: native.provenance.film_sha256, map_sha256: native.provenance.map_sha256,
