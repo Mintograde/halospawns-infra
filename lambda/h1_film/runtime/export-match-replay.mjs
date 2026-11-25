@@ -6,8 +6,7 @@ import {createHash} from 'node:crypto';
 import {inspectMatchFilm,matchFilmPolicy} from './match-film.mjs';
 import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {readRawPad} from './format3-pad.mjs';
-import {unpackMszip} from './adapters/beta5-v2-120.mjs';
-import {unpackNetworkColumns} from './format3-codec.mjs';
+import {recordedNetwork} from './recorded-network.mjs';
 import {writeMatchReplay} from './pack-match-replay.mjs';
 import {RECHECK_CLIENT_MATCH_EXPORTER,unsupportedClientBuild} from './client-build.mjs';
 import {profileById,BUILD_MATCHING} from './profiles.mjs';
@@ -117,23 +116,11 @@ export async function exportMatchReplay({film,directory,hostWorld,hostWorldSha25
     const network=section(bytes,448);
     if(network) {
       track.recorded_sections.network=await add(`${track.id}/recorded/network`,'network-observations',network);
-      const blocks=[],decoded=[],hash=compact ? createHash('sha256') : null;
-      let at=32,offset=0;
-      for(let i=0;i<network.readUInt32LE(24);i++) {
-        const [size,packedSize,first,last,count,flags]=Array.from({length:6},(_,j)=>network.readUInt32LE(at+j*4));at+=24;
-        const packed=network.subarray(at,at+packedSize);at+=packedSize;
-        const expanded=flags&1?unpackMszip(packed,size):packed;
-        const block=flags&2?unpackNetworkColumns(expanded,count):expanded;
-        assert.equal(block.length,size);
-        blocks.push({offset,size_bytes:size,first_tick:first,last_tick:last,count,sha256:digest(block)});
-        offset+=size;assert.ok(offset<=512*1024*1024);
-        if (hash) hash.update(block);
-        else decoded.push(block);
-      }
-      if(offset) {
+      const {blocks,length,digest,records}=recordedNetwork(network,!compact);
+      if(length) {
         const id = track.id + '/network/records';
-        const entry = hash ? derived(id,'network-observations',offset,hash.digest('hex'))
-          : await add(id,'network-observations',Buffer.concat(decoded));
+        const entry = compact ? derived(id,'network-observations',length,digest)
+          : await add(id,'network-observations',Buffer.concat(records,length));
         track.network={entry,format:'h1arena.fnet-records.v2',blocks};
       }
     }

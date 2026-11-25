@@ -86,23 +86,29 @@ fn track(values: &[i32], w: &mut Writer) {
         w.i32(values[0]);
         return;
     }
-    let mut d = Writer::default();
-    let mut d2 = Writer::default();
+    // Choose the same shortest representation without constructing both byte streams.
+    let width = |v: i64| {
+        let encoded = ((v << 1) ^ (v >> 63)) as u64;
+        (64 - encoded.leading_zeros()).max(1).div_ceil(7)
+    };
+    let mut first_bytes = 0;
+    let mut second_bytes = 0;
     let mut last_delta = 0;
     for pair in values.windows(2) {
         let delta = pair[1] as i64 - pair[0] as i64;
-        d.signed(delta);
-        d2.signed(delta - last_delta);
+        first_bytes += width(delta);
+        second_bytes += width(delta - last_delta);
         last_delta = delta;
     }
-    let (mode, bytes) = if d2.0.len() < d.0.len() {
-        (2, d2.0)
-    } else {
-        (1, d.0)
-    };
-    w.u8(mode);
+    let second = second_bytes < first_bytes;
+    w.u8(if second { 2 } else { 1 });
     w.i32(values[0]);
-    w.0.extend(bytes);
+    last_delta = 0;
+    for pair in values.windows(2) {
+        let delta = pair[1] as i64 - pair[0] as i64;
+        w.signed(if second { delta - last_delta } else { delta });
+        last_delta = delta;
+    }
 }
 fn untrack(r: &mut Reader, n: usize) -> Result<Vec<i32>> {
     let mode = r.u8()?;
@@ -127,17 +133,15 @@ fn untrack(r: &mut Reader, n: usize) -> Result<Vec<i32>> {
     Ok(out)
 }
 
-struct Frame {
-    values: Vec<[i32; 8]>,
-    raw: Option<Pose>,
-}
 struct Run {
     first: usize,
     player: usize,
     identity: [Value; 3],
     tag: String,
     parents: Vec<i32>,
-    frames: Vec<Frame>,
+    frame_count: usize,
+    values: Vec<[i32; 8]>,
+    raw: Vec<(usize, Pose)>,
     previous: Vec<DQuat>,
 }
 
@@ -171,7 +175,6 @@ pub struct Encoder {
     runs: Vec<Run>,
     latest: [Option<usize>; MAX_PLAYERS],
     quantizers: [Option<pose::Quantizer>; MAX_PLAYERS],
-    reconstructors: [Option<pose::Reconstructor>; MAX_PLAYERS],
     counts: Counts,
     tick_count: usize,
 }
@@ -186,7 +189,6 @@ impl Encoder {
             runs: Vec::new(),
             latest: [None; MAX_PLAYERS],
             quantizers: std::array::from_fn(|_| None),
-            reconstructors: std::array::from_fn(|_| None),
             counts: Counts::default(),
             tick_count: 0,
         })
@@ -264,7 +266,7 @@ impl Encoder {
             let identity = [&p["player_index"], &p["player_object_id"], &p["object_ref"]];
             let previous = latest[pi].filter(|i: &usize| {
                 let r = &runs[*i];
-                r.first + r.frames.len() == tick
+                r.first + r.frame_count == tick
                     && r.identity
                         .iter()
                         .zip(identity)
@@ -278,46 +280,38 @@ impl Encoder {
                 let i = runs.len();
                 let parents = pose::parents(tag, pose.len(), s, rigs)?;
                 quantizers[pi] = Some(pose::Quantizer::new(&parents)?);
-                self.reconstructors[pi] = Some(pose::Reconstructor::new(&parents)?);
                 runs.push(Run {
                     first: tick,
                     player: pi,
                     identity: identity.map(|value| value.clone()),
                     tag: tag.into(),
                     parents,
-                    frames: Vec::new(),
+                    frame_count: 0,
+                    values: Vec::new(),
+                    raw: Vec::new(),
                     previous: Vec::new(),
                 });
                 latest[pi] = Some(i);
                 i
             };
             let r = &mut runs[ri];
-            let values = quantizers[pi]
+            let start = r.values.len();
+            r.values.resize(start + pose.len(), [0; 8]);
+            let values = &mut r.values[start..];
+            let quantized = quantizers[pi]
                 .as_mut()
                 .ok_or("pose quantizer missing")?
-                .quantize(&pose, pose::origin(p), s, &mut r.previous);
+                .quantize_into(&pose, pose::origin(p), s, &mut r.previous, values);
             counts.poses += 1;
-            let frame = if let Some(values) = values {
-                let decoded = self.reconstructors[pi]
-                    .as_mut()
-                    .ok_or("pose reconstructor missing")?
-                    .reconstruct(&values, pose::origin(p), s)?;
-                if pose.iter().zip(decoded).any(|(a, b)| {
-                    let bound = pose::point_bound(a, b, s.point_radius);
-                    !bound.is_finite() || bound > s.point_error_limit
-                }) {
-                    return Err("pose reconstruction exceeds error bound".into());
-                }
-                Frame { values, raw: None }
-            } else {
+            // The quantizer decoded these integers and checked every rounded
+            // matrix against the source. The wire verifier checks the stored tracks.
+            if quantized.is_none() {
                 counts.raw_poses += 1;
                 r.previous.clear();
-                Frame {
-                    values: vec![[0; 8]; pose.len()],
-                    raw: Some(pose.into_owned()),
-                }
-            };
-            r.frames.push(frame);
+                values.fill([0; 8]);
+                r.raw.push((r.frame_count, pose.into_owned()));
+            }
+            r.frame_count += 1;
             removed[pi] = p
                 .as_object_mut()
                 .ok_or("player not object")?
@@ -328,40 +322,49 @@ impl Encoder {
     }
 
     // The caller verifies the lossless base stream before passing it here.
-    pub fn finish(mut self, base_raw: &[u8]) -> Result<(Vec<u8>, Counts)> {
+    pub fn finish(self, base_raw: &[u8]) -> Result<(Vec<u8>, Counts)> {
+        self.finish_with_compression(base_raw, false)
+    }
+
+    pub fn finish_with_compression(
+        mut self,
+        base_raw: &[u8],
+        short_matches: bool,
+    ) -> Result<(Vec<u8>, Counts)> {
         if self.tick_count == 0 {
             return Err("empty pose chunk".into());
         }
         let runs = &self.runs;
         let counts = &mut self.counts;
-        let base_packed = legacy::compress(base_raw)?;
+        let base_packed = legacy::compress_inner(base_raw, short_matches)?;
         let mut w = Writer::default();
         w.u16(runs.len());
         counts.runs = runs.len() as u64;
+        let mut channel = Vec::new();
         for r in runs {
             w.u16(r.first);
             w.u8(r.player as u8);
-            w.u16(r.frames.len());
+            w.u16(r.frame_count);
             w.u8(r.parents.len() as u8);
             for p in &r.parents {
                 w.u8((p + 1) as u8);
             }
             for node in 0..r.parents.len() {
                 for ch in 0..8 {
-                    let values: Vec<_> = r.frames.iter().map(|f| f.values[node][ch]).collect();
+                    channel.clear();
+                    channel.extend(r.values[node..].iter().step_by(r.parents.len()).map(|v| v[ch]));
                     counts.tracks += 1;
-                    counts.constant_tracks += u64::from(values.iter().all(|v| *v == values[0]));
-                    track(&values, &mut w);
+                    let header = w.0.len();
+                    track(&channel, &mut w);
+                    counts.constant_tracks += u64::from(w.0[header] == 0);
                 }
             }
-            w.u16(r.frames.iter().filter(|f| f.raw.is_some()).count());
-            for (fi, f) in r.frames.iter().enumerate() {
-                if let Some(pose) = &f.raw {
-                    w.u16(fi);
-                    for node in pose {
-                        for v in node {
-                            w.0.extend_from_slice(&v.to_le_bytes());
-                        }
+            w.u16(r.raw.len());
+            for (fi, pose) in &r.raw {
+                w.u16(*fi);
+                for node in pose {
+                    for v in node {
+                        w.0.extend_from_slice(&v.to_le_bytes());
                     }
                 }
             }
@@ -393,7 +396,7 @@ fn verify_tracks(bytes: &[u8], runs: &[Run]) -> Result<()> {
     for run in runs {
         if reader.u16()? != run.first
             || reader.u8()? as usize != run.player
-            || reader.u16()? != run.frames.len()
+            || reader.u16()? != run.frame_count
             || reader.u8()? as usize != run.parents.len()
         {
             return Err("pose run header changed".into());
@@ -405,29 +408,27 @@ fn verify_tracks(bytes: &[u8], runs: &[Run]) -> Result<()> {
         }
         for node in 0..run.parents.len() {
             for channel in 0..8 {
-                let decoded = untrack(&mut reader, run.frames.len())?;
+                let decoded = untrack(&mut reader, run.frame_count)?;
                 if decoded
                     .iter()
-                    .zip(&run.frames)
-                    .any(|(v, f)| *v != f.values[node][channel])
+                    .zip(run.values[node..].iter().step_by(run.parents.len()))
+                    .any(|(v, bone)| *v != bone[channel])
                 {
                     return Err("pose track changed".into());
                 }
             }
         }
-        if reader.u16()? != run.frames.iter().filter(|f| f.raw.is_some()).count() {
+        if reader.u16()? != run.raw.len() {
             return Err("raw pose count changed".into());
         }
-        for (index, frame) in run.frames.iter().enumerate() {
-            if let Some(pose) = &frame.raw {
-                if reader.u16()? != index {
-                    return Err("raw pose index changed".into());
-                }
-                for node in pose {
-                    for value in node {
-                        if reader.bytes(8)? != value.to_le_bytes() {
-                            return Err("raw pose value changed".into());
-                        }
+        for (index, pose) in &run.raw {
+            if reader.u16()? != *index {
+                return Err("raw pose index changed".into());
+            }
+            for node in pose {
+                for value in node {
+                    if reader.bytes(8)? != value.to_le_bytes() {
+                        return Err("raw pose value changed".into());
                     }
                 }
             }
@@ -503,7 +504,7 @@ pub fn unpack(
         let parents = (0..bones)
             .map(|_| Ok(r.u8()? as i32 - 1))
             .collect::<Result<Vec<_>>>()?;
-        pose::order(&parents)?;
+        let mut reconstructor = pose::Reconstructor::new(&parents)?;
         let mut frames = vec![vec![[0; 8]; bones]; n];
         for node in 0..bones {
             for ch in 0..8 {
@@ -547,10 +548,10 @@ pub fn unpack(
             if p.get("model_nodes").is_some() {
                 return Err("pose overwrites base field".into());
             }
-            let pose = if let Some(pose) = raw.remove(&fi) {
+            let pose = if let Some(pose) = raw.get(&fi) {
                 pose
             } else {
-                pose::reconstruct(values, &parents, pose::origin(p), s)?
+                reconstructor.reconstruct(values, pose::origin(p), s)?
             };
             p["model_nodes"] = serde_json::to_value(pose)?;
         }

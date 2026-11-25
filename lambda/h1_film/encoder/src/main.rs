@@ -51,6 +51,8 @@ struct Request {
     #[serde(default = "default_incremental_state")]
     typed_poses: bool,
     #[serde(default)]
+    compact_world: bool,
+    #[serde(default)]
     verify_incremental_state: bool,
     #[serde(default)]
     client_roster_evidence: bool,
@@ -301,6 +303,12 @@ impl Observations {
                 self.initial_counters.insert(id, counters.clone());
             }
             let before = self.previous.remove(&id);
+            if before.as_ref() == Some(&counters) {
+                // No counter delta, grenade transition or body replacement can
+                // produce an event here. Keep the exact incoming numeric values.
+                self.previous.insert(id, counters);
+                continue;
+            }
             let name = player["name"]
                 .as_str()
                 .map(str::to_owned)
@@ -467,7 +475,7 @@ fn encode(request_path: &Path, directory: &Path) -> Result<(), Box<dyn Error>> {
     } else {
         "source"
     };
-    artifact::select_revision(request.viewer_profile_revision)?;
+    artifact::select_revision(request.viewer_profile_revision, request.compact_world)?;
     fs::create_dir(directory)?;
     let mut high = artifact::PrimaryExport::new(
         &directory.join("parts-120"),
@@ -927,6 +935,7 @@ mod observation_tests {
             source_viewer_only: false,
             incremental_state: true,
             typed_poses: true,
+            compact_world: false,
             verify_incremental_state: false,
             client_roster_evidence: false, sniper_evidence: false, sniper_zoom_anchors: false,
             analytics_revision: 2,
@@ -1167,6 +1176,7 @@ mod observation_tests {
                 source_viewer_only: false,
                 incremental_state: true,
                 typed_poses: true,
+                compact_world: false,
                 verify_incremental_state: false,
                 client_roster_evidence: false, sniper_evidence: false, sniper_zoom_anchors: false,
                 analytics_revision: 2,

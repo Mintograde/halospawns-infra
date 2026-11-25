@@ -1,5 +1,7 @@
 # H1 Film Worker
 
+The local replay encoding candidate reduces complete viewer files while preserving every recorded tick and perspective. [Benchmarks, fidelity checks and release recipes](REPLAY_ENCODING_PERFORMANCE.md)
+
 Dev worker `20261123-r1` processes up to eight embedded perspectives per film in parallel. The AWS measurements cover nine-perspective Jaywalk and eight-perspective Dread FFA. [H1 film processing latency](WORLD_POOL.md)
 
 See [analytics ideas](ANALYTICS_IDEAS.md) for candidate stats, metrics, replay

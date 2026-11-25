@@ -22,8 +22,13 @@ mod tick_hash;
 
 const LOCAL_CHUNK_RAW_LIMIT: usize = 64 * 1024 * 1024;
 
-pub fn select_revision(revision: u32) -> Result<(), Box<dyn Error>> {
+static COMPACT_WORLD: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+pub fn select_revision(revision: u32, compact: bool) -> Result<(), Box<dyn Error>> {
     Projection::load_revision(revision)?;
+    COMPACT_WORLD
+        .set(compact)
+        .map_err(|_| "world encoding already initialized")?;
     PROFILE_REVISION
         .set(revision)
         .map_err(|_| "viewer revision already initialized".into())
@@ -1388,7 +1393,9 @@ impl StreamingExport {
             self.collector.tick_hash_duration_ms += chunk.hash_duration.as_millis();
             let (raw, tick_sha256) = if let Some(poses) = self.poses.take() {
                 let started = Instant::now();
-                let (raw, _) = poses.finish(&chunk.binary.bytes)?;
+                let (raw, _) = poses.finish_with_compression(
+                    &chunk.binary.bytes, COMPACT_WORLD.get() == Some(&true),
+                )?;
                 self.pose_duration += started.elapsed();
                 self.collector.encode_duration_ms += self.pose_duration.as_millis();
                 self.pose_duration = Duration::ZERO;

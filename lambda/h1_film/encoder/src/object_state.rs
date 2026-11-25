@@ -251,13 +251,14 @@ fn write_record_delta(
         return Ok(());
     }
     let write_changed = |writer: &mut BinaryWriter, index: usize| {
-        ordered_delta::write(
+        ordered_delta::write_inner(
             writer,
             previous.get(index).map(|record| &record.value),
             &next[index].value,
             before
                 .and_then(|records| records.get(index))
                 .map(|record| &record.value),
+            true,
         )
     };
     if previous.len() == next.len() && changed.len() > next.len() / 2 {
@@ -369,7 +370,7 @@ pub(super) fn write_tick(
                 before_objects.map(|records| records.as_slice()),
             )?;
         } else {
-            ordered_delta::write(
+            ordered_delta::write_inner(
                 writer,
                 previous
                     .get(key)
@@ -378,6 +379,7 @@ pub(super) fn write_tick(
                 before
                     .and_then(|before| before.get(key))
                     .map(|value| field_value(key, value, before_objects)),
+                true,
             )?;
         }
     }

@@ -192,11 +192,14 @@ impl<'a> Cursor<'a> {
         Ok(self.text_ref()?.to_owned())
     }
     fn text_ref(&mut self) -> Result<&'a str> {
+        Ok(std::str::from_utf8(self.text_bytes()?)?)
+    }
+    fn text_bytes(&mut self) -> Result<&'a [u8]> {
         let length = self.u32()? as usize;
         if length > 65536 {
             return Err("engine string exceeds limit".into());
         }
-        Ok(std::str::from_utf8(self.take(length)?)?)
+        self.take(length)
     }
     fn float(&mut self) -> Result<Value> {
         let value = f32::from_le_bytes(self.take(4)?.try_into()?) as f64;
@@ -375,10 +378,10 @@ impl<'a> Cursor<'a> {
             && let Value::String(text) = target
         {
             self.take(1)?;
-            let next = self.text_ref()?;
-            if text != next {
+            let next = self.text_bytes()?;
+            if text.as_bytes() != next {
                 text.clear();
-                text.push_str(next);
+                text.push_str(std::str::from_utf8(next)?);
             }
             return Ok(());
         }
@@ -415,7 +418,7 @@ impl<'a> Cursor<'a> {
             if values.len() == count {
                 let mut matched = true;
                 for (key, value) in values.iter_mut() {
-                    if self.text_ref()? != key {
+                    if self.text_bytes()? != key.as_bytes() {
                         matched = false;
                         break;
                     }
@@ -531,14 +534,17 @@ impl<'a> Cursor<'a> {
             return Err("expanded engine frame exceeds limit".into());
         }
         self.take(5)?;
+        let packed = self.take(count * 53)?;
         target.resize(count, [0.; 13]);
-        for node in target {
-            self.take(1)?;
-            for component in node {
-                *component = f32::from_le_bytes(self.take(4)?.try_into()?) as f64;
-                if !component.is_finite() {
-                    return Err("non-finite engine value".into());
-                }
+        for (node, record) in target.iter_mut().zip(packed.chunks_exact(53)) {
+            let mut finite = true;
+            for (component, bytes) in node.iter_mut().zip(record[1..].chunks_exact(4)) {
+                let value = f32::from_le_bytes(bytes.try_into()?);
+                finite &= value.is_finite();
+                *component = f64::from(value);
+            }
+            if !finite {
+                return Err("non-finite engine value".into());
             }
         }
         Ok(true)
@@ -585,7 +591,7 @@ impl<'a> Cursor<'a> {
         {
             let mut matched = true;
             for (key, value) in values.iter_mut() {
-                if self.text_ref()? != key {
+                if self.text_bytes()? != key.as_bytes() {
                     matched = false;
                     break;
                 }

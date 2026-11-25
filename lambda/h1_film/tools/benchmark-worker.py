@@ -110,6 +110,9 @@ def main():
                 metrics[name] = path.read_text()
         (evidence / "stages.json").write_text(json.dumps(metrics, indent=2))
     output = Path(sys.argv[sys.argv.index("--output") + 1])
+    if os.environ.get("H1_BENCH_KEEP_VIEWER") == "1":
+        artifact = json.loads((output / "finalization.json").read_text())["viewer_artifact"]
+        shutil.copyfile(output / "objects" / artifact["s3_key"], evidence / "replay.hsrv")
     for source in output.glob("*.json"):
         shutil.copyfile(source, evidence / source.name)
 

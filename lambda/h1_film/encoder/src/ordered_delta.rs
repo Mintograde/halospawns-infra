@@ -31,13 +31,26 @@ pub(super) fn write(
     write_inner(writer, previous, next, before, false)
 }
 
-fn write_inner(
+pub(super) fn write_inner(
     writer: &mut BinaryWriter,
     previous: Option<&Value>,
     next: &Value,
     before: Option<&Value>,
     changed_known: bool,
 ) -> Result<(), Box<dyn Error>> {
+    if let (Some(previous), Some(next)) = (previous.and_then(number), number(next)) {
+        if !changed_known && previous.to_bits() == next.to_bits() {
+            writer.byte(DELTA_SAME);
+            return Ok(());
+        }
+        let history = before.and_then(number);
+        if COMPACT_WORLD.get() != Some(&true)
+            || !write_compact_number(writer, previous, next, history)?
+        {
+            write_number_delta(writer, previous, next, history)?;
+        }
+        return Ok(());
+    }
     if float_delta::write(writer, previous, next, before)? {
         return Ok(());
     }
@@ -117,9 +130,86 @@ fn write_inner(
     write_delta(writer, previous, next, before)
 }
 
+// Most moving coordinates have either a small linear residual or repeat an
+// absolute float elsewhere in the chunk. Stable tags let zstd match those runs.
+fn write_compact_number(
+    writer: &mut BinaryWriter,
+    previous: f64,
+    next: f64,
+    before: Option<f64>,
+) -> Result<bool, Box<dyn Error>> {
+    if !exact_f32(previous) || !exact_f32(next) || (previous.fract() == 0.0 && next.fract() == 0.0)
+    {
+        return Ok(false);
+    }
+    let next_bits = (next as f32).to_bits();
+    let residual = |prediction| signed_difference(signed_uint32_difference(prediction, next_bits));
+    const MAX_RESIDUAL: u64 = (1 << 17) - 1;
+    let predicted = before
+        .filter(|value| exact_f32(*value))
+        .map(|value| residual(predict_value_bits(value, previous)));
+    if let Some(value) = predicted.filter(|value| *value <= MAX_RESIDUAL) {
+        writer.byte(DELTA_FLOAT32_VALUE_PREDICTION);
+        writer.varuint(value)?;
+    } else {
+        let value = residual((previous as f32).to_bits());
+        if value <= MAX_RESIDUAL {
+            writer.byte(DELTA_FLOAT32_DIFFERENCE);
+            writer.varuint(value)?;
+        } else {
+            writer.byte(DELTA_REPLACE);
+            write_number(writer, next)?;
+        }
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_coordinates_decode_to_the_exact_original_bits() {
+        for (before, previous, next, tag) in [
+            (Some(1.0), 1.125, 1.25, Some(DELTA_FLOAT32_VALUE_PREDICTION)),
+            (
+                None,
+                1.5,
+                f32::from_bits(1.5_f32.to_bits() + 1) as f64,
+                Some(DELTA_FLOAT32_DIFFERENCE),
+            ),
+            (None, 1.5, -100.25, Some(DELTA_REPLACE)),
+            (Some(4.0), 1.5, -0.0, Some(DELTA_REPLACE)),
+            (None, -0.0, 0.0, None),
+            (None, 1024.0, 2048.0, None),
+            (Some(0.1), 0.2, 0.3, None),
+            (
+                None,
+                f32::MIN_POSITIVE as f64,
+                f32::from_bits(1) as f64,
+                Some(DELTA_REPLACE),
+            ),
+        ] {
+            let mut writer = BinaryWriter::new();
+            let encoded = write_compact_number(&mut writer, previous, next, before).unwrap();
+            assert_eq!(encoded, tag.is_some());
+            if let Some(tag) = tag {
+                assert_eq!(writer.bytes[0], tag);
+            } else {
+                write_number_delta(&mut writer, previous, next, before).unwrap();
+            }
+            let mut reader = BinaryReader::new(&writer.bytes);
+            let value = read_patched_value(
+                &mut reader,
+                Some(&DecodedValue::Number(previous)),
+                before.map(DecodedValue::Number).as_ref(),
+                1,
+            )
+            .unwrap();
+            assert_eq!(value.number().unwrap().to_bits(), next.to_bits());
+            assert_eq!(reader.offset, writer.bytes.len());
+        }
+    }
 
     #[test]
     fn specialization_preserves_bytes_for_dense_sparse_reordered_and_changing_shapes() {

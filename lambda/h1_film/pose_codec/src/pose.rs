@@ -369,7 +369,20 @@ impl Quantizer {
         settings: &Settings,
         previous: &mut Vec<DQuat>,
     ) -> Option<Vec<[i32; 8]>> {
-        if pose.len() != self.parents.len() || !origin.is_finite() {
+        let mut values = vec![[0; 8]; pose.len()];
+        self.quantize_into(pose, origin, settings, previous, &mut values)?;
+        Some(values)
+    }
+
+    pub(crate) fn quantize_into(
+        &mut self,
+        pose: &[Node],
+        origin: DVec3,
+        settings: &Settings,
+        previous: &mut Vec<DQuat>,
+        values: &mut [[i32; 8]],
+    ) -> Option<()> {
+        if pose.len() != self.parents.len() || values.len() != pose.len() || !origin.is_finite() {
             return None;
         }
         let base = Transform {
@@ -377,7 +390,6 @@ impl Quantizer {
             q: DQuat::IDENTITY,
             s: 1.,
         };
-        let mut values = vec![[0; 8]; pose.len()];
         if previous.len() != pose.len() {
             *previous = vec![DQuat::IDENTITY; pose.len()];
         }
@@ -444,7 +456,7 @@ impl Quantizer {
             }
             previous[index] = local_rotation;
         }
-        Some(values)
+        Some(())
     }
 }
 

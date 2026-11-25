@@ -21,7 +21,7 @@ const FIELDS: [&str; 16] = [
     "secondary_nades",
 ];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Counters([Option<Value>; 16]);
 
 impl Counters {

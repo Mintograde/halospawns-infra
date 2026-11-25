@@ -132,10 +132,9 @@ export async function convertMatchTrack(stage,values,report,convertFilm,deadline
     world:`${directory}/candidate/${sourceReplayName(envelope.tick_rate)}`,world_sha256:converted.encoding[sourceRateKey(envelope.tick_rate)].sha256};
 }
 
-export async function convertMatchTracks(stage,values,report,convertFilm,deadline) {
-  const bytes=await readFile(values.film);
-  const policy=matchFilmPolicy(report.exporter_revision);
-  const match=inspectMatchFilm(bytes,policy);
+export async function convertMatchTracks(stage,values,report,convertFilm,deadline,prepared) {
+  const bytes=prepared?.bytes ?? await readFile(values.film);
+  const match=prepared?.match ?? inspectMatchFilm(bytes,matchFilmPolicy(report.exporter_revision));
   assert.equal(match.sha256,report.provenance.film_sha256,'Match film changed');
   const checkMatch = lazyMatchCheck(stage,values,deadline);
   const local = part => convertMatchTrack(stage,values,report,convertFilm,deadline,bytes,match,part,checkMatch);

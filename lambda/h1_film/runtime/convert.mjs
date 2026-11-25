@@ -139,7 +139,7 @@ async function convertAttempt(options, opening) {
   const missingMapSize = ['h1-performance-beta5-p9818-wasm-v1', 'h1-performance-beta6-p9839-wasm-v1', 'h1-performance-beta7-p9844-wasm-v1', 'h1-performance-beta8-p9848-wasm-v1'].includes(profile.id) && envelope.map_bytes === 0;
   if (missingMapSize) assert.ok(values['map-catalog'], 'Missing recorded size requires a reviewed map catalog');
   else assert.equal(actualMapSize, native.envelope.map_bytes, 'Map size differs from recorded cache');
-  const filmHash = await sha256(values.film), mapHash = await sha256(map);
+  const [filmHash, mapHash] = await Promise.all([sha256(values.film), sha256(map)]);
   if (inspected) assert.equal(filmHash, inspected.filmHash, 'Inspected client source changed');
   const engineHashes = engine.hashes;
   let mapBinding;
@@ -163,14 +163,17 @@ async function convertAttempt(options, opening) {
   await mkdir(join(work, 'maps'), { recursive: true });
   await mkdir(join(work, 'stats'));
   await mkdir(join(work, 'films'));
-  await copyFile(map, join(work, 'maps', native.envelope.map + '.map'));
-  await copyFile(values.film, join(work, 'input.h1film'));
+  const stagedFilm = join(work, 'input.h1film'), stagedMap = join(work, 'maps', native.envelope.map + '.map');
+  await Promise.all([copyFile(map, stagedMap), copyFile(values.film, stagedFilm)]);
   let playbackFilm='input.h1film';
   let verifyHostFirst = false;
+  let preparedMatch;
   if(['beta6','beta7','beta8'].includes(profile.port)&&!values['client-view']) {
     const bytes=await readFile(join(work,playbackFilm));
     if(bytes.readUInt32LE(64)===536) {
       const match=inspectMatchFilm(bytes,matchFilmPolicy(profile.exporter_revision));
+      assert.equal(match.sha256, filmHash, 'Film changed while staging');
+      preparedMatch = {bytes, match};
       verifyHostFirst = profile.exporter_revision >= EMPTY_CLIENT_BUILD_EXPORTER && match.parts.some(p => p.envelope.build === '');
       playbackFilm='authoritative.h1film';
       await writeFile(join(work,playbackFilm),bytes.subarray(match.host_offset,match.host_offset+match.host_size),{flag:'wx'});
@@ -195,7 +198,9 @@ async function convertAttempt(options, opening) {
   assert.ok([1, 2, 3, 4, 5].includes(request.viewer_profile_revision), 'Unsupported viewer revision');
   request.source_viewer_only = Boolean(values['source-viewer-only']);
   request.sniper_evidence = profile.exporter_revision >= 42;
-  if (profile.exporter_revision >= 45 && values['client-view']) request.sniper_zoom_anchors = true;
+  const matchEngine = ['beta6','beta7','beta8'].includes(profile.port);
+  if (profile.exporter_revision >= (matchEngine ? 52 : 45)) request.compact_world = true;
+  if (matchEngine && profile.exporter_revision >= 45 && values['client-view']) request.sniper_zoom_anchors = true;
   request.incremental_state = !values['generic-state'];
   request.typed_poses = !values['generic-poses'];
   request.verify_incremental_state = Boolean(values['verify-incremental-state']);
@@ -209,8 +214,9 @@ async function convertAttempt(options, opening) {
       ...(mapBinding ? { map_binding: mapBinding } : {}) };
   }
   await save(requestPath, request);
-  assert.equal(await sha256(join(work, 'input.h1film')), filmHash, 'Film changed while staging');
-  assert.equal(await sha256(join(work, 'maps', native.envelope.map + '.map')), mapHash, 'Map changed while staging');
+  const [stagedFilmHash, stagedMapHash] = await Promise.all([preparedMatch?.match.sha256 ?? sha256(stagedFilm), sha256(stagedMap)]);
+  assert.equal(stagedFilmHash, filmHash, 'Film changed while staging');
+  assert.equal(stagedMapHash, mapHash, 'Map changed while staging');
   const stagingSeconds = (performance.now() - totalStarted) / 1000;
 
   const environment = Object.fromEntries(Object.entries(process.env)
@@ -231,7 +237,7 @@ async function convertAttempt(options, opening) {
     BLAMPC_FILM_DIR: join(work, 'films'), H1_EXPORT_HANDLE: '3',
     H1_EXPORT_METRICS: join(stage, 'engine-metrics.json') });
   const exportBufferBytes = Number(values['export-buffer-bytes'] ??
-    (process.platform === 'linux' && ['beta6','beta7','beta8'].includes(profile.port) ? 65536 : 0));
+    (process.platform === 'linux' && (matchEngine || request.compact_world) ? 65536 : 0));
   assert.ok(Number.isSafeInteger(exportBufferBytes) && (exportBufferBytes === 0 ||
     (exportBufferBytes >= 4096 && exportBufferBytes <= 1024 * 1024)), 'Invalid export buffer size');
   if (exportBufferBytes) {
@@ -311,8 +317,9 @@ async function convertAttempt(options, opening) {
         && ['beta6','beta7','beta8'].includes(profile.port) && !values['client-view']) {
       // Every view uses its own work directory and verified engine/map/source pins.
       // Capture failures immediately, but do not publish until host and clients pass.
-      matchConversion = convertMatchTracks(stage, {...values, hostReady:hostPlayback.promise}, report, convertFilm, started + timeout)
+      matchConversion = convertMatchTracks(stage, {...values, hostReady:hostPlayback.promise}, report, convertFilm, started + timeout, preparedMatch)
         .then(value => ({ok: true, value}), error => ({ok: false, error}));
+      preparedMatch = undefined;
     }
     if (process.platform === 'win32' && values['trusted-local']) {
       monitor = spawn('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('../tools/measure-windows.ps1', import.meta.url)),
@@ -340,8 +347,9 @@ async function convertAttempt(options, opening) {
     }
     report.engine_resources = JSON.parse(await readFile(join(stage, 'engine-metrics.json'), 'utf8'));
     const log = await readFile(join(stage, 'playback.log'), 'utf8');
-    assert.equal(await sha256(join(work, 'maps', native.envelope.map + '.map')), native.provenance.map_sha256);
-    assert.equal(await sha256(join(work, 'input.h1film')), filmHash);
+    const [playedFilmHash, playedMapHash] = await Promise.all([sha256(stagedFilm), sha256(stagedMap)]);
+    assert.equal(playedFilmHash, filmHash);
+    assert.equal(playedMapHash, native.provenance.map_sha256);
     try { report.simulation = adapter.verifyPlayback(log, native.envelope); }
     catch (error) {
       const failure = ['beta6','beta7','beta8'].includes(profile.port) && profile.exporter_revision>=16
@@ -450,7 +458,8 @@ async function convertAttempt(options, opening) {
         if (!result.ok) throw result.error;
         report.match_tracks = result.value;
       } else {
-        report.match_tracks=await convertMatchTracks(stage,values,report,convertFilm,started+timeout);
+        report.match_tracks=await convertMatchTracks(stage,values,report,convertFilm,started+timeout,preparedMatch);
+        preparedMatch = undefined;
       }
       report.timing.match_wait_seconds = (performance.now() - matchStarted) / 1000;
       assert.ok(!expired,'Match conversion timed out');
@@ -491,7 +500,7 @@ async function convertAttempt(options, opening) {
         assert.ok(!expired, 'Client verification timed out or was interrupted');
         let capture, captured;
         if (profile.exporter_revision >= 43) {
-          const command = profile.exporter_revision >= 45 ? 'capture-sniper-zoom' : 'capture-sniper';
+          const command = matchEngine && profile.exporter_revision >= 45 ? 'capture-sniper-zoom' : 'capture-sniper';
           capture = spawn(values.encoder, [command, String(native.envelope.ticks),
             join(stage,'verified-sniper.ndjson')], {cwd:work,windowsHide:true,stdio:['pipe',logFd,logFd]});
           captured = completion(capture);

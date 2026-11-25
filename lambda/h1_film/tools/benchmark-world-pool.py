@@ -121,6 +121,7 @@ def controller():
     parser.add_argument("--workers", type=int, default=0, choices=range(9))
     parser.add_argument("--warm", action="store_true", help="Start the isolated child containers before timing the parent")
     parser.add_argument("--initial-only", action="store_true", help="Measure only the normal initial product build and idempotent callbacks")
+    parser.add_argument("--keep-viewer", action="store_true", help="Save the complete initial viewer file after timing")
     parser.add_argument("--fail-world", type=int, choices=range(16), help="Simulate one failed child invocation")
     parser.add_argument("--candidate", action="store_true", help="Overlay the current worker runtime on the image")
     parser.add_argument("--encoder", help="Linux encoder binary for the candidate")
@@ -204,6 +205,8 @@ def controller():
         if args.initial_only:
             commands.append("--initial-only")
         env = ["-e","H1_BENCH_EVIDENCE=/evidence","-v",f"{evidence}:/evidence"]
+        if args.keep_viewer:
+            env += ["-e", "H1_BENCH_KEEP_VIEWER=1"]
         if args.workers:
             env += ["-e","H1_WORLD_FUNCTION=fixture:1","-e",f"H1_WORLD_CONCURRENCY={args.workers}"]
             if args.fail_world is not None:

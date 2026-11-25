@@ -1,6 +1,7 @@
 import copy
 import io
 import os
+import struct
 import sys
 import tempfile
 import unittest
@@ -101,6 +102,25 @@ class WorldPoolTests(unittest.TestCase):
                         {"hash_mismatches": 1}, {"seed_mismatches": 1}):
             with self.assertRaises(cloud.FilmError):
                 pool.validate_dispatch(0, {**proof, **invalid}, self.event["job"])
+
+    def test_prelaunch_only_hints_labeled_parts_in_a_bounded_match_table(self):
+        film = self.work / "match.h1film"
+        for version, stride in ((1, 96), (2, 112)):
+            table = 536 + 3 * 504
+            body = bytearray(table + 3 * stride)
+            struct.pack_into("<4sI", body, 504, b"MTCH", version)
+            struct.pack_into("<III", body, 520, table, 3, stride)
+            for i, label in enumerate((b"a", b"\0", b"c")):
+                offset = 536 + i * 504
+                struct.pack_into("<II", body, table + i * stride + 4, offset, 504)
+                body[offset + 384:offset + 385] = label
+            film.write_bytes(body)
+            self.assertEqual(pool.labeled_parts(film, body[:536]), [0, 2])
+            film.write_bytes(body[:-1])
+            self.assertEqual(pool.labeled_parts(film, body[:536]), [])
+            struct.pack_into("<I", body, table + stride + 4, table)
+            film.write_bytes(body)
+            self.assertEqual(pool.labeled_parts(film, body[:536]), [])
 
     def test_expired_fragment_is_rejected_before_upload(self):
         self.event["expires"] = 1

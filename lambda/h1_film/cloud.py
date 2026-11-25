@@ -607,7 +607,6 @@ def convert(job, film, work, deadline):
     from .world_pool import world_pool
 
     binding = job["conversion"]["map_binding"]
-    stage_map(binding, work)
     supplements = []
     for index, pin in enumerate(job["conversion"].get("sniper_clients") or []):
         path = work / f"shooter-{index}.h1film"
@@ -616,8 +615,6 @@ def convert(job, film, work, deadline):
                             "player": pin["player"], "match_id": pin["match_id"]})
     if supplements:
         (work / "shooter-sources.json").write_text(json.dumps(supplements), encoding="utf-8")
-    timeout = int(deadline - time.monotonic() - 180)
-    require(timeout >= 30, "conversion_failed")
     directory = work / "conversion"
     arguments = [
         "node",
@@ -647,11 +644,12 @@ def convert(job, film, work, deadline):
         *(["--exporter-revision", str(job["conversion"]["engine"]["exporter_revision"])]
           if job["conversion"]["engine"].get("exporter_revision") is not None else []),
         "--engine-permissions",
-        "--timeout",
-        str(timeout),
     ]
     with world_pool(job, film, work, deadline - 180) as world_options:
-        run_bounded(arguments + world_options, work, deadline - 180, output_name="convert.log")
+        stage_map(binding, work)
+        timeout = int(deadline - time.monotonic() - 180)
+        require(timeout >= 30, "conversion_failed")
+        run_bounded(arguments + ["--timeout", str(timeout)] + world_options, work, deadline - 180, output_name="convert.log")
     # The encoder compares every decoded tick to its source and checks every
     # compressed chunk. Require that evidence before omitting the second scan.
     ticks = job["conversion"]["film"]["source_tick_count"]

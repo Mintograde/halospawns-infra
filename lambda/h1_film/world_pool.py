@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import socketserver
+import struct
 import tempfile
 import threading
 import time
@@ -208,6 +209,32 @@ class WorldServer(socketserver.ThreadingMixIn, getattr(socketserver, "UnixStream
     request_queue_size = MAX_WORKERS
 
 
+def labeled_parts(film, header):
+    # This is only a scheduling hint. The child and the parent still inspect
+    # the complete pinned match and verify every selected part independently.
+    if len(header) < 536:
+        return []
+    magic, version, _, _, table, count, stride = struct.unpack_from("<4s6I", header, 504)
+    if (magic != b"MTCH" or (version, stride) not in ((1, 96), (2, 112))
+            or not 1 <= count <= 16 or table < 536 or table + count * stride != film.stat().st_size):
+        return []
+    with film.open("rb") as source:
+        source.seek(table)
+        rows = source.read(count * stride)
+        if len(rows) != count * stride:
+            return []
+        result = []
+        for index in range(count):
+            start = index * stride
+            offset, size = struct.unpack_from("<II", rows, start + 4)
+            if size < 504 or offset < 536 or offset + size > table:
+                return []
+            source.seek(offset + 384)
+            if source.read(1) not in (b"", b"\0"):
+                result.append(index)
+        return result
+
+
 @contextlib.contextmanager
 def world_pool(job, film, work, deadline):
     function = os.environ.get("H1_WORLD_FUNCTION")
@@ -233,37 +260,55 @@ def world_pool(job, film, work, deadline):
     path = folder / "worker.sock"
     s3 = cloud.shared_parser().S3
 
+    def fetch(index, simulation):
+        nonce = uuid.uuid4().hex
+        try:
+            validate_dispatch(index, simulation, job)
+            seconds = math.floor(deadline - time.monotonic())
+            require(seconds > 1)
+            event = {"index":index, "simulation":simulation, "schema":SCHEMA, "job":job, "nonce":nonce,
+                     "expires":int(time.time()) + seconds, "image_digest":os.environ["H1_WORKER_IMAGE_DIGEST"]}
+            receipt = invoke(event, seconds)
+            receive(event, receipt, folder / nonce, s3)
+            return nonce
+        except Exception as error:
+            if (folder / nonce).exists():
+                shutil.rmtree(folder / nonce)
+            LOG.warning("h1_world_fallback type=%s", type(error).__name__)
+            return None
+        finally:
+            slots.release()
+
+    prefetched = {}
+    lock = threading.Lock()
+
     class Request(socketserver.StreamRequestHandler):
         def handle(self):
             token = None
-            nonce = None
-            if slots.acquire(blocking=False):
-                try:
-                    self.connection.settimeout(5)
-                    data = self.rfile.readline(2049)
-                    require(len(data) <= 2048)
-                    message = json.loads(data)
-                    require(set(message) == {"index", "simulation"})
-                    validate_dispatch(message["index"], message["simulation"], job)
-                    nonce = uuid.uuid4().hex
-                    seconds = math.floor(deadline - time.monotonic())
-                    require(seconds > 1)
-                    event = {**message, "schema": SCHEMA, "job": job, "nonce": nonce,
-                             "expires": int(time.time()) + seconds,
-                             "image_digest": os.environ["H1_WORKER_IMAGE_DIGEST"]}
-                    receipt = invoke(event, seconds)
-                    receive(event, receipt, folder / nonce, s3)
-                    token = nonce
-                except Exception as error:
-                    if nonce and (folder / nonce).exists():
-                        shutil.rmtree(folder / nonce)
-                    LOG.warning("h1_world_fallback type=%s", type(error).__name__)
-                finally:
-                    slots.release()
+            try:
+                self.connection.settimeout(5)
+                data = self.rfile.readline(2049)
+                require(len(data) <= 2048)
+                message = json.loads(data)
+                require(set(message) == {"index", "simulation"})
+                index, simulation = message["index"], message["simulation"]
+                validate_dispatch(index, simulation, job)
+                with lock:
+                    future = prefetched.pop(index, None) if simulation is None else None
+                if future is not None:
+                    token = future.result()
+                elif slots.acquire(blocking=False):
+                    token = fetch(index, simulation)
+            except Exception as error:
+                LOG.warning("h1_world_fallback type=%s", type(error).__name__)
             with contextlib.suppress(OSError):
                 self.wfile.write(json.dumps(token).encode())
 
-    with WorldServer(str(path), Request) as server:
+    with ThreadPoolExecutor(max_workers=concurrency) as pool, WorldServer(str(path), Request) as server:
+        if job["conversion"].get("engine", {}).get("exporter_revision", 0) >= 52:
+            for index in labeled_parts(film, header)[:concurrency]:
+                slots.acquire()
+                prefetched[index] = pool.submit(fetch, index, None)
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05})
         thread.start()
         try:

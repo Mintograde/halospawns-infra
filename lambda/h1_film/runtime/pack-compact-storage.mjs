@@ -5,8 +5,7 @@ import {createHash} from 'node:crypto';
 import {zstdCompressSync,constants} from 'node:zlib';
 import {readClientAccount,readHostLedger} from './format3-diagnostics.mjs';
 import {readRawPad} from './format3-pad.mjs';
-import {unpackMszip} from './adapters/beta5-v2-120.mjs';
-import {unpackNetworkColumns} from './format3-codec.mjs';
+import {networkStorage} from './recorded-network.mjs';
 const sha=b=>createHash('sha256').update(b).digest('hex');
 
 export async function packCompactStorage(index,tracks,entries,scratch,matchId,accountOptions={}) {
@@ -15,18 +14,10 @@ export async function packCompactStorage(index,tracks,entries,scratch,matchId,ac
   const derive=(id,storage,bytes)=>{const e=pins.get(id);assert.ok(e);assert.equal(bytes.length,e.size_bytes);assert.equal(sha(bytes),e.sha256,'derived entry differs');e.storage=storage;};
   for(const t of tracks) {
     if(t.network) {
-      const source=t.recorded_sections.network,bytes=await get(source),blocks=[],hash=createHash('sha256');let at=32,offset=0;
-      for(let i=0;i<bytes.readUInt32LE(24);i++) {
-        const [size,packed,first,last,count,flags]=Array.from({length:6},(_,j)=>bytes.readUInt32LE(at+j*4));at+=24;
-        assert.ok(size>0&&size<=16777216&&packed>0&&at+packed<=bytes.length&&flags<=3);
-        const original=bytes.subarray(at,at+packed),expanded=flags&1?unpackMszip(original,size):original;
-        const raw=flags&2?unpackNetworkColumns(expanded,count):expanded,expected=t.network.blocks[i];
-        assert.equal(raw.length,size);assert.equal(sha(raw),expected.sha256);assert.equal(expected.offset,offset);assert.equal(expected.count,count);hash.update(raw);
-        assert.equal(expected.first_tick,first);assert.equal(expected.last_tick,last);
-        blocks.push({offset,size_bytes:size,source_offset:at,source_size_bytes:packed,count,flags,sha256:expected.sha256});at+=packed;offset+=size;
-      }
-      assert.equal(at,bytes.length);assert.equal(offset,pins.get(t.network.entry).size_bytes);
-      assert.equal(hash.digest('hex'),pins.get(t.network.entry).sha256);
+      const source=t.recorded_sections.network, entry=sources.get(source);
+      assert.ok(entry);
+      const bytes=entry.bytes??await readFile(entry.path);
+      const blocks=networkStorage(bytes,pins.get(source),pins.get(t.network.entry),t.network.blocks);
       pins.get(t.network.entry).storage={kind:'network',source,blocks};
     }
     if(t.pad){const p=readRawPad(await get(t.pad.original));for(const field of ['events','samples'])if(t.pad[field])derive(t.pad[field],{kind:'pad',source:t.pad.original,field},p[field]);}

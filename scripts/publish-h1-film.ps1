@@ -42,7 +42,12 @@ function Invoke-Checked {
 Push-Location -LiteralPath $repo
 $stage = $null
 try {
-    $audit = @('lambda/h1_film/tools/check-release.mjs', '--engine-root', $engines)
+    # Isolate the reviewed binaries from the source store and share duplicate
+    # files inside the Docker context. Audit the exact inventory being shipped.
+    $buildRoot = [IO.Path]::GetFullPath((Join-Path $repo '.build'))
+    $stage = Join-Path $buildRoot "h1-film-$([guid]::NewGuid().ToString('N'))"
+    Invoke-Checked node @('lambda/h1_film/tools/stage-release-engines.mjs', '--engine-root', $engines, '--output', $stage)
+    $audit = @('lambda/h1_film/tools/check-release.mjs', '--engine-root', $stage)
     if ($PreviousRegistry) { $audit += @('--previous-registry', (Resolve-Path -LiteralPath $PreviousRegistry).Path) }
     Invoke-Checked node $audit
     if (-not $BuildOnly) {
@@ -56,23 +61,6 @@ try {
         if (@($images.imageIds | Where-Object imageTag -EQ $Tag).Count) { throw "Release tag already exists: $Tag" }
     }
 
-    # Copy only verified, registered binaries into the private Docker context.
-    $buildRoot = [IO.Path]::GetFullPath((Join-Path $repo '.build'))
-    $stage = Join-Path $buildRoot "h1-film-$([guid]::NewGuid().ToString('N'))"
-    $engineRegistry = Get-Content -Raw -LiteralPath 'lambda/h1_film/profiles/registry.json' | ConvertFrom-Json
-    $profiles = $engineRegistry.profiles
-    foreach ($engine in $profiles) {
-        Invoke-Checked node @('lambda/h1_film/tools/stage-engine.mjs', '--profile', $engine.id,
-            '--from', (Join-Path $engines "$($engine.id)/h1-film.js"), '--engine-root', $stage)
-    }
-    if ($engineRegistry.PSObject.Properties.Name -contains 'exporters') {
-        foreach ($exporter in $engineRegistry.exporters) {
-            Invoke-Checked node @('lambda/h1_film/tools/stage-engine.mjs', '--profile', $exporter.engine_profile,
-                '--exporter-revision', [string]$exporter.revision,
-                '--from', (Join-Path $engines "$($exporter.engine_profile)/exporter-$($exporter.revision)/h1-film.js"),
-                '--engine-root', $stage)
-        }
-    }
     Invoke-Checked docker @('buildx', 'build', '--platform', 'linux/amd64', '--provenance=false', '--load',
         '--build-arg', "H1_WORKER_RELEASE_ID=$Tag",
         '--build-context', "engines=$stage", '-f', 'lambda/h1_film/Dockerfile', '-t', $localImage, '-t', $remoteImage, '.')

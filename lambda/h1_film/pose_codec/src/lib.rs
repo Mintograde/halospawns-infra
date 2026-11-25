@@ -98,12 +98,22 @@ mod legacy {
     }
 
     pub fn compress(raw: &[u8]) -> Result<Vec<u8>> {
+        compress_inner(raw, false)
+    }
+
+    pub(super) fn compress_inner(raw: &[u8], short_matches: bool) -> Result<Vec<u8>> {
         if raw.len() > 64 * 1024 * 1024 {
             return Err("block too large".into());
         }
         let mut c = zstd::bulk::Compressor::new(6)?;
         c.include_checksum(true)?;
         c.include_contentsize(true)?;
+        if short_matches {
+            use zstd::zstd_safe::{CParameter, Strategy};
+            c.set_parameter(CParameter::Strategy(Strategy::ZSTD_lazy))?;
+            c.set_parameter(CParameter::MinMatch(4))?;
+            c.set_parameter(CParameter::SearchLog(3))?;
+        }
         let packed = c.compress(raw)?;
         if decompress(&packed, raw.len())? != raw {
             return Err("pose compression round trip changed bytes".into());
