@@ -28,7 +28,7 @@ module "pb2_idle" {
     Statement = [
       { Effect = "Allow", Action = "lambda:InvokeFunction", Resource = module.app_lambda[0].alias_arn },
       { Effect = "Allow", Action = "s3:GetObjectVersion", Resource = concat(
-        ["${local.uploads_bucket_arn}/films/unprocessed/*"],
+        ["${local.uploads_bucket_arn}/films/unprocessed/*", "${local.uploads_bucket_arn}/films/client-views/*"],
         local.replay_viewer_artifact_get_object_resource_arns
       ) }
     ]

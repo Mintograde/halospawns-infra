@@ -24,3 +24,11 @@ Run `node --test lambda/pb2_idle_worker/tests/input.test.mjs` from the infra
 root. After applying the API migration, deploying the API and provisioning
 the dev worker, `scripts/publish-pb2-idle.py` packages the film readers and
 the sibling Svelte viewer's existing delta decoder and publishes the dev alias.
+
+The same schedule also reads player input profiles from original, versioned
+host, embedded client and selected separate client recordings. This uses
+independent leases and a separate evidence table. It reads only the headers,
+rosters, raw input and configuration ranges. The public product contains
+input method counts and allowlisted settings for identifiable seats.
+Historical runs can invoke the worker with `{"task":"inputs"}`. Run both
+`tests/input.test.mjs` and `tests/profiles.test.mjs` for the two readers.

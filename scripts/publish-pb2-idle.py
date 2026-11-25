@@ -17,7 +17,7 @@ FUNCTION = "halospawns-dev-pb2-idle"
 def package():
     # Include the same delta reader as the site and only the film reader's
     # static dependency closure. The managed Node runtime supplies the AWS SDK.
-    todo = [WORKER / "audit.mjs"]
+    todo = [WORKER / "audit.mjs", WORKER / "profiles.mjs"]
     files = {"index.mjs": WORKER / "index.mjs", "replayDeltaCodec.mjs": VIEWER}
     while todo:
         source = todo.pop().resolve()
