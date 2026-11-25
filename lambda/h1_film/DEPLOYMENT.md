@@ -1,5 +1,37 @@
 # H1 film Lambda integration
 
+## Derelict embedded client recovery in dev (2026-11-25)
+
+Derelict upload `e9674e02-5266-4cd1-9857-f6f0e6be4799` failed after the Beta 8 server recording passed all 802 sampled world hashes. The embedded recording for `0m3N meg` had a zero-filled engine build label and match ID. Exporter 50 rejected it during profile selection. The 23,382,074-byte file in `V:\gitgudreplays` matched the original S3 version byte for byte, with SHA-256 `e656cfbd4e0d9f062f188550fdad7c5577b4236d6e33545ba0b14fa2eee59900`.
+
+Beta 8 exporter 51 uses the verified host's pinned engine to compare the embedded client's original inputs and network records with the host. For this player, all 26,677 inputs and 191,615 messages matched. The engine then played the client through its recorded end, checking RNG seeds and world hashes. The release retains all seven engine profiles and 121 prior exporters. In the 24 earlier regression films, statistics and all 1,673 match payload entries matched the previous release. [Client verification rules](COMPATIBILITY.md#beta-8-clients-missing-both-the-build-label-and-match-id) · [Converter changes](https://github.com/Mintograde/halospawns-infra/commit/8c3b304) · [API 324 deployment](https://github.com/Mintograde/halospawns-api/actions/runs/45542583107)
+
+Dev policy 50 selects `20261125-r1` and world Lambda version 4. Both functions run image `sha256:99b331ae3f7b6cf8a21ae472c661bb2f0cc3457ab4a21e16924f654a9a56be8b`. The packaged worker passed all 25 films in initial conversion, viewer rebuild and full reprocessing. The deployed API accepted all 75 callbacks and the separate client-view case. The first live worker inventory check passed before activation.
+
+Fresh upload `bff59dc7-ddcd-51e1-97b5-12e77fd2505a` converted the exact original S3 version through normal intake in 88.89 seconds. It produced game `55435e97-8899-48e6-bf89-2bfab4e6ca8c`. All three client worlds ran on the world Lambda. The host and Slatchey each verified 96,129 frames and 802 hashes (13:21). `0m3N meg` verified 79,680 frames and 664 hashes (11:04), and CTRL verified 91,560 frames and 763 hashes (12:43). The two shorter recordings retain their own clocks and lack recorded host-clock alignment. All four perspectives passed their RNG checks and 3,031 sampled world hashes. [Recovered replay](https://dev.halospawns.com/viewer/replay/01b2bf88-c3cc-42ff-b12a-aab0bb83c583)
+
+Desktop and mobile Chrome played all four perspectives and passed paused seeking. The CDN returned the selected 79,634,313-byte viewer file with SHA-256 `90fa0964fd0c7eaaceb64097244385295a6f2fcd691e1fff08a04aad05b53d2b` and served range requests. The original failed upload and its pinned S3 version remain available for audit. All 1,682 prior replay selections, 44 attached views and every prior history fingerprint were verified. The new totals are 1,680 conversions, 4,813 receipts, 474 approvals and 4,677 settings snapshots. The processing and dead-letter queues were empty after recovery.
+
+The focused and full dev plans showed three in-place updates in `map-processing`. The promotion applied the world Lambda and its invocation policy together, followed by the intake Lambda. The `app-api` state output moved from 323 to 324. All six final component plans had zero resource or output changes. All commands used the `halospawns-dev` profile in `us-east-1`. [Dev stack configuration](../../stacks/dev.yaml)
+
+```powershell
+./scripts/plan.ps1 dev map-processing
+./scripts/plan.ps1 dev
+$apiPlan = (Resolve-Path 'components/terraform/app-api/dev-app-api.planfile').Path
+terraform -chdir=components/terraform/app-api apply -input=false $apiPlan
+./scripts/plan.ps1 dev app-api
+./scripts/promote-h1-film.ps1 -Stack dev
+
+# Saved plans applied by the promotion
+$promotion = (Resolve-Path '.build/h1-promotions/20261125-041753-f74f7c899df84bf5ab84b21fa53b6e2c').Path
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worlds.planfile"
+terraform -chdir=components/terraform/map-processing apply -no-color "$promotion/worker.planfile"
+
+foreach ($component in 'app-api','map-processing','frontend-site','uploads-ingest','ecr','tfstate-backend') {
+    ./scripts/plan.ps1 dev $component
+}
+```
+
 ## Concurrent replay uploads in dev (2026-11-23)
 
 During the morning upload batch, API Gateway timed out 27 completion callbacks and three preparations at 30 seconds. PostgreSQL logged an 11.73-second wait on the exclusive Beta 8 engine advisory lock (query ID `-7683103009224538355`). The game upsert (query ID `2120058125330881593`) waited up to 76.90 seconds while its heatmap trigger updated a shared map row. Selecting the viewer file also updated movement revisions on those rows. Each failed delivery then waited out the queue's 5,400-second visibility timeout.
