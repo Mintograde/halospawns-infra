@@ -10,6 +10,7 @@ mod viewer {
     #![allow(dead_code)]
     include!("../viewer.rs");
     include!("../movement_viewer.rs");
+    include!("../movement_situations.rs");
 }
 #[path = "../movement_paths.rs"]
 mod movement_paths;
@@ -29,6 +30,7 @@ struct Point {
 }
 
 struct Field {
+    situations: Option<viewer::Situations>,
     paths: Option<movement_paths::Paths>,
     clock: Option<i64>,
     previous: [Option<Point>; SLOTS],
@@ -47,6 +49,7 @@ impl Field {
             return Err("invalid movement clock".into());
         }
         Ok(Self {
+            situations: None,
             paths: None,
             clock: None,
             previous: [None; SLOTS],
@@ -328,6 +331,13 @@ impl<'de> Visitor<'de> for Recording<'_> {
 
 fn run() -> Result<()> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
+    let situation_config = if args.len() == 8 && args[6] == "--situations" {
+        let config = args.pop().unwrap();
+        args.pop();
+        Some(config)
+    } else {
+        None
+    };
     let paths = args.last().is_some_and(|value| value == "--paths");
     if paths {
         args.pop();
@@ -336,6 +346,12 @@ fn run() -> Result<()> {
         return Err("expected format, file, clock and frame bounds".into());
     };
     let mut field = Field::new(rate.parse()?, start.parse()?, end.parse()?)?;
+    if let Some(config) = situation_config {
+        if format != "viewer" {
+            return Err("situation windows require a selected host viewer".into());
+        }
+        field.situations = Some(viewer::Situations::new(File::open(config)?, field.rate)?);
+    }
     if paths {
         field.paths = Some(Default::default());
     }
@@ -363,6 +379,9 @@ fn run() -> Result<()> {
         }
     } else {
         return Err("unknown movement source".into());
+    }
+    if let Some(situations) = field.situations {
+        return situations.write(std::io::BufWriter::new(std::io::stdout().lock()));
     }
     if let Some(paths) = field.paths {
         return paths.write(std::io::BufWriter::new(std::io::stdout().lock()));

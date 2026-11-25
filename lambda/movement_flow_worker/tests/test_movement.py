@@ -37,9 +37,18 @@ class MovementTests(unittest.TestCase):
                 self.assertEqual(worker.handler({}, context), {"processed": 1})
         product.assert_called_once_with("example", "field")
         self.assertEqual(api.call_args_list, [
-            call("claim_any", representation="paths"), call("complete", lease="example", product={}),
-            call("claim_any", representation="field"),
+            call("claim_any", representation="paths", include_situations=True),
+            call("complete", lease="example", product={}),
+            call("claim_any", representation="field", include_situations=True),
         ])
+
+    def test_pilot_claim_is_restricted_to_one_map_and_one_representation(self):
+        context = Mock()
+        context.get_remaining_time_in_millis.return_value = 350000
+        with patch.object(worker, "command", return_value={"job": None}) as api:
+            self.assertEqual(worker.handler({"situations_only": True, "map_id": "example"}, context),
+                             {"processed": 0})
+        api.assert_called_once_with("claim", representation="situations", map_id="example")
 
     def test_source_rate_independent_distance_and_moving_time(self):
         for rate in (30, 120):

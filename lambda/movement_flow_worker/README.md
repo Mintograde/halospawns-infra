@@ -45,6 +45,24 @@ The publisher verifies the dev account, package hash and Lambda version before m
 
 To pause generation, disable the movement schedule. Retain the three movement migrations, all product generations and the worker version that understands `.raw2` recording revisions. Existing replay and occupancy artifacts have independent readers and lifecycles.
 
+## Five seconds before a spawn
+
+On a map heatmap, **Situation** applies to both presence and movement trails. The teammate selection follows the other living member of each respawning player's team. The three item selections follow all living players in the five seconds leading up to a camo, overshield or rocket launcher spawn. A combined selection requires the named items to appear on the same game tick. A single-item inclusive selection also includes cycles where another tracked item appeared.
+
+The extractor reads the authoritative host's recorded game clock and the exact approved map bytes bound to the replay. It resolves applicable netgame equipment for the game mode, positive-weight item permutations, authored and recorded timer settings, and newly created world objects on the due pads. Rockets require a launcher with starting ammunition. A previously held or dropped launcher keeps its handle. Uncertain draws contribute only to the item types observed with certainty. The catalog reports coverage for the selected cohort. Opening spawns have no preceding window.
+
+At the source rate, the window includes the full five seconds before the event and excludes the event's own tick. An overlapping window extends the time counted for each player once. Living stationary players contribute to the half-world-unit presence grid. Movement samples, including the displayed trail tails, stay inside the selected windows and each continuous life. Both products retain elevation for the registered isometric view. Per-slot bundles are combined through the ordinary map cohort and outcome memberships. The map reader comes from `halospawns-maps` revision `df8dfed`.
+
+The trusted worker uses `representation=situations` with revision suffix `.situations1`. A map- or game-restricted claim supports a pilot. The scheduled worker claims all three movement representations with a single idle poll. The public map route is `/v1/maps/{map_id}/heatmap/situations`. Its query, coverage fields and immutable asset descriptors are documented in the API repository's `docs/movement-flow.md`.
+
+### Dev verification on November 25, 2026
+
+The first Chill Out map pilot covered eight qualifying games, 719 teammate respawns, 50 overshield-only cycles and 45 camo/overshield/rockets cycles. Independent decoding of the 30 Hz and 120 Hz reference films checked 6,907 per-slot presence cells and 178,633 source-position comparisons over 1,355 trail visits. Every position difference was below 0.00868 world units and every displayed visit stayed inside its selected interval.
+
+Across 1,151 qualifying games on 33 maps, all 98,815 teammate windows matched the native spawn records and all 10,634 item cycles agreed with the maps, game modes and effective timers. The cohort includes 635 cycles with multiple possible item draws. Each exact selection uses the draw observed in the host world. The aggregate audit checked 2,685 immutable objects and independently reproduced the presence cells, route support and coverage of all 1,045 selections across 280 scopes. Dev API 334 and frontend `0e59d60` serve the filters. Hosted desktop and mobile checks covered both projections, animation, pause, team and eligibility changes. The public catalog and both layers matched the audit on all 33 maps.
+
+Dev movement worker 10 is active on the two-minute schedule. The empty 15-minute launcher on Temple was the only pad removed by the ammunition check. Regenerating Temple's qualifying film reproduced its stored game bundle exactly. An early pilot completion failed on a PostgreSQL string function. The API corrected the lease check, all affected builds completed and the final scheduled poll was idle.
+
 ## Recorded-path release on November 18, 2026
 
 Dev API 293 (`5db5748`, CI `44444521311`) and movement worker 5 serve recorded paths for all 540 source games and all 298 aggregate scopes. The default PB2 2v2 cohort contains 356 games on 30 maps. The 2,293 new immutable products occupy 113.0 MiB compressed. The median populated all-player map is 382 KiB. The maximum is 959 KiB. PostgreSQL uses 1.68 MiB for all movement build generations and indexes.

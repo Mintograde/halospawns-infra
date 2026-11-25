@@ -18,7 +18,7 @@ struct Sample {
 }
 
 #[derive(Serialize)]
-struct Route {
+pub(super) struct Route {
     key: [i32; 6],
     start_frame: u32,
     ticks: u32,
@@ -194,15 +194,18 @@ impl Paths {
     pub(super) fn stop(&mut self, slot: usize) {
         self.tracks[slot].stop();
     }
-    pub(super) fn write(mut self, mut output: impl Write) -> super::Result<()> {
+    pub(super) fn finish(mut self) -> std::collections::BTreeMap<usize, Vec<Route>> {
         let mut groups = std::collections::BTreeMap::new();
         for (slot, track) in self.tracks.iter_mut().enumerate() {
             track.stop();
             if !track.routes.is_empty() {
-                groups.insert(slot, &track.routes);
+                groups.insert(slot, std::mem::take(&mut track.routes));
             }
         }
-        serde_json::to_writer(&mut output, &groups)?;
+        groups
+    }
+    pub(super) fn write(self, mut output: impl Write) -> super::Result<()> {
+        serde_json::to_writer(&mut output, &self.finish())?;
         output.flush()?;
         Ok(())
     }

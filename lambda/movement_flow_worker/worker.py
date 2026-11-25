@@ -18,6 +18,7 @@ from botocore.exceptions import ClientError
 
 from heatmap_worker import _api_request
 import movement_paths
+import situation_windows
 
 S3 = boto3.client("s3")
 PREFIX = "heatmaps/precomputed/v1/movement/views/"
@@ -109,7 +110,7 @@ def host_range(options, source, revision):
     if not head.startswith(b"H1MV"):
         return 0, size, revision
     version, header_size, index_size, physical_size = struct.unpack_from("<4I", head, 8)
-    require(1 <= version <= 9 and head[:8] == f"H1MV000{version}".encode() and header_size == 64
+    require(1 <= version <= 10 and head[:8] == f"H1MV{version:04d}".encode() and header_size == 64
             and physical_size == size and 0 < index_size <= min(8 << 20, size-64), "match header")
     index = read_source(options, 64, index_size)
     digest = sha(index)
@@ -158,14 +159,22 @@ def game_product(job, directory):
     start = (int(source["start"] or 0) + stride-1) // stride
     end = (int(source["end"]) + stride-1) // stride if source["end"] is not None else 432001
     target = Path(directory, "fields.json")
+    arguments = ["--paths"] if paths else []
+    situations = job.get("representation") == "situations"
+    if situations:
+        config = Path(directory, "situation-inputs.json")
+        config.write_text(json.dumps(situation_windows.map_config(job, stride)), encoding="utf8")
+        arguments = ["--situations", str(config)]
     with target.open("wb") as output:
         subprocess.run([str(Path(__file__).parent / "movement_field"), source["format"], str(path),
                         str(rate), str(start), str(end), str(source["tick_count"] or 0),
-                        *(["--paths"] if paths else [])],
+                        *arguments],
                        stdout=output, check=True, timeout=240)
     require(target.stat().st_size <= 64 << 20, "game field output limit")
     with target.open() as file:
         slots = json.load(file)
+    if situations:
+        return situation_windows.game_product(slots, source_hash, publish)
     if paths:
         groups = {slot: publish(movement_paths.slot_rows(rows, f"{source_hash}/{slot}"),
                                 movement_paths.SCHEMA) for slot, rows in slots.items() if rows}
@@ -231,21 +240,28 @@ def scope_product(lease, representation="field"):
 
 def handler(event, context):
     count = 0
+    restricted = event.get("situations_only", False)
+    target = {key: event[key] for key in ("game_id", "map_id") if event.get(key)}
     while count < 16 and context.get_remaining_time_in_millis() > 270000:
-        # Give newly uploaded games both representations. Existing v1 readers
-        # continue to use their own immutable products during the rollout.
-        preferred = "paths" if count % 2 == 0 else "field"
-        job = command("claim_any", representation=preferred)["job"]
+        if restricted:
+            job = command("claim", representation="situations", **target)["job"]
+        else:
+            preferred = ("paths", "field", "situations")[count % 3]
+            job = command("claim_any", representation=preferred, include_situations=True)["job"]
         if not job:
             break
         try:
-            if job["kind"] == "scope":
+            situations = job.get("representation") == "situations"
+            if job["kind"] == "scope" and situations:
+                product = situation_windows.scope_product(job["lease"], command, read_field, publish)
+            elif job["kind"] == "scope":
                 product = scope_product(job["lease"], job.get("representation", "field"))
             else:
                 with tempfile.TemporaryDirectory() as directory:
                     product = game_product(job, directory)
             if product is not None:
-                command("complete", lease=job["lease"], product=product)
+                command("complete", lease=job["lease"], product=product,
+                        **({"representation": "situations"} if situations else {}))
         except Exception:
             command("retry", lease=job["lease"], reason="build_failed")
             LOG.exception("Movement build failed for lease %s", job["lease"])

@@ -68,6 +68,7 @@ pub(super) fn movement_world(
         return Err("invalid viewer timeline".into());
     }
     let mut offset = 0;
+    let mut situation_preceding_chunk = None;
     for chunk in manifest.chunks {
         if chunk.offset != offset
             || chunk.first_tick != field.frames
@@ -129,11 +130,27 @@ pub(super) fn movement_world(
                     Some(DecodedValue::Bool(true))
                 )
             });
-            field.frame(clock.map(|v| v as i64), ended, movement_points(&tick))?;
+            if let Some(situations) = field.situations.as_mut() {
+                field.ended |= ended;
+                if field.frames >= field.start && field.frames < field.end && !field.ended {
+                    situations.observe(
+                        &tick,
+                        previous.as_ref().or(situation_preceding_chunk.as_ref()),
+                        field.frames,
+                        clock,
+                    )?;
+                }
+                field.frames += 1;
+            } else {
+                field.frame(clock.map(|v| v as i64), ended, movement_points(&tick))?;
+            }
             before = previous.replace(tick);
         }
         if reader.offset != base.len() {
             return Err("trailing delta bytes".into());
+        }
+        if field.situations.is_some() {
+            situation_preceding_chunk = previous;
         }
         offset += chunk.compressed_bytes as u64;
     }
