@@ -388,22 +388,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   }
 
   dynamic "rule" {
-    for_each = var.player_distribution_cache_enabled ? [1] : []
+    for_each = var.player_distribution_cache_enabled ? {
+      player-distribution = "cache/player-distributions/", pb2-stats = "cache/pb2-stats/"
+    } : {}
     content {
-      id     = "player-distribution-cache-expiration"
+      id     = "${rule.key}-cache-expiration"
       status = "Enabled"
-      filter { prefix = "cache/player-distributions/" }
+      filter { prefix = rule.value }
       expiration { days = 1 }
       noncurrent_version_expiration { noncurrent_days = 1 }
     }
   }
 
   dynamic "rule" {
-    for_each = var.player_distribution_cache_enabled ? [1] : []
+    for_each = var.player_distribution_cache_enabled ? {
+      player-distribution = "cache/player-distributions/", pb2-stats = "cache/pb2-stats/"
+    } : {}
     content {
-      id     = "player-distribution-cache-delete-markers"
+      id     = "${rule.key}-cache-delete-markers"
       status = "Enabled"
-      filter { prefix = "cache/player-distributions/" }
+      filter { prefix = rule.value }
       expiration { expired_object_delete_marker = true }
     }
   }

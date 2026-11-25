@@ -69,7 +69,8 @@ run "cache_is_private_and_prefix_scoped" {
       if s.sid == "CachePlayerDistributions"])) == toset(["s3:GetObject", "s3:PutObject"]) &&
       toset(one([for s in data.aws_iam_policy_document.app_runtime[0].statement : s.resources
         if s.sid == "CachePlayerDistributions"])) == toset([
-        "arn:aws:s3:::halospawns-api-artifacts-dev-283279960672/cache/player-distributions/*"
+        "arn:aws:s3:::halospawns-api-artifacts-dev-283279960672/cache/player-distributions/*",
+        "arn:aws:s3:::halospawns-api-artifacts-dev-283279960672/cache/pb2-stats/*"
       ]) && aws_s3_bucket_public_access_block.artifacts[0].block_public_policy
     )
     error_message = "Cache access must stay private and restricted to disposable cache objects."
@@ -77,10 +78,10 @@ run "cache_is_private_and_prefix_scoped" {
   assert {
     condition = alltrue([
       for r in aws_s3_bucket_lifecycle_configuration.artifacts[0].rule :
-      alltrue([for f in r.filter : f.prefix == "cache/player-distributions/"])
-      if startswith(r.id, "player-distribution-cache-")
+      alltrue([for f in r.filter : f.prefix == (startswith(r.id, "pb2-stats-") ? "cache/pb2-stats/" : "cache/player-distributions/")])
+      if startswith(r.id, "player-distribution-cache-") || startswith(r.id, "pb2-stats-cache-")
       ]) && length([for r in aws_s3_bucket_lifecycle_configuration.artifacts[0].rule : r
-    if startswith(r.id, "player-distribution-cache-")]) == 2
+    if startswith(r.id, "player-distribution-cache-") || startswith(r.id, "pb2-stats-cache-")]) == 4
     error_message = "Cache expiration must not affect releases or permanent receipt archives."
   }
 }
