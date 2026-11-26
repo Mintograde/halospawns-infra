@@ -9,6 +9,16 @@ to eight embedded worlds to the 32-slot world pool. To check intake capacity,
 inspect the event source mapping's `ScalingConfig.MaximumConcurrency`.
 Reserved concurrency on the function also serves other invocations.
 
+An isolated run used the dev API 338 package and the deployed film worker
+image to process all 50 films from the November 26 burst. It used local S3,
+SNS and SQS emulation and an eight-connection PostgreSQL transaction pool. All 50
+uploads were queued before workers started. The queue drained in 5 minutes
+28 seconds with four active workers at peak and no retries or dead letters.
+All 755 game, map, stats, leaderboard and upload-status reads issued during
+processing succeeded. The 95th percentile was 718 ms and the slowest was 1.01 s.
+Both selected replay artifacts and archived completion receipts were verified
+for every film. Live dev smoke checks also passed. [API release](https://github.com/Mintograde/halospawns-api/actions/runs/45826847753)
+
 During a batch, monitor queue age alongside API Gateway 5xx and integration
 latency. Afterward, check selected viewer artifacts, completion receipts and
 both the main and dead-letter queues. The existing visibility timeout and
