@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readRawPad} from '../h1_film/runtime/format3-pad.mjs';
+import {measureInputStyle} from './input-style.mjs';
 
 const word = (bytes, offset) => bytes.readUInt32LE(offset);
 const number = (value, max = 10000) => {
@@ -121,8 +122,10 @@ export async function inputProfiles(job, read) {
       const settingsRow = configuration(settings,seat);
       settingsRow.pipeline_ticks = pad.pipeline_ticks;
       if (!copy && /^[\w .:+()/\-]{1,63}$/.test(build)) settingsRow.build = build;
+      const fullPad = pad.first_update === word(h,40) && pad.count === word(h,44);
+      const style = job.stable && fullPad ? measureInputStyle(pad,seat,word(h,12),counts) : null;
       rows.push({slot, name:roster.get(slot), ...counts, profile:settingsRow,
-        recording:copy ? 'copied_host' : role});
+        recording:copy ? 'copied_host' : role, ...(style ? {style} : {})});
     }
   }
   // Source offsets are relative to each physical part, including thin clients.

@@ -55,7 +55,7 @@ export async function handler(event,context) {
   const idle = event?.task === 'inputs' ? {checked:0,failures:0} :
     await run(context,'halospawns.pb2IdleAudit.v1',
       job => audit(job,reader(job.film),reader(job.viewer),decodeReplayDeltaChunk),90000,4);
-  const inputs = await run(context,'halospawns.pb2PlayerInputs.v1',
+  const inputs = await run(context,'halospawns.pb2PlayerInputs.v2',
     job => inputProfiles(job,reader(job.film)),60000,4);
   return {...idle,inputs};
 }

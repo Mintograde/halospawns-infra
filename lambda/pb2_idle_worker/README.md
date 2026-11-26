@@ -35,3 +35,13 @@ seat count or mask. Their NAME roster links those seats to game participants.
 Mirrors from these versions omit the pad and contribute no sampled input.
 Historical runs can invoke the worker with `{"task":"inputs"}`. Run both
 `tests/input.test.mjs` and `tests/profiles.test.mjs` for the two readers.
+
+The v2 player-input audit also measures original controller and keyboard/mouse
+behavior for the private admin alias review. It uses the same versioned reads
+and a separate lease for each source. Publish this worker after the sibling
+API's `20261126020000_player_input_styles.sql` migration and v2 private handler.
+New sources receive public settings and private measurements in one pass.
+Existing source audits keep their public settings during the scheduled refresh.
+Run `node --test lambda/pb2_idle_worker/tests/*.test.mjs` for coverage of both
+devices, split-screen, the recorded clock and the abstention rules. See the
+API's `docs/recorded-player-inputs.md` for the review and rollback contracts.

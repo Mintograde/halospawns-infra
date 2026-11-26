@@ -33,6 +33,24 @@ test('copied host inputs never inherit recorder settings, unmatched and scripted
   assert.equal((await inspect(film([[2]],{client:true}),2))[0].recording,'client');
 });
 
+test('style requires complete original coverage and leaves public settings available on abstention',async()=>{
+  const count=3600, b=film(Array.from({length:count},()=>[1]));
+  b.writeUInt32LE(30,12); b.writeUInt32LE(count,44);
+  const pad=b.readUInt32LE(104), samples=pad+64;
+  for(let i=0;i<count;i++){
+    b.writeInt16LE(20000,samples+i*14+8);
+    if(i%30===15) b.writeUInt16LE(0x1000,samples+i*14);
+  }
+  const [original]=await inspect(b);
+  assert.equal(original.style.metrics.a_rate,60);
+  b.writeUInt32LE(count+1,44);
+  const [partial]=await inspect(b);
+  assert.equal(partial.style,undefined);
+  assert.deepEqual(partial.profile,original.profile);
+  b.writeUInt32LE(count,44); b.writeUInt32LE(20,pad+28);
+  assert.equal((await inspect(b))[0].style,undefined);
+});
+
 function legacyFilm(sources, {protocol=9818, own=2, mask=4, name='Alpha', client=true}={}) {
   const bytes = film(sources,{client});
   bytes.writeUInt32LE(2,4);
