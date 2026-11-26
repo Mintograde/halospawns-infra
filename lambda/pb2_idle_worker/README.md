@@ -45,3 +45,19 @@ Existing source audits keep their public settings during the scheduled refresh.
 Run `node --test lambda/pb2_idle_worker/tests/*.test.mjs` for coverage of both
 devices, split-screen, the recorded clock and the abstention rules. See the
 API's `docs/recorded-player-inputs.md` for the review and rollback contracts.
+
+### Dev verification on November 26, 2026
+
+Dev API 339 (`1d1e6ba`) accepts both input protocols. Worker 5 (`8f11d36`)
+completed all 1,898 selected sources across 1,892 games, including six separate
+client recordings. A second invocation found zero jobs. All 1,898 prior public
+settings results retained their hashes. Across 927 original files shared with
+the input study, all 3,409 comparable seat measurements matched.
+
+The hosted site at `6b15914` enables dev account routes. Browser checks covered
+admin sign-in, both sides of an alias, a shared-name profile, and filtering and
+paging in Admin → Players. Members, scorekeepers, and anonymous sessions made
+zero findings requests and received HTTP 403 on direct requests. Revoking the
+test admin role also returned 403 with the same access token.
+[API release](https://github.com/Mintograde/halospawns-api/actions/runs/45849435638)
+and [site release](https://github.com/Mintograde/halospawns-svelte/actions/runs/45853980593).
