@@ -1,5 +1,19 @@
 # H1 film Lambda integration
 
+## Bulk uploads in dev (2026-11-26)
+
+The H1 SQS event source admits four single-film deliveries at a time. A batch
+of 50 uploads can wait in the standard queue while up to four films write
+intake and completion data through the shared API. Each film can dispatch up
+to eight embedded worlds to the 32-slot world pool. To check intake capacity,
+inspect the event source mapping's `ScalingConfig.MaximumConcurrency`.
+Reserved concurrency on the function also serves other invocations.
+
+During a batch, monitor queue age alongside API Gateway 5xx and integration
+latency. Afterward, check selected viewer artifacts, completion receipts and
+both the main and dead-letter queues. The existing visibility timeout and
+per-message retry policy cover transient failures.
+
 ## Full-fidelity replay encoding in dev (2026-11-25)
 
 Dev policy 51 selects `20261125-r2` with API `live=330`. The intake Lambda dispatches to world Lambda version 5. Both use image `sha256:0a547c829863643e024efc332565f99c6da0305d499fcb16ef8f47442cc50285`. The first live inventory check verified the compiled encoder and every binary pin across seven engine profiles and 129 exporters. The release catalog retained all 57 previous manifests. [Worker source](https://github.com/Mintograde/halospawns-infra/commit/1d459f4d93e451cc711fdf5de2689e85cee63d4f) · [API deployment](https://github.com/Mintograde/halospawns-api/actions/runs/45675554519)

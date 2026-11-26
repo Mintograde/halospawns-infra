@@ -186,7 +186,9 @@ components:
           intake_configured: true
           event_source_enabled: true
           reserved_concurrency: 50
-          maximum_concurrency: 50
+          # Leave excess films in SQS. Four conversions can use all 32 world workers
+          # while limiting concurrent preparation and completion writes to Postgres.
+          maximum_concurrency: 4
           world_pool_capacity: 32
           worlds_per_film: 8
         dependencies:
