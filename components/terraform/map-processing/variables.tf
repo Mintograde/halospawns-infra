@@ -314,3 +314,9 @@ variable "release" {
     error_message = "Release artifact lifecycle values must use positive day counts."
   }
 }
+
+variable "render_clip_thumbnails" {
+  description = "Grant the screenshot renderer access to version-pinned compact replay clips."
+  type        = bool
+  default     = false
+}

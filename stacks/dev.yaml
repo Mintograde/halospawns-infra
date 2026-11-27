@@ -170,6 +170,7 @@ components:
             - http://127.0.0.1:5180
     map-processing:
       vars:
+        render_clip_thumbnails: true
         movement_flow_enabled: true
         heatmap_rollup_worker:
           precomputed_enabled: true

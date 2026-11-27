@@ -242,6 +242,14 @@ data "aws_iam_policy_document" "native_maps_processor_map_rendering" {
 }
 
 data "aws_iam_policy_document" "map_renderer_runtime" {
+  dynamic "statement" {
+    for_each = var.render_clip_thumbnails ? [true] : []
+    content {
+      sid       = "ReadVersionedCompactClips"
+      actions   = ["s3:GetObjectVersion"]
+      resources = ["${data.terraform_remote_state.uploads_ingest.outputs.uploads_bucket_arn}/replays/derived/viewer/clips/v1/*.hsrv"]
+    }
+  }
   statement {
     sid     = "ReadProcessedMapGlbs"
     actions = ["s3:GetObject"]

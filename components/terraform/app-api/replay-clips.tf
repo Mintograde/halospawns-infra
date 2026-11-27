@@ -6,6 +6,7 @@ variable "replay_clips_enabled" {
 locals {
   replay_clips_enabled = var.enabled && var.replay_clips_enabled
   replay_clips_name    = "${var.project}-${var.environment}-replay-clips"
+  clip_renderer_alias  = "arn:${data.aws_partition.current.partition}:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.project}-map-renderer-${var.environment}:live"
 }
 
 module "replay_clips" {
@@ -20,16 +21,20 @@ module "replay_clips" {
   memory_size                    = 3008
   reserved_concurrent_executions = 8
   environment_variables = {
-    API_ALIAS      = module.app_lambda[0].alias_arn
-    UPLOADS_BUCKET = local.uploads_bucket_name
-    VIEWER_PREFIX  = local.replay_viewer_artifact_prefix
+    API_ALIAS          = module.app_lambda[0].alias_arn
+    THUMBNAIL_RENDERER = local.clip_renderer_alias
+    UPLOADS_BUCKET     = local.uploads_bucket_name
+    VIEWER_PREFIX      = local.replay_viewer_artifact_prefix
   }
   policies_json = [jsonencode({
     Version = "2012-10-17"
     Statement = [
-      { Effect = "Allow", Action = "lambda:InvokeFunction", Resource = module.app_lambda[0].alias_arn },
+      { Effect = "Allow", Action = "lambda:InvokeFunction", Resource = [module.app_lambda[0].alias_arn, local.clip_renderer_alias] },
       { Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = local.replay_viewer_artifact_get_object_resource_arns },
-      { Effect = "Allow", Action = "s3:PutObject", Resource = "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/clips/v1/*.hsrv" }
+      { Effect = "Allow", Action = "s3:PutObject", Resource = [
+        "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/clips/v1/*.hsrv",
+        "${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}/clips/thumbnails/v1/*.webp"
+      ] }
     ]
   })]
   tags = var.tags
@@ -65,5 +70,13 @@ resource "aws_cloudwatch_event_target" "replay_clips" {
   count      = local.replay_clips_enabled ? 1 : 0
   rule       = aws_cloudwatch_event_rule.replay_clips[0].name
   arn        = module.replay_clips[0].alias_arn
+  depends_on = [aws_lambda_permission.replay_clips]
+}
+
+resource "aws_cloudwatch_event_target" "clip_thumbnails" {
+  count      = local.replay_clips_enabled ? 1 : 0
+  rule       = aws_cloudwatch_event_rule.replay_clips[0].name
+  arn        = module.replay_clips[0].alias_arn
+  input      = jsonencode({ thumbnails_only = true })
   depends_on = [aws_lambda_permission.replay_clips]
 }

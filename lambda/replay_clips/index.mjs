@@ -47,12 +47,17 @@ async function objectReader(ref) {
 async function extract(job) {
   const read = await objectReader(job.source);
   const {body,...proof} = await cutClip(job,read,codec,objectReader);
-  const hash = sha(body), key = process.env.VIEWER_PREFIX+'/clips/v1/'+hash+'.hsrv';
+  const stored = await storeImmutable(body, 'v1', '.hsrv', 'application/vnd.halospawns.replay-delta');
+  return {...proof,...stored};
+}
+
+async function storeImmutable(body, folder, extension, contentType) {
+  const hash = sha(body), key = process.env.VIEWER_PREFIX+'/clips/'+folder+'/'+hash+extension;
   const dest = {Bucket:bucket,Key:key};
   let version;
   try {
     const written = await s3.send(new PutObjectCommand({...dest,Body:body,IfNoneMatch:'*',
-      ContentType:'application/vnd.halospawns.replay-delta',CacheControl:'public,max-age=31536000,immutable',
+      ContentType:contentType,CacheControl:'public,max-age=31536000,immutable',
       ChecksumSHA256:Buffer.from(hash,'hex').toString('base64'),Metadata:{sha256:hash}}));
     version = written.VersionId;
   } catch (error) {
@@ -63,11 +68,51 @@ async function extract(job) {
     version = head.VersionId;
   }
   assert.ok(version && version !== 'null');
-  return {...proof,sha256:hash,size_bytes:body.length,version_id:version};
+  return {sha256:hash,size_bytes:body.length,version_id:version};
+}
+
+async function renderThumbnail(job) {
+  const response = await api.send(new InvokeCommand({FunctionName:process.env.THUMBNAIL_RENDERER,
+    Payload:Buffer.from(JSON.stringify({...job,schema:'halospawns.clipThumbnail.v1'}))}));
+  const result = JSON.parse(Buffer.from(response.Payload));
+  if (response.FunctionError) throw new Error('Clip renderer: '+result.errorMessage);
+  const {image,player_name,...proof} = result;
+  assert.equal(player_name,job.player_name);
+  assert.equal(proof.player_slot,job.player_slot);
+  assert.equal(proof.source_sha256,job.asset.sha256);
+  assert.equal(proof.map_sha256,job.source_glb.sha256);
+  assert.ok(Number.isInteger(proof.frame) && proof.frame >= 0 && proof.frame < job.asset.tick_count);
+  const bytes = Buffer.from(image,'base64');
+  assert.ok(bytes.length > 20 && bytes.length <= 1024*1024);
+  assert.equal(bytes.toString('ascii',0,4),'RIFF');
+  assert.equal(bytes.toString('ascii',8,12),'WEBP');
+  assert.equal(bytes.readUInt32LE(4),bytes.length-8);
+  return {...proof,...await storeImmutable(bytes, 'thumbnails/v1', '.webp', 'image/webp')};
+}
+
+async function buildThumbnails(id, context) {
+  let ready = 0, failures = 0;
+  while (context.getRemainingTimeInMillis() > 125000) {
+    const {job} = await control('claim_thumbnail',id ? {id} : {});
+    if (!job) break;
+    const claim = {id:job.id,lease:job.lease};
+    try {
+      const product = await renderThumbnail(job);
+      const result = await control('complete_thumbnail',{...claim,product});
+      if (result.accepted) ready++;
+    } catch (error) {
+      console.error('Clip thumbnail failed',job.id,error.name,error.message);
+      await control('retry_thumbnail',claim);
+      failures++;
+    }
+    if (id) break;
+  }
+  return {ready,failures};
 }
 
 export async function handler(event, context) {
   const id = event.id;
+  if (event.thumbnails_only) return buildThumbnails(id, context);
   if (!id && !event.build_only) await control('discover',{limit:16});
   let ready = 0, failures = 0;
   while (context.getRemainingTimeInMillis() > 45000) {
@@ -84,5 +129,6 @@ export async function handler(event, context) {
     }
     if (id) break;
   }
+  if (id && process.env.THUMBNAIL_RENDERER) await buildThumbnails(id, context);
   return {ready,failures};
 }
