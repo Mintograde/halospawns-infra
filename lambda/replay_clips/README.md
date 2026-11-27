@@ -83,8 +83,10 @@ thumbnails.
 
 ## Operation
 
-An EventBridge schedule discovers new generations and drains the extraction
-queue every minute. Player submissions also wake the worker immediately.
+An EventBridge schedule sends an empty job to discover new generations and
+drain the extraction queue every minute. Player submissions wake the worker
+immediately with the saved clip ID. The schedule supplies its own input because
+the default EventBridge envelope includes an unrelated event ID.
 The API prioritizes player jobs, leases work transactionally and accepts a
 completion only for its active lease. Save retries reuse the original request
 ID. Conditional S3 writes and immutable versions allow extraction retries.

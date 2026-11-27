@@ -67,9 +67,11 @@ resource "aws_lambda_permission" "replay_clips" {
 }
 
 resource "aws_cloudwatch_event_target" "replay_clips" {
-  count      = local.replay_clips_enabled ? 1 : 0
-  rule       = aws_cloudwatch_event_rule.replay_clips[0].name
-  arn        = module.replay_clips[0].alias_arn
+  count = local.replay_clips_enabled ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.replay_clips[0].name
+  arn   = module.replay_clips[0].alias_arn
+  # An id in a worker request selects a single clip. The schedule scans all pending games.
+  input      = jsonencode({})
   depends_on = [aws_lambda_permission.replay_clips]
 }
 
