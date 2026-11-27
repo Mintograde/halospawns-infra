@@ -9,7 +9,8 @@ interval remains available to spectate.
 The collection can be filtered by the featured player, exact map, clip source
 and play type. The URL preserves the selection. Player and map choices show
 counts across the whole collection with the other filters applied. A player's
-recorded aliases resolve to the same profile when linked.
+recorded aliases resolve to the same profile when linked. Cards show the clip's
+start on the game clock and the match date, when known, in the viewer's time zone.
 
 ## Extraction
 
@@ -43,8 +44,13 @@ resets and the engine's four-second multikill clock. A sequence must agree with
 the recorded award totals across all compatible clock phases. The highest tier
 produces one clip. A double qualifies when one of its kills has verified
 shot-time no-scope or double-melee evidence. Each clip records the triggering
-event indices and source ticks and includes up to six seconds before the first
+event indices and source ticks and includes up to three seconds before the first
 kill and four seconds after the last.
+
+The worker also shortens eligible older automatic highlights. It serves the
+original clip until the shorter file is ready, then publishes the new start
+and file together at the existing share link. Player-selected boundaries are
+stored with each manual clip.
 
 ## Operation
 
