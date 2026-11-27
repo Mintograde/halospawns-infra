@@ -60,6 +60,22 @@ automatic highlight needs its shorter lead-in. It publishes the replacement
 at the existing share link after verification. Player-selected boundaries are
 stored with each manual clip.
 
+## Card thumbnails
+
+Once a clip is published, the screenshot renderer opens its version-pinned
+compact file and the map GLB in the replay viewer. The camera follows the
+featured player's slot in that recording. It captures the weapon reticle and
+omits the HUD and world labels. Automatic highlights use a frame about half
+a second before the first kill. Player saves use one second in, or the midpoint
+of a shorter clip. If the player is dead or absent there, the renderer looks
+for a live frame in the same clip.
+
+The API exposes the resulting 768 × 432 WebP through `thumbnail_url`. The clips
+worker leases screenshots independently of extraction and retries failures
+while the clip remains playable. It regenerates a thumbnail when the clip or
+its selected map changes. The screenshot worker reads only compact clip versions
+and processed map models.
+
 ## Operation
 
 An EventBridge schedule discovers new generations and drains the extraction
