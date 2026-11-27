@@ -112,7 +112,19 @@ async function buildThumbnails(id, context) {
 
 export async function handler(event, context) {
   const id = event.id;
-  if (event.thumbnails_only) return buildThumbnails(id, context);
+  if (event.thumbnails_only) {
+    if (!id && event.backfill === true) {
+      // These jobs only wait on the screenshot Lambda. Independent leases let
+      // a bounded backfill share the normal writer and leave extraction capacity.
+      const batches = await Promise.allSettled(Array.from({length: 3}, () => buildThumbnails(null, context)));
+      const failed = batches.find(batch => batch.status === 'rejected');
+      if (failed) throw failed.reason;
+      return batches.reduce((total, {value}) => ({
+        ready: total.ready + value.ready, failures: total.failures + value.failures
+      }), {ready: 0, failures: 0});
+    }
+    return buildThumbnails(id, context);
+  }
   if (!id && !event.build_only) await control('discover',{limit:16});
   let ready = 0, failures = 0;
   while (context.getRemainingTimeInMillis() > 45000) {

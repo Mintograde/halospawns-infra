@@ -76,6 +76,11 @@ while the clip remains playable. It regenerates a thumbnail when the clip or
 its selected map changes. The screenshot worker reads only compact clip versions
 and processed map models.
 
+For a historical backfill, invoke the clips worker with
+`{"thumbnails_only":true,"backfill":true}` to process up to three screenshots
+concurrently per invocation. The regular minute schedule also fills missing
+thumbnails.
+
 ## Operation
 
 An EventBridge schedule discovers new generations and drains the extraction
