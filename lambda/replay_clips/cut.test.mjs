@@ -3,6 +3,33 @@ import test from 'node:test';
 import {zstdCompressSync, zstdDecompressSync} from 'node:zlib';
 import * as codec from '../../../halospawns-svelte/packages/viewer/src/lib/core/session/replayDeltaCodec.js';
 import {cutClip, sha} from './cut.mjs';
+import {packRuns, slicePoseRuns} from './pose.mjs';
+
+test('trimming a pose run restarts both predictors and preserves a literal fallback', () => {
+  function short(value) {
+    const bytes=Buffer.alloc(2);
+    bytes.writeUInt16LE(value);
+    return bytes;
+  }
+  function channel(mode,initial,residuals=[]) {
+    const header=Buffer.alloc(5);
+    header[0]=mode;
+    header.writeInt32LE(initial,1);
+    return Buffer.concat([header,Buffer.from(residuals.map(n=>n<0 ? -2*n-1 : 2*n))]);
+  }
+  const matrices=Buffer.alloc(13*8);
+  for(let i=0;i<13;i++) matrices.writeDoubleLE(i===0?-0:i/3,i*8);
+  const constants=Array.from({length:6},()=>channel(0,42));
+  // One bone on player 1. The second-order track reconstructs 5, 7, 12, 20, 31.
+  function run(start,count,tracks,literals) {
+    return Buffer.concat([short(start),Buffer.from([1]),short(count),Buffer.from([1,0]),
+      ...tracks,...constants,short(literals.length),...literals.flatMap(frame=>[short(frame),matrices])]);
+  }
+  const source=packRuns([run(0,5,[channel(2,5,[2,3,3,3]),channel(1,6,[-1,-1,-1,-1])],[1,3])]);
+  assert.deepEqual(slicePoseRuns(source,5,2,5,9),[
+    run(9,3,[channel(2,12,[8,3]),channel(1,4,[-1,-1])],[1])
+  ]);
+});
 
 function fixture(count) {
   const ticks = Array.from({length:count}, (_,i) => ({game_time:i,players:[{name:'Test',x:i}]}));
