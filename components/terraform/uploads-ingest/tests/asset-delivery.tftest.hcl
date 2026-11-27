@@ -65,6 +65,7 @@ run "s3_default" {
       "arn:aws:s3:::uploads-dev-283279960672/maps/processed/*.webp",
       "arn:aws:s3:::uploads-dev-283279960672/replays/processed/*.zst",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*.hsrv",
+      "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/clips/thumbnails/v1/*.webp",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/*/generations/*/h1-client-diagnostics.v1.*.h1diag",
       "arn:aws:s3:::uploads-dev-283279960672/replays/derived/viewer/client-views/*/generations/*/h1-client-view-timeline.v1.*.json",
     ])
