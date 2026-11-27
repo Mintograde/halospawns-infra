@@ -67,8 +67,8 @@ compact file and the map GLB in the replay viewer. The camera follows the
 featured player's slot in that recording. It captures the weapon reticle and
 omits the HUD and world labels. Automatic highlights use a frame about half
 a second before the first kill. Player saves use one second in, or the midpoint
-of a shorter clip. If the player is dead or absent there, the renderer looks
-for a live frame in the same clip.
+of a shorter clip. The renderer can use the player's recorded observer camera
+after death. When a frame lacks their viewpoint, it searches the compact clip.
 
 The API exposes the resulting 768 × 432 WebP through `thumbnail_url`. The clips
 worker leases screenshots independently of extraction and retries failures
