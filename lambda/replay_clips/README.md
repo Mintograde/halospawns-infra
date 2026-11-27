@@ -6,6 +6,11 @@ replay viewer, choose the subject and save up to 60 seconds. Playback uses the
 host recording and the existing map assets. Each recorded player in the
 interval remains available to spectate.
 
+The collection can be filtered by the featured player, exact map, clip source
+and play type. The URL preserves the selection. Player and map choices show
+counts across the whole collection with the other filters applied. A player's
+recorded aliases resolve to the same profile when linked.
+
 ## Extraction
 
 The API pins each request to a selected viewer artifact, player slot and
@@ -23,6 +28,14 @@ SHA-256 key under `replays/derived/viewer/clips/v1/`. A clip needs only its
 own file and the shared map assets to play.
 
 ## Highlight selection
+
+Automatic highlights use the default statistics pool of publicly visible PB2
+2v2 games with complete recording coverage, a stable roster, zero recorded bots
+and no verified idle exclusion. Discovery, extraction and publication check
+that policy. An existing automatic clip drops out of the collection and its
+share link becomes unavailable if its game loses eligibility. Its stored
+product can be used again if the game qualifies later. Player-created clips
+follow the source replay's public visibility and can be saved from other games.
 
 The API scans statistics generations tied to the selected PB2 viewer artifact.
 It rebuilds each player's kill sequences in callback order, including death
