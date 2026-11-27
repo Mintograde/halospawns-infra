@@ -64,6 +64,7 @@ components:
         movement_flow_enabled: true
         homepage_snapshot_enabled: true
         pb2_idle_enabled: true
+        replay_clips_enabled: true
         h1_film:
           enabled: true
           processing_enabled: true

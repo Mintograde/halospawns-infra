@@ -121,6 +121,7 @@ locals {
     var.player_distribution_cache_enabled ? {
       PLAYER_DISTRIBUTION_CACHE_BUCKET = aws_s3_bucket.artifacts[0].bucket
     } : {},
+    var.replay_clips_enabled ? { REPLAY_CLIPS_WORKER = "${local.replay_clips_name}:live" } : {},
     var.heatmap_response_cache_enabled ? {
       HEATMAP_RESPONSE_CACHE_BUCKET = aws_s3_bucket.artifacts[0].bucket
     } : {},
