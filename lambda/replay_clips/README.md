@@ -2,9 +2,9 @@
 
 The site lists published highlights at `/clips` and opens each one at
 `/clips/{id}`. A signed-in player can mark the first and last frames in the
-replay viewer, choose the subject and save up to 60 seconds. Playback uses the
-host recording and the existing map assets. Each recorded player in the
-interval remains available to spectate.
+replay viewer, choose the subject and save up to 60 seconds. Clips open in the
+featured player's recorded client view when it covers the play. Otherwise they
+use the host recording. Both share the replay's existing map assets.
 
 The collection can be filtered by the featured player, exact map, clip source
 and play type. The URL preserves the selection. Player and map choices show
@@ -16,9 +16,17 @@ start on the game clock and the match date, when known, in the viewer's time zon
 
 The API pins each request to a selected viewer artifact, player slot and
 half-open interval on the source clock. The worker reads the versioned object
-and its index, then range-reads the overlapping host-world chunks. For legacy
+and its index, then range-reads the overlapping chunks of the selected world. For legacy
 standalone artifacts without a stored version, the worker pins the current
 object version and verifies its recorded digest.
+
+For embedded views and separately attached Beta 5 recordings, match the
+client's recorder in its own roster to the featured player on the host. Map
+the marked host interval through the recorded clock samples, including the last
+included frame. Cut the contiguous native client frames and start playback on
+the recorder's local slot. Missing or ambiguous identity or clock coverage
+uses the host. A full-replay link always uses the original host slot and time.
+Marks made while watching an aligned client also use host coordinates.
 
 Each output begins with an independent keyframe. The worker re-encodes
 lossless frame data, restarts quantized pose predictors at cut boundaries and
@@ -47,9 +55,9 @@ shot-time no-scope or double-melee evidence. Each clip records the triggering
 event indices and source ticks and includes up to three seconds before the first
 kill and four seconds after the last.
 
-The worker also shortens eligible older automatic highlights. It serves the
-original clip until the shorter file is ready, then publishes the new start
-and file together at the existing share link. Player-selected boundaries are
+The worker refreshes older clips when a client view becomes available or an
+automatic highlight needs its shorter lead-in. It publishes the replacement
+at the existing share link after verification. Player-selected boundaries are
 stored with each manual clip.
 
 ## Operation

@@ -13,8 +13,7 @@ async function control(operation, fields = {}) {
   return JSON.parse(Buffer.from(response.Payload));
 }
 
-async function extract(job) {
-  const ref = job.source;
+async function objectReader(ref) {
   assert.ok(ref.s3_bucket === bucket && ref.s3_key.startsWith(process.env.VIEWER_PREFIX+'/')
     && !ref.s3_key.includes('/clips/') && ref.size_bytes <= 512*1024*1024);
   const location = {Bucket:bucket,Key:ref.s3_key};
@@ -33,7 +32,7 @@ async function extract(job) {
       assert.equal(digest.digest('hex'),ref.sha256);
     }
   }
-  const read = async (at,n) => {
+  return async (at,n) => {
     assert.ok(Number.isSafeInteger(at) && Number.isSafeInteger(n) && at>=0 && n>0
       && n<=64*1024*1024 && at+n<=ref.size_bytes);
     const r = await s3.send(new GetObjectCommand({...location,Range:`bytes=${at}-${at+n-1}`}));
@@ -43,7 +42,11 @@ async function extract(job) {
     assert.equal(bytes.length,n);
     return bytes;
   };
-  const {body,...proof} = await cutClip(job,read,codec);
+}
+
+async function extract(job) {
+  const read = await objectReader(job.source);
+  const {body,...proof} = await cutClip(job,read,codec,objectReader);
   const hash = sha(body), key = process.env.VIEWER_PREFIX+'/clips/v1/'+hash+'.hsrv';
   const dest = {Bucket:bucket,Key:key};
   let version;
