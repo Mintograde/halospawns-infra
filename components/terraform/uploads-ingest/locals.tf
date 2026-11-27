@@ -32,6 +32,7 @@ locals {
     ], []),
     local.replay_processed_prefix == null ? [] : ["${local.uploads_bucket_arn}/${local.replay_processed_prefix}*.zst"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*.hsrv"],
+    ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}clips/thumbnails/v1/*.webp"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}*/generations/*/h1-client-diagnostics.v1.*.h1diag"],
     ["${local.uploads_bucket_arn}/${local.replay_viewer_artifact_prefix}client-views/*/generations/*/h1-client-view-timeline.v1.*.json"],
   )
