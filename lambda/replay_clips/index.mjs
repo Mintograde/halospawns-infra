@@ -47,6 +47,7 @@ async function objectReader(ref) {
 async function extract(job) {
   const read = await objectReader(job.source);
   const {body,...proof} = await cutClip(job,read,codec,objectReader);
+  if (!body) return proof;
   const stored = await storeImmutable(body, 'v1', '.hsrv', 'application/vnd.halospawns.replay-delta');
   return {...proof,...stored};
 }
@@ -128,7 +129,7 @@ export async function handler(event, context) {
   if (!id && !event.build_only) await control('discover',{limit:16});
   let ready = 0, failures = 0;
   while (context.getRemainingTimeInMillis() > 45000) {
-    const {job} = await control('claim',id ? {id} : {});
+    const {job} = await control('claim',{id,kill_feed:true});
     if (!job) break;
     try {
       const product = await extract(job);

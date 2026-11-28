@@ -5,6 +5,7 @@ import * as codec from '../../../halospawns-svelte/packages/viewer/src/lib/core/
 import {cutClip, sha} from './cut.mjs';
 import {packRuns, slicePoseRuns} from './pose.mjs';
 import {clientInterval} from './perspective.mjs';
+import {clipKillFeed} from './feed.mjs';
 import {mapViewFrame} from '../../../halospawns-svelte/packages/viewer/src/lib/core/session/viewTrackAlignment.js';
 
 test('trimming a pose run restarts both predictors and preserves a literal fallback', () => {
@@ -94,6 +95,7 @@ test('aligned cuts agree with full replay seeks including gaps, clock correction
       const mapped = Array.from({length:end-start}, (_,i) => mapViewFrame({tracks:[host,track]},host.id,track.id,start+i));
       const valid = mapped.every((n,i) => n !== null && (!i || n >= mapped[i-1]));
       assert.deepEqual(clientInterval(host,track,start,end),valid ? {start:mapped[0],end:mapped.at(-1)+1} : null);
+      if (valid) assert.deepEqual(clientInterval(host,track,start,end,true).hostFrames,mapped);
     }
   }
 });
@@ -124,9 +126,41 @@ test('a separately recorded client uses its own clock, roster slot, events and o
   const index = JSON.parse(zstdDecompressSync(result.body.subarray(32,payload)));
   assert.deepEqual(index.replay.events,['13: inside']);
   assert.deepEqual(codec.decodeReplayDeltaChunk(zstdDecompressSync(result.body.subarray(payload))).ticks, client.ticks.slice(12,22));
+  const feedJob = {...job, source_stride:1, feed_events:[{source_tick:42, kind:'kill', killer_slot:2, victim_slot:0},
+    {source_tick:49, kind:'kill', killer_slot:0, victim_slot:2}]};
+  const withFeed = await cut(feedJob);
+  assert.deepEqual(withFeed.kill_feed,[{frame:1,text:'Subject killed Other'},{frame:8,text:'Other killed Subject'}]);
+  assert.deepEqual(withFeed.body,result.body);
+  const previous = {pov:result.pov, tick_count:result.tick_count, sha256:sha(result.body)};
+  const refresh = await cut({...feedJob, previous});
+  assert.equal(refresh.body,undefined);
+  assert.equal(refresh.sha256,previous.sha256);
+  assert.deepEqual(refresh.kill_feed,withFeed.kill_feed);
   assert.equal((await cut({...job,views:[{...view,recorded_own_player:2}]})).pov.track_id,'host');
   assert.equal((await cut({...job,views:[view,view]})).pov.track_id,'host');
   assert.equal((await cut({...job,start:10})).pov.track_id,'host');
   await assert.rejects(cut({...job,artifact_id:'another generation'}));
   await assert.rejects(cut({...job,views:[{...view,clock_source_film_sha256:digest}]}));
+});
+
+test('feed uses the first recorded frame at or after each death and preserves callback order', () => {
+  const names = {0:'Cupid',1:'Dasher',2:'Prancer'};
+  const death = (source_tick,kind,killer_slot,victim_slot,multikill) =>
+    ({source_tick,kind,killer_slot,victim_slot,multikill});
+  const job = {source_stride:4,start:10,end:15,feed_events:[
+    death(40,'kill',0,1),death(41,'kill',0,2,2),death(41,'betrayal',1,0),
+    death(48,'suicide',0,0),death(51,'environment',null,2),death(56,'unknown',null,0),death(57,'kill',0,1)]};
+  const selected = {start:20,end:26,hostFrames:[20,20,22,24,25]};
+  assert.deepEqual(clipKillFeed(job,selected,names),[
+    {frame:0,text:'Cupid killed Dasher'},{frame:0,text:'Cupid killed Prancer'},{frame:0,text:'Double Kill!'},
+    {frame:0,text:'Dasher betrayed Cupid'},{frame:2,text:'Cupid committed suicide'},
+    {frame:4,text:'Prancer died'},{frame:5,text:'Cupid died'}]);
+});
+
+test('a recording without a native ledger retains explicit obituaries and lone deaths', () => {
+  const job = {source_stride:1,start:10,end:14,source_start:10,source_end:14,feed_events:null};
+  const selected = {start:10,end:14,hostWorld:{manifest:{replay:{events:[
+    '9: Old died (1)','10: Cupid got a kill (2)','10: Dasher died (3)','11: Prancer threw a frag grenade',
+    '12: Comet killed Vixen','14: Late died (7)']}}}};
+  assert.deepEqual(clipKillFeed(job,selected,{}),[{frame:0,text:'Dasher died'},{frame:2,text:'Comet killed Vixen'}]);
 });

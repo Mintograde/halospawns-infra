@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 
 // Map every requested host frame by the same recorded pairtime rule as mapViewFrame.
 // Build the row lookup once so a long clip does not rescan the full clock table per tick.
-export function clientInterval(host, client, start, end) {
+export function clientInterval(host, client, start, end, includeFrames = false) {
   const rows = (client.alignment?.rows ?? []).filter(([local, server]) => local >= 0 && server >= 0);
   if (!rows.length || !client.clocks?.length || start < 0 || end > host.frame_count || end <= start) return null;
   const first = host.first_update + start + 1, last = host.first_update + end;
@@ -40,7 +40,8 @@ export function clientInterval(host, client, start, end) {
     if (frame === null || frame < 0 || frame < previous) return null;
     previous = frame;
   }
-  return {start: frames.get(clocks[0]), end: previous + 1};
+  return {start: frames.get(clocks[0]), end: previous + 1,
+    ...(includeFrames ? {hostFrames: clocks.map(clock => frames.get(clock))} : {})};
 }
 
 export async function attachedTrack(view, job, readObject) {

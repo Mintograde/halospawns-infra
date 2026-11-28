@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {constants, zstdCompressSync, zstdDecompressSync} from 'node:zlib';
+import {isDeepStrictEqual} from 'node:util';
 import {openMatchReplay} from '../h1_film/runtime/match-replay.mjs';
 import {packRuns, slicePoseRuns} from './pose.mjs';
 import {attachedTrack, clientInterval} from './perspective.mjs';
+import {clipKillFeed} from './feed.mjs';
 
 const limit = 64 * 1024 * 1024;
 const frames = 2048;
@@ -48,17 +50,19 @@ async function openWorld(read, worldSize, count, revision, indexHash) {
   return {read, worldSize, header, version, indexSize, manifest};
 }
 
-async function playerNames(world, slot, decode) {
+async function playerNames(world, slots, decode) {
   const names = Object.fromEntries(Object.entries(world.manifest.replay.game_meta?.players ?? {})
     .map(([key, player]) => [key, player?.name]));
-  if (names[slot]) return names;
+  if (slots.every(slot => names[slot])) return names;
   // Older worlds can expose the recorder only in the first snapshot.
   const chunk = world.manifest.chunks[0];
   const packed = await world.read(32 + world.indexSize + chunk.offset, chunk.compressedBytes);
   assert.equal(sha(packed), chunk.compressedSha256);
   const raw = unpack(packed, chunk.rawBytes);
   const base = world.version === 1 ? raw : unpack(raw.subarray(20, 20 + raw.readUInt32LE(8)), raw.readUInt32LE(4));
-  for (const p of decode(base).ticks[0].players ?? []) names[p.player_index] = p.name;
+  for (const p of decode(base).ticks[0].players ?? []) {
+    if (p.name) names[p.player_index] ??= p.name;
+  }
   return names;
 }
 
@@ -88,22 +92,22 @@ async function selectWorld(job, readSource, codec, readObject) {
       openClient = async track => openWorld(await readObject(track.artifact), track.artifact.size_bytes, track.frame_count, 5);
     }
   }
-  const fallback = {world:hostWorld, track_id:'host', player_slot:job.player_slot, start:job.start, end:job.end};
+  const fallback = {world:hostWorld, hostWorld, track_id:'host', player_slot:job.player_slot, start:job.start, end:job.end};
   if (!job.player_name || !clients.length) return fallback;
   const isSubject = async (world, slot) => {
-    const names = await playerNames(world, slot, codec.decodeReplayDeltaChunk);
+    const names = await playerNames(world, [slot], codec.decodeReplayDeltaChunk);
     return names[slot] === job.player_name && Object.values(names).filter(name => name === job.player_name).length === 1;
   };
   if (!await isSubject(hostWorld, job.player_slot)) return fallback;
   let selected;
   for (const track of clients) {
     if (track.status === 'unavailable') continue;
-    const interval = clientInterval(host, track, job.start, job.end);
+    const interval = clientInterval(host, track, job.start, job.end, 'feed_events' in job);
     if (!interval) continue;
     const world = await openClient(track);
     if (!await isSubject(world, track.recorded_own_player)) continue;
     if (selected) return fallback;
-    selected = {world, track_id:track.id, player_slot:track.recorded_own_player, ...interval};
+    selected = {world, hostWorld, track_id:track.id, player_slot:track.recorded_own_player, ...interval};
   }
   return selected ?? fallback;
 }
@@ -112,7 +116,19 @@ export async function cutClip(job, readSource, codec, readObject) {
   const {rate} = job;
   assert.ok(Number.isInteger(job.start) && Number.isInteger(job.end) && job.start >= 0
     && job.start < job.end && job.end <= job.source.tick_count);
-  const {world, track_id, player_slot, start, end} = await selectWorld(job, readSource, codec, readObject);
+  const selected = await selectWorld(job, readSource, codec, readObject);
+  const {world, track_id, player_slot, start, end} = selected;
+  const perspective = job.player_name ? {pov:{track_id,player_slot,start_frame:start,end_frame:end,
+    host_start_frame:job.start,host_end_frame:job.end}, view_attempts:(job.views ?? []).map(v => v.id)} : {};
+  if ('feed_events' in job) {
+    const slots = (job.feed_events ?? []).flatMap(e => [e.killer_slot, e.victim_slot]).filter(Number.isInteger);
+    const names = await playerNames(selected.hostWorld, slots, codec.decodeReplayDeltaChunk);
+    perspective.kill_feed = clipKillFeed(job, selected, names);
+    // The existing clip pins this source and exact POV interval. Only its HUD
+    // metadata needs publishing, so no frame chunks or screenshots are rewritten.
+    if (job.previous && perspective.pov && isDeepStrictEqual(job.previous.pov, perspective.pov)
+        && job.previous.tick_count === end - start) return {...job.previous, ...perspective};
+  }
   const {read, worldSize, header, version, indexSize, manifest} = world;
   const {decodeReplayDeltaChunk, encodeReplayDeltaChunk} = codec;
   let payloadSize = 0, consumed = 0;
@@ -190,6 +206,5 @@ export async function cutClip(job, readSource, codec, readObject) {
   head.writeUInt32LE(32+indexPacked.length+payloadSize,24);
   return {body:Buffer.concat([head,indexPacked,...parts]), raw_bytes:totalRaw,
     tick_count:outputCount, profile_revision:index.sourceContract.profile_revision,
-    ...(job.player_name ? {pov:{track_id, player_slot, start_frame:start, end_frame:end,
-      host_start_frame:job.start, host_end_frame:job.end}, view_attempts:(job.views ?? []).map(v => v.id)} : {})};
+    ...perspective};
 }
