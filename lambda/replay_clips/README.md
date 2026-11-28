@@ -51,11 +51,12 @@ on the awarding frame. Older recordings can supply obituary
 text or individual deaths from their event log. A metadata refresh can add the
 feed to an existing clip and retain its video bytes and thumbnail.
 
-The embedded viewer shows the latest four messages for four seconds of playback
-in the upper-middle of the left side of the picture.
+The embedded viewer shows up to four messages for four seconds of playback.
+They align with the player card's left edge and fade over their final 300 ms.
 The settings gear controls the player card, kill feed and playback speed.
-Turning off Show HUD hides both text overlays and keeps the player's crosshair
-and playback controls available.
+The crosshair follows the living player's first-person view even with Show HUD
+turned off. During maximized playback the timeline hides after 2.5 seconds of
+inactivity. Move the mouse or tap the picture to bring it back.
 
 ## Highlight selection
 
