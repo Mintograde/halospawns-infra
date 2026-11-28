@@ -2,10 +2,11 @@
 
 ## Dev batch capacity (2026-11-28)
 
-The dev film queue admits eight conversions at a time. Each can dispatch up to
-eight embedded worlds to a shared reservation of 64. The parent reservation
-is 50 and also covers direct invocations. Queue deliveries still contain one
-message. The parent continues to invoke world worker version 5.
+The dev film queue admits 16 conversions at a time. Each can dispatch up to
+eight embedded worlds to a shared reservation of 128. The film function has
+50 slots reserved across queue and direct invocations. Each queue delivery
+contains one film. The parent invokes world worker version 5. After the
+increase, AWS reported 795 unreserved Lambda slots in `us-east-1`.
 
 CloudWatch in `us-east-1` recorded the following regional maxima through
 November 28 at 14:17 UTC. The account quota was 1,000. Claimed concurrency
@@ -21,8 +22,6 @@ The 32-slot world pool recorded 186 throttles before intake was capped at
 four. From November 26 at 13:27 UTC through the end of the measurement window,
 the four-film cap held. Both film functions recorded zero throttles, while SQS
 reported up to 99 visible messages and an oldest-message age of 22 minutes.
-The eight-film limit doubles admission to the shared API and PostgreSQL
-completion path. The added world reservation leaves 859 unreserved Lambda slots.
 
 An isolated comparison queued the same 50 November 26 uploads before starting
 each set of workers. Both runs used API 359, film image `20261125-r2`, an
@@ -41,10 +40,20 @@ including 230 perspectives and 124,036 simulation hash checks. These timings
 use local emulation of AWS services. Live batch duration depends on the films
 and concurrent API traffic.
 
+A follow-up queued the same 50 films with all consumers ready before the
+first delivery. Both runs verified all 50 films with zero retries or failed
+reads. The eight-connection database pool had zero waiting clients at every
+sample, and average CPU usage on the shared benchmark host reached 94–95%.
+
+| Concurrent films | Elapsed time | Site read p95 | Completion callback p95 |
+| ---: | ---: | ---: | ---: |
+| 16 | 275.38 s | 860 ms | 574 ms |
+| 32 | 284.66 s | 764 ms | 625 ms |
+
 The saved dev `map-processing` plan updated the existing SQS mapping and world
 function reservation in place. The live mapping, both reservations and the
 regional quota were checked after apply. To restore the previous capacity,
-set `maximum_concurrency` to 4 and `world_pool_capacity` to 32 in
+set `maximum_concurrency` to 8 and `world_pool_capacity` to 64 in
 `stacks/dev.yaml` and apply the reviewed component plan.
 
 ## Bulk uploads in dev (2026-11-26)

@@ -188,9 +188,9 @@ components:
           intake_configured: true
           event_source_enabled: true
           reserved_concurrency: 50
-          # Admit eight films to the shared API/database and allow each its full world pool.
-          maximum_concurrency: 8
-          world_pool_capacity: 64
+          # Reserve enough world workers for every admitted film to use its full pool.
+          maximum_concurrency: 16
+          world_pool_capacity: 128
           worlds_per_film: 8
         dependencies:
           state_bucket: halospawns-tfstate-283279960672

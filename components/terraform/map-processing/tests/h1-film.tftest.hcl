@@ -186,16 +186,16 @@ run "world_pool_is_separate_from_parent_capacity" {
       intake_configured    = true
       event_source_enabled = true
       reserved_concurrency = 50
-      maximum_concurrency  = 8
-      world_pool_capacity  = 64
+      maximum_concurrency  = 16
+      world_pool_capacity  = 128
       worlds_per_film      = 8
     }
   }
   assert {
     condition = (
       aws_lambda_function.h1_film[0].reserved_concurrent_executions == 50 &&
-      aws_lambda_event_source_mapping.h1_film[0].scaling_config[0].maximum_concurrency == 8 &&
-      aws_lambda_function.h1_world[0].reserved_concurrent_executions == 64 &&
+      aws_lambda_event_source_mapping.h1_film[0].scaling_config[0].maximum_concurrency == 16 &&
+      aws_lambda_function.h1_world[0].reserved_concurrent_executions == 128 &&
       aws_lambda_function.h1_world[0].publish &&
       aws_lambda_function.h1_world[0].image_uri == aws_lambda_function.h1_film[0].image_uri &&
       aws_lambda_function.h1_world[0].image_config[0].command[0] == "h1_film.world_pool.handler" &&
@@ -207,14 +207,14 @@ run "world_pool_is_separate_from_parent_capacity" {
   }
 }
 
-run "world_pool_rejects_reservations_above_sixty_four" {
+run "world_pool_rejects_reservations_above_limit" {
   command = plan
   variables {
     h1_film = {
       enabled             = true
       image_tag           = "fixture-v1"
       intake_configured   = true
-      world_pool_capacity = 65
+      world_pool_capacity = 129
     }
   }
   expect_failures = [var.h1_film]
