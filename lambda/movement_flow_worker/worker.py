@@ -3,6 +3,7 @@ import gzip
 import hashlib
 import json
 import logging
+import marshal
 import os
 import re
 import struct
@@ -10,6 +11,8 @@ import subprocess
 import tempfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
+from itertools import batched
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,6 +27,7 @@ S3 = boto3.client("s3")
 PREFIX = "heatmaps/precomputed/v1/movement/views/"
 SCHEMA = "halospawns.movementField.v1"
 MAX_ROWS = 160_000
+MAX_RESIDENT_GROUP_ENTRIES = 650_000
 MAX_DECODED = 32 << 20
 MAX_STORED = 16 << 20
 MAX_SOURCE = 512 << 20
@@ -199,6 +203,27 @@ def merge(group, rows):
             require(values[0] <= (1 << 53) // 4096, "movement accumulation overflow")
 
 
+def spill_groups(groups, files, resources, paths):
+    # Only this invocation writes these temporary files. Keep exact cells and
+    # witnessed paths until all games have contributed to the final compaction.
+    for name, cells in groups.items():
+        if not cells:
+            continue
+        if name not in files:
+            files[name] = resources.enter_context(tempfile.TemporaryFile())
+        rows = cells.values() if paths else (list(k) + v for k, v in cells.items())
+        for block in batched(rows, 1024):
+            marshal.dump(block, files[name], 2)
+        cells.clear()
+
+
+def spilled_rows(file):
+    end = file.tell()
+    file.seek(0)
+    while file.tell() < end:
+        yield from marshal.load(file)
+
+
 def scope_product(lease, representation="field"):
     groups = defaultdict(dict)
     paths = representation == "paths"
@@ -207,7 +232,9 @@ def scope_product(lease, representation="field"):
         return read_field(ref, movement_paths.SCHEMA) if paths else read_field(ref)
     selected = observed = 0
     after = None
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    files = {}
+    with ExitStack() as resources:
+        pool = resources.enter_context(ThreadPoolExecutor(max_workers=4))
         while True:
             page = command("inputs", lease=lease, after=after, representation=representation)
             if page.get("superseded"):
@@ -225,16 +252,22 @@ def scope_product(lease, representation="field"):
                         add(groups[f"team:{team}"], rows)
                         if game["winner"] is not None:
                             add(groups["winning" if game["winner"] == team else "losing"], rows)
-                require(sum(map(len, groups.values())) <= 650000, "aggregate group limit")
+                if sum(map(len, groups.values())) > MAX_RESIDENT_GROUP_ENTRIES:
+                    spill_groups(groups, files, resources, paths)
             after = page["next"]
             if after is None:
                 break
-    if paths:
-        result = {group: publish(movement_paths.compact(cells), movement_paths.SCHEMA)
-                  for group, cells in groups.items() if cells}
-    else:
-        result = {group: publish([list(k)+v for k,v in sorted(cells.items())])
-                  for group, cells in groups.items() if cells}
+        if files:
+            spill_groups(groups, files, resources, paths)
+        result = {}
+        for group, cells in groups.items():
+            if group in files:
+                add(cells, spilled_rows(files[group]))
+                files[group].close()
+            if cells:
+                result[group] = (publish(movement_paths.compact(cells), movement_paths.SCHEMA)
+                                 if paths else publish([list(k)+v for k,v in sorted(cells.items())]))
+            cells.clear()
     return {"games": selected, "observed": observed, "groups": result}
 
 

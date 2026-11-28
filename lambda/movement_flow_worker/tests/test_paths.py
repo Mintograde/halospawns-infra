@@ -100,3 +100,22 @@ class PathTests(unittest.TestCase):
         cmd.assert_called_once_with('inputs',lease='lease',after=None,representation='paths')
         self.assertEqual(product,{'games':2,'observed':1,'groups':
             {'all':2,'team:0':1,'team:1':1,'winning':1,'losing':1}})
+
+    def test_spilled_scopes_keep_exact_selection_rows_across_pages(self):
+        for representation in ('paths', 'field'):
+            games = [{'winner': n % 2, 'slots': [(0, n), (1, n + 1)]}
+                     for n in range(1, 8)]
+            def read(n, *args):
+                if representation == 'paths':
+                    return [[k, 0, 0, 0, 8, 2, 1, n, 16, 10 - n, 0, str(n)] for k in (0, n)]
+                return [[k, 0, 0, 0, 1, n, 0, 0, 0, 0, 0, 0] for k in (0, n)]
+
+            def render(limit):
+                pages = [{'next': 'page', 'games': games[:3]}, {'next': None, 'games': games[3:]}]
+                with patch.object(worker, 'command', side_effect=pages), \
+                     patch.object(worker, 'MAX_RESIDENT_GROUP_ENTRIES', limit), \
+                     patch.object(worker, 'read_field', side_effect=read), \
+                     patch.object(worker, 'publish', side_effect=lambda rows, *args: rows):
+                    return worker.scope_product('lease', representation)
+
+            self.assertEqual(render(5), render(650000))
