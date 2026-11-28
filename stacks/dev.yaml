@@ -41,7 +41,7 @@ components:
           certificate:
             create: true
         access:
-          mode: basic_auth
+          mode: public
           basic_auth:
             create_edge_lambda: true
             ssm_parameter_name: /halospawns/dev/frontend-site/basic-auth/credentials-base64
