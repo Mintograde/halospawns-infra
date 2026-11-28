@@ -129,7 +129,7 @@ export async function handler(event, context) {
   if (!id && !event.build_only) await control('discover',{limit:16});
   let ready = 0, failures = 0;
   while (context.getRemainingTimeInMillis() > 45000) {
-    const {job} = await control('claim',{id,kill_feed:true});
+    const {job} = await control('claim',{id,kill_feed:2});
     if (!job) break;
     try {
       const product = await extract(job);

@@ -6,6 +6,7 @@ import {openMatchReplay} from '../h1_film/runtime/match-replay.mjs';
 import {packRuns, slicePoseRuns} from './pose.mjs';
 import {attachedTrack, clientInterval} from './perspective.mjs';
 import {clipKillFeed} from './feed.mjs';
+import {clipKillScores} from './scores.mjs';
 
 const limit = 64 * 1024 * 1024;
 const frames = 2048;
@@ -50,17 +51,46 @@ async function openWorld(read, worldSize, count, revision, indexHash) {
   return {read, worldSize, header, version, indexSize, manifest};
 }
 
+async function readChunk(world, chunk, decode, withPoses = false) {
+  const packed = await world.read(32 + world.indexSize + chunk.offset, chunk.compressedBytes);
+  assert.equal(sha(packed), chunk.compressedSha256);
+  const raw = unpack(packed, chunk.rawBytes);
+  let base = raw, poses;
+  if (world.version === 2) {
+    assert.equal(sha(raw), chunk.rawSha256);
+    assert.equal(raw.toString('ascii',0,4), 'PC01');
+    const boundary = 20 + raw.readUInt32LE(8);
+    assert.equal(boundary + raw.readUInt32LE(16), raw.length);
+    base = unpack(raw.subarray(20,boundary), raw.readUInt32LE(4));
+    if (withPoses) poses = unpack(raw.subarray(boundary), raw.readUInt32LE(12));
+  }
+  const {firstTick, ticks} = decode(base);
+  assert.equal(firstTick, chunk.firstTick);
+  assert.equal(ticks.length, chunk.tickCount);
+  return {ticks, poses};
+}
+
+function hostTickReader(world, decode) {
+  let cachedIndex = -1, ticks;
+  return async frame => {
+    const index = Math.floor(frame / frames);
+    const chunk = world.manifest.chunks[index];
+    if (index !== cachedIndex) {
+      ticks = undefined;
+      ({ticks} = await readChunk(world, chunk, decode));
+      cachedIndex = index;
+    }
+    return ticks[frame - chunk.firstTick];
+  };
+}
+
 async function playerNames(world, slots, decode) {
   const names = Object.fromEntries(Object.entries(world.manifest.replay.game_meta?.players ?? {})
     .map(([key, player]) => [key, player?.name]));
   if (slots.every(slot => names[slot])) return names;
   // Older worlds can expose the recorder only in the first snapshot.
-  const chunk = world.manifest.chunks[0];
-  const packed = await world.read(32 + world.indexSize + chunk.offset, chunk.compressedBytes);
-  assert.equal(sha(packed), chunk.compressedSha256);
-  const raw = unpack(packed, chunk.rawBytes);
-  const base = world.version === 1 ? raw : unpack(raw.subarray(20, 20 + raw.readUInt32LE(8)), raw.readUInt32LE(4));
-  for (const p of decode(base).ticks[0].players ?? []) {
+  const {ticks} = await readChunk(world, world.manifest.chunks[0], decode);
+  for (const p of ticks[0].players ?? []) {
     if (p.name) names[p.player_index] ??= p.name;
   }
   return names;
@@ -122,14 +152,18 @@ export async function cutClip(job, readSource, codec, readObject) {
     host_start_frame:job.start,host_end_frame:job.end}, view_attempts:(job.views ?? []).map(v => v.id)} : {};
   if ('feed_events' in job) {
     const slots = (job.feed_events ?? []).flatMap(e => [e.killer_slot, e.victim_slot]).filter(Number.isInteger);
+    if (job.feed_version === 2 && job.feed_events === null) slots.push(job.player_slot);
     const names = await playerNames(selected.hostWorld, slots, codec.decodeReplayDeltaChunk);
-    perspective.kill_feed = clipKillFeed(job, selected, names);
+    const scores = job.feed_version === 2
+      ? await clipKillScores(job, hostTickReader(selected.hostWorld, codec.decodeReplayDeltaChunk)) : null;
+    perspective.kill_feed = clipKillFeed(job, selected, names, scores);
+    if (job.feed_version === 2) perspective.kill_feed_version = 2;
     // The existing clip pins this source and exact POV interval. Only its HUD
     // metadata needs publishing, so no frame chunks or screenshots are rewritten.
     if (job.previous && perspective.pov && isDeepStrictEqual(job.previous.pov, perspective.pov)
         && job.previous.tick_count === end - start) return {...job.previous, ...perspective};
   }
-  const {read, worldSize, header, version, indexSize, manifest} = world;
+  const {worldSize, header, version, indexSize, manifest} = world;
   const {decodeReplayDeltaChunk, encodeReplayDeltaChunk} = codec;
   let payloadSize = 0, consumed = 0;
   const parts = [], chunks = [];
@@ -157,25 +191,11 @@ export async function cutClip(job, readSource, codec, readObject) {
     let lo = Math.max(0,start-c.firstTick);
     const hi = Math.min(c.tickCount,end-c.firstTick);
     if (lo >= hi) continue;
-    const packed = await read(32+indexSize+c.offset,c.compressedBytes);
-    assert.equal(sha(packed),c.compressedSha256);
-    const raw = unpack(packed,c.rawBytes);
-    let base = raw, poses;
-    if (version === 2) {
-      assert.equal(sha(raw),c.rawSha256);
-      assert.equal(raw.toString('ascii',0,4),'PC01');
-      const boundary = 20+raw.readUInt32LE(8);
-      assert.equal(boundary+raw.readUInt32LE(16),raw.length);
-      base = unpack(raw.subarray(20,boundary),raw.readUInt32LE(4));
-      poses = unpack(raw.subarray(boundary),raw.readUInt32LE(12));
-    }
-    const decoded = decodeReplayDeltaChunk(base);
-    assert.equal(decoded.firstTick,c.firstTick);
-    assert.equal(decoded.ticks.length,c.tickCount);
+    const {ticks:sourceTicks, poses} = await readChunk(world, c, decodeReplayDeltaChunk, true);
     while (lo < hi) {
       const stop = Math.min(hi,lo+frames-ticks.length);
       if (poses) runs.push(...slicePoseRuns(poses,c.tickCount,lo,stop,ticks.length));
-      ticks.push(...decoded.ticks.slice(lo,stop));
+      ticks.push(...sourceTicks.slice(lo,stop));
       lo = stop;
       if (ticks.length === frames) flush();
     }

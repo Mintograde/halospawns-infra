@@ -41,14 +41,21 @@ own file and the shared map assets to play.
 The clip detail includes a small kill feed indexed by frame in the published
 POV. The extractor reads deaths in the saved interval from the matching native
 statistics generation, resolves names on the host roster and maps events through
-the same recorded client clocks as the cut. Verified automatic multikills add
-an announcement on the awarding frame. Older recordings can supply obituary
+the same recorded client clocks as the cut. The featured player's kills read
+`You killed Dasher (33)` when the game awards a kill score. The extractor uses
+the authoritative host frame for the Slayer team score, or the player's own
+score in FFA. For simultaneous kills, the adjacent scoreboards and callback
+order establish the individual increments. Other players' kills show both
+names. Verified automatic multikills add an announcement with the same score
+on the awarding frame. Older recordings can supply obituary
 text or individual deaths from their event log. A metadata refresh can add the
 feed to an existing clip and retain its video bytes and thumbnail.
 
-The embedded viewer shows the latest four messages for four seconds of playback.
-The settings gear controls the player card, kill feed, overall HUD (including
-the reticle) and playback speed. The timeline remains available with the HUD hidden.
+The embedded viewer shows the latest four messages for four seconds of playback
+in the upper-middle of the left side of the picture.
+The settings gear controls the player card, kill feed and playback speed.
+Turning off Show HUD hides both text overlays and keeps the player's crosshair
+and playback controls available.
 
 ## Highlight selection
 

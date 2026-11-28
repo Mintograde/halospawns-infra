@@ -6,6 +6,7 @@ import {cutClip, sha} from './cut.mjs';
 import {packRuns, slicePoseRuns} from './pose.mjs';
 import {clientInterval} from './perspective.mjs';
 import {clipKillFeed} from './feed.mjs';
+import {clipKillScores} from './scores.mjs';
 import {mapViewFrame} from '../../../halospawns-svelte/packages/viewer/src/lib/core/session/viewTrackAlignment.js';
 
 test('trimming a pose run restarts both predictors and preserves a literal fallback', () => {
@@ -35,7 +36,9 @@ test('trimming a pose run restarts both predictors and preserves a literal fallb
 });
 
 function fixture(count, players = {}, marker = 0, revision = 2) {
-  const ticks = Array.from({length:count}, (_,i) => ({game_time:i,players:[{name:'Test',x:i + marker}]}));
+  const ticks = Array.from({length:count}, (_,i) => ({game_time:i, game_type:2, game_engine_has_teams:false,
+    players:Object.keys(players).length ? Object.entries(players).map(([slot, player]) =>
+      ({...player,player_index:Number(slot),score:i + marker,x:i + marker})) : [{name:'Test',x:i + marker}]}));
   let offset = 0;
   const parts = [], chunks = [];
   for (let firstTick=0; firstTick<count; firstTick+=2048) {
@@ -136,6 +139,12 @@ test('a separately recorded client uses its own clock, roster slot, events and o
   assert.equal(refresh.body,undefined);
   assert.equal(refresh.sha256,previous.sha256);
   assert.deepEqual(refresh.kill_feed,withFeed.kill_feed);
+  const scored = await cut({...feedJob, feed_version:2, previous});
+  assert.equal(scored.body,undefined);
+  assert.equal(scored.kill_feed_version,2);
+  assert.deepEqual(scored.kill_feed, [
+    {frame:1,text:'You killed Other',score:42}, {frame:8,text:'Other killed Subject'}
+  ]);
   assert.equal((await cut({...job,views:[{...view,recorded_own_player:2}]})).pov.track_id,'host');
   assert.equal((await cut({...job,views:[view,view]})).pov.track_id,'host');
   assert.equal((await cut({...job,start:10})).pov.track_id,'host');
@@ -163,4 +172,45 @@ test('a recording without a native ledger retains explicit obituaries and lone d
     '9: Old died (1)','10: Cupid got a kill (2)','10: Dasher died (3)','11: Prancer threw a frag grenade',
     '12: Comet killed Vixen','14: Late died (7)']}}}};
   assert.deepEqual(clipKillFeed(job,selected,{}),[{frame:0,text:'Dasher died'},{frame:2,text:'Comet killed Vixen'}]);
+});
+
+test('the HUD shows the featured side’s post-kill score, including consecutive kills on one frame', async () => {
+  const names = {0:'Cupid',1:'Dasher',2:'Comet',3:'Vixen'};
+  const events = [[10,0,1], [10,0,3], [11,3,2], [12,2,1]].map(([source_tick,killer_slot,victim_slot]) =>
+    ({source_tick, killer_slot, victim_slot, kind:'kill'}));
+  events[1].multikill = 2;
+  const job = {player_slot:0, feed_version:2, source_stride:1, stable_player_count:4,
+    start:10, end:13, feed_events:events};
+  const world = frame => ({game_type:2, game_engine_has_teams:true, players:[
+    {player_index:0,team:0,score:frame<10 ? 4 : 6}, {player_index:1,team:1,score:17},
+    {player_index:2,team:0,score:23}, {player_index:3,team:1,score:5}
+  ]});
+  const reads = [];
+  const scores = await clipKillScores(job, frame => { reads.push(frame); return world(frame); });
+  assert.deepEqual(reads,[9,10]);
+  assert.deepEqual(clipKillFeed(job,{start:10,end:13},names,scores), [
+    {frame:0,text:'You killed Dasher',score:28}, {frame:0,text:'You killed Vixen',score:29},
+    {frame:0,text:'Double Kill!',score:29}, {frame:1,text:'Vixen killed Comet'}, {frame:2,text:'Comet killed Dasher'}
+  ]);
+  assert.equal((await clipKillScores({...job, stable_player_count:null}, world)).size,0);
+  assert.equal((await clipKillScores(job, f => ({...world(f),game_type:1}))).size,0);
+  const uncertain = await clipKillScores(job,f=>{
+    const tick=world(f);
+    tick.players[0].score=f<10 ? 5 : 6;
+    return tick;
+  });
+  assert(!uncertain.has(events[0]));
+  assert.equal(uncertain.get(events[1]),29);
+});
+
+test('recorded named kills retain their score only for a uniquely identified featured player', () => {
+  const job = {player_slot:0,player_name:'Cupid',feed_version:2,source_stride:1,
+    start:10,end:14,source_start:10,source_end:14,feed_events:null};
+  const selected = {start:10,end:14,hostWorld:{manifest:{replay:{events:[
+    '10: Dasher was killed by Cupid (0)','11: Cupid was killed by Comet (18)',
+    '12: Dasher died (6)','13: You killed Dasher (123)']}}}};
+  assert.deepEqual(clipKillFeed(job,selected,{0:'Cupid',1:'Dasher',2:'Comet'}),[
+    {frame:0,text:'You killed Dasher',score:0},{frame:1,text:'Comet killed Cupid'},
+    {frame:2,text:'Dasher died'},{frame:3,text:'Dasher died'}]);
+  assert.equal(clipKillFeed(job,selected,{0:'Cupid',1:'Cupid'})[0].text,'Cupid killed Dasher');
 });
