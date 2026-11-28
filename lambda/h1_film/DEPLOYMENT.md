@@ -1,10 +1,57 @@
 # H1 film Lambda integration
 
+## Dev batch capacity (2026-11-28)
+
+The dev film queue admits eight conversions at a time. Each can dispatch up to
+eight embedded worlds to a shared reservation of 64. The parent reservation
+is 50 and also covers direct invocations. Queue deliveries still contain one
+message. The parent continues to invoke world worker version 5.
+
+CloudWatch in `us-east-1` recorded the following regional maxima through
+November 28 at 14:17 UTC. The account quota was 1,000. Claimed concurrency
+includes allocations and active use of the unreserved pool. [AWS Lambda concurrency metrics](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-concurrency.html)
+
+| Window | Peak active | Peak claimed | Slots available at peak claimed |
+| --- | ---: | ---: | ---: |
+| 365 days | 383 | 384 | 616 |
+| 90 days | 383 | 384 | 616 |
+| 30 days | 130 | 218 | 782 |
+
+The 32-slot world pool recorded 186 throttles before intake was capped at
+four. From November 26 at 13:27 UTC through the end of the measurement window,
+the four-film cap held. Both film functions recorded zero throttles, while SQS
+reported up to 99 visible messages and an oldest-message age of 22 minutes.
+The eight-film limit doubles admission to the shared API and PostgreSQL
+completion path. The added world reservation leaves 859 unreserved Lambda slots.
+
+An isolated comparison queued the same 50 November 26 uploads before starting
+each set of workers. Both runs used API 359, film image `20261125-r2`, an
+eight-connection PostgreSQL transaction pool, and concurrent site reads.
+Elapsed time runs from the first delivery start through the last acknowledgment.
+
+| Concurrent films | Elapsed time | Site reads during processing | Site read p95 |
+| ---: | ---: | ---: | ---: |
+| 4 | 337.95 s | 800 | 768 ms |
+| 8 | 277.79 s | 650 | 964 ms |
+
+Eight workers reduced elapsed time by 60 seconds (18%). All 50 films completed
+in each run with zero retries, dead letters or failed reads. The selected
+artifacts and completion receipts passed verification for all 50 films,
+including 230 perspectives and 124,036 simulation hash checks. These timings
+use local emulation of AWS services. Live batch duration depends on the films
+and concurrent API traffic.
+
+The saved dev `map-processing` plan updated the existing SQS mapping and world
+function reservation in place. The live mapping, both reservations and the
+regional quota were checked after apply. To restore the previous capacity,
+set `maximum_concurrency` to 4 and `world_pool_capacity` to 32 in
+`stacks/dev.yaml` and apply the reviewed component plan.
+
 ## Bulk uploads in dev (2026-11-26)
 
-The H1 SQS event source admits four single-film deliveries at a time. A batch
-of 50 uploads can wait in the standard queue while up to four films write
-intake and completion data through the shared API. Each film can dispatch up
+The H1 SQS event source admitted four single-film deliveries at a time. A batch
+of 50 uploads could wait in the standard queue while up to four films wrote
+intake and completion data through the shared API. Each film could dispatch up
 to eight embedded worlds to the 32-slot world pool. To check intake capacity,
 inspect the event source mapping's `ScalingConfig.MaximumConcurrency`.
 Reserved concurrency on the function also serves other invocations.

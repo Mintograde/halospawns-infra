@@ -22,14 +22,14 @@ variable "h1_film" {
 
   validation {
     condition = (
-      var.h1_film.world_pool_capacity >= 0 && var.h1_film.world_pool_capacity <= 50 &&
+      var.h1_film.world_pool_capacity >= 0 && var.h1_film.world_pool_capacity <= 64 &&
       floor(var.h1_film.world_pool_capacity) == var.h1_film.world_pool_capacity &&
       var.h1_film.worlds_per_film >= 0 && var.h1_film.worlds_per_film <= 8 &&
       floor(var.h1_film.worlds_per_film) == var.h1_film.worlds_per_film &&
       (var.h1_film.world_pool_capacity == 0 || (var.h1_film.intake_configured && var.h1_film.enabled &&
       var.h1_film.worlds_per_film <= var.h1_film.world_pool_capacity))
     )
-    error_message = "The optional embedded-world pool needs configured intake, up to 8 workers per film and a separate reservation of at most 50."
+    error_message = "The optional embedded-world pool needs configured intake, up to 8 workers per film and a separate reservation of at most 64."
   }
 
   validation {
